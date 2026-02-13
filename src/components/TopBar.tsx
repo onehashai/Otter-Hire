@@ -1,4 +1,4 @@
-import { useLocation } from "react-router-dom";
+import { useLocation, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Search, Plus } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -6,6 +6,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 const pageTitles: Record<string, string> = {
   "/": "Dashboard",
   "/jobs": "Jobs",
+  "/jobs/new": "Create Job",
   "/candidates": "Candidates",
   "/pipeline": "Pipeline",
   "/interviews": "Interviews",
@@ -23,8 +24,13 @@ interface TopBarProps {
 
 export function TopBar({ onOpenCommandPalette }: TopBarProps) {
   const location = useLocation();
-  const title = pageTitles[location.pathname] || "Page";
   const isMobile = useIsMobile();
+
+  // For job edit routes, derive title from URL param
+  const isJobEdit = /^\/jobs\/[^/]+\/edit$/.test(location.pathname);
+  const title = isJobEdit
+    ? decodeURIComponent(location.pathname.split("/")[2])
+    : pageTitles[location.pathname] || "Page";
 
   return (
     <header className="h-12 border-b border-border flex items-center justify-between px-4 md:px-6 bg-background shrink-0">

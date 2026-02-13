@@ -13,27 +13,26 @@ const charts = [
 
 const Reports = () => {
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" className="h-8 text-xs">Last 30 days</Button>
-          <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground">Last 90 days</Button>
-          <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground">This Year</Button>
+    <div className="space-y-3 md:space-y-4">
+      <div className="flex items-center justify-between overflow-x-auto gap-2">
+        <div className="flex items-center gap-1.5 md:gap-2 shrink-0">
+          <Button variant="outline" size="sm" className="h-9 md:h-8 text-xs">30 days</Button>
+          <Button variant="ghost" size="sm" className="h-9 md:h-8 text-xs text-muted-foreground">90 days</Button>
+          <Button variant="ghost" size="sm" className="h-9 md:h-8 text-xs text-muted-foreground">Year</Button>
         </div>
-        <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
-          <Download className="h-3.5 w-3.5" /> Export
+        <Button variant="outline" size="sm" className="h-9 md:h-8 text-xs gap-1.5 shrink-0">
+          <Download className="h-3.5 w-3.5" /><span className="hidden sm:inline">Export</span>
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
         {charts.map((chart) => (
-          <Card key={chart.title} className="hover:shadow-sm transition-shadow">
-            <CardContent className="p-5">
-              <p className="text-xs text-muted-foreground mb-1">{chart.title}</p>
-              <p className="text-2xl font-semibold">{chart.value}</p>
-              <p className="text-[11px] text-muted-foreground mt-1">{chart.subtitle}</p>
-              {/* Placeholder chart area */}
-              <div className="mt-4 h-20 bg-muted/50 rounded-lg flex items-center justify-center">
+          <Card key={chart.title}>
+            <CardContent className="p-4 md:p-5">
+              <p className="text-[11px] md:text-xs text-muted-foreground mb-1">{chart.title}</p>
+              <p className="text-xl md:text-2xl font-semibold">{chart.value}</p>
+              <p className="text-[10px] md:text-[11px] text-muted-foreground mt-0.5 md:mt-1">{chart.subtitle}</p>
+              <div className="mt-3 md:mt-4 h-16 md:h-20 bg-muted/50 rounded-lg flex items-center justify-center">
                 <span className="text-[10px] text-muted-foreground">Chart</span>
               </div>
             </CardContent>

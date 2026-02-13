@@ -3,6 +3,9 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Settings2, List } from "lucide-react";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { useState } from "react";
+import { cn } from "@/lib/utils";
 
 const stages = [
   {
@@ -38,17 +41,71 @@ const stages = [
 ];
 
 const Pipeline = () => {
+  const isMobile = useIsMobile();
+  const [activeStage, setActiveStage] = useState(0);
+
+  if (isMobile) {
+    const stage = stages[activeStage];
+    return (
+      <div className="space-y-3">
+        {/* Stage tabs - horizontally scrollable */}
+        <div className="flex gap-1 overflow-x-auto pb-1 -mx-4 px-4 no-scrollbar">
+          {stages.map((s, i) => (
+            <button
+              key={s.name}
+              onClick={() => setActiveStage(i)}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition-colors min-h-[44px]",
+                i === activeStage ? "bg-foreground text-background" : "bg-muted text-muted-foreground"
+              )}
+            >
+              {s.name}
+              <Badge variant={i === activeStage ? "outline" : "secondary"} className={cn("text-[10px] h-4", i === activeStage && "border-background/30 text-background")}>
+                {s.candidates.length}
+              </Badge>
+            </button>
+          ))}
+        </div>
+
+        {/* Cards for active stage */}
+        <div className="space-y-2">
+          {stage.candidates.map((c) => (
+            <Card key={c.name} className="active:bg-muted/50 transition-colors">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <Avatar className="h-9 w-9">
+                    <AvatarFallback className="text-xs bg-muted">{c.name.split(" ").map(n => n[0]).join("")}</AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1">
+                    <span className="text-sm font-medium">{c.name}</span>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-muted-foreground">{c.role}</span>
+                      <span className="text-xs font-medium">{c.score}%</span>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+          {stage.candidates.length === 0 && (
+            <div className="border border-dashed border-border rounded-xl p-8 text-center">
+              <p className="text-xs text-muted-foreground">No candidates in this stage</p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
-            <Settings2 className="h-3.5 w-3.5" /> Edit Stages
-          </Button>
-          <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
-            <List className="h-3.5 w-3.5" /> List View
-          </Button>
-        </div>
+      <div className="flex items-center gap-2">
+        <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
+          <Settings2 className="h-3.5 w-3.5" /> Edit Stages
+        </Button>
+        <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
+          <List className="h-3.5 w-3.5" /> List View
+        </Button>
       </div>
 
       <div className="flex gap-3 overflow-x-auto pb-4">

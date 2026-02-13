@@ -735,14 +735,12 @@ export default function JobForm() {
         )}
       </div>
 
-      {/* Section nav */}
-      <div className="flex gap-1 mb-6 overflow-x-auto no-scrollbar">
+      {/* Tab nav */}
+      <div className="flex gap-1 mb-6 overflow-x-auto no-scrollbar border-b border-border pb-2">
         {sections.map((s, i) => (
           <button
             key={s}
-            onClick={() => {
-              document.getElementById(`section-${i}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
-            }}
+            onClick={() => setActiveSection(i)}
             className={cn(
               "px-3 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition-colors",
               "hover:bg-muted text-muted-foreground",
@@ -756,17 +754,13 @@ export default function JobForm() {
 
       {/* Main grid */}
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_260px] gap-6">
-        {/* Form */}
-        <div className="space-y-8">
-          {sections.map((sectionName, i) => (
-            <Card key={sectionName} id={`section-${i}`}>
-              <CardContent className="p-5 md:p-6">
-                <h2 className="text-sm font-semibold mb-4">{sectionName}</h2>
-                {sectionRenderers[i]()}
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        {/* Active tab content only */}
+        <Card>
+          <CardContent className="p-5 md:p-6">
+            <h2 className="text-sm font-semibold mb-4">{sections[activeSection]}</h2>
+            {sectionRenderers[activeSection]()}
+          </CardContent>
+        </Card>
 
         {/* Summary sidebar (desktop) / collapsible drawer (tablet) */}
         <div className="hidden lg:block">

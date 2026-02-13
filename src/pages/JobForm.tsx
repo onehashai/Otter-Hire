@@ -578,20 +578,7 @@ export default function JobForm() {
         </div>
       </div>
       <Separator />
-      <div className="space-y-2">
-        {published ? (
-          <Button variant="outline" size="sm" className="w-full text-xs h-9" onClick={handleUnpublish}>
-            Unpublish
-          </Button>
-        ) : (
-          <Button size="sm" className="w-full text-xs h-9" onClick={handlePublish}>
-            Publish Job
-          </Button>
-        )}
-        <Button variant="outline" size="sm" className="w-full text-xs h-9" onClick={handleSave}>
-          <Save className="h-3.5 w-3.5 mr-1.5" /> Save Draft
-        </Button>
-      </div>
+      {/* Actions removed — single action group lives in header */}
       {savedAt && (
         <p className="text-[10px] text-muted-foreground text-center">Saved at {savedAt}</p>
       )}
@@ -645,7 +632,7 @@ export default function JobForm() {
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div className="flex-1 min-w-0">
-            <h1 className="text-base font-semibold truncate">{isEdit ? "Edit Job" : "Create Job"}</h1>
+            <h1 className="text-base font-semibold truncate">{isEdit ? (title || "Edit Job") : "Create Job"}</h1>
             <p className="text-[10px] text-muted-foreground">
               Step {activeSection + 1} of {sections.length} · {sections[activeSection]}
             </p>
@@ -716,7 +703,7 @@ export default function JobForm() {
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div className="flex-1">
-          <h1 className="text-lg font-semibold">{isEdit ? "Edit Job" : "Create Job"}</h1>
+          <h1 className="text-lg font-semibold">{isEdit ? (title || "Edit Job") : "Create Job"}</h1>
         </div>
         {savedAt && (
           <span className="text-[11px] text-muted-foreground">Saved at {savedAt}</span>

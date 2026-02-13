@@ -4,6 +4,8 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Search, Filter } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useNavigate } from "react-router-dom";
+import { FloatingActionButton } from "@/components/FloatingActionButton";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -20,6 +22,7 @@ const statusVariant = (s: string) => s === "Active" ? "default" : s === "Draft" 
 
 const Jobs = () => {
   const isMobile = useIsMobile();
+  const navigate = useNavigate();
 
   return (
     <div className="space-y-3 md:space-y-4">
@@ -32,7 +35,7 @@ const Jobs = () => {
         <Button variant="outline" size="sm" className="h-9 md:h-8 text-xs gap-1.5 shrink-0">
           <Filter className="h-3.5 w-3.5" /><span className="hidden sm:inline">Filters</span>
         </Button>
-        <Button size="sm" className="h-9 md:h-8 text-xs gap-1.5 shrink-0 hidden md:flex">
+        <Button size="sm" className="h-9 md:h-8 text-xs gap-1.5 shrink-0 hidden md:flex" onClick={() => navigate("/jobs/new")}>
           <Plus className="h-3.5 w-3.5" /> Create Job
         </Button>
       </div>
@@ -41,7 +44,7 @@ const Jobs = () => {
       {isMobile ? (
         <div className="space-y-2">
           {jobs.map((job) => (
-            <Card key={job.role} className="active:bg-muted/50 transition-colors">
+            <Card key={job.role} className="active:bg-muted/50 transition-colors cursor-pointer" onClick={() => navigate(`/jobs/${encodeURIComponent(job.role)}/edit`)}>
               <CardContent className="p-4">
                 <div className="flex items-start justify-between mb-1.5">
                   <h3 className="text-sm font-medium leading-tight pr-2">{job.role}</h3>
@@ -73,7 +76,7 @@ const Jobs = () => {
               </TableHeader>
               <TableBody>
                 {jobs.map((job) => (
-                  <TableRow key={job.role} className="cursor-pointer hover:bg-muted/50">
+                  <TableRow key={job.role} className="cursor-pointer hover:bg-muted/50" onClick={() => navigate(`/jobs/${encodeURIComponent(job.role)}/edit`)}>
                     <TableCell className="text-sm font-medium">{job.role}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">{job.dept}</TableCell>
                     <TableCell><Badge variant={statusVariant(job.status)} className="text-[10px]">{job.status}</Badge></TableCell>
@@ -86,6 +89,7 @@ const Jobs = () => {
           </CardContent>
         </Card>
       )}
+      {isMobile && <FloatingActionButton onClick={() => navigate("/jobs/new")} />}
     </div>
   );
 };

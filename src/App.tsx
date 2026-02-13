@@ -7,6 +7,7 @@ import { ThemeProvider } from "@/components/ThemeProvider";
 import { AppLayout } from "@/components/AppLayout";
 import Dashboard from "@/pages/Dashboard";
 import Jobs from "@/pages/Jobs";
+import JobForm from "@/pages/JobForm";
 import Candidates from "@/pages/Candidates";
 import Pipeline from "@/pages/Pipeline";
 import Interviews from "@/pages/Interviews";
@@ -31,6 +32,8 @@ const App = () => (
             <Route element={<AppLayout />}>
               <Route path="/" element={<Dashboard />} />
               <Route path="/jobs" element={<Jobs />} />
+              <Route path="/jobs/new" element={<JobForm />} />
+              <Route path="/jobs/:id/edit" element={<JobForm />} />
               <Route path="/candidates" element={<Candidates />} />
               <Route path="/pipeline" element={<Pipeline />} />
               <Route path="/interviews" element={<Interviews />} />

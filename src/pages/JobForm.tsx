@@ -7,7 +7,6 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import {
   Select,
@@ -34,12 +33,24 @@ import {
   GripVertical,
   Plus,
   X,
-  Link2,
   Copy,
   Check,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import TiptapEditor from "@/components/TiptapEditor";
+
+/* ───── country/city data ───── */
+const countryCities: Record<string, string[]> = {
+  "United States": ["San Francisco", "New York", "Austin", "Seattle", "Chicago", "Los Angeles", "Boston", "Denver"],
+  "United Kingdom": ["London", "Manchester", "Edinburgh", "Birmingham", "Bristol"],
+  Germany: ["Berlin", "Munich", "Hamburg", "Frankfurt"],
+  Canada: ["Toronto", "Vancouver", "Montreal", "Calgary"],
+  Australia: ["Sydney", "Melbourne", "Brisbane", "Perth"],
+  France: ["Paris", "Lyon", "Marseille", "Toulouse"],
+  India: ["Bangalore", "Mumbai", "Delhi", "Hyderabad", "Chennai"],
+  Netherlands: ["Amsterdam", "Rotterdam", "The Hague", "Utrecht"],
+};
 
 /* ───── mock data for edit mode ───── */
 const mockJob = {
@@ -47,16 +58,19 @@ const mockJob = {
   department: "Engineering",
   employmentType: "full-time",
   workplaceType: "remote",
-  location: "San Francisco, CA",
+  country: "United States",
+  city: "San Francisco",
   hiringManager: "Jane Doe",
   status: "draft" as const,
   description:
-    "We're looking for a Senior Frontend Engineer to lead our design system efforts and build delightful user experiences.\n\nResponsibilities:\n- Architect and maintain our React component library\n- Collaborate with design on new features\n- Mentor junior engineers\n\nRequirements:\n- 5+ years of frontend experience\n- Strong TypeScript and React skills\n- Experience with design systems",
+    "<p>We're looking for a Senior Frontend Engineer to lead our design system efforts and build delightful user experiences.</p><h2>Responsibilities</h2><ul><li>Architect and maintain our React component library</li><li>Collaborate with design on new features</li><li>Mentor junior engineers</li></ul><h2>Requirements</h2><ul><li>5+ years of frontend experience</li><li>Strong TypeScript and React skills</li><li>Experience with design systems</li></ul>",
   openings: 2,
+  salaryType: "range" as SalaryType,
+  salaryFixed: "",
   salaryMin: "140000",
   salaryMax: "180000",
   currency: "USD",
-  targetStart: "2026-04-01",
+  timeframe: "per year",
   pipeline: "standard",
   collectResume: true,
   collectCover: false,
@@ -67,11 +81,12 @@ const mockJob = {
     { name: "Culture Fit", interviewer: "Sarah Lee" },
     { name: "Final", interviewer: "Jane Doe" },
   ],
-  visibility: "careers" as const,
+  visibility: "careers" as Visibility,
 };
 
 type JobStatus = "draft" | "open" | "closed";
 type Visibility = "internal" | "careers" | "public";
+type SalaryType = "hidden" | "fixed" | "range";
 
 const sections = [
   "Basic Info",
@@ -81,8 +96,6 @@ const sections = [
   "Interview Plan",
   "Visibility",
 ] as const;
-
-type SectionId = (typeof sections)[number];
 
 export default function JobForm() {
   const { id } = useParams();
@@ -95,15 +108,18 @@ export default function JobForm() {
   const [department, setDepartment] = useState("");
   const [employmentType, setEmploymentType] = useState("full-time");
   const [workplaceType, setWorkplaceType] = useState("remote");
-  const [location, setLocation] = useState("");
+  const [country, setCountry] = useState("");
+  const [city, setCity] = useState("");
   const [hiringManager, setHiringManager] = useState("");
   const [status, setStatus] = useState<JobStatus>("draft");
   const [description, setDescription] = useState("");
   const [openings, setOpenings] = useState(1);
+  const [salaryType, setSalaryType] = useState<SalaryType>("hidden");
+  const [salaryFixed, setSalaryFixed] = useState("");
   const [salaryMin, setSalaryMin] = useState("");
   const [salaryMax, setSalaryMax] = useState("");
   const [currency, setCurrency] = useState("USD");
-  const [targetStart, setTargetStart] = useState("");
+  const [timeframe, setTimeframe] = useState("per year");
   const [pipeline, setPipeline] = useState("standard");
   const [collectResume, setCollectResume] = useState(true);
   const [collectCover, setCollectCover] = useState(false);
@@ -124,6 +140,13 @@ export default function JobForm() {
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
 
+  /* ───── city search ───── */
+  const [citySearch, setCitySearch] = useState("");
+  const availableCities = country ? (countryCities[country] || []) : [];
+  const filteredCities = citySearch
+    ? availableCities.filter((c) => c.toLowerCase().includes(citySearch.toLowerCase()))
+    : availableCities;
+
   /* ───── load edit data ───── */
   useEffect(() => {
     if (isEdit) {
@@ -131,15 +154,18 @@ export default function JobForm() {
       setDepartment(mockJob.department);
       setEmploymentType(mockJob.employmentType);
       setWorkplaceType(mockJob.workplaceType);
-      setLocation(mockJob.location);
+      setCountry(mockJob.country);
+      setCity(mockJob.city);
       setHiringManager(mockJob.hiringManager);
       setStatus(mockJob.status);
       setDescription(mockJob.description);
       setOpenings(mockJob.openings);
+      setSalaryType(mockJob.salaryType);
+      setSalaryFixed(mockJob.salaryFixed);
       setSalaryMin(mockJob.salaryMin);
       setSalaryMax(mockJob.salaryMax);
       setCurrency(mockJob.currency);
-      setTargetStart(mockJob.targetStart);
+      setTimeframe(mockJob.timeframe);
       setPipeline(mockJob.pipeline);
       setCollectResume(mockJob.collectResume);
       setCollectCover(mockJob.collectCover);
@@ -203,6 +229,12 @@ export default function JobForm() {
     setStages(stages.map((s, idx) => (idx === i ? { ...s, [field]: val } : s)));
   };
 
+  const handleCountryChange = (val: string) => {
+    setCountry(val);
+    setCity("");
+    setCitySearch("");
+  };
+
   /* ───── render helpers ───── */
   const FieldRow = ({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) => (
     <div className="space-y-1.5">
@@ -245,30 +277,56 @@ export default function JobForm() {
           </Select>
         </FieldRow>
       </div>
+      <FieldRow label="Workplace Type">
+        <div className="flex gap-1.5">
+          {(["remote", "hybrid", "onsite"] as const).map((w) => (
+            <Button
+              key={w}
+              type="button"
+              variant={workplaceType === w ? "default" : "outline"}
+              size="sm"
+              className="flex-1 h-9 text-xs capitalize"
+              onClick={() => setWorkplaceType(w)}
+            >
+              {w}
+            </Button>
+          ))}
+        </div>
+      </FieldRow>
+      {/* Location: Country + City */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <FieldRow label="Workplace Type">
-          <div className="flex gap-1.5">
-            {(["remote", "hybrid", "onsite"] as const).map((w) => (
-              <Button
-                key={w}
-                type="button"
-                variant={workplaceType === w ? "default" : "outline"}
-                size="sm"
-                className="flex-1 h-9 text-xs capitalize"
-                onClick={() => setWorkplaceType(w)}
-              >
-                {w}
-              </Button>
-            ))}
-          </div>
+        <FieldRow label="Country">
+          <Select value={country} onValueChange={handleCountryChange}>
+            <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select country" /></SelectTrigger>
+            <SelectContent>
+              {Object.keys(countryCities).map((c) => (
+                <SelectItem key={c} value={c}>{c}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </FieldRow>
-        <FieldRow label="Location">
-          <Input
-            value={location}
-            onChange={(e) => setLocation(e.target.value)}
-            placeholder="e.g. San Francisco, CA"
-            className="h-9 text-sm"
-          />
+        <FieldRow label="City">
+          <Select value={city} onValueChange={setCity} disabled={!country}>
+            <SelectTrigger className="h-9 text-sm"><SelectValue placeholder={country ? "Select city" : "Select country first"} /></SelectTrigger>
+            <SelectContent>
+              {/* Simple search within content */}
+              <div className="px-2 pb-1.5">
+                <Input
+                  placeholder="Search city..."
+                  value={citySearch}
+                  onChange={(e) => setCitySearch(e.target.value)}
+                  className="h-7 text-xs"
+                />
+              </div>
+              {filteredCities.length === 0 ? (
+                <div className="px-3 py-2 text-xs text-muted-foreground">No cities found</div>
+              ) : (
+                filteredCities.map((c) => (
+                  <SelectItem key={c} value={c}>{c}</SelectItem>
+                ))
+              )}
+            </SelectContent>
+          </Select>
         </FieldRow>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -309,12 +367,7 @@ export default function JobForm() {
           <Sparkles className="h-3 w-3" /> AI Assist
         </Button>
       </div>
-      <Textarea
-        value={description}
-        onChange={(e) => setDescription(e.target.value)}
-        placeholder="Describe the role, responsibilities, and requirements..."
-        className="min-h-[240px] md:min-h-[320px] text-sm leading-relaxed resize-y"
-      />
+      <TiptapEditor content={description} onChange={setDescription} />
       <p className="text-[11px] text-muted-foreground/70">
         Use AI Assist to generate, improve, shorten, or expand the description.
       </p>
@@ -322,54 +375,127 @@ export default function JobForm() {
   );
 
   const renderHiringDetails = () => (
-    <div className="space-y-4">
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <FieldRow label="Openings">
-          <Input
-            type="number"
-            min={1}
-            value={openings}
-            onChange={(e) => setOpenings(Number(e.target.value))}
-            className="h-9 text-sm"
-          />
-        </FieldRow>
-        <FieldRow label="Salary Min">
-          <Input
-            value={salaryMin}
-            onChange={(e) => setSalaryMin(e.target.value)}
-            placeholder="e.g. 140000"
-            className="h-9 text-sm"
-          />
-        </FieldRow>
-        <FieldRow label="Salary Max">
-          <Input
-            value={salaryMax}
-            onChange={(e) => setSalaryMax(e.target.value)}
-            placeholder="e.g. 180000"
-            className="h-9 text-sm"
-          />
-        </FieldRow>
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <FieldRow label="Currency">
-          <Select value={currency} onValueChange={setCurrency}>
-            <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {["USD", "EUR", "GBP", "CAD", "AUD"].map((c) => (
-                <SelectItem key={c} value={c}>{c}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </FieldRow>
-        <FieldRow label="Target Start Date">
-          <Input
-            type="date"
-            value={targetStart}
-            onChange={(e) => setTargetStart(e.target.value)}
-            className="h-9 text-sm"
-          />
-        </FieldRow>
-      </div>
+    <div className="space-y-5">
+      <FieldRow label="Openings">
+        <Input
+          type="number"
+          min={1}
+          value={openings}
+          onChange={(e) => setOpenings(Number(e.target.value))}
+          className="h-9 text-sm max-w-[120px]"
+        />
+      </FieldRow>
+
+      <Separator />
+
+      {/* Salary Type Selector */}
+      <FieldRow label="Salary">
+        <div className="flex gap-1.5">
+          {([
+            { val: "hidden", label: "Not shown" },
+            { val: "fixed", label: "Fixed amount" },
+            { val: "range", label: "Range" },
+          ] as { val: SalaryType; label: string }[]).map((opt) => (
+            <Button
+              key={opt.val}
+              type="button"
+              variant={salaryType === opt.val ? "default" : "outline"}
+              size="sm"
+              className="h-9 text-xs flex-1"
+              onClick={() => setSalaryType(opt.val)}
+            >
+              {opt.label}
+            </Button>
+          ))}
+        </div>
+      </FieldRow>
+
+      {salaryType === "fixed" && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <FieldRow label="Amount">
+            <Input
+              value={salaryFixed}
+              onChange={(e) => setSalaryFixed(e.target.value)}
+              placeholder="e.g. 150000"
+              className="h-9 text-sm"
+              type="number"
+            />
+          </FieldRow>
+          <FieldRow label="Currency">
+            <Select value={currency} onValueChange={setCurrency}>
+              <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {["USD", "EUR", "GBP", "CAD", "AUD"].map((c) => (
+                  <SelectItem key={c} value={c}>{c}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FieldRow>
+          <FieldRow label="Timeframe">
+            <Select value={timeframe} onValueChange={setTimeframe}>
+              <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {["per year", "per month", "per hour"].map((t) => (
+                  <SelectItem key={t} value={t} className="capitalize">{t}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FieldRow>
+        </div>
+      )}
+
+      {salaryType === "range" && (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <FieldRow label="Minimum">
+              <Input
+                value={salaryMin}
+                onChange={(e) => setSalaryMin(e.target.value)}
+                placeholder="e.g. 140000"
+                className="h-9 text-sm"
+                type="number"
+              />
+            </FieldRow>
+            <FieldRow label="Maximum">
+              <Input
+                value={salaryMax}
+                onChange={(e) => setSalaryMax(e.target.value)}
+                placeholder="e.g. 180000"
+                className="h-9 text-sm"
+                type="number"
+              />
+            </FieldRow>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <FieldRow label="Currency">
+              <Select value={currency} onValueChange={setCurrency}>
+                <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {["USD", "EUR", "GBP", "CAD", "AUD"].map((c) => (
+                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FieldRow>
+            <FieldRow label="Timeframe">
+              <Select value={timeframe} onValueChange={setTimeframe}>
+                <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {["per year", "per month", "per hour"].map((t) => (
+                    <SelectItem key={t} value={t} className="capitalize">{t}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FieldRow>
+          </div>
+          {salaryMin && salaryMax && Number(salaryMin) > Number(salaryMax) && (
+            <p className="text-xs text-destructive">Minimum salary must be less than or equal to maximum.</p>
+          )}
+        </>
+      )}
+
+      <Separator />
+
       <FieldRow label="Interview Pipeline Template">
         <Select value={pipeline} onValueChange={setPipeline}>
           <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
@@ -380,11 +506,12 @@ export default function JobForm() {
           </SelectContent>
         </Select>
       </FieldRow>
-      {salaryMin && salaryMax && (
+
+      {salaryType === "range" && salaryMin && salaryMax && Number(salaryMin) <= Number(salaryMax) && (
         <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/50 p-3">
           <Sparkles className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
           <p className="text-xs text-muted-foreground">
-            AI benchmark: Market median for this role is $150k–$175k in {location || "the US"}.
+            AI benchmark: Market median for this role is $150k–$175k in {country && city ? `${city}, ${country}` : "the US"}.
           </p>
         </div>
       )}
@@ -578,7 +705,6 @@ export default function JobForm() {
         </div>
       </div>
       <Separator />
-      {/* Actions removed — single action group lives in header */}
       {savedAt && (
         <p className="text-[10px] text-muted-foreground text-center">Saved at {savedAt}</p>
       )}
@@ -749,7 +875,7 @@ export default function JobForm() {
           </CardContent>
         </Card>
 
-        {/* Summary sidebar (desktop) / collapsible drawer (tablet) */}
+        {/* Summary sidebar (desktop) */}
         <div className="hidden lg:block">
           <div className="sticky top-20">
             <Card>

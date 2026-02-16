@@ -1,73 +1,295 @@
-# Welcome to your Lovable project
+# OneHash ATS Monorepo
 
-## Project info
+OneHash ATS is a full-stack Applicant Tracking System built as a monorepo.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+It includes:
+- `apps/web`: Next.js 15 App Router frontend
+- `apps/backend`: FastAPI backend with async SQLAlchemy and Alembic
+- `packages/ui`: shared UI package used by the frontend
+- `docker-compose.yml`: local orchestration for Postgres, backend, and web
 
-## How can I edit this code?
+## A. Overview
 
-There are several ways of editing your application.
+This repository is structured to support local development and containerized development with a clear separation between frontend and backend apps.
 
-**Use Lovable**
+Core stack:
+- Frontend: Next.js 15, TypeScript, Tailwind
+- Backend: FastAPI, SQLAlchemy 2.0 async, Alembic, psycopg3
+- Database: PostgreSQL 15
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+## Quick Start (Docker)
 
-Changes made via Lovable will be committed automatically to this repo.
+```bash
+docker-compose up --build
+```
 
-**Use your preferred IDE**
+Open:
+- `http://localhost:3000`
+- `http://localhost:8000/health`
+- `http://localhost:3000/debug-api`
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+## Architecture Summary
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+Browser -> Next.js -> FastAPI -> PostgreSQL  
+Cloudflare -> ALB -> ECS -> RDS (production)
 
-Follow these steps:
+## B. Folder Structure
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+```text
+ATS/
+├── apps/
+│   ├── web/
+│   │   ├── src/
+│   │   ├── public/
+│   │   ├── package.json
+│   │   ├── next.config.js
+│   │   └── Dockerfile
+│   └── backend/
+│       ├── app/
+│       ├── alembic/
+│       ├── alembic.ini
+│       ├── requirements.txt
+│       └── Dockerfile
+├── packages/
+│   └── ui/
+├── infra/
+├── docker-compose.yml
+└── README.md
+```
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+## C. Requirements
 
-# Step 3: Install the necessary dependencies.
-npm i
+Recommended local toolchain:
+- Node.js: 20.x LTS
+- npm: 10+
+- Python: 3.11+
+- Docker Engine: 24+
+- Docker Compose plugin: v2+
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+Database:
+- PostgreSQL 15 (Docker is recommended)
+
+## D. Environment Variables
+
+### Backend (`apps/backend`)
+
+Local backend env file:
+- `apps/backend/.env` (local only, gitignored)
+
+Template file (tracked):
+- `apps/backend/.env.example`
+
+Current template:
+
+```env
+DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/ats_db
+IS_PRODUCTION=false
+CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+```
+
+Variables:
+- `DATABASE_URL`: full SQLAlchemy DSN for backend and Alembic
+- `IS_PRODUCTION`: runtime mode switch (`true`/`false`)
+- `CORS_ORIGINS`: comma-separated origins allowed by backend CORS middleware
+
+### Frontend (`apps/web`)
+
+Local frontend env file:
+- `apps/web/.env.local` (local only, gitignored)
+
+Example value:
+
+```env
+NEXT_PUBLIC_API_URL=http://localhost:8000
+```
+
+Usage:
+- Frontend API client reads `process.env.NEXT_PUBLIC_API_URL`
+- Fallback base URL is `http://localhost:8000`
+- `apps/web/.env.local` is for host-based local development
+- `docker-compose` injects container environment variables directly
+
+## E. Local Development (Without Docker)
+
+### 1) Backend
+
+```bash
+cd apps/backend
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+Copy env template if needed:
+
+```bash
+cp .env.example .env
+```
+
+Run migrations and backend:
+
+```bash
+alembic upgrade head
+uvicorn app.main:app --reload --port 8000
+```
+
+Quick tests:
+
+```bash
+curl http://localhost:8000/health
+curl http://localhost:8000/me
+```
+
+Expected `/health` response:
+
+```json
+{"status":"ok"}
+```
+
+### 2) Frontend
+
+```bash
+cd apps/web
+npm install
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+Open:
+- `http://localhost:3000`
+- `http://localhost:3000/debug-api`
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## F. Local Development (With Docker)
 
-**Use GitHub Codespaces**
+Start all services:
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+```bash
+docker-compose up --build
+```
 
-## What technologies are used for this project?
+Service ports:
+- Postgres: `5432`
+- Backend: `8000`
+- Web: `3000`
 
-This project is built with:
+Stop services:
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+```bash
+docker-compose down
+```
 
-## How can I deploy this project?
+Rebuild from scratch:
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+```bash
+docker-compose build --no-cache
+docker-compose up
+```
 
-## Can I connect a custom domain to my Lovable project?
+## G. Database & Migrations
 
-Yes, you can!
+Migration files are in:
+- `apps/backend/alembic/versions/`
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+Useful commands:
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+```bash
+cd apps/backend
+source venv/bin/activate
+alembic current
+alembic history
+alembic upgrade head
+alembic downgrade -1
+```
+
+Create a new migration after model changes:
+
+```bash
+alembic revision --autogenerate -m "describe_change"
+```
+
+Recommended workflow:
+1. Update models
+2. Generate migration
+3. Review migration file
+4. Apply with `alembic upgrade head`
+5. Run backend and smoke test endpoints
+
+## H. Useful Commands
+
+Frontend:
+
+```bash
+cd apps/web
+npm install
+npm run dev
+npm run build
+npm run lint
+npx tsc --noEmit
+```
+
+Backend:
+
+```bash
+cd apps/backend
+source venv/bin/activate
+pip install -r requirements.txt
+alembic upgrade head
+uvicorn app.main:app --reload --port 8000
+```
+
+If additional backend format/lint tools are introduced (for example `ruff`, `black`, `mypy`), run them from `apps/backend`.
+
+## I. Troubleshooting
+
+### `alembic: command not found`
+Use the backend virtual environment:
+
+```bash
+cd apps/backend
+source venv/bin/activate
+alembic current
+```
+
+### `pip: command not found`
+Use `python3 -m pip`:
+
+```bash
+python3 -m pip install -r requirements.txt
+```
+
+### `email-validator` missing
+Install backend dependencies in the active venv:
+
+```bash
+cd apps/backend
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+### Database connection refused
+- Ensure Postgres is running (local or Docker)
+- Verify `DATABASE_URL` in `apps/backend/.env`
+- With Docker, ensure backend uses host `postgres` in compose network
+
+### CORS errors in browser
+- Verify backend `CORS_ORIGINS` contains frontend origin
+- Default local origins:
+  - `http://localhost:3000`
+  - `http://127.0.0.1:3000`
+
+### `NEXT_PUBLIC_API_URL` not set
+Set in `apps/web/.env.local`:
+
+```env
+NEXT_PUBLIC_API_URL=http://localhost:8000
+```
+
+Restart the Next.js dev server after env changes.
+
+## J. Production Notes (ECS)
+
+- Backend container definition uses `apps/backend/Dockerfile`
+- Web container definition uses `apps/web/Dockerfile`
+- Do not run `uvicorn --reload` in production
+- Production DB should be Amazon RDS PostgreSQL
+- Typical edge architecture: Cloudflare -> ALB -> ECS services
+- Pass all runtime config via environment variables/secrets manager, not code defaults

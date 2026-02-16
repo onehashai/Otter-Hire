@@ -1,0 +1,28 @@
+from sqlalchemy import Column, String, DateTime, ForeignKey, Index, UniqueConstraint, CheckConstraint
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.sql import func
+from sqlalchemy.orm import relationship
+import uuid
+from app.db.base import Base
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
+    email = Column(String, nullable=False)
+    name = Column(String, nullable=False)
+    role = Column(String, nullable=False)
+    status = Column(String, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("org_id", "email", name="uq_users_org_email"),
+        CheckConstraint("role IN ('owner', 'admin', 'recruiter', 'hiring_manager', 'interviewer')", name="ck_users_role"),
+        CheckConstraint("status IN ('invited', 'active', 'disabled')", name="ck_users_status"),
+        Index("ix_users_org_email", "org_id", "email"),
+    )
+
+    organization = relationship("Organization")

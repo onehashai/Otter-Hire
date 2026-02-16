@@ -1,0 +1,38 @@
+from fastapi import FastAPI, Depends, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from app.core.config import settings
+from app.core.logging import setup_logging, logger
+from app.middleware.context import get_request_context, RequestContext
+from app.middleware.errors import http_exception_handler, generic_exception_handler
+from app.schemas.common import HealthResponse, RequestContextSchema
+
+setup_logging()
+
+app = FastAPI(title="ATS Backend", version="1.0.0")
+
+app.add_exception_handler(HTTPException, http_exception_handler)
+app.add_exception_handler(Exception, generic_exception_handler)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+@app.on_event("startup")
+async def startup_event():
+    mode = "production" if settings.is_production else "development"
+    logger.info(f"Starting ATS Backend in {mode} mode")
+
+
+@app.get("/health", response_model=HealthResponse)
+async def health():
+    return HealthResponse(status="ok")
+
+
+@app.get("/me", response_model=RequestContextSchema)
+async def get_me(ctx: RequestContext = Depends(get_request_context)):
+    return ctx.to_schema()

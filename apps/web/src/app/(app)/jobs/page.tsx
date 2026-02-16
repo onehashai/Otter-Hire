@@ -18,21 +18,44 @@ import { format, isAfter, isBefore, subDays, startOfDay } from "date-fns";
 import { jobNameSchema, type JobNameFormValues } from "@/lib/schemas/zodResolver";
 import { DepartmentType, EmploymentType, JobStatusType } from "./[id]/constants";
 
-const jobs = [
-  { role: "Senior Frontend Engineer", dept: "Engineering", type: "Full-time", status: "open", candidates: 34, lastActivity: "2h ago", lastActivityDate: new Date() },
-  { role: "Product Designer", dept: "Design", type: "Full-time", status: "open", candidates: 22, lastActivity: "5h ago", lastActivityDate: new Date() },
-  { role: "Data Scientist", dept: "Data", type: "Contract", status: "draft", candidates: 0, lastActivity: "1d ago", lastActivityDate: subDays(new Date(), 1) },
-  { role: "Engineering Manager", dept: "Engineering", type: "Full-time", status: "open", candidates: 18, lastActivity: "3h ago", lastActivityDate: new Date() },
-  { role: "Marketing Lead", dept: "Marketing", type: "Part-time", status: "closed", candidates: 45, lastActivity: "5d ago", lastActivityDate: subDays(new Date(), 5) },
+type JobListItem = {
+  role: string;
+  dept: DepartmentType;
+  type: EmploymentType;
+  status: JobStatusType;
+  candidates: number;
+  lastActivity: string;
+  lastActivityDate: Date;
+};
+
+const jobs: JobListItem[] = [
+  { role: "Senior Frontend Engineer", dept: "engineering", type: "full_time", status: "open", candidates: 34, lastActivity: "2h ago", lastActivityDate: new Date() },
+  { role: "Product Designer", dept: "design", type: "full_time", status: "open", candidates: 22, lastActivity: "5h ago", lastActivityDate: new Date() },
+  { role: "Data Scientist", dept: "data", type: "contract", status: "draft", candidates: 0, lastActivity: "1d ago", lastActivityDate: subDays(new Date(), 1) },
+  { role: "Engineering Manager", dept: "engineering", type: "full_time", status: "open", candidates: 18, lastActivity: "3h ago", lastActivityDate: new Date() },
+  { role: "Marketing Lead", dept: "marketing", type: "part_time", status: "closed", candidates: 45, lastActivity: "5d ago", lastActivityDate: subDays(new Date(), 5) },
 ];
 
-const allDepts = ["Engineering", "Design", "Data", "Marketing", "Sales", "Operations", "HR"] as const;
-const allTypes = ["Full-time", "Part-time", "Contract", "Internship"] as const;
+const allDepts: DepartmentType[] = ["engineering", "design", "data", "marketing", "sales", "operations", "hr"];
+const allTypes: EmploymentType[] = ["full_time", "part_time", "contract", "internship"];
 const allStatuses = ["open", "draft", "closed"] as const;
 
 const statusKey: Record<JobStatusType, string> = { open: "open", draft: "draft", closed: "closed" };
-const deptKey: Record<string, string> = { Engineering: "engineering", Design: "design", Data: "data", Marketing: "marketing", Sales: "sales", Operations: "operations", HR: "hr" };
-const typeKey: Record<string, string> = { "Full-time": "full_time", "Part-time": "part_time", Contract: "contract", Internship: "internship" };
+const deptKey: Record<DepartmentType, string> = {
+  engineering: "engineering",
+  design: "design",
+  data: "data",
+  marketing: "marketing",
+  sales: "sales",
+  operations: "operations",
+  hr: "hr",
+};
+const typeKey: Record<EmploymentType, string> = {
+  full_time: "full_time",
+  part_time: "part_time",
+  contract: "contract",
+  internship: "internship",
+};
 
 const statusVariant = (s: JobStatusType) => s === "open" ? "default" : s === "draft" ? "secondary" : "outline";
 

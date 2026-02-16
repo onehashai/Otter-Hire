@@ -7,6 +7,12 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Env files
+.env
+.env.*
+!.env.example
+!**/.env.example
+
 node_modules
 dist
 dist-ssr
@@ -25,3 +31,7 @@ next-env.d.ts
 *.njsproj
 *.sln
 *.sw?
+apps/backend/venv/
+venv/
+__pycache__/
+*.pyc

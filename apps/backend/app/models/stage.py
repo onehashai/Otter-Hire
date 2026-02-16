@@ -1,0 +1,24 @@
+from sqlalchemy import Column, String, DateTime, ForeignKey, Index, Integer
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.sql import func
+from sqlalchemy.orm import relationship
+import uuid
+from app.db.base import Base
+
+
+class Stage(Base):
+    __tablename__ = "stages"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
+    job_id = Column(UUID(as_uuid=True), ForeignKey("jobs.id"), nullable=False)
+    name = Column(String, nullable=False)
+    position = Column(Integer, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        Index("ix_stages_job_position", "job_id", "position"),
+    )
+
+    organization = relationship("Organization")
+    job = relationship("Job")

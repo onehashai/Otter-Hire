@@ -1,0 +1,124 @@
+import { useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
+import {
+  Button, InputField, Badge, Icon,
+  Popover, PopoverContent, PopoverTrigger,
+  Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
+} from "@onehash/ui";
+import type { IconName } from "@onehash/ui";
+import { useIsMobile } from "@/hooks/use-mobile";
+
+interface MainPagesLayoutProps {
+  searchValue: string;
+  onSearchChange: (value: string) => void;
+
+  actionLabel: string;
+  actionIcon: IconName;
+  onAction: () => void;
+
+  filterContent?: ReactNode;
+  filterTitle?: string;
+  filterDescription?: string;
+  hasActiveFilters?: boolean;
+
+  activeChips?: { label: string; clear: () => void }[];
+  onClearAllFilters?: () => void;
+
+  children: ReactNode;
+}
+
+export const MainPagesLayout = ({
+  searchValue,
+  onSearchChange,
+  actionLabel,
+  actionIcon,
+  onAction,
+  filterContent,
+  filterTitle,
+  filterDescription,
+  hasActiveFilters = false,
+  activeChips,
+  onClearAllFilters,
+  children,
+}: MainPagesLayoutProps) => {
+  const { t } = useTranslation();
+  const isMobile = useIsMobile();
+  const [filterOpen, setFilterOpen] = useState(false);
+
+  return (
+    <div className="space-y-3 md:space-y-4">
+      {/* ─── Toolbar ─── */}
+      <div className="flex items-center gap-2">
+        {/* Search */}
+        <div className="relative flex-1 md:flex-none">
+          <Icon name="Search" className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+          <InputField
+            placeholder={t("search_placeholder")}
+            value={searchValue}
+            onChange={(e) => onSearchChange(e.target.value)}
+            className="h-9 md:h-8 pl-8 text-xs md:w-56"
+          />
+        </div>
+
+        {/* Filters */}
+        {filterContent && (
+          isMobile ? (
+            <>
+              <Button variant="outline" size="sm" className="h-9 text-xs gap-1.5 shrink-0" onClick={() => setFilterOpen(true)}>
+                <Icon name="Filter" className="h-3.5 w-3.5" />
+                {hasActiveFilters && <span className="h-1.5 w-1.5 rounded-full bg-foreground" />}
+              </Button>
+              <Sheet open={filterOpen} onOpenChange={setFilterOpen}>
+                <SheetContent side="bottom" className="h-[80vh] rounded-t-2xl overflow-y-auto">
+                  <SheetHeader>
+                    <SheetTitle className="text-base">{filterTitle ?? t("filters")}</SheetTitle>
+                    {filterDescription && <SheetDescription className="text-xs">{filterDescription}</SheetDescription>}
+                  </SheetHeader>
+                  <div className="mt-4">{filterContent}</div>
+                </SheetContent>
+              </Sheet>
+            </>
+          ) : (
+            <Popover open={filterOpen} onOpenChange={setFilterOpen}>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5 shrink-0">
+                  <Icon name="Filter" className="h-3.5 w-3.5" />
+                  <span>{t("filters")}</span>
+                  {hasActiveFilters && <span className="h-1.5 w-1.5 rounded-full bg-foreground" />}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-72 max-h-[70vh] overflow-y-auto" align="start">
+                {filterContent}
+              </PopoverContent>
+            </Popover>
+          )
+        )}
+        <div className="flex-1" />
+        <Button size="sm" className="h-9 md:h-8 text-xs gap-1.5 shrink-0 hidden md:flex" onClick={onAction}>
+          <Icon name={actionIcon} className="h-3.5 w-3.5" /> {actionLabel}
+        </Button>
+      </div>
+
+      {/* ─── Active filter chips ─── */}
+      {activeChips && activeChips.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {activeChips.map((chip, i) => (
+            <Badge key={i} variant="secondary" className="text-[10px] gap-1 pr-1 cursor-pointer hover:bg-muted" onClick={chip.clear}>
+              {chip.label}
+              <Icon name="X" className="h-2.5 w-2.5" />
+            </Badge>
+          ))}
+          {onClearAllFilters && (
+            <Button variant="ghost" size="icon" className="h-6 w-6 p-0" onClick={onClearAllFilters}>
+              <Icon name="X" className="h-2.5 w-2.5" />
+              <span className="text-[10px] text-muted-foreground hover:text-foreground transition-colors px-1">{t("clear_all")}</span>
+            </Button>
+          )}
+        </div>
+      )}
+
+      {/* ─── Page content ─── */}
+      {children}
+    </div>
+  );
+};

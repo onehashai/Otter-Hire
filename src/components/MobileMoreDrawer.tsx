@@ -1,13 +1,15 @@
-import { useNavigate } from "react-router-dom";
+"use client";
+
+import { useRouter } from "next/navigation";
 import { Calendar, UserSearch, BarChart3, Zap, Bot, Settings, Sun, Moon } from "lucide-react";
 import { useTheme } from "@/components/ThemeProvider";
-import { Separator } from "@/components/ui/separator";
 import {
+  Separator,
   Drawer,
   DrawerContent,
   DrawerHeader,
   DrawerTitle,
-} from "@/components/ui/drawer";
+} from "@onehash/ui";
 
 const moreItems = [
   { title: "Interviews", url: "/interviews", icon: Calendar },
@@ -24,11 +26,11 @@ interface MobileMoreDrawerProps {
 }
 
 export function MobileMoreDrawer({ open, onOpenChange }: MobileMoreDrawerProps) {
-  const navigate = useNavigate();
+  const router = useRouter();
   const { theme, setTheme } = useTheme();
 
   const handleNav = (url: string) => {
-    navigate(url);
+    router.push(url);
     onOpenChange(false);
   };
 

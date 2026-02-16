@@ -1,6 +1,5 @@
-import { Toaster } from "@/components/ui/toaster";
-import { Toaster as Sonner } from "@/components/ui/sonner";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { Suspense } from "react";
+import { Toaster, SonnerToaster, TooltipProvider } from "@onehash/ui";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "@/components/ThemeProvider";
@@ -22,34 +21,36 @@ import NotFound from "@/pages/NotFound";
 const queryClient = new QueryClient();
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <ThemeProvider defaultTheme="light">
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <Routes>
-            <Route element={<AppLayout />}>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/jobs" element={<Jobs />} />
-              <Route path="/jobs/new" element={<JobForm />} />
-              <Route path="/jobs/:id/edit" element={<JobForm />} />
-              <Route path="/candidates" element={<Candidates />} />
-              <Route path="/pipeline" element={<Pipeline />} />
-              <Route path="/interviews" element={<Interviews />} />
-              <Route path="/messages" element={<Messages />} />
-              <Route path="/talent-pool" element={<TalentPool />} />
-              <Route path="/reports" element={<Reports />} />
-              <Route path="/automations" element={<Automations />} />
-              <Route path="/ai-assistant" element={<AIAssistant />} />
-              <Route path="/settings" element={<SettingsPage />} />
-            </Route>
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
-      </TooltipProvider>
-    </ThemeProvider>
-  </QueryClientProvider>
+  <Suspense fallback={<div className="flex h-screen items-center justify-center" />}>
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider defaultTheme="light">
+        <TooltipProvider>
+          <Toaster />
+          <SonnerToaster />
+          <BrowserRouter>
+            <Routes>
+              <Route element={<AppLayout />}>
+                <Route path="/" element={<Dashboard />} />
+                <Route path="/jobs" element={<Jobs />} />
+                <Route path="/jobs/new" element={<JobForm />} />
+                <Route path="/jobs/:id/edit" element={<JobForm />} />
+                <Route path="/candidates" element={<Candidates />} />
+                <Route path="/pipeline" element={<Pipeline />} />
+                <Route path="/interviews" element={<Interviews />} />
+                <Route path="/messages" element={<Messages />} />
+                <Route path="/talent-pool" element={<TalentPool />} />
+                <Route path="/reports" element={<Reports />} />
+                <Route path="/automations" element={<Automations />} />
+                <Route path="/ai-assistant" element={<AIAssistant />} />
+                <Route path="/settings" element={<SettingsPage />} />
+              </Route>
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </BrowserRouter>
+        </TooltipProvider>
+      </ThemeProvider>
+    </QueryClientProvider>
+  </Suspense>
 );
 
 export default App;

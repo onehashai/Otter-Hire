@@ -1,6 +1,8 @@
-import { useLocation, useParams } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { Search, Plus } from "lucide-react";
+"use client";
+
+import { usePathname } from "next/navigation";
+import { Button } from "@onehash/ui";
+import { Search } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 const pageTitles: Record<string, string> = {
@@ -23,14 +25,13 @@ interface TopBarProps {
 }
 
 export function TopBar({ onOpenCommandPalette }: TopBarProps) {
-  const location = useLocation();
+  const pathname = usePathname();
   const isMobile = useIsMobile();
 
-  // For job edit routes, derive title from URL param
-  const isJobEdit = /^\/jobs\/[^/]+\/edit$/.test(location.pathname);
+  const isJobEdit = /^\/jobs\/[^/]+\/edit$/.test(pathname);
   const title = isJobEdit
-    ? decodeURIComponent(location.pathname.split("/")[2])
-    : pageTitles[location.pathname] || "Page";
+    ? decodeURIComponent(pathname.split("/")[2])
+    : pageTitles[pathname] || "Page";
 
   return (
     <header className="h-12 border-b border-border flex items-center justify-between px-4 md:px-6 bg-background shrink-0">
@@ -53,13 +54,6 @@ export function TopBar({ onOpenCommandPalette }: TopBarProps) {
             </>
           )}
         </Button>
-
-        {!isMobile && (
-          <Button size="sm" className="h-8 gap-1.5 text-xs">
-            <Plus className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Quick Action</span>
-          </Button>
-        )}
       </div>
     </header>
   );

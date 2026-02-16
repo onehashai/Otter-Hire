@@ -1,6 +1,8 @@
+"use client";
+
 import { LayoutDashboard, Briefcase, Kanban, Users, Mail, MoreHorizontal } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
-import { useLocation } from "react-router-dom";
+import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
 import { MobileMoreDrawer } from "./MobileMoreDrawer";
@@ -14,7 +16,7 @@ const primaryTabs = [
 ];
 
 export function BottomNav() {
-  const location = useLocation();
+  const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
 
   return (
@@ -23,12 +25,12 @@ export function BottomNav() {
         <div className="flex items-center justify-around h-14 px-1">
           {primaryTabs.map((tab) => {
             const isActive = tab.url === "/"
-              ? location.pathname === "/"
-              : location.pathname.startsWith(tab.url);
+              ? pathname === "/"
+              : pathname.startsWith(tab.url);
             return (
               <NavLink
                 key={tab.title}
-                to={tab.url}
+                href={tab.url}
                 end={tab.url === "/"}
                 className={cn(
                   "flex flex-col items-center justify-center gap-0.5 min-w-[48px] min-h-[44px] rounded-lg transition-colors",

@@ -1,3 +1,5 @@
+"use client";
+
 import {
   LayoutDashboard,
   Briefcase,
@@ -13,20 +15,20 @@ import {
   Sun,
   Moon,
   ChevronsLeft,
-  Building2,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
-import { useLocation } from "react-router-dom";
+import { usePathname } from "next/navigation";
 import { useTheme } from "@/components/ThemeProvider";
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-import { Separator } from "@/components/ui/separator";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
+  Button,
+  Separator,
+  Avatar,
+  AvatarFallback,
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-} from "@/components/ui/tooltip";
+} from "@onehash/ui";
+import { cn } from "@/lib/utils";
 
 const navItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
@@ -48,7 +50,7 @@ interface AppSidebarProps {
 }
 
 export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
-  const location = useLocation();
+  const pathname = usePathname();
   const { theme, setTheme } = useTheme();
 
   return (
@@ -84,13 +86,13 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
       <nav className="flex-1 overflow-y-auto py-2 px-2 space-y-0.5">
         {navItems.map((item) => {
           const isActive = item.url === "/"
-            ? location.pathname === "/"
-            : location.pathname.startsWith(item.url);
+            ? pathname === "/"
+            : pathname.startsWith(item.url);
 
           const link = (
             <NavLink
               key={item.title}
-              to={item.url}
+              href={item.url}
               end={item.url === "/"}
               className={cn(
                 "flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm transition-colors",

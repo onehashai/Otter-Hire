@@ -1,0 +1,87 @@
+/* Syntax highlighting for code blocks (lowlight / highlight.js compatible) */
+.rich-text-editor .hljs-keyword,
+.rich-text-editor .hljs-selector-tag,
+.rich-text-editor .hljs-addition {
+  color: #0550ae;
+}
+
+.rich-text-editor .hljs-string,
+.rich-text-editor .hljs-attr {
+  color: #0a3069;
+}
+
+.rich-text-editor .hljs-number,
+.rich-text-editor .hljs-literal {
+  color: #0550ae;
+}
+
+.rich-text-editor .hljs-comment,
+.rich-text-editor .hljs-quote {
+  color: #57606a;
+  font-style: italic;
+}
+
+.rich-text-editor .hljs-title,
+.rich-text-editor .hljs-title.class_ {
+  color: #953800;
+}
+
+.rich-text-editor .hljs-built_in,
+.rich-text-editor .hljs-type {
+  color: #0550ae;
+}
+
+.rich-text-editor .hljs-params {
+  color: inherit;
+}
+
+.rich-text-editor .hljs-meta,
+.rich-text-editor .hljs-meta .hljs-keyword {
+  color: #953800;
+}
+
+.rich-text-editor .hljs-regexp,
+.rich-text-editor .hljs-link {
+  color: #0a3069;
+}
+
+.rich-text-editor .hljs-symbol,
+.rich-text-editor .hljs-bullet {
+  color: #0550ae;
+}
+
+.rich-text-editor .hljs-subst,
+.rich-text-editor .hljs-variable {
+  color: #953800;
+}
+
+.rich-text-editor .hljs-deletion {
+  color: #cf222e;
+}
+
+.rich-text-editor .hljs-selector-id,
+.rich-text-editor .hljs-selector-class {
+  color: #953800;
+}
+
+.rich-text-editor .hljs-doctag,
+.rich-text-editor .hljs-formula {
+  color: #57606a;
+}
+
+.rich-text-editor .hljs-section {
+  color: #0550ae;
+  font-weight: 600;
+}
+
+.rich-text-editor .hljs-name {
+  color: #0550ae;
+}
+
+.rich-text-editor .hljs-emphasis {
+  font-style: italic;
+}
+
+.rich-text-editor .hljs-strong {
+  font-weight: 600;
+}

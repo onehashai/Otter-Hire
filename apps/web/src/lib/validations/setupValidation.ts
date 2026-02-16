@@ -1,6 +1,6 @@
 import { jobNameSchema } from "@/lib/schemas/zodResolver";
-import type { JobSetupState } from "../../app/(app)/jobs/[id]/context";
-import type { SetupStepSlug } from "../../app/(app)/jobs/[id]/constants";
+import type { JobSetupState } from "../../app/(dashboard)/jobs/[id]/context";
+import type { SetupStepSlug } from "../../app/(dashboard)/jobs/[id]/constants";
 
 export type BasicInfoValidation = {
   valid: boolean;

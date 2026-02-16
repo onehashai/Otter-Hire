@@ -21,7 +21,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { JobSetupProvider, useJobSetup } from "./context";
 import { SETUP_SECTIONS, type SetupStepSlug } from "./constants";
-import { isSetupValid, getFirstInvalidSection, getBasicInfoValidation } from "../../../../../lib/validations/setupValidation";
+import { isSetupValid, getFirstInvalidSection, getBasicInfoValidation } from "../../../../lib/validations/setupValidation";
 
 function SetupLayoutInner({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -55,15 +55,10 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
   } = useJobSetup();
 
   const pathParts = pathname.split("/");
-  const setupIdx = pathParts.indexOf("setup");
-  const pathSlug =
-    setupIdx >= 0 && pathParts[setupIdx + 1]
-      ? pathParts[setupIdx + 1]
-      : "basic-info";
-  const currentIndex = sections.findIndex((s) => s.slug === pathSlug);
+  const currentIndex = sections.findIndex((s) => s.slug === pathParts[pathParts.length - 1]);
   const currentStep = currentIndex >= 0 ? currentIndex : 0;
-  const currentSlug = sections[currentStep]?.slug ?? "basic-info";
-  const basePath = `/jobs/${encodeURIComponent(id)}/setup`;
+  const currentSlug = sections[currentStep]?.slug ?? "info";
+  const basePath = `/jobs/${encodeURIComponent(id)}`;
 
   const goTo = (slug: SetupStepSlug) => router.push(`${basePath}/${slug}`);
 
@@ -79,7 +74,7 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
     if (!isSetupValid(validationState)) {
       const first = getFirstInvalidSection(validationState);
       if (first) {
-        setBasicInfoAttemptedSave(first.slug === "basic-info");
+        setBasicInfoAttemptedSave(first.slug === "info");
         setHiringDetailsAttemptedSave(first.slug === "hiring-details");
         toast.error(first.messageParams ? t(first.messageKey, first.messageParams) : t(first.messageKey));
         goTo(first.slug);
@@ -95,7 +90,7 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
     if (!isSetupValid(validationState)) {
       const first = getFirstInvalidSection(validationState);
       if (first) {
-        setBasicInfoAttemptedSave(first.slug === "basic-info");
+        setBasicInfoAttemptedSave(first.slug === "info");
         setHiringDetailsAttemptedSave(first.slug === "hiring-details");
         toast.error(first.messageParams ? t(first.messageKey, first.messageParams) : t(first.messageKey));
         goTo(first.slug);
@@ -108,9 +103,9 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
   };
 
   const goNext = () => {
-    if (pathSlug === "basic-info" && !getBasicInfoValidation(validationState).valid) {
+    if (pathSlug === "info" && !getBasicInfoValidation(validationState).valid) {
       const first = getFirstInvalidSection(validationState);
-      if (first?.slug === "basic-info") {
+      if (first?.slug === "info") {
         setBasicInfoAttemptedSave(true);
         toast.error(first.messageParams ? t(first.messageKey, first.messageParams) : t(first.messageKey));
         return;

@@ -16,7 +16,7 @@ import { useRouter } from "next/navigation";
 import { MainPagesLayout } from "@/components/MainPagesLayout";
 import { format, isAfter, isBefore, subDays, startOfDay } from "date-fns";
 import { jobNameSchema, type JobNameFormValues } from "@/lib/schemas/zodResolver";
-import { DepartmentType, EmploymentType, JobStatusType } from "./[id]/setup/constants";
+import { DepartmentType, EmploymentType, JobStatusType } from "./[id]/constants";
 
 const jobs = [
   { role: "Senior Frontend Engineer", dept: "Engineering", type: "Full-time", status: "open", candidates: 34, lastActivity: "2h ago", lastActivityDate: new Date() },
@@ -62,7 +62,7 @@ export default function JobsPage() {
 
   const onCreateJobValid = (data: JobNameFormValues) => {
     setCreateOpen(false);
-    router.push(`/jobs/${encodeURIComponent(data.jobName.trim())}/setup`);
+    router.push(`/jobs/${encodeURIComponent(data.jobName.trim())}/info`);
   };
 
   const toggleArrayFilter = <T extends string | JobStatusType | DepartmentType | EmploymentType>(arr: T[], val: T, setter: (v: T[]) => void) => {
@@ -200,7 +200,7 @@ export default function JobsPage() {
       {isMobile ? (
         <div className="space-y-2">
           {filtered.map((job) => (
-            <Card key={job.role} className="active:bg-muted/50 transition-colors cursor-pointer" onClick={() => router.push(`/jobs/${encodeURIComponent(job.role)}/setup`)}>
+            <Card key={job.role} className="active:bg-muted/50 transition-colors cursor-pointer" onClick={() => router.push(`/jobs/${encodeURIComponent(job.role)}/info`)}>
               <CardContent className="p-4">
                 <div className="flex items-start justify-between mb-1.5">
                   <h3 className="text-sm font-medium leading-tight pr-2">{job.role}</h3>
@@ -235,7 +235,7 @@ export default function JobsPage() {
               </TableHeader>
               <TableBody>
                 {filtered.map((job) => (
-                  <TableRow key={job.role} className="cursor-pointer hover:bg-muted/50" onClick={() => router.push(`/jobs/${encodeURIComponent(job.role)}/setup`)}>
+                  <TableRow key={job.role} className="cursor-pointer hover:bg-muted/50" onClick={() => router.push(`/jobs/${encodeURIComponent(job.role)}/info`)}>
                     <TableCell className="text-sm font-medium">{job.role}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">{t(deptKey[job.dept])}</TableCell>
                     <TableCell><Badge variant={statusVariant(job.status)} className="text-[10px]">{t(statusKey[job.status])}</Badge></TableCell>

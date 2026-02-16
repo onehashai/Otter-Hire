@@ -6,14 +6,14 @@ import { Sparkles } from "lucide-react";
 import { useJobSetup } from "../context";
 import { useTranslation } from "react-i18next";
 
-export default function DescriptionPage() {
+export default function JobDescriptionPage() {
   const { description, setDescription, setAiSheetOpen } = useJobSetup();
   const { t } = useTranslation();
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <Label className="text-xs font-medium text-muted-foreground">Job Description</Label>
+        <Label className="text-xs font-medium text-muted-foreground">{t("job_description")}</Label>
         <Button
           variant="outline"
           size="sm"

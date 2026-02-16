@@ -12,7 +12,7 @@ import { Country } from "country-state-city";
 import { useJobSetup } from "../context";
 import { type SalaryType, salaryTypes, timeframes } from "../constants";
 import { useTranslation } from "react-i18next";
-import { getHiringDetailsValidation } from "../../../../../../lib/validations/setupValidation";
+import { getHiringDetailsValidation } from "../../../../../lib/validations/setupValidation";
 
 const uniqueCurrencies = (() => {
   const set = new Set<string>();

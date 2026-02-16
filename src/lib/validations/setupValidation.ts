@@ -1,6 +1,6 @@
 import { jobNameSchema } from "@/lib/schemas/zodResolver";
-import type { JobSetupState } from "../../app/(app)/jobs/[id]/setup/context";
-import type { SetupStepSlug } from "../../app/(app)/jobs/[id]/setup/constants";
+import type { JobSetupState } from "../../app/(app)/jobs/[id]/context";
+import type { SetupStepSlug } from "../../app/(app)/jobs/[id]/constants";
 
 export type BasicInfoValidation = {
   valid: boolean;
@@ -62,15 +62,15 @@ export function getFirstInvalidSection(state: SetupValidationState): FirstInvali
   const basic = getBasicInfoValidation(state);
   if (!basic.valid) {
     if (basic.titleError === "min") {
-      return { slug: "basic-info", messageKey: "min_char_length", messageParams: { count: 1 } };
+      return { slug: "info", messageKey: "min_char_length", messageParams: { count: 1 } };
     }
     if (basic.titleError === "max") {
-      return { slug: "basic-info", messageKey: "max_char_length", messageParams: { count: 100 } };
+      return { slug: "info", messageKey: "max_char_length", messageParams: { count: 100 } };
     }
     if (basic.titleError === "invalid") {
-      return { slug: "basic-info", messageKey: "job_name_invalid" };
+      return { slug: "info", messageKey: "job_name_invalid" };
     }
-    return { slug: "basic-info", messageKey: "job_title_required" };
+    return { slug: "info", messageKey: "job_title_required" };
   }
   const hiring = getHiringDetailsValidation(state);
   if (!hiring.valid) {

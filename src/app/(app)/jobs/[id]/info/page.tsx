@@ -11,9 +11,9 @@ import { Country, City } from "country-state-city";
 import { useJobSetup } from "../context";
 import { departments, employmentTypes, workplaceTypes, CITY_VALUE_SEP, getCityDisplayName, jobStatuses } from "../constants";
 import { useTranslation } from "react-i18next";
-import { getBasicInfoValidation } from "../../../../../../lib/validations/setupValidation";
+import { getBasicInfoValidation } from "../../../../../lib/validations/setupValidation";
 
-export default function BasicInfoPage() {
+export default function JobInfoPage() {
   const { t } = useTranslation();
   const [countrySearch, setCountrySearch] = useState("");
   const [titleTouched, setTitleTouched] = useState(false);

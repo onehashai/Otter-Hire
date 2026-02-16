@@ -20,12 +20,10 @@ export function getCityDisplayName(city: string): string {
 }
 
 export const SETUP_SECTIONS = (t: TFunction<"translation", undefined>) => [
-  { slug: "basic-info", label: t("basic_info") },
-  { slug: "description", label: t("description") },
-  { slug: "hiring-details", label: t("hiring_details") },
-  { slug: "application-form", label: t("application_form") },
-  { slug: "interview-plan", label: t("interview_plan") },
-  { slug: "visibility", label: t("visibility") },
+  { slug: "info", label: t("job_info") },
+  { slug: "description", label: t("job_description") },
+  { slug: "details", label: t("hiring_details") },
+  { slug: "application", label: t("application_form") },
 ] as const;
 
 export type SetupStepSlug = ReturnType<typeof SETUP_SECTIONS>[number]["slug"];

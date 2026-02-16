@@ -46,6 +46,8 @@ export interface JobSetupState {
   newQuestion: string;
   aiSheetOpen: boolean;
   summaryOpen: boolean;
+  basicInfoAttemptedNext: boolean;
+  hiringDetailsAttemptedSave: boolean;
 }
 
 const defaultState: JobSetupState = {
@@ -82,6 +84,8 @@ const defaultState: JobSetupState = {
   newQuestion: "",
   aiSheetOpen: false,
   summaryOpen: false,
+  basicInfoAttemptedNext: false,
+  hiringDetailsAttemptedSave: false,
 };
 
 type JobSetupContextValue = JobSetupState & {
@@ -114,6 +118,8 @@ type JobSetupContextValue = JobSetupState & {
   setNewQuestion: (v: string) => void;
   setAiSheetOpen: (v: boolean) => void;
   setSummaryOpen: (v: boolean) => void;
+  setBasicInfoAttemptedSave: (v: boolean) => void;
+  setHiringDetailsAttemptedSave: (v: boolean) => void;
   addQuestion: () => void;
   removeQuestion: (i: number) => void;
   addStage: () => void;
@@ -265,6 +271,8 @@ export function JobSetupProvider({ children }: { children: ReactNode }) {
     setNewQuestion: (v) => setState((s) => ({ ...s, newQuestion: v })),
     setAiSheetOpen: (v) => setState((s) => ({ ...s, aiSheetOpen: v })),
     setSummaryOpen: (v) => setState((s) => ({ ...s, summaryOpen: v })),
+    setBasicInfoAttemptedSave: (v) => setState((s) => ({ ...s, basicInfoAttemptedNext: v })),
+    setHiringDetailsAttemptedSave: (v) => setState((s) => ({ ...s, hiringDetailsAttemptedSave: v })),
     addQuestion,
     removeQuestion,
     addStage,

@@ -7,7 +7,7 @@ export type WorkplaceType = "remote" | "hybrid" | "onsite";
 export type JobStatusType = "draft" | "open" | "closed";
 export type VisibilityType = "internal" | "careers" | "public";
 export type SalaryType = "hidden" | "fixed" | "range";
-export type TimeframeType = "per_year" | "per_month" | "per_day" | "per_hour";
+export type TimeframeType = "per_year" | "per_month" | "per_week" | "per_day" | "per_hour";
 
 export function getCountryName(isoCode: string): string {
   const c = Country.getCountryByCode(isoCode);
@@ -68,6 +68,7 @@ export const salaryTypes: SalaryType[] = [
 export const timeframes: TimeframeType[] = [
   "per_year",
   "per_month",
+  "per_week",
   "per_day",
   "per_hour",
 ];

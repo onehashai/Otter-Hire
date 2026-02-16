@@ -21,6 +21,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { JobSetupProvider, useJobSetup } from "./context";
 import { SETUP_SECTIONS, type SetupStepSlug } from "./constants";
+import { isSetupValid, getFirstInvalidSection, getBasicInfoValidation } from "../../../../../lib/validations/setupValidation";
 
 function SetupLayoutInner({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -42,6 +43,12 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
     aiSheetOpen,
     setAiSheetOpen,
     published,
+    salaryType,
+    salaryFixed,
+    salaryMin,
+    salaryMax,
+    setBasicInfoAttemptedSave,
+    setHiringDetailsAttemptedSave,
     handleSave,
     handlePublish,
     handleUnpublish,
@@ -59,7 +66,57 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
   const basePath = `/jobs/${encodeURIComponent(id)}/setup`;
 
   const goTo = (slug: SetupStepSlug) => router.push(`${basePath}/${slug}`);
+
+  const validationState = {
+    title,
+    salaryType,
+    salaryFixed,
+    salaryMin,
+    salaryMax,
+  };
+
+  const onSave = () => {
+    if (!isSetupValid(validationState)) {
+      const first = getFirstInvalidSection(validationState);
+      if (first) {
+        setBasicInfoAttemptedSave(first.slug === "basic-info");
+        setHiringDetailsAttemptedSave(first.slug === "hiring-details");
+        toast.error(first.messageParams ? t(first.messageKey, first.messageParams) : t(first.messageKey));
+        goTo(first.slug);
+      }
+      return;
+    }
+    setBasicInfoAttemptedSave(false);
+    setHiringDetailsAttemptedSave(false);
+    handleSave();
+  };
+
+  const onPublish = () => {
+    if (!isSetupValid(validationState)) {
+      const first = getFirstInvalidSection(validationState);
+      if (first) {
+        setBasicInfoAttemptedSave(first.slug === "basic-info");
+        setHiringDetailsAttemptedSave(first.slug === "hiring-details");
+        toast.error(first.messageParams ? t(first.messageKey, first.messageParams) : t(first.messageKey));
+        goTo(first.slug);
+      }
+      return;
+    }
+    setBasicInfoAttemptedSave(false);
+    setHiringDetailsAttemptedSave(false);
+    handlePublish();
+  };
+
   const goNext = () => {
+    if (pathSlug === "basic-info" && !getBasicInfoValidation(validationState).valid) {
+      const first = getFirstInvalidSection(validationState);
+      if (first?.slug === "basic-info") {
+        setBasicInfoAttemptedSave(true);
+        toast.error(first.messageParams ? t(first.messageKey, first.messageParams) : t(first.messageKey));
+        return;
+      }
+    }
+    setBasicInfoAttemptedSave(false);
     if (currentStep < sections.length - 1) goTo(sections[currentStep + 1].slug);
   };
   const goPrev = () => {
@@ -152,7 +209,11 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
               Next <ChevronRight className="h-4 w-4 ml-1" />
             </Button>
           ) : (
-            <Button size="sm" className="h-11 text-sm flex-1" onClick={published ? handleSave : handlePublish}>
+            <Button
+              size="sm"
+              className="h-11 text-sm flex-1"
+              onClick={published ? onSave : onPublish}
+            >
               {published ? "Save Changes" : "Publish Job"}
             </Button>
           )}
@@ -182,7 +243,7 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
         <div className="flex-1">
           <h1 className="text-lg font-semibold">{title || "Create Job"}</h1>
         </div>
-        <Button variant="outline" size="sm" className="h-8 text-xs" onClick={handleSave}>
+        <Button variant="outline" size="sm" className="h-8 text-xs" onClick={onSave}>
           {t("save")}
         </Button>
         {published ? (
@@ -190,7 +251,7 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
             {t("unpublish")}
           </Button>
         ) : (
-          <Button size="sm" className="h-8 text-xs" onClick={handlePublish}>
+          <Button size="sm" className="h-8 text-xs" onClick={onPublish}>
             {t("publish")}
           </Button>
         )}

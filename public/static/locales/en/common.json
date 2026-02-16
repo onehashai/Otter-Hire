@@ -44,8 +44,8 @@
   "create_job": "Create Job",
   "create_job_description": "Enter a name for your new job posting.",
   "job_name": "Job Name",
-  "job_name_min": "Job name must be at least 1 character.",
-  "job_name_max": "Job name must be 100 characters or fewer.",
+  "min_char_length": "Length must be at least {{count}} characters.",
+  "max_char_length": "Length must be {{count}} characters or fewer.",
   "job_name_invalid": "Job name can only contain letters, numbers, spaces, and - & ' / + . ( )",
   "basic_info": "Basic Info",
   "job_title": "Job Title",
@@ -78,6 +78,7 @@
   "timeframe": "Timeframe",
   "per_year": "Per year",
   "per_month": "Per month",
+  "per_week": "Per week",
   "per_day": "Per day",
   "per_hour": "Per hour",
   "interview_pipeline_template": "Interview Pipeline Template",
@@ -87,5 +88,6 @@
   "minimum": "Minimum",
   "maximum": "Maximum",
   "resume": "Resume",
-  "require_candidates_to_upload_a_resume": "Require candidates to upload a resume"
+  "require_candidates_to_upload_a_resume": "Require candidates to upload a resume",
+  "required": "This field is required."
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import {
   Button,
   InputField,
@@ -11,6 +12,7 @@ import { Country } from "country-state-city";
 import { useJobSetup } from "../context";
 import { type SalaryType, salaryTypes, timeframes } from "../constants";
 import { useTranslation } from "react-i18next";
+import { getHiringDetailsValidation } from "../../../../../../lib/validations/setupValidation";
 
 const uniqueCurrencies = (() => {
   const set = new Set<string>();
@@ -20,6 +22,9 @@ const uniqueCurrencies = (() => {
 
 export default function HiringDetailsPage() {
   const { t } = useTranslation();
+  const [amountTouched, setAmountTouched] = useState(false);
+  const [minTouched, setMinTouched] = useState(false);
+  const [maxTouched, setMaxTouched] = useState(false);
   const {
     openings,
     setOpenings,
@@ -39,7 +44,27 @@ export default function HiringDetailsPage() {
     setPipeline,
     country,
     city,
+    hiringDetailsAttemptedSave,
   } = useJobSetup();
+
+  const hiringValidation = getHiringDetailsValidation({
+    salaryType,
+    salaryFixed,
+    salaryMin,
+    salaryMax,
+  });
+  const amountError =
+    hiringValidation.amountError && (amountTouched || hiringDetailsAttemptedSave)
+      ? t("required")
+      : undefined;
+  const minError =
+    hiringValidation.minError && (minTouched || hiringDetailsAttemptedSave)
+      ? t("required")
+      : undefined;
+  const maxError =
+    hiringValidation.maxError && (maxTouched || hiringDetailsAttemptedSave)
+      ? t("required")
+      : undefined;
 
   return (
     <div className="space-y-5">
@@ -70,10 +95,13 @@ export default function HiringDetailsPage() {
             label={t("amount")}
             value={salaryFixed}
             onChange={(e) => setSalaryFixed(e.target.value)}
+            onBlur={() => setAmountTouched(true)}
+            error={amountError}
             placeholder="e.g. 150000"
             className="h-9 text-sm"
             type="number"
-            />
+            showAsterisk
+          />
           <SelectField
             label={t("currency")}
             value={currency}
@@ -93,24 +121,28 @@ export default function HiringDetailsPage() {
       {salaryType === "range" && (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <SelectField label={t("minimum")}>
-              <InputField
-                value={salaryMin}
-                onChange={(e) => setSalaryMin(e.target.value)}
-                placeholder="e.g. 140000"
-                className="h-9 text-sm"
-                type="number"
-              />
-            </SelectField>
-            <SelectField label={t("maximum")}>
-              <InputField
-                value={salaryMax}
-                onChange={(e) => setSalaryMax(e.target.value)}
-                placeholder="e.g. 180000"
-                className="h-9 text-sm"
-                type="number"
-              />
-            </SelectField>
+            <InputField
+              label={t("minimum")}
+              value={salaryMin}
+              onChange={(e) => setSalaryMin(e.target.value)}
+              onBlur={() => setMinTouched(true)}
+              error={minError}
+              placeholder="e.g. 140000"
+              className="h-9 text-sm"
+              type="number"
+              showAsterisk
+            />
+            <InputField
+              label={t("maximum")}
+              value={salaryMax}
+              onChange={(e) => setSalaryMax(e.target.value)}
+              onBlur={() => setMaxTouched(true)}
+              error={maxError}
+              placeholder="e.g. 180000"
+              className="h-9 text-sm"
+              type="number"
+              showAsterisk
+            />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <SelectField

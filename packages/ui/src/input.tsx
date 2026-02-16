@@ -6,13 +6,19 @@ import { Label } from "./label";
 interface InputFieldProps extends React.ComponentProps<"input"> {
   error?: string;
   label?: string;
+  showAsterisk?: boolean;
 }
 
 const InputField = React.forwardRef<HTMLInputElement, InputFieldProps>(
-  ({ className, type, error, label, ...props }, ref) => {
+  ({ className, type, error, label, showAsterisk, ...props }, ref) => {
     return (
       <div className="w-full space-y-1.5">
-        {label && <Label className="text-xs font-medium text-muted-foreground">{label}</Label>}
+        {label && (
+          <Label className="text-xs font-medium text-muted-foreground">
+            {label}
+            {showAsterisk && <span className="text-destructive ml-0.5">*</span>}
+          </Label>
+        )}
         <input
           type={type}
           className={cn(

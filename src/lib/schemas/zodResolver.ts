@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const createJobNameSchema = z.object({
+export const jobNameSchema = z.object({
   jobName: z
     .string()
     .trim()
@@ -9,4 +9,4 @@ export const createJobNameSchema = z.object({
     .regex(/^[A-Za-z0-9\s\-&'/+.()]+$/, "invalid"),
 });
 
-export type CreateJobFormValues = z.infer<typeof createJobNameSchema>;
+export type JobNameFormValues = z.infer<typeof jobNameSchema>;

@@ -11,13 +11,16 @@ import { Country, City } from "country-state-city";
 import { useJobSetup } from "../context";
 import { departments, employmentTypes, workplaceTypes, CITY_VALUE_SEP, getCityDisplayName, jobStatuses } from "../constants";
 import { useTranslation } from "react-i18next";
+import { getBasicInfoValidation } from "../../../../../../lib/validations/setupValidation";
 
 export default function BasicInfoPage() {
   const { t } = useTranslation();
   const [countrySearch, setCountrySearch] = useState("");
+  const [titleTouched, setTitleTouched] = useState(false);
   const {
     title,
     setTitle,
+    basicInfoAttemptedNext,
     department,
     setDepartment,
     employmentType,
@@ -50,12 +53,27 @@ export default function BasicInfoPage() {
     return cities.filter((c) => c.name.toLowerCase().includes(q));
   }, [cities, citySearch]);
 
+  const titleError = useMemo(() => {
+    if (!titleTouched && !basicInfoAttemptedNext) return undefined;
+    const { valid, titleError: err } = getBasicInfoValidation({ title });
+    if (valid || !err) return undefined;
+    if (err === "min") return t("min_char_length", { count: 1 });
+    if (err === "max") return t("max_char_length", { count: 100 });
+    return t("job_name_invalid");
+  }, [title, titleTouched, basicInfoAttemptedNext, t]);
+
   return (
     <div className="space-y-4">
       <InputField
         value={title}
         label={t("job_title")}
-        onChange={(e) => setTitle(e.target.value)}
+        showAsterisk
+        onChange={(e) => {
+          setTitle(e.target.value);
+          if (e.target.value.trim()) setTitleTouched(false);
+        }}
+        onBlur={() => setTitleTouched(true)}
+        error={titleError}
         placeholder="e.g. Senior Frontend Engineer"
       />
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

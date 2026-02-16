@@ -15,7 +15,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useRouter } from "next/navigation";
 import { MainPagesLayout } from "@/components/MainPagesLayout";
 import { format, isAfter, isBefore, subDays, startOfDay } from "date-fns";
-import { createJobNameSchema, type CreateJobFormValues } from "@/lib/schemas/zodResolver";
+import { jobNameSchema, type JobNameFormValues } from "@/lib/schemas/zodResolver";
 import { DepartmentType, EmploymentType, JobStatusType } from "./[id]/setup/constants";
 
 const jobs = [
@@ -51,16 +51,16 @@ export default function JobsPage() {
   const [dateRange, setDateRange] = useState<{ from?: Date; to?: Date }>({});
   const [createOpen, setCreateOpen] = useState(false);
 
-  const createJobForm = useForm<CreateJobFormValues>({
+  const createJobForm = useForm<JobNameFormValues>({
     defaultValues: { jobName: "" },
-    resolver: zodResolver(createJobNameSchema),
+    resolver: zodResolver(jobNameSchema),
   });
 
   useEffect(() => {
     if (createOpen) createJobForm.reset({ jobName: "" });
   }, [createOpen]);
 
-  const onCreateJobValid = (data: CreateJobFormValues) => {
+  const onCreateJobValid = (data: JobNameFormValues) => {
     setCreateOpen(false);
     router.push(`/jobs/${encodeURIComponent(data.jobName.trim())}/setup`);
   };
@@ -272,7 +272,15 @@ export default function JobsPage() {
                       autoFocus
                       placeholder="e.g. Senior Frontend Engineer"
                       className="mt-1.5"
-                      error={fieldState.error?.message ? t(`job_name_${fieldState.error.message}`) : undefined}
+                      error={
+                        fieldState.error?.message
+                          ? fieldState.error.message === "min"
+                            ? t("min_char_length", { count: 1 })
+                            : fieldState.error.message === "max"
+                              ? t("max_char_length", { count: 100 })
+                              : t("job_name_invalid")
+                          : undefined
+                      }
                       onKeyDown={(e) => {
                         if (e.key === "Enter") {
                           e.preventDefault();

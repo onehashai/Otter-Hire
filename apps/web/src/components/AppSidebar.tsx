@@ -32,11 +32,10 @@ import { cn } from "@/lib/utils";
 const navItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Jobs", url: "/jobs", icon: Briefcase },
-  { title: "Candidates", url: "/candidates", icon: Users },
   { title: "Pipeline", url: "/pipeline", icon: Kanban },
+  { title: "Candidates", url: "/candidates", icon: Users },
   { title: "Interviews", url: "/interviews", icon: Calendar },
   { title: "Messages", url: "/messages", icon: Mail },
-  { title: "Talent Pool", url: "/talent-pool", icon: UserSearch },
   { title: "Reports", url: "/reports", icon: BarChart3 },
   { title: "Automations", url: "/automations", icon: Zap },
   { title: "AI Assistant", url: "/ai-assistant", icon: Bot },

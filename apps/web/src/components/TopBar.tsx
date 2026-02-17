@@ -19,7 +19,6 @@ const pageTitles: Record<string, string> = {
   "/pipeline": "Pipeline",
   "/interviews": "Interviews",
   "/messages": "Messages",
-  "/talent-pool": "Talent Pool",
   "/reports": "Reports",
   "/automations": "Automations",
   "/ai-assistant": "AI Assistant",

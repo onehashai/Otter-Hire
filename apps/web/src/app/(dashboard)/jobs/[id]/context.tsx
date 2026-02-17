@@ -10,8 +10,9 @@ import {
 } from "react";
 import { useParams } from "next/navigation";
 import { toast } from "sonner";
-import type { JobStatusType, VisibilityType, SalaryType, TimeframeType } from "./constants";
-import { mockJob } from "./constants";
+import type { JobStatusType, VisibilityType, SalaryType, TimeframeType, TeamRole } from "./constants";
+import { mockJob, defaultHiringStages } from "./constants";
+import type { HiringStage, TeamMember } from "./constants";
 import { useTranslation } from "react-i18next";
 
 export type Stage = { name: string; interviewer: string };
@@ -38,6 +39,8 @@ export interface JobSetupState {
   collectCover: boolean;
   screeningQuestions: string[];
   stages: Stage[];
+  hiringStages: HiringStage[];
+  teamMembers: TeamMember[];
   visibility: VisibilityType;
   published: boolean;
   linkCopied: boolean;
@@ -76,6 +79,8 @@ const defaultState: JobSetupState = {
     { name: "Technical", interviewer: "" },
     { name: "Final", interviewer: "" },
   ],
+  hiringStages: defaultHiringStages.map((s) => ({ ...s, id: crypto.randomUUID() })),
+  teamMembers: [],
   visibility: "careers" as VisibilityType,
   published: false,
   linkCopied: false,
@@ -110,6 +115,8 @@ type JobSetupContextValue = JobSetupState & {
   setCollectCover: (v: boolean) => void;
   setScreeningQuestions: (v: string[]) => void;
   setStages: (v: Stage[]) => void;
+  setHiringStages: (v: HiringStage[]) => void;
+  setTeamMembers: (v: TeamMember[]) => void;
   setVisibility: (v: VisibilityType) => void;
   setPublished: (v: boolean) => void;
   setLinkCopied: (v: boolean) => void;
@@ -125,6 +132,13 @@ type JobSetupContextValue = JobSetupState & {
   addStage: () => void;
   removeStage: (i: number) => void;
   updateStage: (i: number, field: "name" | "interviewer", val: string) => void;
+  addHiringStage: () => void;
+  removeHiringStage: (id: string) => void;
+  updateHiringStageName: (id: string, name: string) => void;
+  reorderHiringStages: (fromIndex: number, toIndex: number) => void;
+  addTeamMember: (member: Omit<TeamMember, "role"> & { role: TeamRole }) => void;
+  removeTeamMember: (id: string) => void;
+  updateTeamMemberRole: (id: string, role: TeamRole) => void;
   handleCountryChange: (val: string) => void;
   handleSave: () => void;
   handlePublish: () => void;
@@ -167,6 +181,8 @@ export function JobSetupProvider({ children }: { children: ReactNode }) {
         collectCover: mockJob.collectCover,
         screeningQuestions: mockJob.screeningQuestions,
         stages: mockJob.stages,
+        hiringStages: mockJob.hiringStages ?? defaultHiringStages.map((s) => ({ ...s, id: crypto.randomUUID() })),
+        teamMembers: mockJob.teamMembers ?? [],
         visibility: mockJob.visibility,
       }));
     }
@@ -212,6 +228,57 @@ export function JobSetupProvider({ children }: { children: ReactNode }) {
     setState((s) => ({
       ...s,
       stages: s.stages.map((st, idx) => (idx === i ? { ...st, [field]: val } : st)),
+    }));
+  }, []);
+
+  const addHiringStage = useCallback(() => {
+    setState((s) => ({
+      ...s,
+      hiringStages: [...s.hiringStages, { id: crypto.randomUUID(), name: "" }],
+    }));
+  }, []);
+
+  const removeHiringStage = useCallback((id: string) => {
+    setState((s) => {
+      if (s.hiringStages.length <= 2) return s;
+      return { ...s, hiringStages: s.hiringStages.filter((st) => st.id !== id) };
+    });
+  }, []);
+
+  const updateHiringStageName = useCallback((id: string, name: string) => {
+    setState((s) => ({
+      ...s,
+      hiringStages: s.hiringStages.map((st) => (st.id === id ? { ...st, name } : st)),
+    }));
+  }, []);
+
+  const reorderHiringStages = useCallback((fromIndex: number, toIndex: number) => {
+    setState((s) => {
+      const reordered = [...s.hiringStages];
+      const [moved] = reordered.splice(fromIndex, 1);
+      reordered.splice(toIndex, 0, moved);
+      return { ...s, hiringStages: reordered };
+    });
+  }, []);
+
+  const addTeamMember = useCallback((member: Omit<TeamMember, "role"> & { role: TeamRole }) => {
+    setState((s) => ({
+      ...s,
+      teamMembers: [...s.teamMembers, { ...member, role: member.role }],
+    }));
+  }, []);
+
+  const removeTeamMember = useCallback((id: string) => {
+    setState((s) => ({
+      ...s,
+      teamMembers: s.teamMembers.filter((m) => m.id !== id),
+    }));
+  }, []);
+
+  const updateTeamMemberRole = useCallback((id: string, role: TeamRole) => {
+    setState((s) => ({
+      ...s,
+      teamMembers: s.teamMembers.map((m) => (m.id === id ? { ...m, role } : m)),
     }));
   }, []);
 
@@ -263,6 +330,8 @@ export function JobSetupProvider({ children }: { children: ReactNode }) {
     setCollectCover: (v) => setState((s) => ({ ...s, collectCover: v })),
     setScreeningQuestions: (v) => setState((s) => ({ ...s, screeningQuestions: v })),
     setStages: (v) => setState((s) => ({ ...s, stages: v })),
+    setHiringStages: (v) => setState((s) => ({ ...s, hiringStages: v })),
+    setTeamMembers: (v) => setState((s) => ({ ...s, teamMembers: v })),
     setVisibility: (v) => setState((s) => ({ ...s, visibility: v })),
     setPublished: (v) => setState((s) => ({ ...s, published: v })),
     setLinkCopied: (v) => setState((s) => ({ ...s, linkCopied: v })),
@@ -278,6 +347,13 @@ export function JobSetupProvider({ children }: { children: ReactNode }) {
     addStage,
     removeStage,
     updateStage,
+    addHiringStage,
+    removeHiringStage,
+    updateHiringStageName,
+    reorderHiringStages,
+    addTeamMember,
+    removeTeamMember,
+    updateTeamMemberRole,
     handleCountryChange,
     handleSave,
     handlePublish,

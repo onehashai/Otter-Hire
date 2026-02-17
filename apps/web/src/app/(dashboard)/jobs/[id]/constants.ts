@@ -8,6 +8,8 @@ export type JobStatusType = "draft" | "open" | "closed";
 export type VisibilityType = "internal" | "careers" | "public";
 export type SalaryType = "hidden" | "fixed" | "range";
 export type TimeframeType = "per_year" | "per_month" | "per_week" | "per_day" | "per_hour";
+export type TeamRole = "hiring_manager" | "recruiter" | "interviewer" | "coordinator";
+
 
 export function getCountryName(isoCode: string): string {
   const c = Country.getCountryByCode(isoCode);
@@ -24,6 +26,8 @@ export const SETUP_SECTIONS = (t: TFunction<"translation", undefined>) => [
   { slug: "description", label: t("job_description") },
   { slug: "details", label: t("hiring_details") },
   { slug: "application", label: t("application_form") },
+  { slug: "stages", label: t("hiring_stages") },
+  { slug: "team", label: t("hiring_team") },
 ] as const;
 
 export type SetupStepSlug = ReturnType<typeof SETUP_SECTIONS>[number]["slug"];
@@ -76,7 +80,41 @@ export const visibilityTypes: VisibilityType[] = [
   "careers",
   "public",
 ];
+export interface HiringStage {
+  id: string;
+  name: string;
+}
 
+export interface TeamMember {
+  id: string;
+  name: string;
+  email: string;
+  role: TeamRole;
+}
+
+export const defaultHiringStages: HiringStage[] = [
+  { id: crypto.randomUUID(), name: "Applied" },
+  { id: crypto.randomUUID(), name: "Screening" },
+  { id: crypto.randomUUID(), name: "Interview" },
+  { id: crypto.randomUUID(), name: "Offer" },
+  { id: crypto.randomUUID(), name: "Hired" },
+];
+
+export const mockWorkspaceUsers: { id: string; name: string; email: string }[] = [
+  { id: "u1", name: "Jane Doe", email: "jane@acme.com" },
+  { id: "u2", name: "John Smith", email: "john@acme.com" },
+  { id: "u3", name: "Sarah Lee", email: "sarah@acme.com" },
+  { id: "u4", name: "Mike Chen", email: "mike@acme.com" },
+  { id: "u5", name: "Emma Wilson", email: "emma@acme.com" },
+  { id: "u6", name: "David Kim", email: "david@acme.com" },
+];
+
+export const teamRoleLabels: Record<TeamRole, string> = {
+  hiring_manager: "Hiring Manager",
+  recruiter: "Recruiter",
+  interviewer: "Interviewer",
+  coordinator: "Coordinator",
+};
 
 /** Mock data for edit mode */
 export const mockJob = {
@@ -106,6 +144,11 @@ export const mockJob = {
     { name: "Technical", interviewer: "John Smith" },
     { name: "Culture Fit", interviewer: "Sarah Lee" },
     { name: "Final", interviewer: "Jane Doe" },
+  ],
+  hiringStages: defaultHiringStages.map((s) => ({ ...s, id: crypto.randomUUID() })),
+  teamMembers: [
+    { id: "u1", name: "Jane Doe", email: "jane@acme.com", role: "hiring_manager" as TeamRole },
+    { id: "u2", name: "John Smith", email: "john@acme.com", role: "interviewer" as TeamRole },
   ],
   visibility: "careers" as VisibilityType,
 };

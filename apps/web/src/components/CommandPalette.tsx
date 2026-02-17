@@ -35,7 +35,6 @@ const pages = [
   { title: "Pipeline", url: "/pipeline", icon: Kanban },
   { title: "Interviews", url: "/interviews", icon: Calendar },
   { title: "Messages", url: "/messages", icon: Mail },
-  { title: "Talent Pool", url: "/talent-pool", icon: UserSearch },
   { title: "Reports", url: "/reports", icon: BarChart3 },
   { title: "Automations", url: "/automations", icon: Zap },
   { title: "AI Assistant", url: "/ai-assistant", icon: Bot },

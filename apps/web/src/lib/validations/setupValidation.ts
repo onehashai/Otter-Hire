@@ -75,13 +75,13 @@ export function getFirstInvalidSection(state: SetupValidationState): FirstInvali
   const hiring = getHiringDetailsValidation(state);
   if (!hiring.valid) {
     if (hiring.amountError) {
-      return { slug: "hiring-details", messageKey: "required" };
+      return { slug: "details", messageKey: "required" };
     }
     if (hiring.minError) {
-      return { slug: "hiring-details", messageKey: "required" };
+      return { slug: "details", messageKey: "required" };
     }
     if (hiring.maxError) {
-      return { slug: "hiring-details", messageKey: "required" };
+      return { slug: "details", messageKey: "required" };
     }
   }
   return null;

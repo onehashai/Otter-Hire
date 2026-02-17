@@ -20,7 +20,7 @@ import { ArrowLeft, ChevronLeft, ChevronRight, Save, Globe, Eye, Sparkles } from
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { JobSetupProvider, useJobSetup } from "./context";
-import { SETUP_SECTIONS, type SetupStepSlug } from "./constants";
+import { SETUP_SECTIONS, teamRoleLabels, type SetupStepSlug } from "./constants";
 import { isSetupValid, getFirstInvalidSection, getBasicInfoValidation } from "../../../../lib/validations/setupValidation";
 
 function SetupLayoutInner({ children }: { children: React.ReactNode }) {
@@ -37,6 +37,8 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
     visibility,
     hiringManager,
     stages,
+    hiringStages,
+    teamMembers,
     savedAt,
     summaryOpen,
     setSummaryOpen,
@@ -75,7 +77,7 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
       const first = getFirstInvalidSection(validationState);
       if (first) {
         setBasicInfoAttemptedSave(first.slug === "info");
-        setHiringDetailsAttemptedSave(first.slug === "hiring-details");
+        setHiringDetailsAttemptedSave(first.slug === "details");
         toast.error(first.messageParams ? t(first.messageKey, first.messageParams) : t(first.messageKey));
         goTo(first.slug);
       }
@@ -91,7 +93,7 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
       const first = getFirstInvalidSection(validationState);
       if (first) {
         setBasicInfoAttemptedSave(first.slug === "info");
-        setHiringDetailsAttemptedSave(first.slug === "hiring-details");
+        setHiringDetailsAttemptedSave(first.slug === "details");
         toast.error(first.messageParams ? t(first.messageKey, first.messageParams) : t(first.messageKey));
         goTo(first.slug);
       }
@@ -103,7 +105,7 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
   };
 
   const goNext = () => {
-    if (pathSlug === "info" && !getBasicInfoValidation(validationState).valid) {
+    if (currentSlug === "info" && !getBasicInfoValidation(validationState).valid) {
       const first = getFirstInvalidSection(validationState);
       if (first?.slug === "info") {
         setBasicInfoAttemptedSave(true);
@@ -136,25 +138,33 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
       </div>
       <Separator />
       <div>
+        <p className="text-xs text-muted-foreground mb-1.5">Pipeline</p>
+        <div className="flex flex-wrap gap-1">
+          {hiringStages.filter((s) => s.name).map((s) => (
+            <Badge key={s.id} variant="secondary" className="text-[10px] font-normal">
+              {s.name}
+            </Badge>
+          ))}
+        </div>
+      </div>
+      <Separator />
+      <div>
         <p className="text-xs text-muted-foreground mb-1.5">Hiring Team</p>
         <div className="space-y-1.5">
-          {hiringManager && (
-            <div className="flex items-center gap-2">
+          {teamMembers.map((m) => (
+            <div key={m.id} className="flex items-center gap-2">
               <div className="h-6 w-6 rounded-full bg-muted flex items-center justify-center text-[10px] font-medium text-muted-foreground shrink-0">
-                {hiringManager.split(" ").map((n) => n[0]).join("")}
+                {m.name.split(" ").map((n) => n[0]).join("")}
               </div>
-              <span className="text-xs">{hiringManager}</span>
-            </div>
-          )}
-          {stages.filter((s) => s.interviewer).map((s, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <div className="h-6 w-6 rounded-full bg-muted flex items-center justify-center text-[10px] font-medium text-muted-foreground shrink-0">
-                {s.interviewer.split(" ").map((n) => n[0]).join("")}
-              </div>
-              <span className="text-xs">{s.interviewer}</span>
-              <span className="text-[10px] text-muted-foreground">· {s.name}</span>
+              <span className="text-xs">{m.name}</span>
+              <span className="text-[10px] text-muted-foreground">
+                · {teamRoleLabels[m.role]}
+              </span>
             </div>
           ))}
+          {teamMembers.length === 0 && !hiringManager && (
+            <p className="text-xs text-muted-foreground/70">No members yet</p>
+          )}
         </div>
       </div>
       <Separator />

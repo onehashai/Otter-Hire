@@ -9,7 +9,7 @@ import {
   Calendar,
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
-  Form, FormField, FormItem, FormLabel, FormControl,
+  Form, FormField, FormItem, FormControl,
 } from "@onehash/ui";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useRouter } from "next/navigation";
@@ -288,10 +288,10 @@ export default function JobsPage() {
               name="jobName"
               render={({ field, fieldState }) => (
                 <FormItem>
-                  <FormLabel>{t("job_name")}</FormLabel>
                   <FormControl>
                     <InputField
                       {...field}
+                      label={t("job_name")}
                       autoFocus
                       placeholder="e.g. Senior Frontend Engineer"
                       className="mt-1.5"

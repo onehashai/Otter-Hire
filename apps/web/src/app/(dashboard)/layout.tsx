@@ -18,10 +18,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <AppSidebar
           collapsed={sidebarCollapsed}
           onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+          onOpenCommandPalette={() => setCommandOpen(true)}
         />
       )}
       <div className="flex flex-col flex-1 min-w-0">
-        <TopBar onOpenCommandPalette={() => setCommandOpen(true)} />
+        <TopBar />
         <main className="flex-1 overflow-auto">
           <div className="mx-auto max-w-6xl px-4 md:px-6 py-4 md:py-6 pb-20 md:pb-6">
             {children}

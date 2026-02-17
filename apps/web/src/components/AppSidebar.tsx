@@ -15,6 +15,7 @@ import {
   Sun,
   Moon,
   ChevronsLeft,
+  Search,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { usePathname } from "next/navigation";
@@ -22,8 +23,6 @@ import { useTheme } from "@/components/ThemeProvider";
 import {
   Button,
   Separator,
-  Avatar,
-  AvatarFallback,
   Tooltip,
   TooltipContent,
   TooltipTrigger,
@@ -47,9 +46,10 @@ const navItems = [
 interface AppSidebarProps {
   collapsed: boolean;
   onToggle: () => void;
+  onOpenCommandPalette?: () => void;
 }
 
-export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
+export function AppSidebar({ collapsed, onToggle, onOpenCommandPalette }: AppSidebarProps) {
   const pathname = usePathname();
   const { theme, setTheme } = useTheme();
 
@@ -135,17 +135,24 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
           {!collapsed && <span className="text-xs">{theme === "dark" ? "Light mode" : "Dark mode"}</span>}
         </Button>
 
-        <div className={cn("flex items-center gap-2.5 rounded-lg px-2.5 py-1.5", collapsed && "px-0 justify-center")}>
-          <Avatar className="h-6 w-6">
-            <AvatarFallback className="text-[10px] bg-muted text-muted-foreground">JD</AvatarFallback>
-          </Avatar>
-          {!collapsed && (
-            <div className="flex flex-col">
-              <span className="text-xs font-medium text-foreground">Jane Doe</span>
-              <span className="text-[10px] text-muted-foreground">Acme Inc</span>
-            </div>
-          )}
-        </div>
+        {onOpenCommandPalette && (
+          <Button
+            variant="outline"
+            size={collapsed ? "icon" : "sm"}
+            onClick={onOpenCommandPalette}
+            className={cn("w-full text-muted-foreground text-xs font-normal", collapsed ? "h-8 w-8" : "h-8 gap-2 justify-start px-2.5")}
+          >
+            <Search className="h-3.5 w-3.5 shrink-0" />
+            {!collapsed && (
+              <>
+                <span>Search...</span>
+                <kbd className="pointer-events-none inline-flex h-5 select-none items-center rounded border border-border bg-muted px-1.5 text-[10px] font-medium text-muted-foreground ml-auto">
+                  ⌘K
+                </kbd>
+              </>
+            )}
+          </Button>
+        )}
       </div>
     </aside>
   );

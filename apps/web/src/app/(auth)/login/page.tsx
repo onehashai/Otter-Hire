@@ -1,27 +1,39 @@
 "use client";
 
-import { useState } from "react";
-import { Button, InputField, Label, Checkbox, Icon, cn } from "@onehash/ui";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import Link from "next/link";
+import {
+  Button,
+  InputField,
+  PasswordField,
+  Checkbox,
+  Form,
+  FormField,
+  FormItem,
+  FormControl,
+  Icon,
+} from "@onehash/ui";
+import { useTranslation } from "react-i18next";
+import { loginSchema, type LoginFormValues } from "@/lib/schemas/zodResolver";
 
 export default function Login() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [remember, setRemember] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const { t } = useTranslation();
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
-    if (!email.trim() || !password.trim()) {
-      setError("Please enter your email and password.");
-      return;
-    }
-    setLoading(true);
+  const form = useForm<LoginFormValues>({
+    resolver: zodResolver(loginSchema),
+    defaultValues: {
+      email: "",
+      password: "",
+      remember: false,
+    },
+  });
+
+  const loading = form.formState.isSubmitting;
+
+  const onSubmit = async (_data: LoginFormValues) => {
     // Simulate auth
     await new Promise((r) => setTimeout(r, 1500));
-    setLoading(false);
     // For demo purposes, always succeed — redirect to dashboard
     window.location.href = "/";
   };
@@ -117,116 +129,64 @@ export default function Login() {
               </div>
             </div>
 
-            {/* Form */}
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {error && (
-                <div
-                  className={cn(
-                    "rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-sm text-destructive",
-                    "animate-in fade-in-0 slide-in-from-top-1 duration-200"
+            <Form form={form} onSubmit={onSubmit} className="space-y-4">
+                <FormField
+                  control={form.control}
+                  name="email"
+                  render={({ field, fieldState }) => (
+                    <FormItem>
+                      <FormControl>
+                        <InputField
+                          {...field}
+                          label={t("email")}
+                          type="email"
+                          placeholder="acme@example.com"
+                          autoComplete="email"
+                          error={fieldState.error?.message}
+                        />
+                      </FormControl>
+                    </FormItem>
                   )}
-                >
-                  {error}
-                </div>
-              )}
-
-              <div className="space-y-1.5">
-                <Label
-                  htmlFor="email"
-                  className="text-xs font-medium text-muted-foreground"
-                >
-                  Email
-                </Label>
-                <InputField
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@company.com"
-                  className="h-10 text-sm"
-                  autoComplete="email"
-                  autoFocus
                 />
-              </div>
 
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <Label
-                    htmlFor="password"
-                    className="text-xs font-medium text-muted-foreground"
-                  >
-                    Password
-                  </Label>
-                  <span
-                    onClick={() => window.location.href = "/forgot-password"}
-                    className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    Forgot password?
-                  </span>
-                </div>
-                <div className="relative">
-                  <InputField
-                    id="password"
-                    type={showPassword ? "text" : "password"}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className="h-10 text-sm pr-10"
-                    autoComplete="current-password"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                    tabIndex={-1}
-                    aria-label={
-                      showPassword ? "Hide password" : "Show password"
-                    }
-                  >
-                    {showPassword ? (
-                      <Icon name="eye-off" className="h-4 w-4" />
-                    ) : (
-                      <Icon name="eye" className="h-4 w-4" />
-                    )}
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="remember"
-                  checked={remember}
-                  onCheckedChange={(v) => setRemember(!!v)}
+                <FormField
+                  control={form.control}
+                  name="password"
+                  render={({ field, fieldState }) => (
+                    <FormItem>
+                      <FormControl>
+                        <PasswordField
+                          {...field}
+                          label={t("password")}
+                          placeholder="••••••••"
+                          autoComplete="current-password"
+                          error={fieldState.error?.message}
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
                 />
-                <Label
-                  htmlFor="remember"
-                  className="text-xs text-muted-foreground cursor-pointer"
+                <Button
+                  type="submit"
+                  className="w-full h-10 text-sm font-medium"
+                  disabled={loading}
                 >
-                  Remember me
-                </Label>
-              </div>
-
-              <Button
-                type="submit"
-                className="w-full h-10 text-sm font-medium"
-                disabled={loading}
-              >
-                {loading ? (
-                  <Icon name="loader" className="h-4 w-4 animate-spin" />
-                ) : (
-                  "Sign in"
-                )}
-              </Button>
-            </form>
+                  {loading ? (
+                    <Icon name="Loader" className="h-4 w-4 animate-spin" />
+                  ) : (
+                    t("sign_in")
+                  )}
+                </Button>
+            </Form>
 
             <p className="text-center text-xs text-muted-foreground mt-5">
-              Don&apos;t have an account?{" "}
-              <span
+              {t("dont_have_an_account")}{" "}
+              <Link
                 href="/signup"
                 className="text-foreground font-medium hover:underline underline-offset-4"
               >
-                Sign up
-              </span>
+                {t("sign_up")}
+              </Link>
             </p>
           </div>
         </div>

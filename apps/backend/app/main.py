@@ -5,6 +5,7 @@ from app.core.logging import setup_logging, logger
 from app.middleware.context import get_request_context, RequestContext
 from app.middleware.errors import http_exception_handler, generic_exception_handler
 from app.schemas.common import HealthResponse, RequestContextSchema
+from app.api.v1.router import api_router
 
 setup_logging()
 
@@ -20,6 +21,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(api_router)
 
 
 @app.on_event("startup")

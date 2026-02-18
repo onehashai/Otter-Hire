@@ -1,3 +1,5 @@
+"use client";
+
 import { icons, type LucideProps } from "lucide-react";
 import { cn } from "./lib/utils";
 

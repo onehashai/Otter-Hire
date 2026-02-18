@@ -1,9 +1,11 @@
+"use client";
+
 import * as React from "react";
 import { Slot } from "@radix-ui/react-slot";
 import { VariantProps, cva } from "class-variance-authority";
 import { PanelLeft } from "lucide-react";
 
-import { useIsMobile } from "@/hooks/use-mobile";
+import { useIsMobile } from "./hooks/use-mobile";
 import { cn } from "./lib/utils";
 import { Button } from "./button";
 import { InputField } from "./input";
@@ -434,12 +436,17 @@ const sidebarMenuButtonVariants = cva(
   },
 );
 
+type SidebarMenuButtonVariant = NonNullable<VariantProps<typeof sidebarMenuButtonVariants>["variant"]>;
+type SidebarMenuButtonSize = NonNullable<VariantProps<typeof sidebarMenuButtonVariants>["size"]>;
+
 const SidebarMenuButton = React.forwardRef<
   HTMLButtonElement,
   React.ComponentProps<"button"> & {
     asChild?: boolean;
     isActive?: boolean;
     tooltip?: string | React.ComponentProps<typeof TooltipContent>;
+    variant?: SidebarMenuButtonVariant;
+    size?: SidebarMenuButtonSize;
   } & VariantProps<typeof sidebarMenuButtonVariants>
 >(({ asChild = false, isActive = false, variant = "default", size = "default", tooltip, className, ...props }, ref) => {
   const Comp = asChild ? Slot : "button";
@@ -451,7 +458,13 @@ const SidebarMenuButton = React.forwardRef<
       data-sidebar="menu-button"
       data-size={size}
       data-active={isActive}
-      className={cn(sidebarMenuButtonVariants({ variant, size }), className)}
+      className={cn(
+        sidebarMenuButtonVariants({
+          variant: variant as SidebarMenuButtonVariant,
+          size: size as SidebarMenuButtonSize,
+        }),
+        className,
+      )}
       {...props}
     />
   );

@@ -2,6 +2,7 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { LogOut } from "lucide-react";
+import { logout } from "@/lib/api";
 import {
   Avatar,
   AvatarFallback,
@@ -34,9 +35,13 @@ export function TopBar() {
     ? decodeURIComponent(pathname.split("/")[2])
     : pageTitles[pathname] || "Page";
 
-  const handleLogout = () => {
-    // TODO: Clear auth state / token when auth is implemented
-    router.push("/login");
+  const handleLogout = async () => {
+    try {
+      await logout();
+    } finally {
+      router.replace("/login");
+      router.refresh();
+    }
   };
 
   return (

@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import  Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Button, InputField, Label, Icon, cn } from "@onehash/ui";
 import { useTranslation } from "react-i18next";
 
@@ -12,6 +13,7 @@ const passwordRules = [
 ];
 
 export default function ResetPassword() {
+  const router = useRouter();
   const { t } = useTranslation();
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -43,7 +45,10 @@ export default function ResetPassword() {
     await new Promise((r) => setTimeout(r, 1500));
     setLoading(false);
     setSuccess(true);
-    setTimeout(() => navigate("/login"), 3000);
+    setTimeout(() => {
+      router.replace("/login");
+      router.refresh();
+    }, 3000);
   };
 
   if (!tokenValid) {
@@ -51,7 +56,7 @@ export default function ResetPassword() {
       <div className="min-h-screen flex items-center justify-center bg-background px-4">
         <div className="w-full max-w-[420px] text-center">
           <div className="mx-auto h-12 w-12 rounded-full bg-destructive/10 flex items-center justify-center mb-5">
-            <Icon name="alert-circle" className="h-5 w-5 text-destructive" />
+            <Icon name="CircleAlert" className="h-5 w-5 text-destructive" />
           </div>
           <h2 className="text-xl font-semibold tracking-tight mb-2">Invalid or expired link</h2>
           <p className="text-sm text-muted-foreground mb-6">
@@ -70,7 +75,7 @@ export default function ResetPassword() {
       <div className="min-h-screen flex items-center justify-center bg-background px-4">
         <div className="w-full max-w-[420px] text-center animate-in fade-in-0 duration-300">
           <div className="mx-auto h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-5">
-            <Icon name="shield-check" className="h-5 w-5 text-foreground" />
+            <Icon name="ShieldCheck" className="h-5 w-5 text-foreground" />
           </div>
           <h2 className="text-xl font-semibold tracking-tight mb-2">{t("password_reset")}</h2>
           <p className="text-sm text-muted-foreground mb-6">
@@ -127,7 +132,7 @@ export default function ResetPassword() {
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                   tabIndex={-1}
                 >
-                  {showPassword ? <Icon name="eye-off" className="h-4 w-4" /> : <Icon name="eye" className="h-4 w-4" />}
+                  {showPassword ? <Icon name="EyeOff" className="h-4 w-4" /> : <Icon name="Eye" className="h-4 w-4" />}
                 </button>
               </div>
               {password.length > 0 && (
@@ -135,9 +140,9 @@ export default function ResetPassword() {
                   {passwordRules.map((rule, i) => (
                     <div key={rule.label} className="flex items-center gap-2">
                       {ruleResults[i] ? (
-                        <Icon name="check" className="h-3 w-3 text-foreground" />
+                        <Icon name="Check" className="h-3 w-3 text-foreground" />
                       ) : (
-                        <Icon name="x" className="h-3 w-3 text-muted-foreground/50" />
+                        <Icon name="X" className="h-3 w-3 text-muted-foreground/50" />
                       )}
                       <span className={cn(
                         "text-[11px] transition-colors",
@@ -172,7 +177,7 @@ export default function ResetPassword() {
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                   tabIndex={-1}
                 >
-                  {showConfirm ? <Icon name="eye-off" className="h-4 w-4" /> : <Icon name="eye" className="h-4 w-4" />}
+                  {showConfirm ? <Icon name="EyeOff" className="h-4 w-4" /> : <Icon name="Eye" className="h-4 w-4" />}
                 </button>
               </div>
               {confirmPassword.length > 0 && !passwordsMatch && (
@@ -181,7 +186,7 @@ export default function ResetPassword() {
             </div>
 
             <Button type="submit" className="w-full h-10 text-sm font-medium" disabled={loading}>
-              {loading ? <Icon name="loader" className="h-4 w-4 animate-spin" /> : "Reset password"}
+              {loading ? <Icon name="Loader" className="h-4 w-4 animate-spin" /> : "Reset password"}
             </Button>
           </form>
         </div>

@@ -12,6 +12,7 @@ class User(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     org_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
     email = Column(String, nullable=False)
+    hashed_password = Column(String, nullable=False)
     name = Column(String, nullable=False)
     role = Column(String, nullable=False)
     status = Column(String, nullable=False)

@@ -1,34 +1,42 @@
-# Python
-__pycache__
-*.py[cod]
-*$py.class
-*.so
-.Python
-venv/
-env/
-ENV/
-*.egg-info/
-.pytest_cache/
-
-# Environment
-.env
-.env.local
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# OS
-.DS_Store
-Thumbs.db
-
 # Git
-.git/
+.git
 .gitignore
 
-# Node (for root level)
-node_modules/
-.next/
-.lovable/
+# Node / Next
+**/node_modules
+**/.next
+**/dist
+**/build
+**/.turbo
+**/.cache
+**/coverage
+.lovable
+
+# Python
+**/__pycache__
+**/*.py[cod]
+**/*$py.class
+**/*.so
+**/.Python
+**/venv
+**/.venv
+**/env
+**/ENV
+**/*.egg-info
+**/.pytest_cache
+**/.mypy_cache
+
+# Environment
+**/.env
+**/.env.*
+!**/.env.example
+
+# IDE
+**/.vscode
+**/.idea
+**/*.swp
+**/*.swo
+
+# OS
+**/.DS_Store
+**/Thumbs.db

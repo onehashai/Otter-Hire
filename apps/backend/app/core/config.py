@@ -10,6 +10,9 @@ class Settings(BaseSettings):
     database_url: str = Field(validation_alias="DATABASE_URL")
     is_production: bool = Field(default=False, validation_alias="IS_PRODUCTION")
     cors_origins_raw: str = Field(default="", validation_alias="CORS_ORIGINS")
+    jwt_secret_key: str = Field(validation_alias="JWT_SECRET_KEY")
+    jwt_algorithm: str = Field(default="HS256", validation_alias="JWT_ALGORITHM")
+    access_token_expire_minutes: int = Field(default=60 * 24 * 7, validation_alias="ACCESS_TOKEN_EXPIRE_MINUTES")
     log_level: str = "INFO"
 
     @property

@@ -282,7 +282,7 @@ export default function JobsPage() {
             <DialogTitle>{t("create_job")}</DialogTitle>
             <DialogDescription>{t("create_job_description")}</DialogDescription>
           </DialogHeader>
-          <Form {...createJobForm}>
+          <Form form={createJobForm} onSubmit={onCreateJobValid}>
             <FormField
               control={createJobForm.control}
               name="jobName"
@@ -319,7 +319,7 @@ export default function JobsPage() {
               <Button variant="outline" size="sm" type="button" onClick={() => setCreateOpen(false)}>
                 {t("cancel")}
               </Button>
-              <Button size="sm" type="button" onClick={createJobForm.handleSubmit(onCreateJobValid)}>
+              <Button size="sm" type="submit">
                 {t("continue")}
               </Button>
             </DialogFooter>

@@ -92,7 +92,7 @@ export default function ForgotPassword() {
             {!sent ? (
               <>
                 <Link href="/login" className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mb-6">
-                  <Icon name="arrow-left" className="h-3.5 w-3.5" />
+                  <Icon name="ArrowLeft" className="h-3.5 w-3.5" />
                   Back to login
                 </Link>
 
@@ -123,14 +123,14 @@ export default function ForgotPassword() {
                   </div>
 
                   <Button type="submit" className="w-full h-10 text-sm font-medium" disabled={loading}>
-                    {loading ? <Icon name="loader" className="h-4 w-4 animate-spin" /> : "Send reset link"}
+                    {loading ? <Icon name="Loader" className="h-4 w-4 animate-spin" /> : "Send reset link"}
                   </Button>
                 </form>
               </>
             ) : (
               <div className="text-center py-4 animate-in fade-in-0 duration-300">
                 <div className="mx-auto h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-5">
-                  <Icon name="mail" className="h-5 w-5 text-muted-foreground" />
+                  <Icon name="Mail" className="h-5 w-5 text-muted-foreground" />
                 </div>
                 <h2 className="text-xl font-semibold tracking-tight mb-2">Check your email</h2>
                 <p className="text-sm text-muted-foreground leading-relaxed max-w-[300px] mx-auto">

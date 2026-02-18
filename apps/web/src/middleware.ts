@@ -1,0 +1,32 @@
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+
+const AUTH_ROUTES = new Set(["/login", "/signup"]);
+const PUBLIC_ROUTES = new Set(["/health", "/favicon.ico"]);
+const APP_LANDING_ROUTE = "/";
+
+export function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+  const hasAccessToken = Boolean(request.cookies.get("access_token")?.value);
+
+  if (AUTH_ROUTES.has(pathname)) {
+    if (hasAccessToken) {
+      return NextResponse.redirect(new URL(APP_LANDING_ROUTE, request.url));
+    }
+    return NextResponse.next();
+  }
+
+  if (PUBLIC_ROUTES.has(pathname)) {
+    return NextResponse.next();
+  }
+
+  if (!hasAccessToken) {
+    return NextResponse.redirect(new URL("/login", request.url));
+  }
+
+  return NextResponse.next();
+}
+
+export const config = {
+  matcher: ["/((?!_next/static|_next/image|.*\\..*).*)"],
+};

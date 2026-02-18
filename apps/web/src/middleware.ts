@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 const AUTH_ROUTES = new Set(["/login", "/signup"]);
+const LIFECYCLE_ROUTES = new Set(["/verify", "/onboarding"]);
 const PUBLIC_ROUTES = new Set(["/health", "/favicon.ico"]);
 const APP_LANDING_ROUTE = "/";
 
@@ -13,6 +14,10 @@ export function middleware(request: NextRequest) {
     if (hasAccessToken) {
       return NextResponse.redirect(new URL(APP_LANDING_ROUTE, request.url));
     }
+    return NextResponse.next();
+  }
+
+  if (LIFECYCLE_ROUTES.has(pathname)) {
     return NextResponse.next();
   }
 

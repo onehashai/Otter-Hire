@@ -15,6 +15,21 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = Field(default=60 * 24 * 7, validation_alias="ACCESS_TOKEN_EXPIRE_MINUTES")
     log_level: str = "INFO"
 
+    # Frontend URL
+    frontend_base_url: str = Field(default="http://localhost:3000", validation_alias="FRONTEND_BASE_URL")
+
+    # Mailtrap (dev)
+    mailtrap_host: str | None = Field(default=None, validation_alias="MAILTRAP_HOST")
+    mailtrap_port: int | None = Field(default=None, validation_alias="MAILTRAP_PORT")
+    mailtrap_username: str | None = Field(default=None, validation_alias="MAILTRAP_USERNAME")
+    mailtrap_password: str | None = Field(default=None, validation_alias="MAILTRAP_PASSWORD")
+    mailtrap_from_email: str | None = Field(default=None, validation_alias="MAILTRAP_FROM_EMAIL")
+
+    # ZeptoMail (prod)
+    zeptomail_api_key: str | None = Field(default=None, validation_alias="ZEPTOMAIL_API_KEY")
+    zeptomail_from_email: str | None = Field(default=None, validation_alias="ZEPTOMAIL_FROM_EMAIL")
+    zeptomail_from_name: str | None = Field(default=None, validation_alias="ZEPTOMAIL_FROM_NAME")
+
     @property
     def cors_origins(self) -> list[str]:
         raw = self.cors_origins_raw.strip()

@@ -1,6 +1,7 @@
 "use client";
 
-import { Suspense, createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { Toaster, SonnerToaster, TooltipProvider } from "@onehash/ui";
@@ -26,9 +27,14 @@ export function useAuthSession(): AuthSessionContextValue {
   return value;
 }
 
+const AUTH_ROUTES = ["/login", "/signup"];
+const LIFECYCLE_ROUTES = ["/verify", "/onboarding"];
+
 export function Providers({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthSessionResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const router = useRouter();
+  const pathname = usePathname();
 
   const refreshSession = async () => {
     try {
@@ -43,12 +49,61 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     void refreshSession();
+
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === "session_updated" && e.newValue) {
+        void refreshSession();
+      }
+    };
+
+    window.addEventListener("storage", handleStorageChange);
+    return () => window.removeEventListener("storage", handleStorageChange);
   }, []);
+
+  useEffect(() => {
+    if (loading) return;
+
+    const isAuthRoute = AUTH_ROUTES.includes(pathname);
+    const isLifecycleRoute = LIFECYCLE_ROUTES.includes(pathname);
+
+    if (!user) {
+      if (!isAuthRoute && !isLifecycleRoute) {
+        router.replace("/login");
+      }
+      return;
+    }
+
+    if (!user.is_verified) {
+      if (pathname !== "/verify") {
+        router.replace("/verify");
+      }
+      return;
+    }
+
+    if (!user.is_onboarded) {
+      if (pathname !== "/onboarding") {
+        router.replace("/onboarding");
+      }
+      return;
+    }
+
+    if (isAuthRoute || isLifecycleRoute) {
+      router.replace("/");
+    }
+  }, [user, loading, pathname, router]);
 
   const authValue = useMemo(
     () => ({ user, loading, refreshSession }),
     [user, loading]
   );
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-foreground" />
+      </div>
+    );
+  }
 
   return (
     <QueryClientProvider client={queryClient}>

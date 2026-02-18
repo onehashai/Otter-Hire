@@ -52,7 +52,8 @@ export default function Signup() {
         email: data.email,
         password: data.password,
       });
-      router.replace("/");
+      sessionStorage.setItem("signup_email", data.email);
+      router.replace("/verify");
       router.refresh();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to sign up";

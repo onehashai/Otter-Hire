@@ -3,7 +3,6 @@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import {
   Button,
@@ -19,10 +18,11 @@ import {
 import { useTranslation } from "react-i18next";
 import { loginSchema, type LoginFormValues } from "@/lib/schemas/zodResolver";
 import { login } from "@/lib/api";
+import { useAuthSession } from "@/app/providers";
 
 export default function Login() {
-  const router = useRouter();
   const { t } = useTranslation();
+  const { refreshSession } = useAuthSession();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -47,8 +47,7 @@ export default function Login() {
         email: data.email,
         password: data.password,
       });
-      router.replace("/");
-      router.refresh();
+      await refreshSession();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to sign in";
       form.setError("root", { message });

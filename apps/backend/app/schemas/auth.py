@@ -20,3 +20,22 @@ class AuthUserResponse(BaseModel):
     name: str
     role: str
     org_id: UUID
+    is_verified: bool
+    is_onboarded: bool
+
+
+class VerifyEmailRequest(BaseModel):
+    token: str
+
+
+class ResendVerificationRequest(BaseModel):
+    email: EmailStr
+
+
+class VerifyEmailResponse(BaseModel):
+    ok: bool
+
+
+class OnboardingRequest(BaseModel):
+    full_name: str = Field(min_length=1)
+    organization_name: str = Field(min_length=1)

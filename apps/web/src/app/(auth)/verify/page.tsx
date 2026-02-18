@@ -1,26 +1,84 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button, Icon } from "@onehash/ui";
 import { useTranslation } from "react-i18next";
+import { verifyEmail, resendVerification } from "@/lib/api";
+import { useAuthSession } from "@/app/providers";
 
-export default function VerifyEmail() {
+function VerifyEmailContent() {
   const { t } = useTranslation();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { user, refreshSession } = useAuthSession();
   const [resendDisabled, setResendDisabled] = useState(false);
   const [resendTimer, setResendTimer] = useState(0);
   const [resending, setResending] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [email, setEmail] = useState<string>("");
 
-  const email = "user@company.com"; // Would come from signup context
+  useEffect(() => {
+    if (user?.is_verified && !user?.is_onboarded) {
+      router.replace("/onboarding");
+      return;
+    }
+    if (user?.is_verified && user?.is_onboarded) {
+      router.replace("/");
+      return;
+    }
 
-  const startResendTimer = () => {
+    const storedEmail = sessionStorage.getItem("signup_email");
+    if (storedEmail) {
+      setEmail(storedEmail);
+    }
+
+    const storedTimer = sessionStorage.getItem("resend_timer");
+    if (storedTimer) {
+      const remaining = parseInt(storedTimer, 10) - Math.floor(Date.now() / 1000);
+      if (remaining > 0) {
+        setResendTimer(remaining);
+        setResendDisabled(true);
+        startResendTimer(remaining);
+      }
+    }
+
+    const token = searchParams.get("token");
+    if (token && !verifying) {
+      handleVerify(token);
+    }
+  }, []);
+
+  const handleVerify = async (token: string) => {
+    setVerifying(true);
+    setError(null);
+    try {
+      await verifyEmail(token);
+      sessionStorage.removeItem("signup_email");
+      await refreshSession();
+      localStorage.setItem("session_updated", Date.now().toString());
+      router.replace("/onboarding");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Verification failed";
+      setError(message);
+      setVerifying(false);
+    }
+  };
+
+  const startResendTimer = (initialSeconds = 30) => {
     setResendDisabled(true);
-    setResendTimer(30);
+    setResendTimer(initialSeconds);
+    const expiresAt = Math.floor(Date.now() / 1000) + initialSeconds;
+    sessionStorage.setItem("resend_timer", expiresAt.toString());
+
     const interval = setInterval(() => {
       setResendTimer((prev) => {
         if (prev <= 1) {
           clearInterval(interval);
           setResendDisabled(false);
+          sessionStorage.removeItem("resend_timer");
           return 0;
         }
         return prev - 1;
@@ -29,11 +87,29 @@ export default function VerifyEmail() {
   };
 
   const handleResend = async () => {
+    if (!email) return;
     setResending(true);
-    // startResendTimer();
-    await new Promise((r) => setTimeout(r, 1000));
-    setResending(false);
+    setError(null);
+    try {
+      await resendVerification(email);
+      startResendTimer();
+    } catch (err) {
+      setError("Failed to resend email");
+    } finally {
+      setResending(false);
+    }
   };
+
+  if (verifying) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12">
+        <div className="w-full max-w-[420px] text-center">
+          <Icon name="Loader" className="h-8 w-8 animate-spin mx-auto text-muted-foreground" />
+          <p className="text-sm text-muted-foreground mt-4">Verifying your email...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12">
@@ -54,16 +130,22 @@ export default function VerifyEmail() {
           <h2 className="text-xl font-semibold tracking-tight mb-2">{t("verify_your_email")}</h2>
           <p className="text-sm text-muted-foreground leading-relaxed max-w-[300px] mx-auto mb-6">
             {t("we_ve_sent_a_verification_link_to")}{" "}
-            <span className="text-foreground font-medium">{email}</span>.
+            {email && <span className="text-foreground font-medium">{email}</span>}.
             {t("check_your_inbox_to_continue")}
           </p>
+
+          {error && (
+            <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-sm text-destructive mb-4">
+              {error}
+            </div>
+          )}
 
           <div className="space-y-3">
             <Button
               variant="outline"
               className="w-full h-10 text-sm"
               onClick={handleResend}
-              disabled={resendDisabled || resending}
+              disabled={resendDisabled || resending || !email}
             >
               {resending ? (
                 <Icon name="Loader" className="h-4 w-4 animate-spin" />
@@ -83,5 +165,19 @@ export default function VerifyEmail() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function VerifyEmail() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12">
+        <div className="w-full max-w-[420px] text-center">
+          <Icon name="Loader" className="h-8 w-8 animate-spin mx-auto text-muted-foreground" />
+        </div>
+      </div>
+    }>
+      <VerifyEmailContent />
+    </Suspense>
   );
 }

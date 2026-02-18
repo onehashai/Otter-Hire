@@ -24,6 +24,8 @@ export type AuthSessionResponse = {
   name: string;
   role: string;
   org_id: string;
+  is_verified: boolean;
+  is_onboarded: boolean;
 };
 
 type AuthPayload = {
@@ -31,6 +33,25 @@ type AuthPayload = {
   password: string;
   name?: string;
 };
+
+function formatRetryAfter(seconds: number): string {
+  if (seconds < 60) {
+    return `Too many attempts. Try again in ${seconds} ${seconds === 1 ? "second" : "seconds"}.`;
+  }
+  const minutes = Math.ceil(seconds / 60);
+  return `Too many attempts. Try again in ${minutes} ${minutes === 1 ? "minute" : "minutes"}.`;
+}
+
+function handle429Error(res: Response): string {
+  const retryAfter = res.headers.get("Retry-After");
+  if (retryAfter) {
+    const seconds = parseInt(retryAfter, 10);
+    if (!isNaN(seconds) && seconds > 0) {
+      return formatRetryAfter(seconds);
+    }
+  }
+  return "Too many attempts. Please try again later.";
+}
 
 async function apiGet<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE_URL}${path}`, {
@@ -55,6 +76,10 @@ async function apiPost<T>(path: string, body: AuthPayload): Promise<T> {
   });
 
   if (!res.ok) {
+    if (res.status === 429) {
+      throw new Error(handle429Error(res));
+    }
+    
     let message = `API request failed: ${res.status} ${res.statusText}`;
     try {
       const data = (await res.json()) as { detail?: string };
@@ -114,6 +139,75 @@ export async function getAuthSession(): Promise<AuthSessionResponse | null> {
 
   if (!res.ok) {
     throw new Error(`API request failed: ${res.status} ${res.statusText}`);
+  }
+
+  return (await res.json()) as AuthSessionResponse;
+}
+
+export async function verifyEmail(token: string): Promise<{ ok: boolean }> {
+  const res = await fetch(`${API_BASE_URL}/auth/verify`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ token }),
+  });
+
+  if (!res.ok) {
+    if (res.status === 429) {
+      throw new Error(handle429Error(res));
+    }
+    
+    let message = `Verification failed: ${res.status} ${res.statusText}`;
+    try {
+      const data = (await res.json()) as { detail?: string };
+      if (typeof data.detail === "string" && data.detail.trim()) {
+        message = data.detail;
+      }
+    } catch {}
+    throw new Error(message);
+  }
+
+  return (await res.json()) as { ok: boolean };
+}
+
+export async function resendVerification(email: string): Promise<{ ok: boolean }> {
+  const res = await fetch(`${API_BASE_URL}/auth/resend-verification`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ email }),
+  });
+
+  if (!res.ok) {
+    if (res.status === 429) {
+      throw new Error(handle429Error(res));
+    }
+    throw new Error(`Resend failed: ${res.status} ${res.statusText}`);
+  }
+
+  return (await res.json()) as { ok: boolean };
+}
+
+export async function completeOnboarding(data: {
+  full_name: string;
+  organization_name: string;
+}): Promise<AuthSessionResponse> {
+  const res = await fetch(`${API_BASE_URL}/auth/onboarding`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    credentials: "include",
+    body: JSON.stringify(data),
+  });
+
+  if (!res.ok) {
+    let message = `Onboarding failed: ${res.status} ${res.statusText}`;
+    try {
+      const data = (await res.json()) as { detail?: string };
+      if (typeof data.detail === "string" && data.detail.trim()) {
+        message = data.detail;
+      }
+    } catch {}
+    throw new Error(message);
   }
 
   return (await res.json()) as AuthSessionResponse;

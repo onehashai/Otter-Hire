@@ -39,7 +39,7 @@ const navItems = [
   { title: "Reports", url: "/reports", icon: BarChart3 },
   { title: "Automations", url: "/automations", icon: Zap },
   { title: "AI Assistant", url: "/ai-assistant", icon: Bot },
-  { title: "Settings", url: "/settings", icon: Settings },
+  { title: "Settings", url: "/settings/workspace", icon: Settings },
 ];
 
 interface AppSidebarProps {

@@ -1,12 +1,5 @@
 "use client";
 
-// Utility
-export { cn } from "./lib/utils";
-
-// Icon
-export { Icon } from "./icon";
-export type { IconName, IconProps } from "./icon";
-
 // Components
 export * from "./accordion";
 export * from "./alert";
@@ -27,8 +20,10 @@ export * from "./context-menu";
 export * from "./dialog";
 export * from "./drawer";
 export * from "./dropdown-menu";
+export * from "./editor";
 export * from "./form";
 export * from "./hover-card";
+export * from "./icon";
 export * from "./input";
 export * from "./input-otp";
 export * from "./label";
@@ -54,11 +49,5 @@ export * from "./toast";
 export * from "./toggle";
 export * from "./toggle-group";
 export * from "./tooltip";
-
-export { Toaster } from "./toaster";
-
-export { Toaster as SonnerToaster, toast as sonnerToast } from "./sonner";
-
-export { useToast } from "./use-toast";
-
-export { RichTextEditor } from "./editor/rich-text-editor";
+export * from "./toaster";
+export * from "./sonner";

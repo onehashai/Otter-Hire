@@ -14,17 +14,9 @@ import {
   DialogFooter,
   InputField,
   Label,
+  Icon,
+  IconName,
 } from "@onehash/ui";
-import {
-  ArrowLeft,
-  ChevronLeft,
-  MapPin,
-  Briefcase,
-  Clock,
-  DollarSign,
-  Building2,
-  Upload,
-} from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -172,7 +164,7 @@ export default function CareerJobDetailPage() {
             className="text-xs mt-4"
             onClick={() => router.push(orgName ? `/${encodeURIComponent(orgName)}` : "/")}
           >
-            <ChevronLeft className="h-3.5 w-3.5 mr-1.5" /> View all positions
+            <Icon name="ChevronLeft" className="h-3.5 w-3.5 mr-1.5" /> View all positions
           </Button>
         </div>
       </div>
@@ -182,12 +174,12 @@ export default function CareerJobDetailPage() {
   const isDraft = job.status === "draft";
 
   const metaItems = [
-    job.location && { icon: MapPin, label: job.location },
-    { icon: Briefcase, label: job.employmentType },
-    { icon: Clock, label: job.workplaceType },
-    job.salaryRange && { icon: DollarSign, label: job.salaryRange },
-    { icon: Building2, label: job.department },
-  ].filter(Boolean) as { icon: React.ElementType; label: string }[];
+    job.location && { iconName: "MapPin", label: job.location },
+    { iconName: "Briefcase", label: job.employmentType },
+    { iconName: "Clock", label: job.workplaceType },
+    job.salaryRange && { iconName: "DollarSign", label: job.salaryRange },
+    { iconName: "Building2", label: job.department },
+  ].filter(Boolean) as { iconName: IconName; label: string }[];
 
   const listHref = orgName ? `/${encodeURIComponent(orgName)}` : "/";
 
@@ -213,7 +205,7 @@ export default function CareerJobDetailPage() {
             className="h-8 w-8 shrink-0"
             onClick={() => router.push(listHref)}
           >
-            <ArrowLeft className="h-4 w-4" />
+            <Icon name="ChevronLeft" className="h-4 w-4" />
           </Button>
           <div className="flex items-center gap-2.5 flex-1 min-w-0">
             <div className="h-7 w-7 rounded-md bg-foreground flex items-center justify-center shrink-0">
@@ -250,7 +242,7 @@ export default function CareerJobDetailPage() {
                 key={i}
                 className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs text-muted-foreground"
               >
-                <item.icon className="h-3 w-3 shrink-0" />
+                <Icon name={item.iconName} className="h-3 w-3 shrink-0" />
                 <span>{item.label}</span>
               </div>
             ))}
@@ -354,7 +346,7 @@ export default function CareerJobDetailPage() {
               <Label className="text-xs">Resume</Label>
               <div className="mt-1.5 flex items-center gap-2">
                 <label className="flex-1 flex items-center justify-center gap-2 rounded-lg border border-border border-dashed px-4 py-3 text-xs text-muted-foreground hover:bg-muted/50 cursor-pointer transition-colors">
-                  <Upload className="h-4 w-4 shrink-0" />
+                  <Icon name="Upload" className="h-4 w-4 shrink-0" />
                   <span>{applyForm.resume ? applyForm.resume.name : "Choose file or drag and drop"}</span>
                   <input
                     type="file"

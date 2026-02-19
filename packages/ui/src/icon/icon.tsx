@@ -1,9 +1,10 @@
 "use client";
 
-import { icons, type LucideProps } from "lucide-react";
-import { cn } from "./lib/utils";
+import type { LucideProps } from "lucide-react";
+import { iconMap, type IconName } from "./icon-map";
+import { cn } from "../lib/utils";
 
-export type IconName = keyof typeof icons;
+export type { IconName };
 
 export interface IconProps extends Omit<LucideProps, "ref"> {
   name: IconName;
@@ -21,15 +22,8 @@ export const Icon = ({
   className,
   ...rest
 }: IconProps) => {
-  const LucideIcon = icons[name];
-
-  if (!LucideIcon) {
-    if (process.env.NODE_ENV === "development") {
-      console.warn(`[Icon] Unknown icon name: "${name}"`);
-    }
-    return null;
-  }
-
+  const LucideIcon = iconMap[name];
+  if (!LucideIcon) return null;
   return (
     <LucideIcon
       size={size}

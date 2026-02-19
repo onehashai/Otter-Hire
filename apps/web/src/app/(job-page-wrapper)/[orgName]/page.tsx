@@ -120,19 +120,6 @@ export default function CareersListPage() {
         </div>
       </header>
 
-      {/* Hero */}
-      {/* <section className="mx-auto max-w-4xl px-4 pt-12 md:pt-16 pb-8 md:pb-10">
-        <div className="max-w-2xl space-y-3">
-          <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">
-            Join our team
-          </h1>
-          <p className="text-sm md:text-base text-muted-foreground leading-relaxed">
-            We&apos;re building the future of work. Explore our open positions
-            and find where you can make an impact.
-          </p>
-        </div>
-      </section> */}
-
       {/* Search & Filters */}
       <div className="mx-auto max-w-4xl pt-12 md:pt-16 px-4 pb-6">
         <div

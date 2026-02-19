@@ -9,6 +9,9 @@
     ".": "./src/index.ts",
     "./*": "./src/*.tsx"
   },
+  "scripts": {
+    "generate:icons": "node src/icon/generate-icon-map.mjs"
+  },
   "peerDependencies": {
     "react": "^18.0.0",
     "react-dom": "^18.0.0"

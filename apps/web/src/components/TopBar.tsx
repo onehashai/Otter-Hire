@@ -24,7 +24,7 @@ const pageTitles: Record<string, string> = {
   "/reports": "Reports",
   "/automations": "Automations",
   "/ai-assistant": "AI Assistant",
-  "/settings": "Settings",
+  "/settings/workspace": "Settings",
 };
 
 export function TopBar() {

@@ -5,6 +5,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { Toaster, SonnerToaster, TooltipProvider } from "@onehash/ui";
+
+const TooltipProviderCompat = TooltipProvider as React.ComponentType<React.PropsWithChildren>;
 import { getAuthSession, type AuthSessionResponse } from "@/lib/api";
 
 import "@/i18n";
@@ -109,11 +111,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <QueryClientProvider client={queryClient}>
       <AuthSessionContext.Provider value={authValue}>
         <ThemeProvider defaultTheme="light">
-          <TooltipProvider>
+          <TooltipProviderCompat>
             {children}
             <Toaster />
             <SonnerToaster />
-          </TooltipProvider>
+          </TooltipProviderCompat>
         </ThemeProvider>
       </AuthSessionContext.Provider>
     </QueryClientProvider>

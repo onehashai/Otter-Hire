@@ -39,8 +39,8 @@ const initialMembers: TeamMember[] = [
   { id: "2", name: "Marcus Johnson", email: "marcus@acme.com", role: "Admin", status: "Active", lastActive: "2 hours ago" },
   { id: "3", name: "Emily Park", email: "emily@acme.com", role: "Recruiter", status: "Active", lastActive: "1 day ago" },
   { id: "4", name: "James Lee", email: "james@acme.com", role: "Hiring Manager", status: "Active", lastActive: "3 hours ago" },
-  { id: "5", name: "Nina Patel", email: "nina@acme.com", role: "Interviewer", status: "Pending Invite", lastActive: "—" },
-  { id: "6", name: "Alex Rivera", email: "alex@acme.com", role: "Employee", status: "Pending Invite", lastActive: "—" },
+  { id: "5", name: "Nina Patel", email: "nina@acme.com", role: "Interviewer", status: "Pending", lastActive: "—" },
+  { id: "6", name: "Alex Rivera", email: "alex@acme.com", role: "Employee", status: "Pending", lastActive: "—" },
 ];
 
 function getCurrentUserRole(members: TeamMember[]): Role {
@@ -68,7 +68,7 @@ export default function TeamSettingsPage() {
       name: email.split("@")[0],
       email,
       role,
-      status: "Pending Invite",
+      status: "Pending",
       lastActive: "—",
     }));
     setMembers((prev) => [...prev, ...newMembers]);

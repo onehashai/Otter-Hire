@@ -26,7 +26,7 @@ import {
 import { cn } from "@/lib/utils";
 import { type Role } from "@/components/settings/team/lib/permissonMatrix";
 
-export type Status = "Active" | "Pending" | "Pending Invite";
+export type Status = "Active" | "Pending"
 
 export interface TeamMember {
   id: string;
@@ -126,7 +126,7 @@ export function TeamMembers({
                 <TooltipContent side="left"><p className="text-xs">{roleCheck.reason}</p></TooltipContent>
               </Tooltip>
             )}
-            {member.status === "Pending Invite" && (
+            {member.status === "Pending" && (
               <DropdownMenuItem onClick={() => onResendInvite(member)}>Resend invite</DropdownMenuItem>
             )}
             {removeCheck.allowed ? (
@@ -177,7 +177,7 @@ export function TeamMembers({
                     <Badge variant="secondary" className={cn("text-[10px] px-2 py-0 h-5 font-medium border-0", roleBadgeClass[m.role])} title={m.role}>
                       {m.role}
                     </Badge>
-                    {m.status === "Pending Invite" && (
+                    {m.status === "Pending" && (
                       <span className="text-[10px] text-muted-foreground italic">Pending</span>
                     )}
                   </div>

@@ -76,7 +76,7 @@ export function TeamInviteModal({ open, onOpenChange, onSubmit }: TeamInviteModa
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="text-base">Invite Team Members</DialogTitle>
-          <DialogDescription className="text-xs">Send invitations to join your workspace.</DialogDescription>
+          <DialogDescription className="text-xs">Send invitations to join your organization.</DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-2">
           <div className="space-y-1.5">
@@ -111,17 +111,16 @@ export function TeamInviteModal({ open, onOpenChange, onSubmit }: TeamInviteModa
                 {inviteRoles.map((r) => (
                   <SelectItem key={r.role} value={r.role} className="text-sm">
                     <span className="font-medium">{r.role}</span>
-                    <span className="text-muted-foreground ml-1.5 text-xs">— {r.description}</span>
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
         </div>
-        <DialogFooter className="gap-2 sm:gap-0">
+        <DialogFooter>
           <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => onOpenChange(false)}>Cancel</Button>
           <Button size="sm" className="text-xs h-8 gap-1.5" onClick={handleSubmit}>
-            <Icon name="Send" className="h-3.5 w-3.5" /> Send Invite
+            <Icon name="Send" className="h-3.5 w-3.5" /> Invite
           </Button>
         </DialogFooter>
       </DialogContent>

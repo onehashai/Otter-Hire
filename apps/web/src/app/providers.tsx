@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "@/components/ThemeProvider";
@@ -14,7 +14,8 @@ const queryClient = new QueryClient();
 type AuthSessionContextValue = {
   user: AuthSessionResponse | null;
   loading: boolean;
-  refreshSession: () => Promise<void>;
+  refreshSession: (force?: boolean) => Promise<AuthSessionResponse | null>;
+  clearSession: () => void;
 };
 
 const AuthSessionContext = createContext<AuthSessionContextValue | null>(null);
@@ -33,19 +34,37 @@ const LIFECYCLE_ROUTES = ["/verify", "/onboarding"];
 export function Providers({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthSessionResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [sessionVersion, setSessionVersion] = useState(0);
   const router = useRouter();
   const pathname = usePathname();
+  const inflightRef = useRef<Promise<AuthSessionResponse | null> | null>(null);
 
-  const refreshSession = async () => {
-    try {
-      const me = await getAuthSession();
-      setUser(me);
-    } catch {
-      setUser(null);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const refreshSession = useCallback(async (force?: boolean): Promise<AuthSessionResponse | null> => {
+    if (!force && inflightRef.current) return inflightRef.current;
+    if (force) inflightRef.current = null;
+    const promise = (async () => {
+      try {
+        const me = await getAuthSession();
+        setUser(me);
+        return me;
+      } catch {
+        setUser(null);
+        return null;
+      } finally {
+        setLoading(false);
+        setSessionVersion((v) => v + 1);
+        inflightRef.current = null;
+      }
+    })();
+    inflightRef.current = promise;
+    return promise;
+  }, []);
+
+  const clearSession = useCallback(() => {
+    inflightRef.current = null;
+    setUser(null);
+    localStorage.removeItem("session_updated");
+  }, []);
 
   useEffect(() => {
     void refreshSession();
@@ -58,7 +77,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
     window.addEventListener("storage", handleStorageChange);
     return () => window.removeEventListener("storage", handleStorageChange);
-  }, []);
+  }, [refreshSession]);
 
   useEffect(() => {
     if (loading) return;
@@ -90,11 +109,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
     if (isAuthRoute || isLifecycleRoute) {
       router.replace("/");
     }
-  }, [user, loading, pathname, router]);
+  }, [user, loading, pathname, router, sessionVersion]);
 
   const authValue = useMemo(
-    () => ({ user, loading, refreshSession }),
-    [user, loading]
+    () => ({ user, loading, refreshSession, clearSession }),
+    [user, loading, refreshSession, clearSession]
   );
 
   if (loading) {

@@ -214,3 +214,160 @@ export async function completeOnboarding(data: {
 
   return (await res.json()) as AuthSessionResponse;
 }
+
+export type JobHiringStageResponse = {
+  id: string;
+  name: string;
+  position: number;
+};
+
+export type JobTeamMemberResponse = {
+  id: string;
+  user_id: string;
+  name: string | null;
+  email: string | null;
+  role: string;
+};
+
+export type JobListItemResponse = {
+  id: string;
+  title: string;
+  department: string | null;
+  employment_type: string | null;
+  status: string;
+  candidate_count: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type JobDetailResponse = {
+  id: string;
+  title: string;
+  department: string | null;
+  employment_type: string | null;
+  workplace_type: string | null;
+  country: string | null;
+  city: string | null;
+  openings: number;
+  salary_type: string;
+  salary_min: number | null;
+  salary_max: number | null;
+  salary_fixed: number | null;
+  currency: string | null;
+  salary_timeframe: string | null;
+  description: string | null;
+  status: string;
+  visibility: string;
+  collect_resume: boolean;
+  collect_cover: boolean;
+  screening_questions: string[];
+  pipeline_template: string | null;
+  hiring_stages: JobHiringStageResponse[];
+  team_members: JobTeamMemberResponse[];
+  created_by_user_id: string;
+  published_at: string | null;
+  closed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type JobUpdatePayload = {
+  title?: string;
+  department?: string | null;
+  employment_type?: string | null;
+  workplace_type?: string;
+  country?: string | null;
+  city?: string | null;
+  openings?: number;
+  salary_type?: string;
+  salary_min?: number | null;
+  salary_max?: number | null;
+  salary_fixed?: number | null;
+  currency?: string;
+  salary_timeframe?: string;
+  description?: string | null;
+  visibility?: string;
+  collect_resume?: boolean;
+  collect_cover?: boolean;
+  screening_questions?: string[];
+  pipeline_template?: string;
+  hiring_stages?: { name: string; position: number }[];
+  team_members?: { user_id: string; role: string }[];
+};
+
+async function apiFetch<T>(
+  path: string,
+  options: { method: string; body?: unknown },
+): Promise<T> {
+  const headers: Record<string, string> = { Accept: "application/json" };
+  if (options.body !== undefined) {
+    headers["Content-Type"] = "application/json";
+  }
+
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    method: options.method,
+    headers,
+    credentials: "include",
+    body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    if (res.status === 429) {
+      throw new Error(handle429Error(res));
+    }
+    let message = `Request failed: ${res.status} ${res.statusText}`;
+    try {
+      const data = (await res.json()) as { detail?: string; error?: string };
+      const msg = typeof data.detail === "string" ? data.detail : typeof data.error === "string" ? data.error : "";
+      if (msg.trim()) message = msg;
+    } catch {}
+    throw new Error(message);
+  }
+
+  if (res.status === 204) return {} as T;
+  return (await res.json()) as T;
+}
+
+export function getJobs(): Promise<JobListItemResponse[]> {
+  return apiFetch<JobListItemResponse[]>("/jobs", { method: "GET" });
+}
+
+export function getJobById(id: string): Promise<JobDetailResponse> {
+  return apiFetch<JobDetailResponse>(`/jobs/${id}`, { method: "GET" });
+}
+
+export function createJob(title: string): Promise<JobDetailResponse> {
+  return apiFetch<JobDetailResponse>("/jobs", {
+    method: "POST",
+    body: { title },
+  });
+}
+
+export function updateJob(
+  id: string,
+  payload: JobUpdatePayload,
+): Promise<JobDetailResponse> {
+  return apiFetch<JobDetailResponse>(`/jobs/${id}`, {
+    method: "PATCH",
+    body: payload,
+  });
+}
+
+export function publishJob(id: string): Promise<JobDetailResponse> {
+  return apiFetch<JobDetailResponse>(`/jobs/${id}/publish`, {
+    method: "POST",
+  });
+}
+
+export function closeJob(id: string): Promise<JobDetailResponse> {
+  return apiFetch<JobDetailResponse>(`/jobs/${id}/close`, {
+    method: "POST",
+  });
+}
+
+export function unpublishJob(id: string): Promise<JobDetailResponse> {
+  return apiFetch<JobDetailResponse>(`/jobs/${id}/unpublish`, {
+    method: "POST",
+  });
+}

@@ -2,6 +2,7 @@ from app.models.organization import Organization
 from app.models.user import User
 from app.models.job import Job
 from app.models.stage import Stage
+from app.models.job_team_member import JobTeamMember
 from app.models.candidate import Candidate
 from app.models.note import Note
 from app.models.email_template import EmailTemplate
@@ -15,6 +16,7 @@ __all__ = [
     "User",
     "Job",
     "Stage",
+    "JobTeamMember",
     "Candidate",
     "Note",
     "EmailTemplate",

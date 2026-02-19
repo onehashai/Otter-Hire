@@ -47,7 +47,7 @@ export default function Login() {
         email: data.email,
         password: data.password,
       });
-      await refreshSession();
+      await refreshSession(true);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to sign in";
       form.setError("root", { message });

@@ -5,7 +5,6 @@ export type EmploymentType = "full_time" | "part_time" | "contract" | "internshi
 export type DepartmentType = "engineering" | "design" | "marketing" | "sales" | "data" | "operations" | "hr";
 export type WorkplaceType = "remote" | "hybrid" | "onsite";
 export type JobStatusType = "draft" | "open" | "closed";
-export type VisibilityType = "internal" | "careers" | "public";
 export type SalaryType = "hidden" | "fixed" | "range";
 export type TimeframeType = "per_year" | "per_month" | "per_week" | "per_day" | "per_hour";
 export type TeamRole = "hiring_manager" | "recruiter" | "interviewer" | "coordinator";
@@ -75,11 +74,6 @@ export const timeframes: TimeframeType[] = [
   "per_hour",
 ];
 
-export const visibilityTypes: VisibilityType[] = [
-  "internal",
-  "careers",
-  "public",
-];
 export interface HiringStage {
   id: string;
   name: string;
@@ -150,5 +144,4 @@ export const mockJob = {
     { id: "u1", name: "Jane Doe", email: "jane@acme.com", role: "hiring_manager" as TeamRole },
     { id: "u2", name: "John Smith", email: "john@acme.com", role: "interviewer" as TeamRole },
   ],
-  visibility: "careers" as VisibilityType,
 };

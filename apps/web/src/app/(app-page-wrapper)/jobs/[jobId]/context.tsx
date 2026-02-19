@@ -10,7 +10,7 @@ import {
 } from "react";
 import { useParams } from "next/navigation";
 import { toast } from "sonner";
-import type { JobStatusType, VisibilityType, SalaryType, TimeframeType, TeamRole } from "./constants";
+import type { JobStatusType, SalaryType, TimeframeType, TeamRole } from "./constants";
 import { mockJob, defaultHiringStages } from "./constants";
 import type { HiringStage, TeamMember } from "./constants";
 import { useTranslation } from "react-i18next";
@@ -41,7 +41,6 @@ export interface JobSetupState {
   stages: Stage[];
   hiringStages: HiringStage[];
   teamMembers: TeamMember[];
-  visibility: VisibilityType;
   published: boolean;
   linkCopied: boolean;
   savedAt: string | null;
@@ -81,7 +80,6 @@ const defaultState: JobSetupState = {
   ],
   hiringStages: defaultHiringStages.map((s) => ({ ...s, id: crypto.randomUUID() })),
   teamMembers: [],
-  visibility: "careers" as VisibilityType,
   published: false,
   linkCopied: false,
   savedAt: null,
@@ -117,7 +115,6 @@ type JobSetupContextValue = JobSetupState & {
   setStages: (v: Stage[]) => void;
   setHiringStages: (v: HiringStage[]) => void;
   setTeamMembers: (v: TeamMember[]) => void;
-  setVisibility: (v: VisibilityType) => void;
   setPublished: (v: boolean) => void;
   setLinkCopied: (v: boolean) => void;
   setSavedAt: (v: string | null) => void;
@@ -150,7 +147,7 @@ const JobSetupContext = createContext<JobSetupContextValue | null>(null);
 
 export function JobSetupProvider({ children }: { children: ReactNode }) {
   const params = useParams();
-  const id = params?.id as string | undefined;
+  const id = params?.jobId as string;
   const isEdit = Boolean(id);
   const { t } = useTranslation();
 
@@ -182,8 +179,7 @@ export function JobSetupProvider({ children }: { children: ReactNode }) {
         screeningQuestions: mockJob.screeningQuestions,
         stages: mockJob.stages,
         hiringStages: mockJob.hiringStages ?? defaultHiringStages.map((s) => ({ ...s, id: crypto.randomUUID() })),
-        teamMembers: mockJob.teamMembers ?? [],
-        visibility: mockJob.visibility,
+        teamMembers: mockJob.teamMembers,
       }));
     }
   }, [isEdit]);
@@ -332,7 +328,6 @@ export function JobSetupProvider({ children }: { children: ReactNode }) {
     setStages: (v) => setState((s) => ({ ...s, stages: v })),
     setHiringStages: (v) => setState((s) => ({ ...s, hiringStages: v })),
     setTeamMembers: (v) => setState((s) => ({ ...s, teamMembers: v })),
-    setVisibility: (v) => setState((s) => ({ ...s, visibility: v })),
     setPublished: (v) => setState((s) => ({ ...s, published: v })),
     setLinkCopied: (v) => setState((s) => ({ ...s, linkCopied: v })),
     setSavedAt: (v) => setState((s) => ({ ...s, savedAt: v })),

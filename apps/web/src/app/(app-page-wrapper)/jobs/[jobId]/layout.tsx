@@ -1,9 +1,11 @@
 "use client";
 
 import { usePathname, useRouter, useParams } from "next/navigation";
+import { Icon } from "@onehash/ui";
 import Link from "next/link";
 import { useTranslation } from "react-i18next";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useAuthSession } from "@/app/providers";
 import {
   Button,
   Card,
@@ -16,7 +18,6 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@onehash/ui";
-import { ArrowLeft, ChevronLeft, ChevronRight, Save, Globe, Eye, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { JobSetupProvider, useJobSetup } from "./context";
@@ -27,16 +28,16 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const params = useParams();
-  const id = params?.id as string;
+  const { user } = useAuthSession();
+  const id = params?.jobId as string;
+  const orgName = user?.org_name;
   const isMobile = useIsMobile();
   const { t } = useTranslation();
   const sections = SETUP_SECTIONS(t);
   const {
     title,
     status,
-    visibility,
     hiringManager,
-    stages,
     hiringStages,
     teamMembers,
     savedAt,
@@ -122,19 +123,26 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
 
   const SummaryContent = () => (
     <div className="space-y-5">
+      <Button
+        variant="outline"
+        size="sm"
+        className="w-full h-8 text-xs gap-1.5"
+        onClick={() => {
+          if (!orgName) {
+            toast.error(t("preview_org_missing", "Organization not found. Cannot open preview."));
+            return;
+          }
+          router.push(`/${encodeURIComponent(orgName)}/${encodeURIComponent(id)}`);
+        }}
+      >
+        <Icon name="Eye" className="h-3.5 w-3.5" /> {t("preview")}
+      </Button>
+      <Separator />
       <div>
         <p className="text-xs text-muted-foreground mb-1">Status</p>
         <Badge variant={status === "open" ? "default" : "secondary"} className="capitalize text-xs">
           {status}
         </Badge>
-      </div>
-      <Separator />
-      <div>
-        <p className="text-xs text-muted-foreground mb-1">Visibility</p>
-        <div className="flex items-center gap-1.5">
-          {visibility === "public" ? <Globe className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-          <span className="text-sm capitalize">{visibility}</span>
-        </div>
       </div>
       <Separator />
       <div>
@@ -179,16 +187,16 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
       <div className="flex flex-col min-h-[calc(100vh-8rem)]">
         <div className="flex items-center gap-2 mb-4">
           <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={() => router.push("/jobs")}>
-            <ArrowLeft className="h-4 w-4" />
+            <Icon name="ChevronLeft" className="h-4 w-4" />
           </Button>
           <div className="flex-1 min-w-0">
-            <h1 className="text-base font-semibold truncate">{title || "Create Job"}</h1>
+            <h1 className="text-base font-semibold truncate">{title || t("create_job")}</h1>
             <p className="text-[10px] text-muted-foreground">
               Step {currentStep + 1} of {sections.length} · {sections[currentStep].label}
             </p>
           </div>
           <Button variant="ghost" size="sm" className="text-xs h-8" onClick={() => setSummaryOpen(true)}>
-            Summary
+            {t("summary")}
           </Button>
         </div>
         <div className="flex gap-1 mb-5">
@@ -206,12 +214,12 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
         <div className="sticky bottom-16 bg-background py-3 flex gap-2 -mx-4 px-4">
           {currentStep > 0 && (
             <Button variant="outline" size="sm" className="h-11 text-sm flex-1" onClick={goPrev}>
-              <ChevronLeft className="h-4 w-4 mr-1" /> Back
+              {t("back")}
             </Button>
           )}
           {currentStep < sections.length - 1 ? (
             <Button size="sm" className="h-11 text-sm flex-1" onClick={goNext}>
-              Next <ChevronRight className="h-4 w-4 ml-1" />
+              {t("next")}
             </Button>
           ) : (
             <Button
@@ -219,7 +227,7 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
               className="h-11 text-sm flex-1"
               onClick={published ? onSave : onPublish}
             >
-              {published ? "Save Changes" : "Publish Job"}
+              {published ? t("save") : t("publish")}
             </Button>
           )}
         </div>
@@ -243,7 +251,7 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
     <div>
       <div className="flex items-center gap-3 mb-6">
         <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => router.push("/jobs")}>
-          <ArrowLeft className="h-4 w-4" />
+          <Icon name="ChevronLeft" className="h-4 w-4" />
         </Button>
         <div className="flex-1">
           <h1 className="text-lg font-semibold">{title || "Create Job"}</h1>
@@ -300,7 +308,7 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
             className="h-10 rounded-full shadow-md text-xs gap-1.5 bg-background"
             onClick={() => setSummaryOpen(true)}
           >
-            <Eye className="h-3.5 w-3.5" /> Summary
+            <Icon name="Eye" className="h-3.5 w-3.5" /> Summary
           </Button>
         </div>
         <Sheet open={summaryOpen} onOpenChange={setSummaryOpen}>
@@ -351,7 +359,7 @@ function AiSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (v: bool
               }}
               className="w-full flex items-center gap-3 rounded-lg border border-border p-3 text-left hover:bg-muted/50 transition-colors"
             >
-              <Sparkles className="h-4 w-4 text-muted-foreground shrink-0" />
+              <Icon name="Sparkles" className="h-4 w-4 text-muted-foreground shrink-0" />
               <div>
                 <p className="text-sm font-medium">{action.label}</p>
                 <p className="text-xs text-muted-foreground">{action.desc}</p>

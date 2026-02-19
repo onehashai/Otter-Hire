@@ -63,7 +63,6 @@
   "hiring_stages": "Hiring Stages",
   "hiring_team": "Hiring Team",
   "interview_plan": "Interview Plan",
-  "visibility": "Visibility",
   "select": "Select",
   "select_country_first": "Select country first",
   "search_country": "Search country...",
@@ -109,5 +108,9 @@
   "we_ve_sent_a_verification_link_to": "We've sent a verification link to",
   "check_your_inbox_to_continue": "Check your inbox to continue.",
   "back_to_login": "Back to login",
-  "continue_to_dashboard": "Continue to dashboard"
+  "continue_to_dashboard": "Continue to dashboard",
+  "preview": "Preview",
+  "summary": "Summary",
+  "next": "Next",
+  "back": "Back"
 }

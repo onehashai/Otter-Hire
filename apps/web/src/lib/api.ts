@@ -10,6 +10,7 @@ export type HealthResponse = {
 
 export type MeResponse = {
   org_id: string | null;
+  org_name?: string;
   user: {
     id: string | null;
     email: string | null;
@@ -24,6 +25,7 @@ export type AuthSessionResponse = {
   name: string;
   role: string;
   org_id: string;
+  org_name: string;
   is_verified: boolean;
   is_onboarded: boolean;
 };

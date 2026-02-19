@@ -61,7 +61,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
       )}
 
       {/* Content */}
-      <div className="flex-1 max-w-xl min-w-0">{children}</div>
+      <div className="flex-1 max-w-6xl min-w-0">{children}</div>
     </div>
   );
 }

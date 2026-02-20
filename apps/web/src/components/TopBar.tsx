@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { LogOut } from "lucide-react";
-import { logout } from "@/lib/api";
+import { logout } from "@/api/index";
 import { useAuthSession } from "@/app/providers";
 import {
   Avatar,

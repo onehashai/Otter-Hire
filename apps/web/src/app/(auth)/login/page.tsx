@@ -3,6 +3,7 @@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useEffect } from "react";
 import {
   Button,
@@ -17,13 +18,24 @@ import {
 } from "@onehash/ui";
 import { useTranslation } from "react-i18next";
 import { loginSchema, type LoginFormValues } from "@/lib/schemas/zodResolver";
-import { login } from "@/lib/api";
+import { login } from "@/api/index";
 import { useAuthSession } from "@/app/providers";
+
+function isSafeRedirect(path: string): boolean {
+  return path.startsWith("/invite/") && path.length > 8;
+}
 
 export default function Login() {
   const { t } = useTranslation();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { refreshSession } = useAuthSession();
   const [mounted, setMounted] = useState(false);
+  const redirectTo = searchParams.get("redirect");
+  const inviteRedirect = typeof redirectTo === "string" && isSafeRedirect(redirectTo) ? redirectTo : null;
+  const signupHref = inviteRedirect
+    ? `/signup?invite=${encodeURIComponent(inviteRedirect.replace(/^\/invite\//, ""))}`
+    : "/signup";
 
   useEffect(() => {
     setMounted(true);
@@ -48,6 +60,11 @@ export default function Login() {
         password: data.password,
       });
       await refreshSession();
+      if (inviteRedirect) {
+        router.replace(inviteRedirect);
+        router.refresh();
+        return;
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to sign in";
       form.setError("root", { message });
@@ -207,7 +224,7 @@ export default function Login() {
             <p className="text-center text-xs text-muted-foreground mt-5">
               {t("dont_have_an_account")}{" "}
               <Link
-                href="/signup"
+                href={signupHref}
                 className="text-foreground font-medium hover:underline underline-offset-4"
               >
                 {t("sign_up")}

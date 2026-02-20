@@ -3,7 +3,8 @@
 import { useState, useMemo } from "react";
 import  Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Button, InputField, Label, Icon, cn } from "@onehash/ui";
+import { Button, InputField, Label, Icon } from "@onehash/ui";
+import { cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
 
 const passwordRules = [

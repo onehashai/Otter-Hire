@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button, Icon } from "@onehash/ui";
 import { useTranslation } from "react-i18next";
-import { verifyEmail, resendVerification } from "@/lib/api";
+import { verifyEmail, resendVerification } from "@/api/index";
 import { useAuthSession } from "@/app/providers";
 
 function VerifyEmailContent() {
@@ -21,8 +21,13 @@ function VerifyEmailContent() {
   const [email, setEmail] = useState<string>("");
 
   useEffect(() => {
+    const inviteToken = sessionStorage.getItem("invite_token");
     if (user?.is_verified && !user?.is_onboarded) {
-      router.replace("/onboarding");
+      if (inviteToken) {
+        router.replace(`/invite/${encodeURIComponent(inviteToken)}`);
+      } else {
+        router.replace("/onboarding");
+      }
       return;
     }
     if (user?.is_verified && user?.is_onboarded) {
@@ -57,9 +62,15 @@ function VerifyEmailContent() {
     try {
       await verifyEmail(token);
       sessionStorage.removeItem("signup_email");
+      const inviteToken = sessionStorage.getItem("invite_token");
+      sessionStorage.removeItem("invite_token");
       await refreshSession();
       localStorage.setItem("session_updated", Date.now().toString());
-      router.replace("/onboarding");
+      if (inviteToken) {
+        router.replace(`/invite/${encodeURIComponent(inviteToken)}`);
+      } else {
+        router.replace("/onboarding");
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Verification failed";
       setError(message);

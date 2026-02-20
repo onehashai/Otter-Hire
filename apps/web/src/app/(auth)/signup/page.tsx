@@ -3,7 +3,7 @@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Button,
   InputField,
@@ -13,11 +13,11 @@ import {
   FormItem,
   FormControl,
   Icon,
-  cn,
 } from "@onehash/ui";
 import { useTranslation } from "react-i18next";
+import { cn } from "@/lib/utils";
 import { signupSchema, type SignupFormValues } from "@/lib/schemas/zodResolver";
-import { signup } from "@/lib/api";
+import { signup } from "@/api/index";
 
 const PASSWORD_RULES = [
   { label: "At least 8 characters", test: (pw: string) => pw.length >= 8 },
@@ -30,7 +30,9 @@ const PASSWORD_RULES = [
 
 export default function Signup() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { t } = useTranslation();
+  const inviteToken = searchParams.get("invite");
 
   const form = useForm<SignupFormValues>({
     resolver: zodResolver(signupSchema),
@@ -53,6 +55,9 @@ export default function Signup() {
         password: data.password,
       });
       sessionStorage.setItem("signup_email", data.email);
+      if (typeof inviteToken === "string" && inviteToken.trim()) {
+        sessionStorage.setItem("invite_token", inviteToken.trim());
+      }
       router.replace("/verify");
       router.refresh();
     } catch (err) {

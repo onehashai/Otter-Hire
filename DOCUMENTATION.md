@@ -12,7 +12,7 @@ The frontend (Next.js 14) communicates with the backend (FastAPI) via HTTP reque
 
 ### API Client Configuration
 
-**Location**: `apps/web/src/lib/api.ts`
+**Location**: `apps/web/src/api/` (client in `client.ts`; auth in `auth.ts`; invites in `invites.ts`; re-exports in `index.ts`)
 
 - **Public API URL**: `process.env.NEXT_PUBLIC_API_URL` (default: `http://localhost:8000`)
 - **Internal API URL**: `process.env.API_INTERNAL_URL` (fallback to public URL)

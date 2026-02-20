@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { Toaster, SonnerToaster, TooltipProvider } from "@onehash/ui";
-import { getAuthSession, type AuthSessionResponse } from "@/lib/api";
+import { getAuthSession, type AuthSessionResponse } from "@/api/index";
 
 import "@/i18n";
 
@@ -29,6 +29,10 @@ export function useAuthSession(): AuthSessionContextValue {
 
 const AUTH_ROUTES = ["/login", "/signup"];
 const LIFECYCLE_ROUTES = ["/verify", "/onboarding"];
+
+function isInvitePath(pathname: string): boolean {
+  return pathname.startsWith("/invite/");
+}
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthSessionResponse | null>(null);
@@ -65,23 +69,24 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
     const isAuthRoute = AUTH_ROUTES.includes(pathname);
     const isLifecycleRoute = LIFECYCLE_ROUTES.includes(pathname);
+    const onInvitePage = isInvitePath(pathname);
 
     if (!user) {
-      if (!isAuthRoute && !isLifecycleRoute) {
+      if (!isAuthRoute && !isLifecycleRoute && !onInvitePage) {
         router.replace("/login");
       }
       return;
     }
 
     if (!user.is_verified) {
-      if (pathname !== "/verify") {
+      if (pathname !== "/verify" && !onInvitePage) {
         router.replace("/verify");
       }
       return;
     }
 
     if (!user.is_onboarded) {
-      if (pathname !== "/onboarding") {
+      if (pathname !== "/onboarding" && !onInvitePage) {
         router.replace("/onboarding");
       }
       return;

@@ -14,7 +14,7 @@ import {
 } from "@onehash/ui";
 import { onboardingSchema, type OnboardingFormValues } from "@/lib/schemas/zodResolver";
 import { useTranslation } from "react-i18next";
-import { completeOnboarding } from "@/lib/api";
+import { completeOnboarding } from "@/api/index";
 import { useAuthSession } from "@/app/providers";
 
 export default function Onboarding() {

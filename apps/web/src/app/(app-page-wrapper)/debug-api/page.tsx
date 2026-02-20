@@ -1,4 +1,4 @@
-import { API_BASE_URL, getHealth, getMe } from "@/lib/api";
+import { API_BASE_URL, getHealth, getMe } from "@/api/index";
 
 export default async function DebugApiPage() {
   const [healthResult, meResult] = await Promise.allSettled([getHealth(), getMe()]);

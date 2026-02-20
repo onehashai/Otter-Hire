@@ -112,5 +112,12 @@
   "preview": "Preview",
   "summary": "Summary",
   "next": "Next",
-  "back": "Back"
+  "back": "Back",
+  "applied_for": "Applied for",
+  "stage": "Stage",
+  "tags": "Tags",
+  "score": "Score",
+  "added": "Added",
+  "team": "Team",
+  "manage_your_team_members_roles_and_permissions": "Manage your team members, roles, and permissions."
 }

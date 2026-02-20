@@ -1,36 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import {
-  Button,
-  Label,
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-  Icon,
-} from "@onehash/ui";
+import { Button, Icon } from "@onehash/ui";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useToast } from "@/hooks/use-toast";
 import { RolesAndPermissionsTable } from "@/components/settings/team/rolesAndPermissionsTable";
 import { TeamMembers, type TeamMember } from "@/components/settings/team/teamMembers";
 import { TeamInviteModal } from "@/components/settings/team/teamInviteModal";
+import { TeamMemberRemoveDialog } from "@/components/settings/team/teamMemberRemoveDialog";
+import { TeamMemberRoleChangeDialog } from "@/components/settings/team/teamMemberRoleChangeDialog";
+import { TeamOwnershipTransferDialog } from "@/components/settings/team/teamOwnershipTransferDialog";
 import { type Role, roles } from "@/components/settings/team/lib/permissonMatrix";
+import { useTranslation } from "react-i18next";
 
 const CURRENT_USER_ID = "1";
 
@@ -48,9 +29,9 @@ function getCurrentUserRole(members: TeamMember[]): Role {
 }
 
 export default function TeamSettingsPage() {
+  const { t } = useTranslation();
   const isMobile = useIsMobile();
   const { toast } = useToast();
-
   const [members, setMembers] = useState<TeamMember[]>(initialMembers);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [removeTarget, setRemoveTarget] = useState<TeamMember | null>(null);
@@ -115,11 +96,10 @@ export default function TeamSettingsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-base md:text-lg font-semibold mb-1">Team</h2>
-          <p className="text-xs text-muted-foreground">Manage your team members, roles, and permissions.</p>
+          <h2 className="text-base md:text-lg font-semibold mb-1">{t("team")}</h2>
+          <p className="text-xs text-muted-foreground">{t("manage_your_team_members_roles_and_permissions")}</p>
         </div>
         <Button size="sm" className="text-xs h-9 md:h-8 gap-1.5 shrink-0" onClick={() => setInviteOpen(true)}>
           <Icon name="UserPlus" className="h-3.5 w-3.5" />
@@ -127,7 +107,6 @@ export default function TeamSettingsPage() {
         </Button>
       </div>
 
-      {/* Members */}
       <TeamMembers
         members={members}
         isMobile={isMobile}
@@ -140,75 +119,26 @@ export default function TeamSettingsPage() {
         onRemoveClick={setRemoveTarget}
       />
 
-      {/* Roles & Permissions */}
       <RolesAndPermissionsTable />
 
-      {/* Invite Modal */}
       <TeamInviteModal
         open={inviteOpen}
         onOpenChange={setInviteOpen}
         onSubmit={handleInvite}
       />
 
-      {/* Remove Confirmation */}
-      <AlertDialog open={!!removeTarget} onOpenChange={(open) => !open && setRemoveTarget(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="text-base">Remove team member</AlertDialogTitle>
-            <AlertDialogDescription className="text-sm">
-              Are you sure you want to remove <span className="font-medium text-foreground">{removeTarget?.name}</span> from the team? This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel className="text-xs h-8">Cancel</AlertDialogCancel>
-            <AlertDialogAction className="text-xs h-8 bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={handleRemove}>Remove</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <TeamMemberRemoveDialog member={removeTarget} onOpenChange={() => setRemoveTarget(null)} onConfirm={handleRemove} />
 
-      {/* Role Change Dialog */}
-      <Dialog open={!!roleChangeTarget} onOpenChange={(open) => !open && setRoleChangeTarget(null)}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="text-base">Change role</DialogTitle>
-            <DialogDescription className="text-xs">Update the role for {roleChangeTarget?.name}.</DialogDescription>
-          </DialogHeader>
-          <div className="py-2">
-            <Select value={newRole} onValueChange={(v) => setNewRole(v as Role)}>
-              <SelectTrigger className="h-9 text-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {changeRoles.map((r) => (
-                  <SelectItem key={r.role} value={r.role} className="text-sm">
-                    <span className="font-medium">{r.role}</span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => setRoleChangeTarget(null)}>Cancel</Button>
-            <Button size="sm" className="text-xs h-8" onClick={handleRoleChange}>Save</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <TeamMemberRoleChangeDialog
+        member={roleChangeTarget}
+        newRole={newRole}
+        onNewRoleChange={setNewRole}
+        roles={changeRoles}
+        onOpenChange={() => setRoleChangeTarget(null)}
+        onConfirm={handleRoleChange}
+      />
 
-      {/* Ownership Transfer Confirmation */}
-      <AlertDialog open={!!ownerTransferTarget} onOpenChange={(open) => !open && setOwnerTransferTarget(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="text-base">Transfer ownership</AlertDialogTitle>
-            <AlertDialogDescription className="text-sm">
-              Are you sure you want to transfer ownership to <span className="font-medium text-foreground">{ownerTransferTarget?.name}</span>? You will be downgraded to Admin. This action requires careful consideration.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel className="text-xs h-8">Cancel</AlertDialogCancel>
-            <AlertDialogAction className="text-xs h-8" onClick={handleOwnerTransfer}>Transfer Ownership</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <TeamOwnershipTransferDialog member={ownerTransferTarget} onOpenChange={() => setOwnerTransferTarget(null)} onConfirm={handleOwnerTransfer} />
     </div>
   );
 }

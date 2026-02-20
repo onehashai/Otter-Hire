@@ -48,6 +48,9 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
     handleSave,
     handlePublish,
     handleUnpublish,
+    isLoading,
+    isSaving,
+    isPublishing,
   } = useJobSetup();
 
   const pathParts = pathname.split("/");
@@ -169,11 +172,21 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
         </div>
       </div>
       <Separator />
-      {savedAt && (
+      {isSaving ? (
+        <p className="text-[10px] text-muted-foreground text-center">Saving...</p>
+      ) : savedAt ? (
         <p className="text-[10px] text-muted-foreground text-center">Saved at {savedAt}</p>
-      )}
+      ) : null}
     </div>
   );
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[calc(100vh-8rem)]">
+        <p className="text-sm text-muted-foreground">Loading...</p>
+      </div>
+    );
+  }
 
   if (isMobile) {
     return (
@@ -219,8 +232,9 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
               size="sm"
               className="h-11 text-sm flex-1"
               onClick={published ? onSave : onPublish}
+              disabled={isSaving || isPublishing}
             >
-              {published ? t("save") : t("publish")}
+              {isSaving ? "Saving..." : isPublishing ? "Publishing..." : published ? "Save Changes" : "Publish Job"}
             </Button>
           )}
         </div>
@@ -249,16 +263,16 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
         <div className="flex-1">
           <h1 className="text-lg font-semibold">{title || "Create Job"}</h1>
         </div>
-        <Button variant="outline" size="sm" className="h-8 text-xs" onClick={onSave}>
-          {t("save")}
+        <Button variant="outline" size="sm" className="h-8 text-xs" onClick={onSave} disabled={isSaving || isPublishing}>
+          {isSaving ? (t("saving") || "Saving...") : t("save")}
         </Button>
         {published ? (
-          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={handleUnpublish}>
-            {t("unpublish")}
+          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={handleUnpublish} disabled={isSaving || isPublishing}>
+            {isPublishing ? (t("processing") || "Processing...") : t("unpublish")}
           </Button>
         ) : (
-          <Button size="sm" className="h-8 text-xs" onClick={onPublish}>
-            {t("publish")}
+          <Button size="sm" className="h-8 text-xs" onClick={onPublish} disabled={isSaving || isPublishing}>
+            {isPublishing ? (t("publishing") || "Publishing...") : t("publish")}
           </Button>
         )}
       </div>

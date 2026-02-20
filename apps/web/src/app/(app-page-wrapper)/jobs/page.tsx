@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -21,24 +21,8 @@ import { MainPagesLayout } from "@/components/common/MainPagesLayout";
 import { format, isAfter, isBefore, subDays, startOfDay } from "date-fns";
 import { jobNameSchema, type JobNameFormValues } from "@/lib/schemas/zodResolver";
 import { DepartmentType, EmploymentType, JobStatusType } from "./[jobId]/constants";
-
-type JobListItem = {
-  role: string;
-  dept: DepartmentType;
-  type: EmploymentType;
-  status: JobStatusType;
-  candidates: number;
-  lastActivity: string;
-  lastActivityDate: Date;
-};
-
-const jobs: JobListItem[] = [
-  { role: "Senior Frontend Engineer", dept: "engineering", type: "full_time", status: "open", candidates: 34, lastActivity: "2h ago", lastActivityDate: new Date() },
-  { role: "Product Designer", dept: "design", type: "full_time", status: "open", candidates: 22, lastActivity: "5h ago", lastActivityDate: new Date() },
-  { role: "Data Scientist", dept: "data", type: "contract", status: "draft", candidates: 0, lastActivity: "1d ago", lastActivityDate: subDays(new Date(), 1) },
-  { role: "Engineering Manager", dept: "engineering", type: "full_time", status: "open", candidates: 18, lastActivity: "3h ago", lastActivityDate: new Date() },
-  { role: "Marketing Lead", dept: "marketing", type: "part_time", status: "closed", candidates: 45, lastActivity: "5d ago", lastActivityDate: subDays(new Date(), 5) },
-];
+import { getJobs, createJob, type JobListItemResponse } from "@/api";
+import { toast } from "sonner";
 
 const allDepts: DepartmentType[] = ["engineering", "design", "data", "marketing", "sales", "operations", "hr"];
 const allTypes: EmploymentType[] = ["full_time", "part_time", "contract", "internship"];
@@ -70,6 +54,11 @@ export default function JobsPage() {
   const isMobile = useIsMobile();
   const router = useRouter();
 
+  const [jobs, setJobs] = useState<JobListItemResponse[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [deptFilter, setDeptFilter] = useState<string[]>([]);
@@ -83,13 +72,39 @@ export default function JobsPage() {
     resolver: zodResolver(jobNameSchema),
   });
 
+  const fetchJobs = useCallback(async (signal?: AbortSignal) => {
+    try {
+      setError(null);
+      const data = await getJobs();
+      if (!signal?.aborted) setJobs(data);
+    } catch (err) {
+      if (!signal?.aborted) setError(err instanceof Error ? err.message : "Failed to load jobs");
+    } finally {
+      if (!signal?.aborted) setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchJobs(controller.signal);
+    return () => controller.abort();
+  }, [fetchJobs]);
+
   useEffect(() => {
     if (createOpen) createJobForm.reset({ jobName: "" });
   }, [createOpen]);
 
-  const onCreateJobValid = (data: JobNameFormValues) => {
-    setCreateOpen(false);
-    router.push(`/jobs/${encodeURIComponent(data.jobName.trim())}/info`);
+  const onCreateJobValid = async (data: JobNameFormValues) => {
+    if (creating) return;
+    setCreating(true);
+    try {
+      const job = await createJob(data.jobName.trim());
+      setCreateOpen(false);
+      router.push(`/jobs/${job.id}/info`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to create job");
+      setCreating(false);
+    }
   };
 
   const applyDatePreset = (preset: DatePreset) => {
@@ -109,15 +124,21 @@ export default function JobsPage() {
 
   const filtered = useMemo(() => {
     return jobs.filter((job) => {
-      if (search && !job.role.toLowerCase().includes(search.toLowerCase()) && !job.dept.toLowerCase().includes(search.toLowerCase())) return false;
-      if (statusFilter.length && !statusFilter.includes(job.status)) return false;
-      if (deptFilter.length && !deptFilter.includes(job.dept)) return false;
-      if (typeFilter.length && !typeFilter.includes(job.type)) return false;
-      if (dateRange.from && isBefore(job.lastActivityDate, startOfDay(dateRange.from))) return false;
-      if (dateRange.to && isAfter(startOfDay(job.lastActivityDate), dateRange.to)) return false;
+      if (search && !job.title.toLowerCase().includes(search.toLowerCase()) && !(job.department ?? "").toLowerCase().includes(search.toLowerCase())) return false;
+      if (statusFilter.length && !statusFilter.includes(job.status as JobStatusType)) return false;
+      if (deptFilter.length && !deptFilter.includes((job.department ?? "") as DepartmentType)) return false;
+      if (typeFilter.length && !typeFilter.includes((job.employment_type ?? "") as EmploymentType)) return false;
+      if (dateRange.from) {
+        const jobDate = new Date(job.updated_at);
+        if (isBefore(jobDate, startOfDay(dateRange.from))) return false;
+      }
+      if (dateRange.to) {
+        const jobDate = new Date(job.updated_at);
+        if (isAfter(startOfDay(jobDate), dateRange.to)) return false;
+      }
       return true;
     });
-  }, [search, statusFilter, deptFilter, typeFilter, dateRange]);
+  }, [jobs, search, statusFilter, deptFilter, typeFilter, dateRange]);
 
   const statusOptions = allStatuses.map((s) => ({ value: s, label: t(statusKey[s]) }));
   const deptOptions = allDepts.map((d) => ({ value: d, label: t(deptKey[d]) }));
@@ -206,6 +227,62 @@ export default function JobsPage() {
     </div>
   );
 
+  const formatTimeAgo = (dateStr: string) => {
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    if (diffMins < 1) return "just now";
+    if (diffMins < 60) return `${diffMins}m ago`;
+    const diffHrs = Math.floor(diffMins / 60);
+    if (diffHrs < 24) return `${diffHrs}h ago`;
+    const diffDays = Math.floor(diffHrs / 24);
+    return `${diffDays}d ago`;
+  };
+
+  if (loading) {
+    return (
+      <MainPagesLayout
+        searchValue=""
+        onSearchChange={() => {}}
+        actionLabel={t("create")}
+        actionIcon="Plus"
+        onAction={() => {}}
+        filterContent={<div />}
+        hasActiveFilters={false}
+        activeChips={[]}
+        onClearAllFilters={() => {}}
+      >
+        <div className="flex items-center justify-center py-16">
+          <p className="text-sm text-muted-foreground">{t("loading") || "Loading..."}</p>
+        </div>
+      </MainPagesLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <MainPagesLayout
+        searchValue=""
+        onSearchChange={() => {}}
+        actionLabel={t("create")}
+        actionIcon="Plus"
+        onAction={() => {}}
+        filterContent={<div />}
+        hasActiveFilters={false}
+        activeChips={[]}
+        onClearAllFilters={() => {}}
+      >
+        <div className="flex flex-col items-center justify-center py-16 gap-3">
+          <p className="text-sm text-destructive">{error}</p>
+          <Button variant="outline" size="sm" onClick={() => { setLoading(true); fetchJobs(); }}>
+            {t("retry") || "Retry"}
+          </Button>
+        </div>
+      </MainPagesLayout>
+    );
+  }
+
   return (
     <MainPagesLayout
       searchValue={search}
@@ -221,18 +298,18 @@ export default function JobsPage() {
       {isMobile ? (
         <div className="space-y-2">
           {filtered.map((job) => (
-            <Card key={job.role} className="active:bg-muted/50 transition-colors cursor-pointer" onClick={() => router.push(`/jobs/${encodeURIComponent(job.role)}/info`)}>
+            <Card key={job.id} className="active:bg-muted/50 transition-colors cursor-pointer" onClick={() => router.push(`/jobs/${job.id}/info`)}>
               <CardContent className="p-4">
                 <div className="flex items-start justify-between mb-1.5">
-                  <h3 className="text-sm font-medium leading-tight pr-2">{job.role}</h3>
-                  <Badge variant={statusVariant(job.status)} className="text-[10px] shrink-0">{t(statusKey[job.status])}</Badge>
+                  <h3 className="text-sm font-medium leading-tight pr-2">{job.title}</h3>
+                  <Badge variant={statusVariant(job.status as JobStatusType)} className="text-[10px] shrink-0">{t(statusKey[job.status as JobStatusType] ?? job.status)}</Badge>
                 </div>
                 <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                  <span>{t(deptKey[job.dept])}</span>
+                  {job.department && <span>{t(deptKey[job.department as DepartmentType] ?? job.department)}</span>}
                   <span>·</span>
-                  <span>{job.candidates} {job.candidates === 1 ? t("candidate") : t("candidates")}</span>
+                  <span>{job.candidate_count} {job.candidate_count === 1 ? t("candidate") : t("candidates")}</span>
                   <span>·</span>
-                  <span>{job.lastActivity}</span>
+                  <span>{formatTimeAgo(job.updated_at)}</span>
                 </div>
               </CardContent>
             </Card>
@@ -256,12 +333,12 @@ export default function JobsPage() {
               </TableHeader>
               <TableBody>
                 {filtered.map((job) => (
-                  <TableRow key={job.role} className="cursor-pointer hover:bg-muted/50" onClick={() => router.push(`/jobs/${encodeURIComponent(job.role)}/info`)}>
-                    <TableCell className="text-sm font-medium">{job.role}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{t(deptKey[job.dept])}</TableCell>
-                    <TableCell><Badge variant={statusVariant(job.status)} className="text-[10px]">{t(statusKey[job.status])}</Badge></TableCell>
-                    <TableCell className="text-xs text-right">{job.candidates}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground text-right">{job.lastActivity}</TableCell>
+                  <TableRow key={job.id} className="cursor-pointer hover:bg-muted/50" onClick={() => router.push(`/jobs/${job.id}/info`)}>
+                    <TableCell className="text-sm font-medium">{job.title}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{job.department ? t(deptKey[job.department as DepartmentType] ?? job.department) : "—"}</TableCell>
+                    <TableCell><Badge variant={statusVariant(job.status as JobStatusType)} className="text-[10px]">{t(statusKey[job.status as JobStatusType] ?? job.status)}</Badge></TableCell>
+                    <TableCell className="text-xs text-right">{job.candidate_count}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground text-right">{formatTimeAgo(job.updated_at)}</TableCell>
                   </TableRow>
                 ))}
                 {filtered.length === 0 && (
@@ -317,8 +394,8 @@ export default function JobsPage() {
               <Button variant="outline" size="sm" type="button" onClick={() => setCreateOpen(false)}>
                 {t("cancel")}
               </Button>
-              <Button size="sm" type="submit">
-                {t("continue")}
+              <Button size="sm" type="submit" disabled={creating}>
+                {creating ? (t("creating") || "Creating...") : t("continue")}
               </Button>
             </DialogFooter>
           </Form>

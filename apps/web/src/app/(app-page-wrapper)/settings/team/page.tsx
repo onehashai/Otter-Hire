@@ -1,99 +1,199 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { toast } from "sonner";
 import { Button } from "@onehash/ui/button";
 import { Icon } from "@onehash/ui/icon";
+import { Skeleton } from "@onehash/ui/skeleton";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { useToast } from "@/hooks/use-toast";
-import { RolesAndPermissionsTable } from "@/components/settings/team/RolesAndPermissionsTable";
-import { TeamMembersList, type TeamMember } from "@/components/settings/team/TeamMembersList";
+import { useAuthSession } from "@/app/providers";
+import { RolesAndPermissionsTable } from "@/components/settings/team/rolesAndPermissionsTable";
+import { TeamMember, TeamMembersList as TeamMembers } from "@/components/settings/team/TeamMembersList";
 import { TeamInviteModal } from "@/components/settings/team/TeamInviteModal";
-import { TeamMemberRemoveDialog } from "@/components/settings/team/TeamMemberRemoveDialog";
+import { type BackendRole, ASSIGNABLE_ROLES, formatRole } from "@/components/settings/team/lib/permissonMatrix";
+import {
+  getOrgUsers,
+  inviteOrgUser,
+  updateOrgUserRole,
+  removeOrgUser,
+  type OrgUserResponse,
+} from "@/api";
 import { TeamMemberRoleChangeDialog } from "@/components/settings/team/TeamMemberRoleChangeDialog";
+import { TeamMemberRemoveDialog } from "@/components/settings/team/TeamMemberRemoveDialog";
 import { TeamOwnershipTransferDialog } from "@/components/settings/team/TeamOwnershipTransferDialog";
-import { type Role, roles } from "@/components/settings/team/lib/permissonMatrix";
 import { useTranslation } from "react-i18next";
 
-const CURRENT_USER_ID = "1";
-
-const initialMembers: TeamMember[] = [
-  { id: "1", name: "Sarah Chen", email: "sarah@acme.com", role: "Owner", status: "Active", lastActive: "Just now" },
-  { id: "2", name: "Marcus Johnson", email: "marcus@acme.com", role: "Admin", status: "Active", lastActive: "2 hours ago" },
-  { id: "3", name: "Emily Park", email: "emily@acme.com", role: "Recruiter", status: "Active", lastActive: "1 day ago" },
-  { id: "4", name: "James Lee", email: "james@acme.com", role: "Hiring Manager", status: "Active", lastActive: "3 hours ago" },
-  { id: "5", name: "Nina Patel", email: "nina@acme.com", role: "Interviewer", status: "Pending", lastActive: "—" },
-  { id: "6", name: "Alex Rivera", email: "alex@acme.com", role: "Employee", status: "Pending", lastActive: "—" },
-];
-
-function getCurrentUserRole(members: TeamMember[]): Role {
-  return members.find((m) => m.id === CURRENT_USER_ID)?.role ?? "Employee";
+function mapApiUser(u: OrgUserResponse): TeamMember {
+  return {
+    id: u.id,
+    name: u.name || "",
+    email: u.email,
+    role: u.role as BackendRole,
+    status: u.status,
+  };
 }
 
 export default function TeamSettingsPage() {
   const { t } = useTranslation();
   const isMobile = useIsMobile();
-  const { toast } = useToast();
-  const [members, setMembers] = useState<TeamMember[]>(initialMembers);
+  const { user } = useAuthSession();
+
+  const [members, setMembers] = useState<TeamMember[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [permissionDenied, setPermissionDenied] = useState(false);
+  const [fetchError, setFetchError] = useState("");
+
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteSubmitting, setInviteSubmitting] = useState(false);
   const [removeTarget, setRemoveTarget] = useState<TeamMember | null>(null);
+  const [removing, setRemoving] = useState(false);
   const [roleChangeTarget, setRoleChangeTarget] = useState<TeamMember | null>(null);
-  const [newRole, setNewRole] = useState<Role>("Recruiter");
-  const [ownerTransferTarget, setOwnerTransferTarget] = useState<TeamMember | null>(null);
+  const [newRole, setNewRole] = useState<BackendRole>("recruiter");
+  const [savingRole, setSavingRole] = useState(false);
+  const [ownershipTransferTarget, setOwnershipTransferTarget] = useState<TeamMember | null>(null);
 
-  const currentUserRole = getCurrentUserRole(members);
-  const isOwner = currentUserRole === "Owner";
-  const isAdmin = currentUserRole === "Admin";
+  const currentUserId = user?.id ?? "";
+  const currentRole = user?.role ?? "";
+  const isOwner = currentRole === "owner";
+  const isAdmin = currentRole === "admin";
 
-  const handleInvite = (emails: string[], role: Role) => {
-    const newMembers: TeamMember[] = emails.map((email) => ({
-      id: crypto.randomUUID(),
-      name: email.split("@")[0],
-      email,
-      role,
-      status: "Pending",
-      lastActive: "—",
-    }));
-    setMembers((prev) => [...prev, ...newMembers]);
-    toast({ title: "Invites sent", description: `${emails.length} invitation(s) sent successfully.` });
-  };
-
-  const handleRemove = () => {
-    if (!removeTarget) return;
-    setMembers((prev) => prev.filter((m) => m.id !== removeTarget.id));
-    toast({ title: "Member removed", description: `${removeTarget.name} has been removed from the team.` });
-    setRemoveTarget(null);
-  };
-
-  const handleRoleChange = () => {
-    if (!roleChangeTarget) return;
-    if (newRole === "Owner") {
-      setOwnerTransferTarget(roleChangeTarget);
-      setRoleChangeTarget(null);
-      return;
+  const fetchMembers = useCallback(async () => {
+    try {
+      setFetchError("");
+      setPermissionDenied(false);
+      const data = await getOrgUsers();
+      setMembers(data.map(mapApiUser));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to load team members";
+      if (message.includes("403") || message.toLowerCase().includes("permission")) {
+        setPermissionDenied(true);
+      } else {
+        setFetchError(message);
+      }
+    } finally {
+      setLoading(false);
     }
-    setMembers((prev) => prev.map((m) => (m.id === roleChangeTarget.id ? { ...m, role: newRole } : m)));
-    toast({ title: "Role updated", description: `${roleChangeTarget.name} is now ${newRole}.` });
-    setRoleChangeTarget(null);
+  }, []);
+
+  useEffect(() => {
+    fetchMembers();
+  }, [fetchMembers]);
+
+  const handleInvite = async (email: string) => {
+    setInviteSubmitting(true);
+    try {
+      await inviteOrgUser(email);
+      toast.success("Invite sent", { description: `Invitation sent to ${email}.` });
+      await fetchMembers();
+    } finally {
+      setInviteSubmitting(false);
+    }
   };
 
-  const handleOwnerTransfer = () => {
-    if (!ownerTransferTarget) return;
-    setMembers((prev) =>
-      prev.map((m) => {
-        if (m.id === ownerTransferTarget.id) return { ...m, role: "Owner" as Role };
-        if (m.id === CURRENT_USER_ID && m.role === "Owner") return { ...m, role: "Admin" as Role };
-        return m;
-      })
+  const handleRemove = async () => {
+    if (!removeTarget) return;
+    setRemoving(true);
+    try {
+      await removeOrgUser(removeTarget.id);
+      toast.success("Member removed", { description: `${removeTarget.name || removeTarget.email} has been removed from the team.` });
+      setRemoveTarget(null);
+      await fetchMembers();
+    } catch (err) {
+      toast.error("Failed to remove member", { description: err instanceof Error ? err.message : "An error occurred." });
+    } finally {
+      setRemoving(false);
+    }
+  };
+
+  const handleRoleChange = async () => {
+    if (!roleChangeTarget) return;
+    setSavingRole(true);
+    try {
+      await updateOrgUserRole(roleChangeTarget.id, newRole);
+      toast.success("Role updated", { description: `${roleChangeTarget.name || roleChangeTarget.email} is now ${formatRole(newRole)}.` });
+      setRoleChangeTarget(null);
+      await fetchMembers();
+    } catch (err) {
+      toast.error("Failed to update role", { description: err instanceof Error ? err.message : "An error occurred." });
+    } finally {
+      setSavingRole(false);
+    }
+  };
+
+  const handleResendInvite = async (member: TeamMember) => {
+    try {
+      await inviteOrgUser(member.email);
+      toast.success("Invite resent", { description: `Invitation resent to ${member.email}.` });
+    } catch (err) {
+      toast.error("Failed to resend invite", { description: err instanceof Error ? err.message : "An error occurred." });
+    }
+  };
+
+  const handleOwnershipTransfer = async () => {
+    if (!ownershipTransferTarget) return;
+    try {
+      await updateOrgUserRole(ownershipTransferTarget.id, "owner");
+      toast.success("Ownership transferred", { description: `${ownershipTransferTarget.name || ownershipTransferTarget.email} is now the owner.` });
+      setOwnershipTransferTarget(null);
+      await fetchMembers();
+    } catch (err) {
+      toast.error("Failed to transfer ownership", { description: err instanceof Error ? err.message : "An error occurred." });
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <Skeleton className="h-6 w-24 mb-2" />
+            <Skeleton className="h-4 w-64" />
+          </div>
+          <Skeleton className="h-9 w-32" />
+        </div>
+        <div className="space-y-2">
+          {[1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-16 w-full" />
+          ))}
+        </div>
+      </div>
     );
-    toast({ title: "Ownership transferred", description: `${ownerTransferTarget.name} is now the Owner. You've been set to Admin.` });
-    setOwnerTransferTarget(null);
-  };
+  }
 
-  const handleResendInvite = (member: TeamMember) => {
-    toast({ title: "Invite resent", description: `Invitation resent to ${member.email}.` });
-  };
+  if (permissionDenied) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h2 className="text-base md:text-lg font-semibold mb-1">Team</h2>
+          <p className="text-xs text-muted-foreground">Manage your team members, roles, and permissions.</p>
+        </div>
+        <div className="py-16 text-center space-y-3">
+          <Icon name="Shield" className="h-10 w-10 mx-auto text-muted-foreground/40" />
+          <p className="text-sm text-muted-foreground">You don&apos;t have permission to manage team members.</p>
+          <p className="text-xs text-muted-foreground">Contact your organization owner or admin for access.</p>
+        </div>
+        <RolesAndPermissionsTable />
+      </div>
+    );
+  }
 
-  const changeRoles = isOwner ? roles : roles.filter((r) => r.role !== "Owner");
+  if (fetchError) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h2 className="text-base md:text-lg font-semibold mb-1">Team</h2>
+          <p className="text-xs text-muted-foreground">Manage your team members, roles, and permissions.</p>
+        </div>
+        <div className="py-16 text-center space-y-3">
+          <Icon name="CircleAlert" className="h-10 w-10 mx-auto text-muted-foreground/40" />
+          <p className="text-sm text-muted-foreground">{fetchError}</p>
+          <Button size="sm" variant="outline" className="text-xs h-8" onClick={() => { setLoading(true); fetchMembers(); }}>
+            Try again
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -108,15 +208,15 @@ export default function TeamSettingsPage() {
         </Button>
       </div>
 
-      <TeamMembersList
+      <TeamMembers
         members={members}
         isMobile={isMobile}
-        currentUserId={CURRENT_USER_ID}
+        currentUserId={currentUserId}
         isOwner={isOwner}
         isAdmin={isAdmin}
         onInviteClick={() => setInviteOpen(true)}
         onResendInvite={handleResendInvite}
-        onRoleChangeClick={(member) => { setRoleChangeTarget(member); setNewRole(member.role); }}
+        onRoleChangeClick={(member) => { setRoleChangeTarget(member); setNewRole(member.role === "owner" ? "admin" : member.role); }}
         onRemoveClick={setRemoveTarget}
       />
 
@@ -126,20 +226,29 @@ export default function TeamSettingsPage() {
         open={inviteOpen}
         onOpenChange={setInviteOpen}
         onSubmit={handleInvite}
+        isSubmitting={inviteSubmitting}
       />
 
-      <TeamMemberRemoveDialog member={removeTarget} onOpenChange={() => setRemoveTarget(null)} onConfirm={handleRemove} />
+      <TeamMemberRemoveDialog
+        member={removeTarget}
+        onOpenChange={() => setRemoveTarget(null)}
+        onConfirm={handleRemove}
+      />
 
       <TeamMemberRoleChangeDialog
         member={roleChangeTarget}
         newRole={newRole}
         onNewRoleChange={setNewRole}
-        roles={changeRoles}
+        roles={ASSIGNABLE_ROLES}
         onOpenChange={() => setRoleChangeTarget(null)}
         onConfirm={handleRoleChange}
       />
-
-      <TeamOwnershipTransferDialog member={ownerTransferTarget} onOpenChange={() => setOwnerTransferTarget(null)} onConfirm={handleOwnerTransfer} />
+      
+      <TeamOwnershipTransferDialog
+        member={ownershipTransferTarget}
+        onOpenChange={() => setOwnershipTransferTarget(null)}
+        onConfirm={handleOwnershipTransfer}
+      />
     </div>
   );
 }

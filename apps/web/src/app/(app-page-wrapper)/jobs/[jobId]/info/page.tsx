@@ -27,8 +27,6 @@ export default function JobInfoPage() {
     country,
     city,
     setCity,
-    hiringManager,
-    setHiringManager,
     status,
     setStatus,
     citySearch,
@@ -136,22 +134,13 @@ export default function JobInfoPage() {
           maxOptions={200}
         />
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <SelectField
-          label={t("hiring_manager")}
-          value={hiringManager}
-          onValueChange={setHiringManager}
-          options={["Jane Doe", "John Smith", "Sarah Lee", "Mike Chen"].map((m) => ({ value: m, label: m }))}
-          placeholder={t("select")}
-        />
-        <SelectField
-          label={t("status")}
-          value={status}
-          onValueChange={setStatus}
-          options={jobStatuses.map((s) => ({ value: s, label: t(s) }))}
-          placeholder={t("select")}
-        />
-      </div>
+      <SelectField
+        label={t("status")}
+        value={status}
+        onValueChange={setStatus}
+        options={jobStatuses.map((s) => ({ value: s, label: t(s) }))}
+        placeholder={t("select")}
+      />
     </div>
   );
 }

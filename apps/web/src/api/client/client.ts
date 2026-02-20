@@ -95,3 +95,37 @@ export async function apiPost<T>(
 
   return (await res.json()) as T;
 }
+
+export async function apiFetch<T>(
+  path: string,
+  options: { method: string; body?: unknown },
+): Promise<T> {
+  const headers: Record<string, string> = { Accept: "application/json" };
+  if (options.body !== undefined) {
+    headers["Content-Type"] = "application/json";
+  }
+
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    method: options.method,
+    headers,
+    credentials: "include",
+    body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    if (res.status === 429) {
+      throw new Error(handle429Error(res));
+    }
+    let message = `Request failed: ${res.status} ${res.statusText}`;
+    try {
+      const data = (await res.json()) as { detail?: string; error?: string };
+      const msg = typeof data.detail === "string" ? data.detail : typeof data.error === "string" ? data.error : "";
+      if (msg.trim()) message = msg;
+    } catch {}
+    throw new Error(message);
+  }
+
+  if (res.status === 204) return {} as T;
+  return (await res.json()) as T;
+}

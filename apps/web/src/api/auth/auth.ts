@@ -13,6 +13,7 @@ export type AuthSessionResponse = {
   role: string;
   org_id: string;
   org_name: string;
+  org_website: string;
   is_verified: boolean;
   is_onboarded: boolean;
 };
@@ -132,3 +133,17 @@ export async function completeOnboarding(data: {
 
   return (await res.json()) as AuthSessionResponse;
 }
+
+export type OrgUserResponse = {
+  id: string;
+  name: string | null;
+  email: string;
+  role: string;
+  status: string;
+};
+
+export type InviteDetailsResponse = {
+  org_name: string;
+  role: string;
+  email: string;
+};

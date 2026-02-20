@@ -5,7 +5,7 @@ import { Toaster as Sonner, toast } from "sonner";
 
 type ToasterProps = ComponentProps<typeof Sonner>;
 
-const Toaster = ({ ...props }: ToasterProps) => {
+const SonnerToaster = ({ ...props }: ToasterProps) => {
   return (
     <Sonner
       theme={props.theme ?? "system"}
@@ -24,4 +24,4 @@ const Toaster = ({ ...props }: ToasterProps) => {
   );
 };
 
-export { Toaster as SonnerToaster, toast as sonnerToast };
+export { SonnerToaster, toast as sonnerToast };

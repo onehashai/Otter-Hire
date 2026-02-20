@@ -1,10 +1,8 @@
-// Client & health
+// Client
 export {
   API_BASE_URL,
-  getHealth,
   handle429Error,
   parseErrorResponse,
-  type HealthResponse,
   type ApiGetOptions,
   type ApiPostOptions,
 } from "./client/client";
@@ -25,9 +23,7 @@ export {
 } from "./auth/auth";
 
 // Invites
-export {
-  getInviteDetails,
-  acceptInvite,
-  declineInvite,
-  type InviteDetailsResponse,
-} from "./team/invites";
+export * from "./team/index";
+
+// Health
+export { getHealth, type HealthResponse } from "./health/status";

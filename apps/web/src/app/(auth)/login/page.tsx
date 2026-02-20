@@ -5,17 +5,11 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useEffect } from "react";
-import {
-  Button,
-  InputField,
-  PasswordField,
-  Checkbox,
-  Form,
-  FormField,
-  FormItem,
-  FormControl,
-  Icon,
-} from "@onehash/ui";
+import { Button } from "@onehash/ui/button";
+import { InputField, PasswordField } from "@onehash/ui/input";
+import { Checkbox } from "@onehash/ui/checkbox";
+import { Form, FormField, FormItem, FormControl } from "@onehash/ui/form";
+import { Icon } from "@onehash/ui/icon";
 import { useTranslation } from "react-i18next";
 import { loginSchema, type LoginFormValues } from "@/lib/schemas/zodResolver";
 import { login } from "@/api/index";

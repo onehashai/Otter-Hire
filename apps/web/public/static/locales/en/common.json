@@ -3,7 +3,6 @@
   "search": "Search",
   "filters": "Filters",
   "clear_all": "Clear all",
-  "clear_all_filters": "Clear all filters",
   "from": "From",
   "to": "To",
   "today": "Today",
@@ -119,5 +118,18 @@
   "score": "Score",
   "added": "Added",
   "team": "Team",
-  "manage_your_team_members_roles_and_permissions": "Manage your team members, roles, and permissions."
+  "manage_your_team_members_roles_and_permissions": "Manage your team members, roles, and permissions.",
+  "add": "Add",
+  "remove": "Remove",
+  "clear": "Clear",
+  "assign": "Assign",
+  "reject": "Reject",
+  "selected_count": "{{count}} selected",
+  "overview": "Overview",
+  "interviews": "Interviews",
+  "evaluation": "Evaluation",
+  "documents": "Documents",
+  "move_stage": "Move Stage",
+  "schedule_interview": "Schedule Interview",
+  "add_note": "Add Note"
 }

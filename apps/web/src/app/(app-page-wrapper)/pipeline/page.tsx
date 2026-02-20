@@ -2,18 +2,11 @@
 
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import {
-  Card,
-  CardContent,
-  Badge,
-  Button,
-  InputField,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@onehash/ui";
+import { Card, CardContent } from "@onehash/ui/card";
+import { Badge } from "@onehash/ui/badge";
+import { Button } from "@onehash/ui/button";
+import { InputField } from "@onehash/ui/input";
+import { SelectField } from "@onehash/ui/select";
 import { Search, Plus, Briefcase, ChevronDown } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
@@ -56,17 +49,17 @@ export default function PipelinePage() {
             className="h-9 md:h-8 pl-8 text-xs md:w-56"
           />
         </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="h-9 md:h-8 w-auto min-w-[100px] text-xs">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Status</SelectItem>
-            <SelectItem value="Active">Active</SelectItem>
-            <SelectItem value="Draft">Draft</SelectItem>
-            <SelectItem value="Closed">Closed</SelectItem>
-          </SelectContent>
-        </Select>
+        <SelectField 
+          label="Status" 
+          value={statusFilter} 
+          onValueChange={setStatusFilter} 
+          options={[
+            { value: "all", label: "All Status" },
+            { value: "Active", label: "Active" },
+            { value: "Draft", label: "Draft" },
+            { value: "Closed", label: "Closed" },
+          ]} 
+        />
       </div>
 
       {filtered.length === 0 ? (

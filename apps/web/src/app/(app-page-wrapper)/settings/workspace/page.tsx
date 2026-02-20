@@ -1,6 +1,9 @@
 "use client";
 
-import { Card, CardContent, Button, InputField, Separator } from "@onehash/ui";
+import { Card, CardContent } from "@onehash/ui/card";
+import { Button } from "@onehash/ui/button";
+import { InputField } from "@onehash/ui/input";
+import { Separator } from "@onehash/ui/separator";
 
 export default function WorkspaceSettings() {
   return (

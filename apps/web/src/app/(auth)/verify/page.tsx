@@ -3,7 +3,8 @@
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Button, Icon } from "@onehash/ui";
+import { Button } from "@onehash/ui/button";
+import { Icon } from "@onehash/ui/icon";
 import { useTranslation } from "react-i18next";
 import { verifyEmail, resendVerification } from "@/api/index";
 import { useAuthSession } from "@/app/providers";

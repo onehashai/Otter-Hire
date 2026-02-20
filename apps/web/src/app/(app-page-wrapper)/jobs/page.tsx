@@ -4,16 +4,20 @@ import { useState, useMemo, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import {
-  Card, CardContent, Button, Badge, Label, Checkbox, Icon, InputField,
-  Calendar,
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
-  Form, FormField, FormItem, FormControl,
-} from "@onehash/ui";
+import { Card, CardContent } from "@onehash/ui/card";
+import { Button } from "@onehash/ui/button";
+import { Badge } from "@onehash/ui/badge";
+import { Label } from "@onehash/ui/label";
+import { Icon } from "@onehash/ui/icon";
+import { InputField } from "@onehash/ui/input";
+import { Calendar } from "@onehash/ui/calendar";
+import { MultiSelect } from "@onehash/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@onehash/ui/table";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@onehash/ui/dialog";
+import { Form, FormField, FormItem, FormControl } from "@onehash/ui/form";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useRouter } from "next/navigation";
-import { MainPagesLayout } from "@/components/MainPagesLayout";
+import { MainPagesLayout } from "@/components/common/MainPagesLayout";
 import { format, isAfter, isBefore, subDays, startOfDay } from "date-fns";
 import { jobNameSchema, type JobNameFormValues } from "@/lib/schemas/zodResolver";
 import { DepartmentType, EmploymentType, JobStatusType } from "./[jobId]/constants";
@@ -67,9 +71,9 @@ export default function JobsPage() {
   const router = useRouter();
 
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<JobStatusType[]>([]);
-  const [deptFilter, setDeptFilter] = useState<DepartmentType[]>([]);
-  const [typeFilter, setTypeFilter] = useState<EmploymentType[]>([]);
+  const [statusFilter, setStatusFilter] = useState<string[]>([]);
+  const [deptFilter, setDeptFilter] = useState<string[]>([]);
+  const [typeFilter, setTypeFilter] = useState<string[]>([]);
   const [datePreset, setDatePreset] = useState<DatePreset>(null);
   const [dateRange, setDateRange] = useState<{ from?: Date; to?: Date }>({});
   const [createOpen, setCreateOpen] = useState(false);
@@ -86,10 +90,6 @@ export default function JobsPage() {
   const onCreateJobValid = (data: JobNameFormValues) => {
     setCreateOpen(false);
     router.push(`/jobs/${encodeURIComponent(data.jobName.trim())}/info`);
-  };
-
-  const toggleArrayFilter = <T extends string | JobStatusType | DepartmentType | EmploymentType>(arr: T[], val: T, setter: (v: T[]) => void) => {
-    setter(arr.includes(val) ? arr.filter((v) => v !== val) : [...arr, val]);
   };
 
   const applyDatePreset = (preset: DatePreset) => {
@@ -119,10 +119,14 @@ export default function JobsPage() {
     });
   }, [search, statusFilter, deptFilter, typeFilter, dateRange]);
 
+  const statusOptions = allStatuses.map((s) => ({ value: s, label: t(statusKey[s]) }));
+  const deptOptions = allDepts.map((d) => ({ value: d, label: t(deptKey[d]) }));
+  const typeOptions = allTypes.map((tp) => ({ value: tp, label: t(typeKey[tp]) }));
+
   const activeChips: { label: string; clear: () => void }[] = [];
-  statusFilter.forEach((s) => activeChips.push({ label: t(statusKey[s]), clear: () => setStatusFilter((p) => p.filter((v) => v !== s)) }));
-  deptFilter.forEach((d) => activeChips.push({ label: t(deptKey[d]), clear: () => setDeptFilter((p) => p.filter((v) => v !== d)) }));
-  typeFilter.forEach((tp) => activeChips.push({ label: t(typeKey[tp]), clear: () => setTypeFilter((p) => p.filter((v) => v !== tp)) }));
+  statusFilter.forEach((s) => activeChips.push({ label: t(statusKey[s as JobStatusType]), clear: () => setStatusFilter((p) => p.filter((v) => v !== s)) }));
+  deptFilter.forEach((d) => activeChips.push({ label: t(deptKey[d as DepartmentType]), clear: () => setDeptFilter((p) => p.filter((v) => v !== d)) }));
+  typeFilter.forEach((tp) => activeChips.push({ label: t(typeKey[tp as EmploymentType]), clear: () => setTypeFilter((p) => p.filter((v) => v !== tp)) }));
   if (datePreset) {
     let dateLabel: string;
     if (datePreset === "custom" && dateRange.from) {
@@ -140,40 +144,34 @@ export default function JobsPage() {
   }
 
   const filterContent = (
-    <div className="space-y-5">
-      <div className="space-y-2">
-        <Label className="text-xs font-medium text-muted-foreground">{t("status")}</Label>
-        <div className="space-y-1.5">
-          {allStatuses.map((s) => (
-            <label key={s} className="flex items-center gap-2 cursor-pointer">
-              <Checkbox checked={statusFilter.includes(s)} onCheckedChange={() => toggleArrayFilter(statusFilter, s, setStatusFilter)} />
-              <span className="text-sm">{t(statusKey[s])}</span>
-            </label>
-          ))}
-        </div>
-      </div>
-      <div className="space-y-2">
-        <Label className="text-xs font-medium text-muted-foreground">{t("department")}</Label>
-        <div className="space-y-1.5">
-          {allDepts.map((d) => (
-            <label key={d} className="flex items-center gap-2 cursor-pointer">
-              <Checkbox checked={deptFilter.includes(d)} onCheckedChange={() => toggleArrayFilter(deptFilter, d, setDeptFilter)} />
-              <span className="text-sm">{t(deptKey[d])}</span>
-            </label>
-          ))}
-        </div>
-      </div>
-      <div className="space-y-2">
-        <Label className="text-xs font-medium text-muted-foreground">{t("type")}</Label>
-        <div className="space-y-1.5">
-          {allTypes.map((tp) => (
-            <label key={tp} className="flex items-center gap-2 cursor-pointer">
-              <Checkbox checked={typeFilter.includes(tp)} onCheckedChange={() => toggleArrayFilter(typeFilter, tp, setTypeFilter)} />
-              <span className="text-sm">{t(typeKey[tp])}</span>
-            </label>
-          ))}
-        </div>
-      </div>
+    <div className="space-y-5 p-1">
+      <MultiSelect
+        label={t("status")}
+        value={statusFilter}
+        onValueChange={setStatusFilter}
+        options={statusOptions}
+        placeholder="All status"
+        triggerClassName="h-8 text-xs"
+        showSelectAllClear
+      />
+      <MultiSelect
+        label={t("department")}
+        value={deptFilter}
+        onValueChange={setDeptFilter}
+        options={deptOptions}
+        placeholder="All departments"
+        triggerClassName="h-8 text-xs"
+        showSelectAllClear
+      />
+      <MultiSelect
+        label={t("type")}
+        value={typeFilter}
+        onValueChange={setTypeFilter}
+        options={typeOptions}
+        placeholder="All types"
+        triggerClassName="h-8 text-xs"
+        showSelectAllClear
+      />
       <div className="space-y-2">
         <Label className="text-xs font-medium text-muted-foreground">{t("last_activity")}</Label>
         <div className="flex flex-wrap gap-1.5">
@@ -202,7 +200,7 @@ export default function JobsPage() {
       </div>
       {hasFilters && (
         <Button variant="ghost" size="sm" className="w-full text-xs h-8 text-muted-foreground" onClick={clearAll}>
-          {t("clear_all_filters")}
+          {t("clear_all")}
         </Button>
       )}
     </div>

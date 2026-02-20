@@ -4,16 +4,10 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import {
-  Button,
-  InputField,
-  PasswordField,
-  Form,
-  FormField,
-  FormItem,
-  FormControl,
-  Icon,
-} from "@onehash/ui";
+import { Button } from "@onehash/ui/button";
+import { InputField, PasswordField } from "@onehash/ui/input";
+import { Form, FormField, FormItem, FormControl } from "@onehash/ui/form";
+import { Icon } from "@onehash/ui/icon";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { signupSchema, type SignupFormValues } from "@/lib/schemas/zodResolver";

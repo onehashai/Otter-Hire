@@ -9,8 +9,8 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@onehash/ui";
-import type { TeamMember } from "@/components/settings/team/teamMembers";
+} from "@onehash/ui/alert-dialog";
+import type { TeamMember } from "@/components/settings/team/TeamMembersList";
 
 interface TeamOwnershipTransferDialogProps {
   member: TeamMember | null;

@@ -1,6 +1,6 @@
 "use client";
 
-import { Card, CardContent } from "@onehash/ui";
+import { Card, CardContent } from "@onehash/ui/card";
 
 export default function IntegrationsSettingsPage() {
   return (

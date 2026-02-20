@@ -1,55 +1,12 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { useRouter } from "next/navigation";
-import {
-  Card,
-  CardContent,
-  Button,
-  InputField,
-  Badge,
-  Avatar,
-  AvatarFallback,
-  Checkbox,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-  Icon,
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@onehash/ui";
-import { useIsMobile } from "@/hooks/use-mobile";
+import { Button } from "@onehash/ui/button";
+import { MultiSelect } from "@onehash/ui/select";
 import { useToast } from "@/hooks/use-toast";
-
-interface Candidate {
-  id: string;
-  name: string;
-  email: string;
-  role: string;
-  stage: string;
-  rating: number;
-  recruiter: string;
-  lastActivity: string;
-  appliedDate: string;
-  tags: string[];
-  source: string;
-  phone: string;
-  location: string;
-}
+import { MainPagesLayout } from "@/components/common/MainPagesLayout";
+import { CandidatesList, type Candidate } from "@/components/candidates/CandidatesList";
+import { useTranslation } from "react-i18next";
 
 const candidates: Candidate[] = [
   { id: "1", name: "Alex Rivera", email: "alex@example.com", role: "Sr. Frontend Engineer", stage: "Interview", rating: 4.5, recruiter: "Sarah Miller", lastActivity: "2h ago", appliedDate: "2025-02-15", tags: ["React", "TypeScript"], source: "LinkedIn", phone: "+1 555-0101", location: "San Francisco, CA" },
@@ -61,50 +18,25 @@ const candidates: Candidate[] = [
   { id: "7", name: "Riley Parker", email: "riley@example.com", role: "Product Designer", stage: "Rejected", rating: 2.5, recruiter: "Sarah Miller", lastActivity: "3d ago", appliedDate: "2025-02-05", tags: ["Sketch", "Prototyping"], source: "LinkedIn", phone: "+1 555-0107", location: "Portland, OR" },
 ];
 
-const stages = ["All", "Applied", "Screening", "Interview", "Offer", "Hired", "Rejected"];
-const roles = ["All", "Sr. Frontend Engineer", "Product Designer", "Data Scientist", "Engineering Manager", "Marketing Lead"];
-const recruiters = ["All", "Sarah Miller", "John Davis"];
-const sortOptions = [
-  { value: "newest", label: "Newest Applied" },
-  { value: "rating", label: "Highest Rating" },
-  { value: "stage", label: "Stage Progress" },
-];
+const stages = ["Applied", "Screening", "Interview", "Offer", "Hired", "Rejected"];
+const roles = ["Sr. Frontend Engineer", "Product Designer", "Data Scientist", "Engineering Manager", "Marketing Lead"];
+const recruiters = ["Sarah Miller", "John Davis"];
 
+const stageOptions = stages.map((s) => ({ value: s, label: s }));
+const roleOptions = roles.map((r) => ({ value: r, label: r }));
+const recruiterOptions = recruiters.map((r) => ({ value: r, label: r }));
 const stageOrder: Record<string, number> = { Applied: 0, Screening: 1, Interview: 2, Offer: 3, Hired: 4, Rejected: 5 };
 
-const stageVariant = (stage: string) => {
-  if (stage === "Hired") return "default";
-  if (stage === "Rejected") return "destructive";
-  return "secondary";
-};
-
-const RatingStars = ({ rating }: { rating: number }) => {
-  const full = Math.floor(rating);
-  return (
-    <div className="flex items-center gap-0.5">
-      {[1, 2, 3, 4, 5].map((i) => (
-        <div
-          key={i}
-          className={`h-2.5 w-2.5 rounded-full ${i <= full ? "bg-foreground" : "bg-muted"}`}
-        />
-      ))}
-      <span className="ml-1 text-xs text-muted-foreground">{rating.toFixed(1)}</span>
-    </div>
-  );
-};
-
 export default function CandidatesPage() {
-  const router = useRouter();
-  const isMobile = useIsMobile();
+  const { t } = useTranslation();
   const { toast } = useToast();
 
   const [search, setSearch] = useState("");
-  const [stageFilter, setStageFilter] = useState("All");
-  const [roleFilter, setRoleFilter] = useState("All");
-  const [recruiterFilter, setRecruiterFilter] = useState("All");
-  const [sort, setSort] = useState("newest");
+  const [stageFilter, setStageFilter] = useState<string[]>([]);
+  const [roleFilter, setRoleFilter] = useState<string[]>([]);
+  const [recruiterFilter, setRecruiterFilter] = useState<string[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [showFilters, setShowFilters] = useState(false);
+  const sort = "newest"; // default sort: newest applied
 
   const filtered = useMemo(() => {
     let list = candidates.filter((c) => {
@@ -115,9 +47,9 @@ export default function CandidatesPage() {
         c.email.toLowerCase().includes(q) ||
         c.role.toLowerCase().includes(q) ||
         c.stage.toLowerCase().includes(q);
-      const matchStage = stageFilter === "All" || c.stage === stageFilter;
-      const matchRole = roleFilter === "All" || c.role === roleFilter;
-      const matchRecruiter = recruiterFilter === "All" || c.recruiter === recruiterFilter;
+      const matchStage = stageFilter.length === 0 || stageFilter.includes(c.stage);
+      const matchRole = roleFilter.length === 0 || roleFilter.includes(c.role);
+      const matchRecruiter = recruiterFilter.length === 0 || recruiterFilter.includes(c.recruiter);
       return matchSearch && matchStage && matchRole && matchRecruiter;
     });
 
@@ -151,332 +83,77 @@ export default function CandidatesPage() {
     setSelected(new Set());
   };
 
-  const activeFilters = [stageFilter, roleFilter, recruiterFilter].filter((f) => f !== "All").length;
+  const activeFiltersCount = stageFilter.length + roleFilter.length + recruiterFilter.length;
 
-  return (
-    <div className="space-y-3 md:space-y-4">
-      {/* Header */}
-      <div className="flex flex-col gap-3">
-        <div className="flex items-center gap-2">
-          <div className="relative flex-1 md:flex-none">
-            <Icon name="Search" className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-            <InputField
-              placeholder="Search by name, email, role..."
-              className="h-9 md:h-8 pl-8 text-xs md:w-64"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
+  const clearAllFilters = () => {
+    setStageFilter([]);
+    setRoleFilter([]);
+    setRecruiterFilter([]);
+  };
 
-          <Popover open={showFilters} onOpenChange={setShowFilters}>
-            <PopoverTrigger asChild>
-              <Button variant="outline" size="sm" className="h-9 md:h-8 text-xs gap-1.5 shrink-0 relative">
-                <Icon name="Filter" className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Filters</span>
-                {activeFilters > 0 && (
-                  <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-foreground text-background text-[10px] flex items-center justify-center">
-                    {activeFilters}
-                  </span>
-                )}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-72 p-3 space-y-3" align="start">
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground">Stage</label>
-                <Select value={stageFilter} onValueChange={setStageFilter}>
-                  <SelectTrigger className="h-8 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {stages.map((s) => (
-                      <SelectItem key={s} value={s} className="text-xs">
-                        {s}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground">Job Role</label>
-                <Select value={roleFilter} onValueChange={setRoleFilter}>
-                  <SelectTrigger className="h-8 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {roles.map((r) => (
-                      <SelectItem key={r} value={r} className="text-xs">
-                        {r}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground">Recruiter</label>
-                <Select value={recruiterFilter} onValueChange={setRecruiterFilter}>
-                  <SelectTrigger className="h-8 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {recruiters.map((r) => (
-                      <SelectItem key={r} value={r} className="text-xs">
-                        {r}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex justify-between pt-1">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 text-xs"
-                  onClick={() => {
-                    setStageFilter("All");
-                    setRoleFilter("All");
-                    setRecruiterFilter("All");
-                  }}
-                >
-                  Clear all
-                </Button>
-                <Button size="sm" className="h-7 text-xs" onClick={() => setShowFilters(false)}>
-                  Apply
-                </Button>
-              </div>
-            </PopoverContent>
-          </Popover>
+  const activeChips: { label: string; clear: () => void }[] = [];
+  stageFilter.forEach((s) => activeChips.push({ label: `Stage: ${s}`, clear: () => setStageFilter((prev) => prev.filter((v) => v !== s)) }));
+  roleFilter.forEach((r) => activeChips.push({ label: `Role: ${r}`, clear: () => setRoleFilter((prev) => prev.filter((v) => v !== r)) }));
+  recruiterFilter.forEach((r) => activeChips.push({ label: `Recruiter: ${r}`, clear: () => setRecruiterFilter((prev) => prev.filter((v) => v !== r)) }));
 
-          <Select value={sort} onValueChange={setSort}>
-            <SelectTrigger className="h-9 md:h-8 w-auto text-xs gap-1.5 shrink-0 hidden sm:flex">
-              <Icon name="ListOrdered" className="h-3.5 w-3.5" />
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {sortOptions.map((o) => (
-                <SelectItem key={o.value} value={o.value} className="text-xs">
-                  {o.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Button size="sm" className="h-9 md:h-8 text-xs gap-1.5 shrink-0 hidden md:flex">
-            <Icon name="UserPlus" className="h-3.5 w-3.5" /> Add Candidate
-          </Button>
-        </div>
-
-        {/* Active filter badges */}
-        {activeFilters > 0 && (
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {stageFilter !== "All" && (
-              <Badge
-                variant="secondary"
-                className="text-[10px] gap-1 cursor-pointer"
-                onClick={() => setStageFilter("All")}
-              >
-                Stage: {stageFilter} <Icon name="X" className="h-3 w-3" />
-              </Badge>
-            )}
-            {roleFilter !== "All" && (
-              <Badge
-                variant="secondary"
-                className="text-[10px] gap-1 cursor-pointer"
-                onClick={() => setRoleFilter("All")}
-              >
-                Role: {roleFilter} <Icon name="X" className="h-3 w-3" />
-              </Badge>
-            )}
-            {recruiterFilter !== "All" && (
-              <Badge
-                variant="secondary"
-                className="text-[10px] gap-1 cursor-pointer"
-                onClick={() => setRecruiterFilter("All")}
-              >
-                Recruiter: {recruiterFilter} <Icon name="X" className="h-3 w-3" />
-              </Badge>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Bulk Actions */}
-      {selected.size > 0 && (
-        <Card>
-          <CardContent className="p-2.5 flex items-center gap-2 flex-wrap">
-            <span className="text-xs font-medium">{selected.size} selected</span>
-            <div className="flex gap-1.5 ml-auto">
-              <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => bulkAction("Move stage")}>
-                <Icon name="UserCheck" className="h-3 w-3 mr-1" /> Move Stage
-              </Button>
-              <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => bulkAction("Assign recruiter")}>
-                Assign
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 text-xs text-destructive"
-                onClick={() => bulkAction("Reject")}
-              >
-                <Icon name="X" className="h-3 w-3 mr-1" /> Reject
-              </Button>
-              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setSelected(new Set())}>
-                Clear
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Empty state */}
-      {filtered.length === 0 ? (
-        <Card>
-          <CardContent className="py-16 flex flex-col items-center gap-3 text-center">
-            <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center">
-              <Icon name="UserPlus" className="h-5 w-5 text-muted-foreground" />
-            </div>
-            <div>
-              <p className="text-sm font-medium">No candidates found</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Try adjusting your filters or add your first candidate.
-              </p>
-            </div>
-            <Button size="sm" className="h-8 text-xs gap-1.5 mt-2">
-              <Icon name="UserPlus" className="h-3.5 w-3.5" /> Add Candidate
-            </Button>
-          </CardContent>
-        </Card>
-      ) : isMobile ? (
-        /* Mobile Cards */
-        <div className="space-y-2">
-          {filtered.map((c) => (
-            <Card
-              key={c.id}
-              className="active:bg-muted/50 transition-colors cursor-pointer"
-              onClick={() => router.push(`/candidates/${c.id}`)}
-            >
-              <CardContent className="p-4">
-                <div className="flex items-start gap-2.5">
-                  <div className="pt-0.5">
-                    <Checkbox
-                      checked={selected.has(c.id)}
-                      onCheckedChange={() => toggleSelect(c.id)}
-                      onClick={(e) => e.stopPropagation()}
-                    />
-                  </div>
-                  <Avatar className="h-8 w-8 shrink-0">
-                    <AvatarFallback className="text-xs bg-muted">
-                      {c.name.split(" ").map((n) => n[0]).join("")}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium truncate">{c.name}</span>
-                      <Icon name="ChevronLeft" className="h-4 w-4 text-muted-foreground shrink-0 rotate-180" />
-                    </div>
-                    <p className="text-xs text-muted-foreground truncate">{c.role}</p>
-                    <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-                      <Badge variant={stageVariant(c.stage)} className="text-[10px]">
-                        {c.stage}
-                      </Badge>
-                      <RatingStars rating={c.rating} />
-                    </div>
-                    <div className="flex items-center justify-between mt-2">
-                      <span className="text-[10px] text-muted-foreground">{c.recruiter}</span>
-                      <span className="text-[10px] text-muted-foreground">{c.lastActivity}</span>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      ) : (
-        /* Desktop Table */
-        <Card>
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-10">
-                    <Checkbox
-                      checked={selected.size === filtered.length && filtered.length > 0}
-                      onCheckedChange={toggleAll}
-                    />
-                  </TableHead>
-                  <TableHead className="text-xs">Candidate</TableHead>
-                  <TableHead className="text-xs">Applied For</TableHead>
-                  <TableHead className="text-xs">Stage</TableHead>
-                  <TableHead className="text-xs">Rating</TableHead>
-                  <TableHead className="text-xs">Recruiter</TableHead>
-                  <TableHead className="text-xs text-right">Activity</TableHead>
-                  <TableHead className="w-10" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filtered.map((c) => (
-                  <TableRow
-                    key={c.id}
-                    className="cursor-pointer hover:bg-muted/50"
-                    onClick={() => router.push(`/candidates/${c.id}`)}
-                  >
-                    <TableCell onClick={(e) => e.stopPropagation()}>
-                      <Checkbox checked={selected.has(c.id)} onCheckedChange={() => toggleSelect(c.id)} />
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Avatar className="h-7 w-7">
-                          <AvatarFallback className="text-[10px] bg-muted">
-                            {c.name.split(" ").map((n) => n[0]).join("")}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <span className="text-sm font-medium">{c.name}</span>
-                          <p className="text-[11px] text-muted-foreground">{c.email}</p>
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{c.role}</TableCell>
-                    <TableCell>
-                      <Badge variant={stageVariant(c.stage)} className="text-[10px]">
-                        {c.stage}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <RatingStars rating={c.rating} />
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{c.recruiter}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground text-right">{c.lastActivity}</TableCell>
-                    <TableCell onClick={(e) => e.stopPropagation()}>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
-                            <Icon name="MoreHorizontal" className="h-3.5 w-3.5" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-44">
-                          <DropdownMenuItem className="text-xs" onClick={() => toast({ title: "Stage updated" })}>
-                            <Icon name="UserCheck" className="h-3.5 w-3.5 mr-2" /> Move Stage
-                          </DropdownMenuItem>
-                          <DropdownMenuItem className="text-xs" onClick={() => toast({ title: "Interview scheduled" })}>
-                            <Icon name="Clock" className="h-3.5 w-3.5 mr-2" /> Schedule Interview
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            className="text-xs text-destructive focus:text-destructive"
-                            onClick={() => toast({ title: "Candidate rejected", variant: "destructive" })}
-                          >
-                            <Icon name="X" className="h-3.5 w-3.5 mr-2" /> Reject
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+  const filterContent = (
+    <div className="space-y-4 p-1">
+      <MultiSelect
+        label="Stage"
+        value={stageFilter}
+        onValueChange={setStageFilter}
+        options={stageOptions}
+        placeholder="All stages"
+        triggerClassName="h-8 text-xs"
+        showSelectAllClear
+      />
+      <MultiSelect
+        label="Job Role"
+        value={roleFilter}
+        onValueChange={setRoleFilter}
+        options={roleOptions}
+        placeholder="All roles"
+        triggerClassName="h-8 text-xs"
+        showSelectAllClear
+      />
+      <MultiSelect
+        label="Recruiter"
+        value={recruiterFilter}
+        onValueChange={setRecruiterFilter}
+        options={recruiterOptions}
+        placeholder="All recruiters"
+        triggerClassName="h-8 text-xs"
+        showSelectAllClear
+      />
+      {activeFiltersCount > 0 && (
+        <Button variant="ghost" size="sm" className="w-full text-xs h-8 text-muted-foreground" onClick={clearAllFilters}>
+          {t("clear_all")}
+        </Button>
       )}
     </div>
+  );
+
+  return (
+    <MainPagesLayout
+      searchValue={search}
+      onSearchChange={setSearch}
+      actionLabel="Add"
+      actionIcon="UserPlus"
+      onAction={() => toast({ title: "Add Candidate" })}
+      filterContent={filterContent}
+      filterTitle="Filters"
+      hasActiveFilters={activeFiltersCount > 0}
+      activeChips={activeChips}
+      onClearAllFilters={clearAllFilters}
+    >
+      <CandidatesList
+        candidates={filtered}
+        selected={selected}
+        onToggleSelect={toggleSelect}
+        onToggleAll={toggleAll}
+        onBulkAction={bulkAction}
+        onClearSelection={() => setSelected(new Set())}
+      />
+    </MainPagesLayout>
   );
 }

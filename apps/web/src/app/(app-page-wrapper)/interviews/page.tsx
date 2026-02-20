@@ -1,6 +1,9 @@
 "use client";
 
-import { Card, CardContent, Button, Badge, Avatar, AvatarFallback } from "@onehash/ui";
+import { Card, CardContent } from "@onehash/ui/card";
+import { Button } from "@onehash/ui/button";
+import { Badge } from "@onehash/ui/badge";
+import { Avatar, AvatarFallback } from "@onehash/ui/avatar";
 import { CalendarPlus, Video } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 

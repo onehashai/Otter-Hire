@@ -1,12 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import {
-  Button,
-  InputField,
-  Separator,
-  SelectField,
-} from "@onehash/ui";
+import { Button } from "@onehash/ui/button";
+import { InputField } from "@onehash/ui/input";
+import { Separator } from "@onehash/ui/separator";
+import { SelectField } from "@onehash/ui/select";
 import { Country } from "country-state-city";
 
 import { useJobSetup } from "../context";

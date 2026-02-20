@@ -1,30 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import {
-  Button,
-  InputField,
-  Label,
-  Separator,
-  Switch,
-  Badge,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  Checkbox,
-} from "@onehash/ui";
+import { Button } from "@onehash/ui/button";
+import { InputField } from "@onehash/ui/input";
+import { Label } from "@onehash/ui/label";
+import { Separator } from "@onehash/ui/separator";
+import { Switch } from "@onehash/ui/switch";
+import { Badge } from "@onehash/ui/badge";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@onehash/ui/sheet";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@onehash/ui/dialog";
+import { Checkbox } from "@onehash/ui/checkbox";
 import {
   Plus,
   X,
@@ -41,6 +26,7 @@ import {
   Github,
   Link2,
 } from "lucide-react";
+import { SelectField } from "@onehash/ui/select";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useJobSetup } from "../context";
@@ -114,22 +100,11 @@ function VisibilityDropdown({
     );
   }
   return (
-    <Select value={value} onValueChange={(v) => onChange(v as FieldVisibility)}>
-      <SelectTrigger className="h-7 w-[100px] text-[11px] border-border bg-card">
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent className="bg-popover z-50">
-        <SelectItem value="required" className="text-xs">
-          Required
-        </SelectItem>
-        <SelectItem value="optional" className="text-xs">
-          Optional
-        </SelectItem>
-        <SelectItem value="hidden" className="text-xs">
-          Hidden
-        </SelectItem>
-      </SelectContent>
-    </Select>
+    <SelectField 
+      label="Visibility" 
+      value={value} 
+      onValueChange={(v) => onChange(v as FieldVisibility)} options={[{ value: "required", label: "Required" }, { value: "optional", label: "Optional" }, { value: "hidden", label: "Hidden" }]} 
+    />
   );
 }
 
@@ -281,18 +256,11 @@ export default function ApplicationFormPage() {
           />
         </FieldRow>
         <FieldRow label="Answer Type">
-          <Select value={qType} onValueChange={(v) => setQType(v as AnswerType)}>
-            <SelectTrigger className="h-9 text-sm">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {(Object.entries(answerTypeLabels) as [AnswerType, string][]).map(([val, label]) => (
-                <SelectItem key={val} value={val}>
-                  {label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <SelectField 
+            label="Answer Type" 
+            value={qType} onValueChange={(v) => setQType(v as AnswerType)} 
+            options={(Object.entries(answerTypeLabels) as [AnswerType, string][]).map(([val, label]) => ({ value: val, label }))} 
+          />
         </FieldRow>
         {showOptions && (
           <FieldRow label="Options">

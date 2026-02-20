@@ -3,7 +3,10 @@
 import { useState, useMemo } from "react";
 import  Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Button, InputField, Label, Icon } from "@onehash/ui";
+import { Button } from "@onehash/ui/button";
+import { InputField } from "@onehash/ui/input";
+import { Label } from "@onehash/ui/label";
+import { Icon } from "@onehash/ui/icon";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
 

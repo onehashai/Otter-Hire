@@ -3,7 +3,8 @@
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
-import { Button, Icon } from "@onehash/ui";
+import { Button } from "@onehash/ui/button";
+import { Icon } from "@onehash/ui/icon";
 import { getInviteDetails, acceptInvite, declineInvite, type InviteDetailsResponse } from "@/api/index";
 import { useAuthSession } from "@/app/providers";
 

@@ -1,7 +1,8 @@
 "use client";
 
-import { Button, Label } from "@onehash/ui";
-import { RichTextEditor } from "@onehash/ui";
+import { Button } from "@onehash/ui/button";
+import { Label } from "@onehash/ui/label";
+import { RichTextEditor } from "@onehash/ui/editor";
 import { Sparkles } from "lucide-react";
 import { useJobSetup } from "../context";
 import { useTranslation } from "react-i18next";

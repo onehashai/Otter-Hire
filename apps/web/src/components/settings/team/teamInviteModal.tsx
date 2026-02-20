@@ -1,22 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-  Button,
-  Label,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-  Icon,
-} from "@onehash/ui";
+import { useTranslation } from "react-i18next";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@onehash/ui/dialog";
+import { Button } from "@onehash/ui/button";
+import { Label } from "@onehash/ui/label";
+import { SelectField } from "@onehash/ui/select";
+import { Icon } from "@onehash/ui/icon";
 import { type Role, roles } from "@/components/settings/team/lib/permissonMatrix";
 
 const inviteRoles = roles.filter((r) => r.role !== "Owner");
@@ -28,6 +18,7 @@ interface TeamInviteModalProps {
 }
 
 export function TeamInviteModal({ open, onOpenChange, onSubmit }: TeamInviteModalProps) {
+  const { t } = useTranslation();
   const [emailInput, setEmailInput] = useState("");
   const [emailChips, setEmailChips] = useState<string[]>([]);
   const [inviteRole, setInviteRole] = useState<Role>("Recruiter");
@@ -102,25 +93,18 @@ export function TeamInviteModal({ open, onOpenChange, onSubmit }: TeamInviteModa
             {emailError && <p className="text-xs text-destructive">{emailError}</p>}
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs">Role</Label>
-            <Select value={inviteRole} onValueChange={(v) => setInviteRole(v as Role)}>
-              <SelectTrigger className="h-9 text-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {inviteRoles.map((r) => (
-                  <SelectItem key={r.role} value={r.role} className="text-sm">
-                    <span className="font-medium">{r.role}</span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SelectField 
+              label="Role"
+              value={inviteRole} 
+              onValueChange={(v) => setInviteRole(v as Role)} 
+              options={inviteRoles.map((r) => ({ value: r.role, label: r.role }))} 
+            />
           </div>
         </div>
         <DialogFooter>
           <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => onOpenChange(false)}>Cancel</Button>
           <Button size="sm" className="text-xs h-8 gap-1.5" onClick={handleSubmit}>
-            <Icon name="Send" className="h-3.5 w-3.5" /> Invite
+            <Icon name="Send" className="h-3.5 w-3.5" /> {t("invite")}
           </Button>
         </DialogFooter>
       </DialogContent>

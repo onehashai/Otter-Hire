@@ -1,6 +1,6 @@
 "use client";
 
-import { Card, CardContent } from "@onehash/ui";
+import { Card, CardContent } from "@onehash/ui/card";
 import { Briefcase, Users, Calendar, TrendingUp } from "lucide-react";
 
 const stats = [

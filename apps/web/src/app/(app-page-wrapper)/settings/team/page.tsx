@@ -1,15 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { Button, Icon } from "@onehash/ui";
+import { Button } from "@onehash/ui/button";
+import { Icon } from "@onehash/ui/icon";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useToast } from "@/hooks/use-toast";
-import { RolesAndPermissionsTable } from "@/components/settings/team/rolesAndPermissionsTable";
-import { TeamMembers, type TeamMember } from "@/components/settings/team/teamMembers";
-import { TeamInviteModal } from "@/components/settings/team/teamInviteModal";
-import { TeamMemberRemoveDialog } from "@/components/settings/team/teamMemberRemoveDialog";
-import { TeamMemberRoleChangeDialog } from "@/components/settings/team/teamMemberRoleChangeDialog";
-import { TeamOwnershipTransferDialog } from "@/components/settings/team/teamOwnershipTransferDialog";
+import { RolesAndPermissionsTable } from "@/components/settings/team/RolesAndPermissionsTable";
+import { TeamMembersList, type TeamMember } from "@/components/settings/team/TeamMembersList";
+import { TeamInviteModal } from "@/components/settings/team/TeamInviteModal";
+import { TeamMemberRemoveDialog } from "@/components/settings/team/TeamMemberRemoveDialog";
+import { TeamMemberRoleChangeDialog } from "@/components/settings/team/TeamMemberRoleChangeDialog";
+import { TeamOwnershipTransferDialog } from "@/components/settings/team/TeamOwnershipTransferDialog";
 import { type Role, roles } from "@/components/settings/team/lib/permissonMatrix";
 import { useTranslation } from "react-i18next";
 
@@ -107,7 +108,7 @@ export default function TeamSettingsPage() {
         </Button>
       </div>
 
-      <TeamMembers
+      <TeamMembersList
         members={members}
         isMobile={isMobile}
         currentUserId={CURRENT_USER_ID}

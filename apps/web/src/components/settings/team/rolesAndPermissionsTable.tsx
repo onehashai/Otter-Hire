@@ -1,7 +1,9 @@
 "use client";
 
 import { Fragment } from "react";
-import { Card, CardContent, Separator, Icon } from "@onehash/ui";
+import { Card, CardContent } from "@onehash/ui/card";
+import { Separator } from "@onehash/ui/separator";
+import { Icon } from "@onehash/ui/icon";
 import { permissionMatrix, roles } from "./lib/permissonMatrix";
 
 export function RolesAndPermissionsTable() {

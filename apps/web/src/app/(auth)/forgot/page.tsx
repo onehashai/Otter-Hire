@@ -2,7 +2,10 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Button, InputField, Label, Icon } from "@onehash/ui";
+import { Button } from "@onehash/ui/button";
+import { InputField } from "@onehash/ui/input";
+import { Label } from "@onehash/ui/label";
+import { Icon } from "@onehash/ui/icon";
 import { useTranslation } from "react-i18next";
 
 export default function ForgotPassword() {

@@ -1,23 +1,16 @@
 "use client";
 
 import { usePathname, useRouter, useParams } from "next/navigation";
-import { Icon } from "@onehash/ui";
+import { Icon } from "@onehash/ui/icon";
 import Link from "next/link";
 import { useTranslation } from "react-i18next";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useAuthSession } from "@/app/providers";
-import {
-  Button,
-  Card,
-  CardContent,
-  Badge,
-  Separator,
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-} from "@onehash/ui";
+import { Button } from "@onehash/ui/button";
+import { Card, CardContent } from "@onehash/ui/card";
+import { Badge } from "@onehash/ui/badge";
+import { Separator } from "@onehash/ui/separator";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@onehash/ui/sheet";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { JobSetupProvider, useJobSetup } from "./context";

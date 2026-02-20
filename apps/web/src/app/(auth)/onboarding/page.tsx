@@ -3,15 +3,10 @@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
-import {
-  Button,
-  InputField,
-  Form,
-  FormField,
-  FormItem,
-  FormControl,
-  Icon,
-} from "@onehash/ui";
+import { Button } from "@onehash/ui/button";
+import { InputField } from "@onehash/ui/input";
+import { Form, FormField, FormItem, FormControl } from "@onehash/ui/form";
+import { Icon } from "@onehash/ui/icon";
 import { onboardingSchema, type OnboardingFormValues } from "@/lib/schemas/zodResolver";
 import { useTranslation } from "react-i18next";
 import { completeOnboarding } from "@/api/index";

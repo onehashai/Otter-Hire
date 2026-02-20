@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { AppSidebar } from "@/components/AppSidebar";
-import { TopBar } from "@/components/TopBar";
-import { BottomNav } from "@/components/BottomNav";
-import { CommandPalette } from "@/components/CommandPalette";
+import { AppSidebar } from "@/components/common/AppSidebar";
+import { TopBar } from "@/components/common/TopBar";
+import { BottomNav } from "@/components/common/BottomNav";
+import { CommandPalette } from "@/components/common/CommandPalette";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {

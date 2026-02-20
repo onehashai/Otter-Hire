@@ -3,23 +3,16 @@
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import {
-  Card,
-  CardContent,
-  Avatar,
-  AvatarFallback,
-  Badge,
-  Button,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@onehash/ui";
+import { Card, CardContent } from "@onehash/ui/card";
+import { Avatar, AvatarFallback } from "@onehash/ui/avatar";
+import { Badge } from "@onehash/ui/badge";
+import { Button } from "@onehash/ui/button";
+import { SelectField } from "@onehash/ui/select";
 import { ArrowLeft, Plus } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { pipelineJobs, statusVariant, type PipelineJob } from "../data";
+import { useTranslation } from "react-i18next";
 
 function PipelineBoard({
   job,
@@ -34,6 +27,7 @@ function PipelineBoard({
   onSwitchJob: (id: string) => void;
   isMobile: boolean;
 }) {
+  const { t } = useTranslation();
   const [candidates, setCandidates] = useState(job.candidates);
   const [activeStage, setActiveStage] = useState(0);
   const [dragItem, setDragItem] = useState<string | null>(null);
@@ -80,18 +74,12 @@ function PipelineBoard({
           </div>
         </div>
 
-        <Select value={job.id} onValueChange={onSwitchJob}>
-          <SelectTrigger className="h-9 text-xs">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {allJobs.filter((j) => j.status !== "Closed").map((j) => (
-              <SelectItem key={j.id} value={j.id} className="text-xs">
-                {j.title} · {j.candidates.length} candidates
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <SelectField 
+          label={t("job")} 
+          value={job.id} 
+          onValueChange={onSwitchJob} 
+          options={allJobs.filter((j) => j.status !== "Closed").map((j) => ({ value: j.id, label: j.title }))} 
+        />
 
         <div className="flex gap-1 overflow-x-auto pb-1 -mx-4 px-4 no-scrollbar">
           {job.stages.map((s, i) => {

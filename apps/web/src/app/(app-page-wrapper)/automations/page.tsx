@@ -1,6 +1,9 @@
 "use client";
 
-import { Card, CardContent, Button, Badge, Switch } from "@onehash/ui";
+import { Card, CardContent } from "@onehash/ui/card";
+import { Button } from "@onehash/ui/button";
+import { Badge } from "@onehash/ui/badge";
+import { Switch } from "@onehash/ui/switch";
 import { Plus, Zap, ArrowRight } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 

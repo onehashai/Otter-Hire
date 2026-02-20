@@ -3,20 +3,13 @@
 import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import {
-  Button,
-  Separator,
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-  InputField,
-  Label,
-  Icon,
-  IconName,
-} from "@onehash/ui";
+import { Button } from "@onehash/ui/button";
+import { Separator } from "@onehash/ui/separator";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@onehash/ui/dialog";
+import { InputField } from "@onehash/ui/input";
+import { Label } from "@onehash/ui/label";
+import { Icon } from "@onehash/ui/icon";
+import type { IconName } from "@onehash/ui/icon";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";

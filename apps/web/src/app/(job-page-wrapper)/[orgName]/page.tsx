@@ -3,15 +3,9 @@
 import { useState, useMemo } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import {
-  InputField,
-  Badge,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@onehash/ui";
+import { InputField } from "@onehash/ui/input";
+import { Badge } from "@onehash/ui/badge";
+import { SelectField } from "@onehash/ui/select";
 import {
   Search,
   MapPin,
@@ -138,42 +132,18 @@ export default function CareersListPage() {
             />
           </div>
           <div className={cn("flex gap-2", isMobile && "w-full")}>
-            <Select value={deptFilter} onValueChange={setDeptFilter}>
-              <SelectTrigger
-                className={cn(
-                  "h-9 text-xs",
-                  isMobile ? "flex-1" : "w-[140px]"
-                )}
-              >
-                <SelectValue placeholder="Department" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Departments</SelectItem>
-                {allDepartments.map((d) => (
-                  <SelectItem key={d} value={d}>
-                    {d}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={locationFilter} onValueChange={setLocationFilter}>
-              <SelectTrigger
-                className={cn(
-                  "h-9 text-xs",
-                  isMobile ? "flex-1" : "w-[160px]"
-                )}
-              >
-                <SelectValue placeholder="Location" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Locations</SelectItem>
-                {allLocations.map((l) => (
-                  <SelectItem key={l} value={l}>
-                    {l}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SelectField 
+              label="Department" 
+              value={deptFilter} 
+              onValueChange={setDeptFilter} 
+              options={allDepartments.map((d) => ({ value: d, label: d }))} 
+            />
+            <SelectField 
+              label="Location" 
+              value={locationFilter} 
+              onValueChange={setLocationFilter} 
+              options={allLocations.map((l) => ({ value: l, label: l }))} 
+            />
           </div>
         </div>
       </div>

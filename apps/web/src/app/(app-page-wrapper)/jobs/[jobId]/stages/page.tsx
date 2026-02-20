@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Button, InputField, Separator } from "@onehash/ui";
+import { Button } from "@onehash/ui/button";
+import { InputField } from "@onehash/ui/input";
+import { Separator } from "@onehash/ui/separator";
 import { GripVertical, Plus, Trash2, Settings, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";

@@ -1,31 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import {
-  Button,
-  InputField,
-  Separator,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@onehash/ui";
+import { Button } from "@onehash/ui/button";
+import { InputField } from "@onehash/ui/input";
+import { Separator } from "@onehash/ui/separator";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@onehash/ui/sheet";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@onehash/ui/dialog";
+import { SelectField } from "@onehash/ui/select";
 import { Plus, X, Search, Users } from "lucide-react";
 import { useJobSetup } from "../context";
 import { mockWorkspaceUsers, teamRoleLabels, type TeamRole } from "../constants";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useTranslation } from "react-i18next";
 
 export default function HiringTeamPage() {
+  const { t } = useTranslation();
   const isMobile = useIsMobile();
   const {
     teamMembers,
@@ -69,21 +58,12 @@ export default function HiringTeamPage() {
       </div>
       <div className="space-y-1.5">
         <label className="text-xs font-medium text-muted-foreground">Assign role</label>
-        <Select
+        <SelectField
+          label="Assign role"
           value={selectedNewMemberRole}
           onValueChange={(v) => setSelectedNewMemberRole(v as TeamRole)}
-        >
-          <SelectTrigger className="h-9 text-sm">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {(Object.entries(teamRoleLabels) as [TeamRole, string][]).map(([val, label]) => (
-              <SelectItem key={val} value={val}>
-                {label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          options={(Object.entries(teamRoleLabels) as [TeamRole, string][]).map(([val, label]) => ({ value: val, label }))}
+        />
       </div>
       <Separator />
       <div className="space-y-1 max-h-[240px] overflow-y-auto">
@@ -167,21 +147,12 @@ export default function HiringTeamPage() {
                   <p className="text-sm font-medium truncate">{member.name}</p>
                   <p className="text-xs text-muted-foreground truncate">{member.email}</p>
                 </div>
-                <Select
+                <SelectField  
+                  label={t("role")}
                   value={member.role}
                   onValueChange={(v) => updateTeamMemberRole(member.id, v as TeamRole)}
-                >
-                  <SelectTrigger className="h-7 w-[130px] text-[11px] border-border bg-card shrink-0">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-popover z-50">
-                    {(Object.entries(teamRoleLabels) as [TeamRole, string][]).map(([val, label]) => (
-                      <SelectItem key={val} value={val} className="text-xs">
-                        {label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  options={(Object.entries(teamRoleLabels) as [TeamRole, string][]).map(([val, label]) => ({ value: val, label }))}
+                />
                 <Button
                   variant="ghost"
                   size="icon"

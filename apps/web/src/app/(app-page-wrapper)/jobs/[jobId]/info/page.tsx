@@ -1,12 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import {
-  Button,
-  InputField,
-  SelectField,
-  SearchableSelectField,
-} from "@onehash/ui";
+import { Button } from "@onehash/ui/button";
+import { InputField } from "@onehash/ui/input";
+import { SelectField, SearchableSelectField } from "@onehash/ui/select";
 import { Country, City } from "country-state-city";
 import { useJobSetup } from "../context";
 import { departments, employmentTypes, workplaceTypes, CITY_VALUE_SEP, getCityDisplayName, jobStatuses } from "../constants";

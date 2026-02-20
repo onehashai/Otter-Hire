@@ -1,6 +1,7 @@
 "use client";
 
-import { Card, CardContent, Button } from "@onehash/ui";
+import { Card, CardContent } from "@onehash/ui/card";
+import { Button } from "@onehash/ui/button";
 import { Download } from "lucide-react";
 
 const charts = [

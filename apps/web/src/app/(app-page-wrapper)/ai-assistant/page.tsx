@@ -1,6 +1,8 @@
 "use client";
 
-import { Card, CardContent, InputField, Button } from "@onehash/ui";
+import { Card, CardContent } from "@onehash/ui/card";
+import { InputField } from "@onehash/ui/input";
+import { Button } from "@onehash/ui/button";
 import { Bot, Send } from "lucide-react";
 
 export default function AIAssistantPage() {

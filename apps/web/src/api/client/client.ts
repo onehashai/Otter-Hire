@@ -95,11 +95,3 @@ export async function apiPost<T>(
 
   return (await res.json()) as T;
 }
-
-export type HealthResponse = {
-  status: string;
-};
-
-export function getHealth(): Promise<HealthResponse> {
-  return apiGet<HealthResponse>("/health");
-}

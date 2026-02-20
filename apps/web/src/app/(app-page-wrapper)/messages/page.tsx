@@ -1,6 +1,8 @@
 "use client";
 
-import { Card, CardContent, InputField, Avatar, AvatarFallback } from "@onehash/ui";
+import { Card, CardContent } from "@onehash/ui/card";
+import { InputField } from "@onehash/ui/input";
+import { Avatar, AvatarFallback } from "@onehash/ui/avatar";
 import { Search } from "lucide-react";  
 import { useIsMobile } from "@/hooks/use-mobile";
 

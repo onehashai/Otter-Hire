@@ -1,20 +1,9 @@
 "use client";
 
-import {
-  Button,
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@onehash/ui";
-import type { TeamMember } from "@/components/settings/team/teamMembers";
+import { Button } from "@onehash/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@onehash/ui/dialog";
+import { SelectField } from "@onehash/ui/select";
+import type { TeamMember } from "@/components/settings/team/TeamMembersList";
 import type { Role } from "@/components/settings/team/lib/permissonMatrix";
 
 interface RoleOption {
@@ -47,18 +36,12 @@ export function TeamMemberRoleChangeDialog({
           <DialogDescription className="text-xs">Update the role for {member?.name}.</DialogDescription>
         </DialogHeader>
         <div className="py-2">
-          <Select value={newRole} onValueChange={(v) => onNewRoleChange(v as Role)}>
-            <SelectTrigger className="h-9 text-sm">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {roles.map((r) => (
-                <SelectItem key={r.role} value={r.role} className="text-sm">
-                  <span className="font-medium">{r.role}</span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <SelectField 
+            label="Role"
+            value={newRole} 
+            onValueChange={(v) => onNewRoleChange(v as Role)} 
+            options={roles.map((r) => ({ value: r.role, label: r.role }))} 
+          />
         </div>
         <DialogFooter className="gap-2 sm:gap-0">
           <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => onOpenChange(false)}>

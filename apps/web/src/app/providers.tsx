@@ -3,8 +3,10 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { ThemeProvider } from "@/components/ThemeProvider";
-import { Toaster, SonnerToaster, TooltipProvider } from "@onehash/ui";
+import { ThemeProvider } from "@/components/common/ThemeProvider";
+import { Toaster } from "@onehash/ui/toaster";
+import { SonnerToaster } from "@onehash/ui/sonner";
+import { TooltipProvider } from "@onehash/ui/tooltip";
 import { getAuthSession, type AuthSessionResponse } from "@/api/index";
 
 import "@/i18n";

@@ -1,4 +1,5 @@
-import { Icon, IconName } from "@onehash/ui";
+import { Icon } from "@onehash/ui/icon";
+import type { IconName } from "@onehash/ui/icon";
 
 export type Role = "Owner" | "Admin" | "Recruiter" | "Hiring Manager" | "Interviewer" | "Employee";
 

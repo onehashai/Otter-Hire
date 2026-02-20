@@ -10,118 +10,75 @@ import {
   DialogFooter,
   Button,
   Label,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
   Icon,
 } from "@onehash/ui";
-import { type Role, roles } from "@/components/settings/team/lib/permissonMatrix";
-
-const inviteRoles = roles.filter((r) => r.role !== "Owner");
 
 interface TeamInviteModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (emails: string[], role: Role) => void;
+  onSubmit: (email: string) => Promise<void>;
+  isSubmitting: boolean;
 }
 
-export function TeamInviteModal({ open, onOpenChange, onSubmit }: TeamInviteModalProps) {
+export function TeamInviteModal({ open, onOpenChange, onSubmit, isSubmitting }: TeamInviteModalProps) {
   const [emailInput, setEmailInput] = useState("");
-  const [emailChips, setEmailChips] = useState<string[]>([]);
-  const [inviteRole, setInviteRole] = useState<Role>("Recruiter");
   const [emailError, setEmailError] = useState("");
 
   const isValidEmail = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim());
 
-  const addEmailChip = () => {
+  const handleSubmit = async () => {
     const trimmed = emailInput.trim();
-    if (!trimmed) return;
+    if (!trimmed) { setEmailError("Enter an email address"); return; }
     if (!isValidEmail(trimmed)) { setEmailError("Invalid email address"); return; }
-    if (emailChips.includes(trimmed)) { setEmailError("Already added"); return; }
-    setEmailChips((prev) => [...prev, trimmed]);
-    setEmailInput("");
-    setEmailError("");
+
+    try {
+      await onSubmit(trimmed);
+      setEmailInput("");
+      setEmailError("");
+      onOpenChange(false);
+    } catch (err) {
+      setEmailError(err instanceof Error ? err.message : "Failed to send invite");
+    }
   };
 
-  const handleEmailKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" || e.key === "," || e.key === "Tab") { e.preventDefault(); addEmailChip(); }
-    if (e.key === "Backspace" && !emailInput && emailChips.length) { setEmailChips((prev) => prev.slice(0, -1)); }
-  };
-
-  const removeChip = (email: string) => setEmailChips((prev) => prev.filter((e) => e !== email));
-
-  const handleSubmit = () => {
-    const allEmails = [...emailChips];
-    if (emailInput.trim()) {
-      if (!isValidEmail(emailInput.trim())) { setEmailError("Invalid email address"); return; }
-      allEmails.push(emailInput.trim());
+  const handleOpenChange = (next: boolean) => {
+    if (!next) {
+      setEmailInput("");
+      setEmailError("");
     }
-    if (!allEmails.length) { setEmailError("Enter at least one email"); return; }
-    if (inviteRole === "Owner") {
-      setEmailError("Cannot invite as Owner. Transfer ownership instead.");
-      return;
-    }
-
-    onSubmit(allEmails, inviteRole);
-    onOpenChange(false);
-    setEmailChips([]);
-    setEmailInput("");
-    setEmailError("");
+    onOpenChange(next);
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="text-base">Invite Team Members</DialogTitle>
-          <DialogDescription className="text-xs">Send invitations to join your workspace.</DialogDescription>
+          <DialogTitle className="text-base">Invite Team Member</DialogTitle>
+          <DialogDescription className="text-xs">Send an invitation to join your organization. They will be added with the Employee role by default.</DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-2">
           <div className="space-y-1.5">
-            <Label className="text-xs">Email addresses</Label>
-            <div className="flex flex-wrap gap-1.5 p-2 border rounded-md bg-background min-h-[40px] focus-within:border-muted-foreground transition-colors">
-              {emailChips.map((chip) => (
-                <span key={chip} className="inline-flex items-center gap-1 bg-muted text-foreground text-xs px-2 py-0.5 rounded-md">
-                  {chip}
-                  <button onClick={() => removeChip(chip)} className="hover:text-destructive">
-                    <Icon name="X" className="h-3 w-3" />
-                  </button>
-                </span>
-              ))}
-              <input
-                value={emailInput}
-                onChange={(e) => { setEmailInput(e.target.value); setEmailError(""); }}
-                onKeyDown={handleEmailKeyDown}
-                onBlur={addEmailChip}
-                placeholder={emailChips.length ? "" : "Enter emails, separated by commas"}
-                className="flex-1 min-w-[140px] bg-transparent outline-none text-sm placeholder:text-muted-foreground"
-              />
-            </div>
+            <Label className="text-xs">Email address</Label>
+            <input
+              value={emailInput}
+              onChange={(e) => { setEmailInput(e.target.value); setEmailError(""); }}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleSubmit(); } }}
+              placeholder="colleague@company.com"
+              className="w-full h-9 px-3 border rounded-md bg-background text-sm placeholder:text-muted-foreground outline-none focus:border-muted-foreground transition-colors"
+              disabled={isSubmitting}
+            />
             {emailError && <p className="text-xs text-destructive">{emailError}</p>}
           </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Role</Label>
-            <Select value={inviteRole} onValueChange={(v) => setInviteRole(v as Role)}>
-              <SelectTrigger className="h-9 text-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {inviteRoles.map((r) => (
-                  <SelectItem key={r.role} value={r.role} className="text-sm">
-                    <span className="font-medium">{r.role}</span>
-                    <span className="text-muted-foreground ml-1.5 text-xs">— {r.description}</span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
         </div>
-        <DialogFooter className="gap-2 sm:gap-0">
-          <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button size="sm" className="text-xs h-8 gap-1.5" onClick={handleSubmit}>
-            <Icon name="Send" className="h-3.5 w-3.5" /> Send Invite
+        <DialogFooter>
+          <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => handleOpenChange(false)} disabled={isSubmitting}>Cancel</Button>
+          <Button size="sm" className="text-xs h-8 gap-1.5" onClick={handleSubmit} disabled={isSubmitting}>
+            {isSubmitting ? (
+              <span className="animate-spin rounded-full h-3.5 w-3.5 border-b-2 border-current" />
+            ) : (
+              <Icon name="Send" className="h-3.5 w-3.5" />
+            )}
+            Invite
           </Button>
         </DialogFooter>
       </DialogContent>

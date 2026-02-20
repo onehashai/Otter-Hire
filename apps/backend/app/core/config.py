@@ -7,7 +7,16 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=False, extra="ignore")
 
-    database_url: str = Field(validation_alias="DATABASE_URL")
+    database_url_raw: str = Field(validation_alias="DATABASE_URL")
+
+    @property
+    def database_url(self) -> str:
+        url = self.database_url_raw
+        if url.startswith("postgres://"):
+            url = "postgresql+psycopg://" + url[len("postgres://"):]
+        elif url.startswith("postgresql://"):
+            url = "postgresql+psycopg://" + url[len("postgresql://"):]
+        return url
     is_production: bool = Field(default=False, validation_alias="IS_PRODUCTION")
     cors_origins_raw: str = Field(default="", validation_alias="CORS_ORIGINS")
     jwt_secret_key: str = Field(validation_alias="JWT_SECRET_KEY")
@@ -17,6 +26,9 @@ class Settings(BaseSettings):
 
     # Frontend URL
     frontend_base_url: str = Field(default="http://localhost:3000", validation_alias="FRONTEND_BASE_URL")
+    
+    # Cookie domain (empty for localhost, .domain.com for production)
+    cookie_domain: str = Field(default="", validation_alias="COOKIE_DOMAIN")
 
     # Mailtrap (dev)
     mailtrap_host: str | None = Field(default=None, validation_alias="MAILTRAP_HOST")
@@ -24,6 +36,10 @@ class Settings(BaseSettings):
     mailtrap_username: str | None = Field(default=None, validation_alias="MAILTRAP_USERNAME")
     mailtrap_password: str | None = Field(default=None, validation_alias="MAILTRAP_PASSWORD")
     mailtrap_from_email: str | None = Field(default=None, validation_alias="MAILTRAP_FROM_EMAIL")
+
+    # Token expiry (configurable)
+    verification_token_expire_hours: int = Field(default=24, validation_alias="VERIFICATION_TOKEN_EXPIRE_HOURS")
+    invite_token_expire_days: int = Field(default=7, validation_alias="INVITE_TOKEN_EXPIRE_DAYS")
 
     # ZeptoMail (prod)
     zeptomail_api_key: str | None = Field(default=None, validation_alias="ZEPTOMAIL_API_KEY")

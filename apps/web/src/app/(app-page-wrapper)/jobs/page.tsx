@@ -16,7 +16,7 @@ import { useRouter } from "next/navigation";
 import { MainPagesLayout } from "@/components/MainPagesLayout";
 import { format, isAfter, isBefore, subDays, startOfDay } from "date-fns";
 import { jobNameSchema, type JobNameFormValues } from "@/lib/schemas/zodResolver";
-import { DepartmentType, EmploymentType, JobStatusType } from "./[id]/constants";
+import { DepartmentType, EmploymentType, JobStatusType } from "./[jobId]/constants";
 import { getJobs, createJob, type JobListItemResponse } from "@/lib/api";
 import { toast } from "sonner";
 

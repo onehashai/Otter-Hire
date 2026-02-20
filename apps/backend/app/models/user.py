@@ -20,13 +20,15 @@ class User(Base):
     verified_at = Column(DateTime(timezone=True), nullable=True)
     verification_token_hash = Column(String, nullable=True)
     verification_token_expires_at = Column(DateTime(timezone=True), nullable=True)
+    invite_token_hash = Column(String, nullable=True)
+    invite_token_expires_at = Column(DateTime(timezone=True), nullable=True)
     is_onboarded = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     __table_args__ = (
         UniqueConstraint("org_id", "email", name="uq_users_org_email"),
-        CheckConstraint("role IN ('owner', 'admin', 'recruiter', 'hiring_manager', 'interviewer')", name="ck_users_role"),
+        CheckConstraint("role IN ('owner', 'admin', 'recruiter', 'hiring_manager', 'interviewer', 'employee')", name="ck_users_role"),
         CheckConstraint("status IN ('invited', 'active', 'disabled')", name="ck_users_status"),
         Index("ix_users_org_email", "org_id", "email"),
     )

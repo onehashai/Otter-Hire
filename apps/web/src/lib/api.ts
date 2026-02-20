@@ -26,6 +26,7 @@ export type AuthSessionResponse = {
   role: string;
   org_id: string;
   org_name: string;
+  org_website: string | null;
   is_verified: boolean;
   is_onboarded: boolean;
 };
@@ -369,5 +370,56 @@ export function closeJob(id: string): Promise<JobDetailResponse> {
 export function unpublishJob(id: string): Promise<JobDetailResponse> {
   return apiFetch<JobDetailResponse>(`/jobs/${id}/unpublish`, {
     method: "POST",
+  });
+}
+
+export type OrgUserResponse = {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  status: string;
+};
+
+export function getOrgUsers(): Promise<OrgUserResponse[]> {
+  return apiFetch<OrgUserResponse[]>("/users", { method: "GET" });
+}
+
+export function inviteOrgUser(email: string): Promise<OrgUserResponse> {
+  return apiFetch<OrgUserResponse>("/users/invite", {
+    method: "POST",
+    body: { email },
+  });
+}
+
+export function updateOrgUserRole(
+  userId: string,
+  role: string,
+): Promise<OrgUserResponse> {
+  return apiFetch<OrgUserResponse>(`/users/${userId}/role`, {
+    method: "PATCH",
+    body: { role },
+  });
+}
+
+export async function removeOrgUser(userId: string): Promise<void> {
+  await apiFetch<Record<string, never>>(`/users/${userId}`, {
+    method: "DELETE",
+  });
+}
+
+export type OrganizationResponse = {
+  id: string;
+  name: string;
+  website: string | null;
+};
+
+export function updateOrganization(data: {
+  name: string;
+  website: string | null;
+}): Promise<OrganizationResponse> {
+  return apiFetch<OrganizationResponse>("/organizations/me", {
+    method: "PATCH",
+    body: data,
   });
 }

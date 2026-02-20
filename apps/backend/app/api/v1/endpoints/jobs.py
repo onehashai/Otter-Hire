@@ -7,7 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db.session import get_db
-from app.deps.auth import require_active_user
+from app.core.permissions import require_permission
+from app.deps.job_scope import require_job_access, ASSIGNED_ONLY_ROLES
 from app.models.candidate import Candidate
 from app.models.job import Job
 from app.models.job_team_member import JobTeamMember
@@ -100,7 +101,7 @@ async def _get_job_or_404(
 async def create_job(
     body: JobCreateRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_active_user),
+    current_user: User = Depends(require_permission("jobs:create")),
 ):
     job = Job(
         org_id=current_user.org_id,
@@ -132,7 +133,7 @@ async def update_job(
     job_id: UUID,
     body: JobUpdateRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_active_user),
+    current_user: User = Depends(require_permission("jobs:update")),
 ):
     job = await _get_job_or_404(db, job_id, current_user.org_id)
 
@@ -193,7 +194,7 @@ async def update_job(
 @router.get("", response_model=list[JobListItemResponse])
 async def list_jobs(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_active_user),
+    current_user: User = Depends(require_permission("jobs:read")),
 ):
     candidate_count_sub = (
         select(
@@ -211,6 +212,15 @@ async def list_jobs(
         .where(Job.org_id == current_user.org_id)
         .order_by(Job.updated_at.desc())
     )
+
+    if current_user.role in ASSIGNED_ONLY_ROLES:
+        stmt = (
+            stmt.join(
+                JobTeamMember,
+                (JobTeamMember.job_id == Job.id) & (JobTeamMember.user_id == current_user.id),
+            )
+            .distinct(Job.id)
+        )
 
     result = await db.execute(stmt)
     items = []
@@ -234,9 +244,9 @@ async def list_jobs(
 async def get_job(
     job_id: UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_active_user),
+    current_user: User = Depends(require_permission("jobs:read")),
 ):
-    job = await _get_job_or_404(db, job_id, current_user.org_id)
+    job = await require_job_access(job_id, db, current_user)
     return _build_detail_response(job)
 
 
@@ -244,7 +254,7 @@ async def get_job(
 async def publish_job(
     job_id: UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_active_user),
+    current_user: User = Depends(require_permission("jobs:publish")),
 ):
     job = await _get_job_or_404(db, job_id, current_user.org_id)
 
@@ -298,7 +308,7 @@ async def publish_job(
 async def close_job(
     job_id: UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_active_user),
+    current_user: User = Depends(require_permission("jobs:close")),
 ):
     job = await _get_job_or_404(db, job_id, current_user.org_id)
 
@@ -321,7 +331,7 @@ async def close_job(
 async def unpublish_job(
     job_id: UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_active_user),
+    current_user: User = Depends(require_permission("jobs:unpublish")),
 ):
     job = await _get_job_or_404(db, job_id, current_user.org_id)
 

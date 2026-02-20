@@ -52,6 +52,7 @@ export interface JobSetupState {
   stages: Stage[];
   hiringStages: HiringStage[];
   teamMembers: TeamMember[];
+  visibility: VisibilityType;
   published: boolean;
   linkCopied: boolean;
   savedAt: string | null;
@@ -170,6 +171,7 @@ type JobSetupContextValue = JobSetupState & {
   setStages: (v: Stage[]) => void;
   setHiringStages: (v: HiringStage[]) => void;
   setTeamMembers: (v: TeamMember[]) => void;
+  setVisibility: (v: VisibilityType) => void;
   setPublished: (v: boolean) => void;
   setLinkCopied: (v: boolean) => void;
   setSavedAt: (v: string | null) => void;

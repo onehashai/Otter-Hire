@@ -13,8 +13,8 @@ import {
   FormItem,
   FormControl,
   Icon,
-  cn,
 } from "@onehash/ui";
+import { cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
 import { signupSchema, type SignupFormValues } from "@/lib/schemas/zodResolver";
 import { signup } from "@/lib/api";

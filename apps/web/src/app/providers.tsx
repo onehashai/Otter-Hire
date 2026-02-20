@@ -107,7 +107,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     }
 
     if (isAuthRoute || isLifecycleRoute) {
-      router.replace("/");
+      router.replace("/dashboard");
     }
   }, [user, loading, pathname, router, sessionVersion]);
 

@@ -5,6 +5,7 @@ export type EmploymentType = "full_time" | "part_time" | "contract" | "internshi
 export type DepartmentType = "engineering" | "design" | "marketing" | "sales" | "data" | "operations" | "hr";
 export type WorkplaceType = "remote" | "hybrid" | "onsite";
 export type JobStatusType = "draft" | "open" | "closed";
+export type VisibilityType = "internal" | "public";
 export type SalaryType = "hidden" | "fixed" | "range";
 export type TimeframeType = "per_year" | "per_month" | "per_week" | "per_day" | "per_hour";
 export type TeamRole = "hiring_manager" | "recruiter" | "interviewer" | "coordinator";

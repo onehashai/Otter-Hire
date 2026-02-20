@@ -1,19 +1,38 @@
-import { Icon, IconName } from "@onehash/ui";
+import { type IconName } from "@onehash/ui";
 
-export type Role = "Owner" | "Admin" | "Recruiter" | "Hiring Manager" | "Interviewer" | "Employee";
+export type BackendRole = "owner" | "admin" | "recruiter" | "hiring_manager" | "interviewer" | "employee";
 
-export const roles: { role: Role; description: string; icon: IconName }[] = [
-  { role: "Owner", description: "Full account ownership, billing, and top oversight.", icon: "Crown" },
-  { role: "Admin", description: "System configuration, user management, and compliance.", icon: "Shield" },
-  { role: "Recruiter", description: "Source candidates, schedule interviews, post jobs.", icon: "PenLine" },
-  { role: "Hiring Manager", description: "View assigned jobs, review candidates, approve stages.", icon: "Users" },
-  { role: "Interviewer", description: "View candidate profiles and submit interview feedback.", icon: "Mic" },
-  { role: "Employee", description: "Read‑only access to candidates and reports.", icon: "Eye" },
+export type Role = BackendRole;
+
+export const ROLE_LABELS: Record<BackendRole, string> = {
+  owner: "Owner",
+  admin: "Admin",
+  recruiter: "Recruiter",
+  hiring_manager: "Hiring Manager",
+  interviewer: "Interviewer",
+  employee: "Employee",
+};
+
+export function formatRole(role: string): string {
+  return ROLE_LABELS[role as BackendRole] ?? role;
+}
+
+export const roles: { role: BackendRole; label: string; description: string; icon: IconName }[] = [
+  { role: "owner", label: "Owner", description: "Full account ownership, billing, and top oversight.", icon: "Crown" },
+  { role: "admin", label: "Admin", description: "System configuration, user management, and compliance.", icon: "Shield" },
+  { role: "recruiter", label: "Recruiter", description: "Source candidates, schedule interviews, post jobs.", icon: "PenLine" },
+  { role: "hiring_manager", label: "Hiring Manager", description: "View assigned jobs, review candidates, approve stages.", icon: "Users" },
+  { role: "interviewer", label: "Interviewer", description: "View candidate profiles and submit interview feedback.", icon: "Mic" },
+  { role: "employee", label: "Employee", description: "Read-only access to candidates and reports.", icon: "Eye" },
 ];
+
+export const ASSIGNABLE_ROLES = roles.filter((r) => r.role !== "owner");
+
+type DisplayRole = "Owner" | "Admin" | "Recruiter" | "Hiring Manager" | "Interviewer" | "Employee";
 
 export const permissionMatrix: {
     category: string;
-    permissions: { label: string; roles: Record<Role, boolean> }[];
+    permissions: { label: string; roles: Record<DisplayRole, boolean> }[];
   }[] = [
     {
       category: "Account & Billing",

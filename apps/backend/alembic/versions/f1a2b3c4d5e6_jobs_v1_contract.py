@@ -1,3 +1,10 @@
+"""jobs v1 contract - expand job model, create job_team_members
+
+Revision ID: f1a2b3c4d5e6
+Revises: e5f8a9b2c3d4
+Create Date: 2026-02-18 12:00:00.000000+00:00
+
+"""
 from typing import Sequence, Union
 
 from alembic import op

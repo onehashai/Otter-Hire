@@ -16,6 +16,7 @@ from app.deps.auth import get_current_user
 from app.models.organization import Organization
 from app.models.user import User
 from app.schemas.auth import (
+    AcceptInviteRequest,
     AuthUserResponse,
     LoginRequest,
     OnboardingRequest,
@@ -37,19 +38,24 @@ def _to_user_response(user: User) -> AuthUserResponse:
         name=user.name,
         role=user.role,
         org_id=user.org_id,
+        org_name="",
+        org_website=None,
         is_verified=user.is_verified,
         is_onboarded=user.is_onboarded,
     )
 
 
 def _set_access_cookie(response: Response, token: str) -> None:
-    response.set_cookie(
-        key="access_token",
-        value=token,
-        httponly=True,
-        samesite="lax",
-        secure=settings.is_production,
-    )
+    cookie_params = {
+        "key": "access_token",
+        "value": token,
+        "httponly": True,
+        "samesite": "lax",
+        "secure": settings.is_production,
+    }
+    if settings.cookie_domain:
+        cookie_params["domain"] = settings.cookie_domain
+    response.set_cookie(**cookie_params)
 
 
 @router.post("/signup", response_model=AuthUserResponse, status_code=status.HTTP_201_CREATED)
@@ -68,7 +74,7 @@ async def signup(request: Request, payload: SignupRequest, response: Response, d
 
     raw_token = secrets.token_urlsafe(32)
     token_hash = sha256(raw_token.encode()).hexdigest()
-    token_expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
+    token_expires_at = datetime.now(timezone.utc) + timedelta(hours=settings.verification_token_expire_hours)
 
     user = User(
         id=uuid4(),
@@ -76,7 +82,7 @@ async def signup(request: Request, payload: SignupRequest, response: Response, d
         email=normalized_email,
         hashed_password=hash_password(payload.password),
         name=payload.name or normalized_email.split("@")[0],
-        role="admin",
+        role="owner",
         status="active",
         is_verified=False,
         verification_token_hash=token_hash,
@@ -123,8 +129,14 @@ async def login(request: Request, payload: LoginRequest, response: Response, db:
 
 
 @router.get("/me", response_model=AuthUserResponse)
-async def me(current_user: User = Depends(get_current_user)) -> AuthUserResponse:
-    return _to_user_response(current_user)
+async def me(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> AuthUserResponse:
+    org_result = await db.execute(select(Organization).where(Organization.id == current_user.org_id))
+    organization = org_result.scalar_one()
+    
+    response = _to_user_response(current_user)
+    response.org_name = organization.name
+    response.org_website = organization.website
+    return response
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
@@ -172,7 +184,7 @@ async def resend_verification(
     if user and not user.is_verified:
         raw_token = secrets.token_urlsafe(32)
         token_hash = sha256(raw_token.encode()).hexdigest()
-        token_expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
+        token_expires_at = datetime.now(timezone.utc) + timedelta(hours=settings.verification_token_expire_hours)
 
         user.verification_token_hash = token_hash
         user.verification_token_expires_at = token_expires_at
@@ -216,6 +228,55 @@ async def onboarding(
     )
     _set_access_cookie(response, token)
     return _to_user_response(current_user)
+
+
+@router.post("/accept-invite", response_model=AuthUserResponse)
+@limiter.limit("5/15 minutes")
+async def accept_invite(
+    request: Request,
+    payload: AcceptInviteRequest,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+) -> AuthUserResponse:
+    token_hash = sha256(payload.token.encode()).hexdigest()
+    now = datetime.now(timezone.utc)
+
+    result = await db.execute(
+        select(User).where(
+            User.invite_token_hash == token_hash,
+            User.invite_token_expires_at > now,
+            User.status == "invited",
+        )
+    )
+    user = result.scalar_one_or_none()
+
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired invitation token",
+        )
+
+    user.name = payload.name
+    user.hashed_password = hash_password(payload.password)
+    user.status = "active"
+    user.is_verified = True
+    user.verified_at = now
+    user.is_onboarded = True
+    user.invite_token_hash = None
+    user.invite_token_expires_at = None
+
+    await db.commit()
+    await db.refresh(user)
+
+    token = create_access_token(
+        {
+            "user_id": str(user.id),
+            "org_id": str(user.org_id),
+            "role": user.role,
+        }
+    )
+    _set_access_cookie(response, token)
+    return _to_user_response(user)
 
 
 # MANUAL TESTING CHECKLIST:

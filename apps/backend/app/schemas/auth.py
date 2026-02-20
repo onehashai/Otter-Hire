@@ -20,6 +20,8 @@ class AuthUserResponse(BaseModel):
     name: str
     role: str
     org_id: UUID
+    org_name: str
+    org_website: str | None
     is_verified: bool
     is_onboarded: bool
 
@@ -39,3 +41,9 @@ class VerifyEmailResponse(BaseModel):
 class OnboardingRequest(BaseModel):
     full_name: str = Field(min_length=1)
     organization_name: str = Field(min_length=1)
+
+
+class AcceptInviteRequest(BaseModel):
+    token: str
+    password: str = Field(min_length=8)
+    name: str = Field(min_length=1)

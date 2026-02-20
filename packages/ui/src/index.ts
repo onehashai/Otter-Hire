@@ -24,6 +24,7 @@ export * from "./editor";
 export * from "./form";
 export * from "./hover-card";
 export * from "./icon";
+export * from "./lib/utils";
 export * from "./input";
 export * from "./input-otp";
 export * from "./label";

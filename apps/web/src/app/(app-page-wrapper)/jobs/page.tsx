@@ -2,27 +2,19 @@
 
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { Card, CardContent } from "@onehash/ui/card";
 import { Button } from "@onehash/ui/button";
-import { Badge } from "@onehash/ui/badge";
 import { Label } from "@onehash/ui/label";
-import { Icon } from "@onehash/ui/icon";
-import { InputField } from "@onehash/ui/input";
 import { Calendar } from "@onehash/ui/calendar";
 import { MultiSelect } from "@onehash/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@onehash/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@onehash/ui/dialog";
-import { Form, FormField, FormItem, FormControl } from "@onehash/ui/form";
-import { useIsMobile } from "@/hooks/use-mobile";
-import { useRouter } from "next/navigation";
 import { MainPagesLayout } from "@/components/common/MainPagesLayout";
 import { format, isAfter, isBefore, subDays, startOfDay } from "date-fns";
-import { jobNameSchema, type JobNameFormValues } from "@/lib/schemas/zodResolver";
 import { DepartmentType, EmploymentType, JobStatusType } from "./[jobId]/constants";
-import { getJobs, createJob, type JobListItemResponse } from "@/api";
-import { toast } from "sonner";
+import { getJobs, type JobListItemResponse } from "@/api";
+import { JobsList } from "@/components/jobs/JobsList";
+import { CreateJobModal } from "@/components/jobs/CreateJobModal";
+import { JobsListSkeleton } from "@/components/jobs/Skeleton";
+import { EmptyCard, ErrorCard } from "@onehash/ui/card";
+import { useSetPageMetadata } from "@/hooks/useSetPageMetadata";
 
 const allDepts: DepartmentType[] = ["engineering", "design", "data", "marketing", "sales", "operations", "hr"];
 const allTypes: EmploymentType[] = ["full_time", "part_time", "contract", "internship"];
@@ -45,20 +37,19 @@ const typeKey: Record<EmploymentType, string> = {
   internship: "internship",
 };
 
-const statusVariant = (s: JobStatusType) => s === "open" ? "default" : s === "draft" ? "secondary" : "outline";
-
 type DatePreset = "today" | "7d" | "30d" | "custom" | null;
 
 export default function JobsPage() {
   const { t } = useTranslation();
-  const isMobile = useIsMobile();
-  const router = useRouter();
+  
+  useSetPageMetadata({
+    title: t("jobs_title"),
+    subtitle: t("jobs_subtitle"),
+  });
 
   const [jobs, setJobs] = useState<JobListItemResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
-
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [deptFilter, setDeptFilter] = useState<string[]>([]);
@@ -66,11 +57,6 @@ export default function JobsPage() {
   const [datePreset, setDatePreset] = useState<DatePreset>(null);
   const [dateRange, setDateRange] = useState<{ from?: Date; to?: Date }>({});
   const [createOpen, setCreateOpen] = useState(false);
-
-  const createJobForm = useForm<JobNameFormValues>({
-    defaultValues: { jobName: "" },
-    resolver: zodResolver(jobNameSchema),
-  });
 
   const fetchJobs = useCallback(async (signal?: AbortSignal) => {
     try {
@@ -89,23 +75,6 @@ export default function JobsPage() {
     fetchJobs(controller.signal);
     return () => controller.abort();
   }, [fetchJobs]);
-
-  useEffect(() => {
-    if (createOpen) createJobForm.reset({ jobName: "" });
-  }, [createOpen]);
-
-  const onCreateJobValid = async (data: JobNameFormValues) => {
-    if (creating) return;
-    setCreating(true);
-    try {
-      const job = await createJob(data.jobName.trim());
-      setCreateOpen(false);
-      router.push(`/jobs/${job.id}/info`);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to create job");
-      setCreating(false);
-    }
-  };
 
   const applyDatePreset = (preset: DatePreset) => {
     setDatePreset(preset);
@@ -226,61 +195,36 @@ export default function JobsPage() {
       )}
     </div>
   );
-
-  const formatTimeAgo = (dateStr: string) => {
-    const date = new Date(dateStr);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    if (diffMins < 1) return "just now";
-    if (diffMins < 60) return `${diffMins}m ago`;
-    const diffHrs = Math.floor(diffMins / 60);
-    if (diffHrs < 24) return `${diffHrs}h ago`;
-    const diffDays = Math.floor(diffHrs / 24);
-    return `${diffDays}d ago`;
-  };
-
-  if (loading) {
+  
+  if (error) {
     return (
-      <MainPagesLayout
-        searchValue=""
-        onSearchChange={() => {}}
-        actionLabel={t("create")}
-        actionIcon="Plus"
-        onAction={() => {}}
-        filterContent={<div />}
-        hasActiveFilters={false}
-        activeChips={[]}
-        onClearAllFilters={() => {}}
-      >
-        <div className="flex items-center justify-center py-16">
-          <p className="text-sm text-muted-foreground">{t("loading") || "Loading..."}</p>
-        </div>
-      </MainPagesLayout>
+      <ErrorCard
+        icon="CircleAlert"
+        title={t("error")}
+        description={error}
+        actionLabel={t("retry")}
+        onAction={() => { setLoading(true); fetchJobs(); }}
+      />
     );
   }
 
-  if (error) {
+  if (jobs.length === 0) {
     return (
-      <MainPagesLayout
-        searchValue=""
-        onSearchChange={() => {}}
-        actionLabel={t("create")}
-        actionIcon="Plus"
-        onAction={() => {}}
-        filterContent={<div />}
-        hasActiveFilters={false}
-        activeChips={[]}
-        onClearAllFilters={() => {}}
-      >
-        <div className="flex flex-col items-center justify-center py-16 gap-3">
-          <p className="text-sm text-destructive">{error}</p>
-          <Button variant="outline" size="sm" onClick={() => { setLoading(true); fetchJobs(); }}>
-            {t("retry") || "Retry"}
-          </Button>
-        </div>
-      </MainPagesLayout>
+      <>
+        <EmptyCard
+          icon="Briefcase"
+          title={t("jobs_title")}
+          description={t("jobs_subtitle")}
+          actionLabel={t("create")}
+          onAction={() => setCreateOpen(true)}
+        />
+        <CreateJobModal open={createOpen} onOpenChange={setCreateOpen} />
+      </>
     );
+  }
+
+  if (loading) {
+    return <JobsListSkeleton count={6} />;
   }
 
   return (
@@ -295,112 +239,8 @@ export default function JobsPage() {
       activeChips={activeChips}
       onClearAllFilters={clearAll}
     >
-      {isMobile ? (
-        <div className="space-y-2">
-          {filtered.map((job) => (
-            <Card key={job.id} className="active:bg-muted/50 transition-colors cursor-pointer" onClick={() => router.push(`/jobs/${job.id}/info`)}>
-              <CardContent className="p-4">
-                <div className="flex items-start justify-between mb-1.5">
-                  <h3 className="text-sm font-medium leading-tight pr-2">{job.title}</h3>
-                  <Badge variant={statusVariant(job.status as JobStatusType)} className="text-[10px] shrink-0">{t(statusKey[job.status as JobStatusType] ?? job.status)}</Badge>
-                </div>
-                <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                  {job.department && <span>{t(deptKey[job.department as DepartmentType] ?? job.department)}</span>}
-                  <span>·</span>
-                  <span>{job.candidate_count} {job.candidate_count === 1 ? t("candidate") : t("candidates")}</span>
-                  <span>·</span>
-                  <span>{formatTimeAgo(job.updated_at)}</span>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-          {filtered.length === 0 && (
-            <p className="text-sm text-muted-foreground text-center py-8">{t("no_results")}</p>
-          )}
-        </div>
-      ) : (
-        <Card>
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="text-xs">{t("role")}</TableHead>
-                  <TableHead className="text-xs">{t("department")}</TableHead>
-                  <TableHead className="text-xs">{t("status")}</TableHead>
-                  <TableHead className="text-xs text-right">{t("candidates")}</TableHead>
-                  <TableHead className="text-xs text-right">{t("last_activity")}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filtered.map((job) => (
-                  <TableRow key={job.id} className="cursor-pointer hover:bg-muted/50" onClick={() => router.push(`/jobs/${job.id}/info`)}>
-                    <TableCell className="text-sm font-medium">{job.title}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{job.department ? t(deptKey[job.department as DepartmentType] ?? job.department) : "—"}</TableCell>
-                    <TableCell><Badge variant={statusVariant(job.status as JobStatusType)} className="text-[10px]">{t(statusKey[job.status as JobStatusType] ?? job.status)}</Badge></TableCell>
-                    <TableCell className="text-xs text-right">{job.candidate_count}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground text-right">{formatTimeAgo(job.updated_at)}</TableCell>
-                  </TableRow>
-                ))}
-                {filtered.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-sm text-muted-foreground text-center py-8">{t("no_results")}</TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      )}
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>{t("create_job")}</DialogTitle>
-            <DialogDescription>{t("create_job_description")}</DialogDescription>
-          </DialogHeader>
-          <Form form={createJobForm} onSubmit={onCreateJobValid}>
-            <FormField
-              control={createJobForm.control}
-              name="jobName"
-              render={({ field, fieldState }) => (
-                <FormItem>
-                  <FormControl>
-                    <InputField
-                      {...field}
-                      label={t("job_name")}
-                      autoFocus
-                      placeholder="e.g. Senior Frontend Engineer"
-                      className="mt-1.5"
-                      error={
-                        fieldState.error?.message
-                          ? fieldState.error.message === "min"
-                            ? t("min_char_length", { count: 1 })
-                            : fieldState.error.message === "max"
-                              ? t("max_char_length", { count: 100 })
-                              : t("job_name_invalid")
-                          : undefined
-                      }
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          createJobForm.handleSubmit(onCreateJobValid)();
-                        }
-                      }}
-                    />
-                  </FormControl>
-                </FormItem>
-              )}
-            />
-            <DialogFooter>
-              <Button variant="outline" size="sm" type="button" onClick={() => setCreateOpen(false)}>
-                {t("cancel")}
-              </Button>
-              <Button size="sm" type="submit" disabled={creating}>
-                {creating ? (t("creating") || "Creating...") : t("continue")}
-              </Button>
-            </DialogFooter>
-          </Form>
-        </DialogContent>
-      </Dialog>
+      <JobsList jobs={filtered} />
+      <CreateJobModal open={createOpen} onOpenChange={setCreateOpen} />
     </MainPagesLayout>
   );
 }

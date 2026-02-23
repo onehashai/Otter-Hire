@@ -7,7 +7,7 @@ import { Icon } from "@onehash/ui/icon";
 import { Skeleton } from "@onehash/ui/skeleton";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useAuthSession } from "@/app/providers";
-import { RolesAndPermissionsTable } from "@/components/settings/team/rolesAndPermissionsTable";
+import { RolesAndPermissionsTable } from "@/components/settings/team/RolesAndPermissionsTable";
 import { TeamMember, TeamMembersList as TeamMembers } from "@/components/settings/team/TeamMembersList";
 import { TeamInviteModal } from "@/components/settings/team/TeamInviteModal";
 import { type BackendRole, ASSIGNABLE_ROLES, formatRole } from "@/components/settings/team/lib/permissonMatrix";
@@ -79,11 +79,27 @@ export default function TeamSettingsPage() {
     fetchMembers();
   }, [fetchMembers]);
 
-  const handleInvite = async (email: string) => {
+  const handleInvite = async (emails: string[], role: BackendRole) => {
     setInviteSubmitting(true);
     try {
-      await inviteOrgUser(email);
-      toast.success("Invite sent", { description: `Invitation sent to ${email}.` });
+      const results = await Promise.allSettled(
+        emails.map((email) => inviteOrgUser(email, role))
+      );
+      const succeeded = results.filter((r) => r.status === "fulfilled").length;
+      const failed = results.filter((r) => r.status === "rejected").length;
+
+      if (succeeded > 0) {
+        toast.success(
+          succeeded === 1 ? "Invite sent" : `${succeeded} invites sent`,
+          { description: `Invitation${succeeded > 1 ? "s" : ""} sent with role ${formatRole(role)}.` }
+        );
+      }
+      if (failed > 0) {
+        toast.error(
+          `${failed} invite${failed > 1 ? "s" : ""} failed`,
+          { description: "Some invitations could not be sent." }
+        );
+      }
       await fetchMembers();
     } finally {
       setInviteSubmitting(false);

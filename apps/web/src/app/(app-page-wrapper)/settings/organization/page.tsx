@@ -8,8 +8,10 @@ import { InputField } from "@onehash/ui/input";
 import { Separator } from "@onehash/ui/separator";
 import { Button } from "@onehash/ui/button";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 
-export default function WorkspaceSettings() {
+export default function OrganizationSettings() {
+  const { t } = useTranslation();
   const { user, refreshSession } = useAuthSession();
   
   const [name, setName] = useState("");
@@ -47,7 +49,7 @@ export default function WorkspaceSettings() {
       setOriginalName(name.trim());
       setOriginalWebsite(website.trim());
       
-      toast.success("Workspace settings saved");
+      toast.success("Organization settings saved");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to save settings";
       toast.error(message);
@@ -58,17 +60,17 @@ export default function WorkspaceSettings() {
 
   return (
     <>
-      <h2 className="text-base md:text-lg font-semibold mb-1">Workspace</h2>
-      <p className="text-xs text-muted-foreground mb-4 md:mb-6">Manage your workspace settings</p>
+      <h2 className="text-base md:text-lg font-semibold mb-1">Organization</h2>
+      <p className="text-xs text-muted-foreground mb-4 md:mb-6">Manage your organization settings</p>
 
       <div className="space-y-6">
         <Card>
           <CardContent className="p-4 md:p-5 space-y-4">
             <InputField
-              label="Workspace Name"
+              label="Organization Name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Enter workspace name"
+              placeholder="Enter organization name"
               className="text-sm h-10 md:h-9"
             />
             <InputField
@@ -85,7 +87,7 @@ export default function WorkspaceSettings() {
               onClick={handleSave}
               disabled={!canSave}
             >
-              {saving ? "Saving..." : "Save Changes"}
+              {t("save")}
             </Button>
           </CardContent>
         </Card>

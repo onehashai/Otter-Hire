@@ -12,7 +12,6 @@ const primaryTabs = [
   { title: "Jobs", url: "/jobs", icon: Briefcase },
   { title: "Pipeline", url: "/pipeline", icon: Kanban },
   { title: "Candidates", url: "/candidates", icon: Users },
-  { title: "Inbox", url: "/messages", icon: Mail },
 ];
 
 export function BottomNav() {

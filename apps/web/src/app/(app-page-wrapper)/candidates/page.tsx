@@ -7,6 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { MainPagesLayout } from "@/components/common/MainPagesLayout";
 import { CandidatesList, type Candidate } from "@/components/candidates/CandidatesList";
 import { useTranslation } from "react-i18next";
+import { useSetPageMetadata } from "@/hooks/useSetPageMetadata";
 
 const candidates: Candidate[] = [
   { id: "1", name: "Alex Rivera", email: "alex@example.com", role: "Sr. Frontend Engineer", stage: "Interview", rating: 4.5, recruiter: "Sarah Miller", lastActivity: "2h ago", appliedDate: "2025-02-15", tags: ["React", "TypeScript"], source: "LinkedIn", phone: "+1 555-0101", location: "San Francisco, CA" },
@@ -29,8 +30,13 @@ const stageOrder: Record<string, number> = { Applied: 0, Screening: 1, Interview
 
 export default function CandidatesPage() {
   const { t } = useTranslation();
-  const { toast } = useToast();
 
+  useSetPageMetadata({
+    title: t("candidates_title"),
+    subtitle: t("candidates_subtitle"),
+  });
+
+  const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [stageFilter, setStageFilter] = useState<string[]>([]);
   const [roleFilter, setRoleFilter] = useState<string[]>([]);

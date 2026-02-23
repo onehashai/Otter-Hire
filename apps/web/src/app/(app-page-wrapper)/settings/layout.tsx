@@ -2,11 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useSetPageMetadata } from "@/hooks/useSetPageMetadata";
 
 const tabRoutes: { label: string; path: string }[] = [
-  { label: "Workspace", path: "/settings/workspace" },
+  { label: "Profile", path: "/settings/profile" },
+  { label: "Organization", path: "/settings/organization" },
   { label: "Team", path: "/settings/team" },
   { label: "Integrations", path: "/settings/integrations" },
   { label: "Custom Fields", path: "/settings/custom-fields" },
@@ -14,8 +17,14 @@ const tabRoutes: { label: string; path: string }[] = [
 ];
 
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {
+  const { t } = useTranslation();
   const pathname = usePathname();
   const isMobile = useIsMobile();
+
+  useSetPageMetadata({
+    title: t("settings_title"),
+    subtitle: t("settings_subtitle"),
+  });
 
   return (
     <div className={isMobile ? "space-y-4" : "flex gap-6"}>

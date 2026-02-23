@@ -6,15 +6,18 @@ import { Badge } from "@onehash/ui/badge";
 import { Icon } from "@onehash/ui/icon";
 import type { IconName } from "@onehash/ui/icon";
 import { Popover, PopoverContent, PopoverTrigger } from "@onehash/ui/popover";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@onehash/ui/sheet";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@onehash/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 interface MainPagesLayoutProps {
   searchValue: string;
   onSearchChange: (value: string) => void;
-  actionLabel: string;
-  actionIcon: IconName;
-  onAction: () => void;
+  actionLabel?: string;
+  actionIcon?: IconName;
+  onAction?: () => void;
+  secondaryActionLabel?: string;
+  secondaryActionIcon?: IconName;
+  onSecondaryAction?: () => void;
   filterContent?: ReactNode;
   filterTitle?: string;
   hasActiveFilters?: boolean;
@@ -30,6 +33,9 @@ export const MainPagesLayout = ({
   actionLabel,
   actionIcon,
   onAction,
+  secondaryActionLabel,
+  secondaryActionIcon,
+  onSecondaryAction,
   filterContent,
   filterTitle,
   hasActiveFilters = false,
@@ -86,9 +92,24 @@ export const MainPagesLayout = ({
           )
         )}
         <div className="flex-1" />
-        <Button size="sm" className="h-9 md:h-8 text-xs gap-1.5 shrink-0" onClick={onAction}>
-          <Icon name={actionIcon} className="h-3.5 w-3.5" /> {actionLabel}
-        </Button>
+        <div className="flex gap-1.5 shrink-0">
+          {onSecondaryAction && secondaryActionLabel && secondaryActionIcon && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9 md:h-8 text-xs gap-1.5"
+              onClick={onSecondaryAction}
+            >
+              <Icon name={secondaryActionIcon} className="h-3.5 w-3.5" />
+              {secondaryActionLabel}
+            </Button>
+          )}
+          {onAction && actionLabel && actionIcon && (
+            <Button size="sm" className="h-9 md:h-8 text-xs gap-1.5" onClick={onAction}>
+              <Icon name={actionIcon} className="h-3.5 w-3.5" /> {actionLabel}
+            </Button>
+          )}
+        </div>
       </div>
 
       {activeChips && activeChips.length > 0 && (

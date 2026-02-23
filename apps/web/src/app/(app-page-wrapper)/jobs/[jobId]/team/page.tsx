@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@onehash/ui/di
 import { SelectField } from "@onehash/ui/select";
 import { Plus, X, Search, Users } from "lucide-react";
 import { useJobSetup } from "../context";
-import { mockWorkspaceUsers, teamRoleLabels, type TeamRole } from "../constants";
+import { mockOrganizationUsers, teamRoleLabels, type TeamRole } from "../constants";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useTranslation } from "react-i18next";
 
@@ -26,14 +26,14 @@ export default function HiringTeamPage() {
   const [memberSearch, setMemberSearch] = useState("");
   const [selectedNewMemberRole, setSelectedNewMemberRole] = useState<TeamRole>("interviewer");
 
-  const filteredUsers = mockWorkspaceUsers.filter(
-    (u) =>
+  const filteredUsers = mockOrganizationUsers.filter(
+    (u) =>  
       !teamMembers.some((m) => m.id === u.id) &&
       (u.name.toLowerCase().includes(memberSearch.toLowerCase()) ||
         u.email.toLowerCase().includes(memberSearch.toLowerCase()))
   );
 
-  const addTeamMemberFromUser = (user: (typeof mockWorkspaceUsers)[0]) => {
+  const addTeamMemberFromUser = (user: (typeof mockOrganizationUsers)[0]) => {
     addTeamMember({
       id: user.id,
       name: user.name,
@@ -173,7 +173,7 @@ export default function HiringTeamPage() {
             <SheetHeader>
               <SheetTitle className="text-base">Add Team Member</SheetTitle>
               <SheetDescription className="text-xs">
-                Search and select a workspace member.
+                Search and select a organization member.
               </SheetDescription>
             </SheetHeader>
             <div className="mt-4 pb-4">

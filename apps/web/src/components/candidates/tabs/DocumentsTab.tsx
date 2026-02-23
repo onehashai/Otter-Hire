@@ -44,9 +44,6 @@ export function DocumentsTab({ documents }: DocumentsTabProps) {
                     {doc.type} · {doc.size} · {doc.date}
                   </p>
                 </div>
-                <Button variant="ghost" size="sm" className="h-7 w-7 p-0 shrink-0">
-                  <Icon name="Link" className="h-3.5 w-3.5" />
-                </Button>
               </CardContent>
             </Card>
           ))}

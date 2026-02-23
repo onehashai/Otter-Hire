@@ -1,39 +1,61 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@onehash/ui/dialog";
 import { Button } from "@onehash/ui/button";
-import { Label } from "@onehash/ui/label";
 import { SelectField } from "@onehash/ui/select";
 import { Icon } from "@onehash/ui/icon";
-import { type Role, roles } from "@/components/settings/team/lib/permissonMatrix";
+import { type Role, ASSIGNABLE_ROLES } from "@/components/settings/team/lib/permissonMatrix";
+import { BulkTextArea } from "@onehash/ui/textarea";
 
 interface TeamInviteModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (email: string) => Promise<void>;
+  onSubmit: (emails: string[], role: Role) => Promise<void>;
   isSubmitting: boolean;
 }
 
 export function TeamInviteModal({ open, onOpenChange, onSubmit, isSubmitting }: TeamInviteModalProps) {
+  const { t } = useTranslation();
   const [emailInput, setEmailInput] = useState("");
   const [emailError, setEmailError] = useState("");
+  const [selectedRole, setSelectedRole] = useState<Role>("employee");
 
   const isValidEmail = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim());
 
+  const parseEmails = (input: string): string[] => {
+    return input
+      .split(/[,\n]+/)
+      .map((e) => e.trim())
+      .filter(Boolean);
+  };
+
+  const parsedEmails = useMemo(() => parseEmails(emailInput), [emailInput]);
+  const emailCount = parsedEmails.length;
+
   const handleSubmit = async () => {
-    const trimmed = emailInput.trim();
-    if (!trimmed) { setEmailError("Enter an email address"); return; }
-    if (!isValidEmail(trimmed)) { setEmailError("Invalid email address"); return; }
+    if (emailCount === 0) {
+      setEmailError("Enter at least one email address");
+      return;
+    }
+
+    const invalidEmails = parsedEmails.filter((e) => !isValidEmail(e));
+    if (invalidEmails.length > 0) {
+      setEmailError(`Invalid email${invalidEmails.length > 1 ? "s" : ""}: ${invalidEmails.join(", ")}`);
+      return;
+    }
+
+    const uniqueEmails = [...new Set(parsedEmails)];
 
     try {
-      await onSubmit(trimmed);
+      await onSubmit(uniqueEmails, selectedRole);
       setEmailInput("");
       setEmailError("");
+      setSelectedRole("employee");
       onOpenChange(false);
     } catch (err) {
-      setEmailError(err instanceof Error ? err.message : "Failed to send invite");
+      setEmailError(err instanceof Error ? err.message : "Failed to send invites");
     }
   };
 
@@ -41,6 +63,7 @@ export function TeamInviteModal({ open, onOpenChange, onSubmit, isSubmitting }: 
     if (!next) {
       setEmailInput("");
       setEmailError("");
+      setSelectedRole("employee");
     }
     onOpenChange(next);
   };
@@ -49,32 +72,37 @@ export function TeamInviteModal({ open, onOpenChange, onSubmit, isSubmitting }: 
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="text-base">Invite Team Member</DialogTitle>
-          <DialogDescription className="text-xs">Send an invitation to join your organization. They will be added with the Employee role by default.</DialogDescription>
+          <DialogTitle className="text-base">Invite Team Members</DialogTitle>
+          <DialogDescription className="text-xs">Send invitations to join your organization.</DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-2">
-          <div className="space-y-1.5">
-            <Label className="text-xs">Email address</Label>
-            <input
-              value={emailInput}
-              onChange={(e) => { setEmailInput(e.target.value); setEmailError(""); }}
-              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleSubmit(); } }}
-              placeholder="colleague@company.com"
-              className="w-full h-9 px-3 border rounded-md bg-background text-sm placeholder:text-muted-foreground outline-none focus:border-muted-foreground transition-colors"
-              disabled={isSubmitting}
-            />
-            {emailError && <p className="text-xs text-destructive">{emailError}</p>}
-          </div>
+          <BulkTextArea
+            label="Emails"
+            value={emailInput}
+            onChange={(value) => { setEmailInput(value); setEmailError(""); }}
+            placeholder="Enter emails separated by commas or new lines"
+            hint="e.g. alice@example.com, bob@example.com"
+            disabled={isSubmitting}
+            error={emailError}
+            rows={4}
+          />
+          <SelectField
+            label="Role"
+            value={selectedRole}
+            onValueChange={(v) => setSelectedRole(v as Role)}
+            options={ASSIGNABLE_ROLES.map((r) => ({ value: r.role, label: r.label }))}
+            disabled={isSubmitting}
+          />
         </div>
         <DialogFooter>
           <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => handleOpenChange(false)} disabled={isSubmitting}>Cancel</Button>
-          <Button size="sm" className="text-xs h-8 gap-1.5" onClick={handleSubmit} disabled={isSubmitting}>
+          <Button size="sm" className="text-xs h-8 gap-1.5" onClick={handleSubmit} disabled={isSubmitting || emailCount === 0}>
             {isSubmitting ? (
               <span className="animate-spin rounded-full h-3.5 w-3.5 border-b-2 border-current" />
             ) : (
               <Icon name="Send" className="h-3.5 w-3.5" />
             )}
-            Invite
+            {t("invite")} {emailCount > 0 && `(${emailCount})`}
           </Button>
         </DialogFooter>
       </DialogContent>

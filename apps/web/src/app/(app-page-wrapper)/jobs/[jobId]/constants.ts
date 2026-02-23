@@ -97,7 +97,7 @@ export const defaultHiringStages: HiringStage[] = [
   { id: crypto.randomUUID(), name: "Hired" },
 ];
 
-export const mockWorkspaceUsers: { id: string; name: string; email: string }[] = [
+export const mockOrganizationUsers: { id: string; name: string; email: string }[] = [
   { id: "u1", name: "Jane Doe", email: "jane@acme.com" },
   { id: "u2", name: "John Smith", email: "john@acme.com" },
   { id: "u3", name: "Sarah Lee", email: "sarah@acme.com" },

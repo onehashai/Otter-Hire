@@ -16,6 +16,7 @@ import {
 import { SummaryPanel } from "@/components/candidates/summary/SummaryPanel";
 import { ActionButtons } from "@/components/candidates/components/ActionButtons";
 import { useTranslation } from "react-i18next";
+import { useSetPageMetadata } from "@/hooks/useSetPageMetadata";
 
 // Mock data
 const candidatesData: Record<string, any> = {
@@ -166,6 +167,11 @@ export default function CandidateProfilePage() {
   const { t } = useTranslation();
   const id = params?.candidateId as string | undefined;
   const candidate = id ? candidatesData[id] : undefined;
+
+  useSetPageMetadata({
+    title: t("edit_candidate_title"),
+    subtitle: t("edit_candidate_subtitle"),
+  });
 
   if (!candidate) {
     return (

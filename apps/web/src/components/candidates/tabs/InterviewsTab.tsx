@@ -23,9 +23,8 @@ interface InterviewsTabProps {
 }
 
 export function InterviewsTab({ interviews }: InterviewsTabProps) {
-  return (
-    <div className="space-y-3">
-      {interviews.length === 0 ? (
+  if (interviews.length === 0) {
+    return (
         <Card>
           <CardContent className="py-12 flex flex-col items-center gap-3 text-center">
             <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
@@ -37,8 +36,11 @@ export function InterviewsTab({ interviews }: InterviewsTabProps) {
             </Button>
           </CardContent>
         </Card>
-      ) : (
-        interviews.map((interview) => (
+    );
+  }
+  return (
+    <div className="space-y-3">
+      {interviews.map((interview) => (
           <Card key={interview.id}>
             <CardContent className="p-4 space-y-3">
               <div className="flex items-start justify-between">
@@ -93,8 +95,7 @@ export function InterviewsTab({ interviews }: InterviewsTabProps) {
               )}
             </CardContent>
           </Card>
-        ))
-      )}
+        ))}
       {interviews.length > 0 && (
         <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5 w-full">
           <Icon name="Clock" className="h-3.5 w-3.5" /> Schedule Another Interview

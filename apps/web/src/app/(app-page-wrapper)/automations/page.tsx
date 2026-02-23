@@ -1,55 +1,127 @@
 "use client";
 
-import { Card, CardContent } from "@onehash/ui/card";
-import { Button } from "@onehash/ui/button";
-import { Badge } from "@onehash/ui/badge";
-import { Switch } from "@onehash/ui/switch";
-import { Plus, Zap, ArrowRight } from "lucide-react";
-import { useIsMobile } from "@/hooks/use-mobile";
+import { useState, useMemo } from "react";
+import { useRouter } from "next/navigation";
+import { MainPagesLayout } from "@/components/common/MainPagesLayout";
+import {
+  AutomationsList,
+  mockAutomations,
+  allStatuses,
+  allTriggerTypes,
+  triggerTypeLabel,
+  type Automation,
+  type AutomationStatus,
+  type TriggerType,
+} from "@/components/automations/AutomationsList";
+import { MultiSelect } from "@onehash/ui/select";
+import { useSetPageMetadata } from "@/hooks/useSetPageMetadata";
+import { useTranslation } from "react-i18next";
 
-const automations = [
-  { name: "Auto-reject unqualified", trigger: "New application", action: "Send rejection email", enabled: true },
-  { name: "Schedule screening", trigger: "Candidate moves to Screening", action: "Send calendar link", enabled: true },
-  { name: "Notify hiring manager", trigger: "Interview completed", action: "Send Slack message", enabled: false },
-  { name: "Tag senior candidates", trigger: "Experience > 5 years", action: "Add 'Senior' tag", enabled: true },
-];
+const statusOptions = allStatuses.map((s) => ({
+  value: s,
+  label: s.charAt(0).toUpperCase() + s.slice(1),
+}));
+const triggerOptions = allTriggerTypes.map((t) => ({ value: t.value, label: t.label }));
 
 export default function AutomationsPage() {
-  const isMobile = useIsMobile();
+  const { t } = useTranslation();
+  const router = useRouter();
+
+  useSetPageMetadata({
+    title: t("automations_title"),
+    subtitle: t("automations_subtitle"),
+  });
+
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<AutomationStatus[]>([]);
+  const [triggerFilter, setTriggerFilter] = useState<TriggerType[]>([]);
+  const [automations, setAutomations] = useState<Automation[]>(mockAutomations);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
+
+  const filtered = useMemo(() => {
+    return automations.filter((a) => {
+      if (
+        search &&
+        !a.name.toLowerCase().includes(search.toLowerCase()) &&
+        !a.description.toLowerCase().includes(search.toLowerCase())
+      )
+        return false;
+      if (statusFilter.length && !statusFilter.includes(a.status)) return false;
+      if (triggerFilter.length && !triggerFilter.includes(a.triggerType))
+        return false;
+      return true;
+    });
+  }, [search, statusFilter, triggerFilter, automations]);
+
+  const hasActiveFilters = statusFilter.length > 0 || triggerFilter.length > 0;
+
+  const filterContent = (
+    <div className="space-y-5 p-1">
+      <MultiSelect
+        label={t("status")}
+        value={statusFilter}
+        onValueChange={(v) => setStatusFilter(v as AutomationStatus[])}
+        options={statusOptions}
+        placeholder="All status"
+        triggerClassName="h-8 text-xs"
+        showSelectAllClear
+      />
+      <MultiSelect
+        label={t("trigger_type", "Trigger type")}
+        value={triggerFilter}
+        onValueChange={(v) => setTriggerFilter(v as TriggerType[])}
+        options={triggerOptions}
+        placeholder="All trigger types"
+        triggerClassName="h-8 text-xs"
+        showSelectAllClear
+      />
+    </div>
+  );
+
+  const activeChips: { label: string; clear: () => void }[] = [];
+  statusFilter.forEach((s) =>
+    activeChips.push({
+      label: `Status: ${s}`,
+      clear: () => setStatusFilter((p) => p.filter((v) => v !== s)),
+    })
+  );
+  triggerFilter.forEach((tr) =>
+    activeChips.push({
+      label: `Trigger: ${triggerTypeLabel(tr)}`,
+      clear: () => setTriggerFilter((p) => p.filter((v) => v !== tr)),
+    })
+  );
+
+  const showEmptyState =
+    automations.length === 0 && !search && !hasActiveFilters;
 
   return (
-    <div className="space-y-3 md:space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-xs text-muted-foreground hidden md:block">Automate repetitive tasks in your hiring workflow</p>
-        <Button size="sm" className="h-9 md:h-8 text-xs gap-1.5 hidden md:flex">
-          <Plus className="h-3.5 w-3.5" /> New Automation
-        </Button>
-      </div>
-
-      <div className="space-y-2">
-        {automations.map((a) => (
-          <Card key={a.name} className="active:bg-muted/50 md:hover:shadow-sm transition-all">
-            <CardContent className="p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-start gap-3 min-w-0">
-                  <div className="h-8 w-8 rounded-lg bg-muted flex items-center justify-center shrink-0">
-                    <Zap className="h-4 w-4 text-muted-foreground" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium">{a.name}</p>
-                    <div className={isMobile ? "mt-1.5 space-y-1" : "flex items-center gap-1.5 mt-0.5"}>
-                      <Badge variant="outline" className="text-[10px]">{a.trigger}</Badge>
-                      {!isMobile && <ArrowRight className="h-3 w-3 text-muted-foreground" />}
-                      <Badge variant="outline" className="text-[10px]">{a.action}</Badge>
-                    </div>
-                  </div>
-                </div>
-                <Switch checked={a.enabled} className="shrink-0 mt-1" />
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-    </div>
+    <MainPagesLayout
+      searchValue={search}
+      onSearchChange={setSearch}
+      actionLabel={t("create")}
+      actionIcon="Plus"
+      onAction={() => router.push("/automations/new")}
+      secondaryActionLabel={t("templates")}
+      secondaryActionIcon="LayoutTemplate"
+      onSecondaryAction={() => setTemplatesOpen(true)}
+      filterContent={filterContent}
+      filterTitle={t("filters")}
+      hasActiveFilters={hasActiveFilters}
+      activeChips={activeChips}
+      onClearAllFilters={() => {
+        setStatusFilter([]);
+        setTriggerFilter([]);
+      }}
+    >
+      <AutomationsList
+        filtered={filtered}
+        automations={automations}
+        setAutomations={setAutomations}
+        showEmptyState={showEmptyState}
+        templatesOpen={templatesOpen}
+        onTemplatesOpenChange={setTemplatesOpen}
+      />
+    </MainPagesLayout>
   );
 }

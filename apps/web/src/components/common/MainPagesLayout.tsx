@@ -6,7 +6,7 @@ import { Badge } from "@onehash/ui/badge";
 import { Icon } from "@onehash/ui/icon";
 import type { IconName } from "@onehash/ui/icon";
 import { Popover, PopoverContent, PopoverTrigger } from "@onehash/ui/popover";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@onehash/ui/sheet";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@onehash/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 interface MainPagesLayoutProps {

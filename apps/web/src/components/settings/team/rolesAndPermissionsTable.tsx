@@ -3,8 +3,7 @@
 import { Fragment } from "react";
 import { Card, CardContent } from "@onehash/ui/card";
 import { Separator } from "@onehash/ui/separator";
-import { Icon } from "@onehash/ui/icon";
-import { permissionMatrix, roles, ROLE_LABELS } from "./lib/permissonMatrix";
+import { permissionMatrix, roles } from "./lib/permissonMatrix";
 
 export function RolesAndPermissionsTable() {
   return (
@@ -16,24 +15,7 @@ export function RolesAndPermissionsTable() {
         </div>
         <Separator />
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {roles.map(({ role, label, description, icon }) => (
-            <div key={role} className="flex items-start gap-3 p-3 rounded-lg border bg-muted/30">
-              <div className="h-8 w-8 rounded-md bg-background border flex items-center justify-center shrink-0 mt-0.5">
-                <Icon name={icon} className="h-4 w-4" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-sm font-medium">{label}</p>
-                <p className="text-xs text-muted-foreground leading-relaxed">{description}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <Separator />
-
         <div>
-          <h4 className="text-xs font-semibold mb-3">Permission Matrix</h4>
           <div className="relative w-full overflow-auto border rounded-lg">
             <table className="w-full text-xs">
               <thead>

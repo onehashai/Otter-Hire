@@ -28,6 +28,7 @@ import { JobSetupProvider, useJobSetup } from "./context";
 import { SETUP_SECTIONS, teamRoleLabels, type SetupStepSlug } from "./constants";
 import { isSetupValid, getFirstInvalidSection, getBasicInfoValidation } from "../../../../lib/validations/setupValidation";
 import { useEffect } from "react";
+import { useSetPageMetadata } from "@/hooks/useSetPageMetadata";
 
 function SetupLayoutInner({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -38,6 +39,12 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
   const orgName = user?.org_name;
   const isMobile = useIsMobile();
   const { t } = useTranslation();
+
+  useSetPageMetadata({
+    title: t("edit_job"),
+    subtitle: t("edit_job_subtitle"),
+  });
+
   const sections = SETUP_SECTIONS(t);
   const {
     title,

@@ -16,7 +16,7 @@ export interface PipelineJob {
   title: string;
   dept: string;
   location: string;
-  status: "Active" | "Draft" | "Closed";
+  status: "Open" | "Draft" | "Closed";
   candidates: PipelineCandidate[];
   stages: { id: string; name: string }[];
   lastActivity: string;
@@ -28,7 +28,7 @@ export const pipelineJobs: PipelineJob[] = [
     title: "Senior Frontend Engineer",
     dept: "Engineering",
     location: "San Francisco, US",
-    status: "Active",
+    status: "Open",
     stages: [
       { id: "s1", name: "Applied" },
       { id: "s2", name: "Screening" },
@@ -51,7 +51,7 @@ export const pipelineJobs: PipelineJob[] = [
     title: "Product Designer",
     dept: "Design",
     location: "Remote",
-    status: "Active",
+    status: "Open",
     stages: [
       { id: "s1", name: "Applied" },
       { id: "s2", name: "Portfolio Review" },
@@ -87,7 +87,7 @@ export const pipelineJobs: PipelineJob[] = [
     title: "Engineering Manager",
     dept: "Engineering",
     location: "New York, US",
-    status: "Active",
+    status: "Open",
     stages: [
       { id: "s1", name: "Applied" },
       { id: "s2", name: "Screening" },
@@ -125,4 +125,4 @@ export const pipelineJobs: PipelineJob[] = [
 ];
 
 export const statusVariant = (s: string): "default" | "secondary" | "outline" =>
-  s === "Active" ? "default" : s === "Draft" ? "secondary" : "outline";
+  s === "Open" ? "default" : s === "Draft" ? "secondary" : "outline";

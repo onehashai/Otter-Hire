@@ -106,15 +106,15 @@ export function SummaryPanel({ candidate }: SummaryPanelProps) {
           </CardTitle>
         </CardHeader>
         <CardContent className="p-4 pt-0 space-y-2">
-          {candidate.documents.filter((d) => d.type === "Resume").length > 0 ? (
-            <Button variant="outline" size="sm" className="h-8 text-xs w-full justify-start gap-2">
+          {candidate.documents.filter((d) => d.type === "Resume").length > 0 && (
+            <Button variant="ghost" size="sm" className="h-8 text-xs w-full justify-start gap-2">
               <Icon name="ScrollText" className="h-3.5 w-3.5" />
               <span className="truncate flex-1 text-left">{candidate.documents[0].name}</span>
-              <Icon name="Link" className="h-3.5 w-3.5 text-muted-foreground" />
             </Button>
-          ) : (
-            <Button variant="outline" size="sm" className="h-8 text-xs w-full justify-start gap-2">
-              <Icon name="Upload" className="h-3.5 w-3.5" /> Upload Resume
+          )}
+          {candidate.coverLetter && (
+            <Button variant="ghost" size="sm" className="h-8 text-xs w-full justify-start gap-2">
+              <Icon name="ScrollText" className="h-3.5 w-3.5" /> Cover Letter
             </Button>
           )}
           {candidate.linkedin && (
@@ -125,11 +125,6 @@ export function SummaryPanel({ candidate }: SummaryPanelProps) {
           {candidate.portfolio && (
             <Button variant="ghost" size="sm" className="h-8 text-xs w-full justify-start gap-2">
               <Icon name="Link" className="h-3.5 w-3.5" /> Portfolio
-            </Button>
-          )}
-          {candidate.coverLetter && (
-            <Button variant="ghost" size="sm" className="h-8 text-xs w-full justify-start gap-2">
-              <Icon name="ScrollText" className="h-3.5 w-3.5" /> Cover Letter
             </Button>
           )}
         </CardContent>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@onehash/ui/button";
@@ -13,100 +13,54 @@ import type { IconName } from "@onehash/ui/icon";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { getPublicJobDetail, type PublicJobDetail } from "@/api";
 
-/* ───── mock published job data ───── */
-const publishedJobs: Record<
-  string,
-  {
-    title: string;
-    department: string;
-    organization: string;
-    employmentType: string;
-    workplaceType: string;
-    location: string;
-    salaryRange: string | null;
-    status: "published" | "draft";
-    description: string;
-    hiringTeam: { name: string; role: string }[];
+function parseOrgSlug(orgSlug: string): { orgName: string; orgId: string } | null {
+  const parts = orgSlug.split("-");
+  if (parts.length < 6) return null;
+  
+  const uuidParts = parts.slice(-5);
+  const orgId = uuidParts.join("-");
+  const orgName = parts.slice(0, -5).join("-");
+  
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!uuidRegex.test(orgId)) return null;
+  
+  return { orgName, orgId };
+}
+
+function formatSalary(job: PublicJobDetail): string | null {
+  if (job.salary_fixed) {
+    return `$${(job.salary_fixed / 100).toLocaleString()} / ${job.salary_timeframe.replace("per_", "")}`;
   }
-> = {
-  "senior-frontend-engineer": {
-    title: "Senior Frontend Engineer",
-    department: "Engineering",
-    organization: "Acme Inc.",
-    employmentType: "Full-time",
-    workplaceType: "Remote",
-    location: "San Francisco, United States",
-    salaryRange: "$140,000 – $180,000 / year",
-    status: "published",
-    description: `<h2>About the Role</h2>
-<p>We're looking for a Senior Frontend Engineer to lead our design system efforts and build delightful user experiences.</p>
-<h2>Responsibilities</h2>
-<ul>
-<li>Architect and maintain our React component library</li>
-<li>Collaborate with design on new features</li>
-<li>Mentor junior engineers</li>
-<li>Drive frontend architecture decisions</li>
-<li>Ensure performance and accessibility standards</li>
-</ul>
-<h2>Requirements</h2>
-<ul>
-<li>5+ years of frontend experience</li>
-<li>Strong TypeScript and React skills</li>
-<li>Experience with design systems</li>
-<li>Excellent communication skills</li>
-<li>Passion for clean, maintainable code</li>
-</ul>`,
-    hiringTeam: [
-      { name: "Jane Doe", role: "Hiring Manager" },
-      { name: "John Smith", role: "Recruiter" },
-    ],
-  },
-  "product-designer": {
-    title: "Product Designer",
-    department: "Design",
-    organization: "Acme Inc.",
-    employmentType: "Full-time",
-    workplaceType: "Hybrid",
-    location: "New York, United States",
-    salaryRange: "$120,000 – $160,000 / year",
-    status: "published",
-    description: `<h2>About the Role</h2><p>Join our design team to craft beautiful, intuitive product experiences.</p><h2>Requirements</h2><ul><li>3+ years of product design experience</li><li>Proficiency in Figma</li><li>Strong portfolio</li></ul>`,
-    hiringTeam: [{ name: "Sarah Lee", role: "Hiring Manager" }],
-  },
-  "engineering-manager": {
-    title: "Engineering Manager",
-    department: "Engineering",
-    organization: "Acme Inc.",
-    employmentType: "Full-time",
-    workplaceType: "On-site",
-    location: "Austin, United States",
-    salaryRange: "$160,000 – $200,000 / year",
-    status: "published",
-    description: `<h2>About the Role</h2><p>Lead and grow a high-performing engineering team building cutting-edge products.</p><h2>Requirements</h2><ul><li>7+ years of engineering experience</li><li>3+ years of management experience</li><li>Track record of building high-performing teams</li></ul>`,
-    hiringTeam: [{ name: "Alex Chen", role: "VP Engineering" }],
-  },
-  "data-scientist": {
-    title: "Data Scientist",
-    department: "Data",
-    organization: "Acme Inc.",
-    employmentType: "Contract",
-    workplaceType: "Remote",
-    location: "Remote",
-    salaryRange: null,
-    status: "published",
-    description: `<h2>About the Role</h2><p>Derive insights from complex datasets to drive product decisions.</p><h2>Requirements</h2><ul><li>MS/PhD in relevant field</li><li>Proficiency in Python and SQL</li><li>Experience with ML frameworks</li></ul>`,
-    hiringTeam: [],
-  },
-};
+  if (job.salary_min && job.salary_max) {
+    return `$${(job.salary_min / 100).toLocaleString()} – $${(job.salary_max / 100).toLocaleString()} / ${job.salary_timeframe.replace("per_", "")}`;
+  }
+  return null;
+}
+
+function formatLocation(job: PublicJobDetail): string {
+  if (job.city && job.country) return `${job.city}, ${job.country}`;
+  if (job.city) return job.city;
+  if (job.country) return job.country;
+  return job.workplace_type || "Remote";
+}
+
+function formatEmploymentType(type: string): string {
+  return type.replace("_", "-").replace(/\b\w/g, (l) => l.toUpperCase());
+}
 
 export default function CareerJobDetailPage() {
   const params = useParams();
   const router = useRouter();
   const isMobile = useIsMobile();
-  const orgName = params?.orgName as string;
+  const orgSlug = params?.orgSlug as string;
   const jobId = params?.jobId as string;
-  const job = jobId ? publishedJobs[jobId] : undefined;
+
+  const [job, setJob] = useState<PublicJobDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [orgName, setOrgName] = useState("");
 
   const [applyDialogOpen, setApplyDialogOpen] = useState(false);
   const [applyForm, setApplyForm] = useState({
@@ -117,6 +71,27 @@ export default function CareerJobDetailPage() {
     coverLetter: "",
   });
   const [applySubmitting, setApplySubmitting] = useState(false);
+
+  useEffect(() => {
+    const parsed = parseOrgSlug(orgSlug);
+    if (!parsed) {
+      setError("Invalid organization");
+      setLoading(false);
+      return;
+    }
+
+    setOrgName(parsed.orgName);
+
+    getPublicJobDetail(parsed.orgId, jobId)
+      .then((data) => {
+        setJob(data);
+        setLoading(false);
+      })
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : "Job not found");
+        setLoading(false);
+      });
+  }, [orgSlug, jobId]);
 
   const openApplyDialog = () => setApplyDialogOpen(true);
   const closeApplyDialog = () => {
@@ -135,7 +110,6 @@ export default function CareerJobDetailPage() {
       return;
     }
     setApplySubmitting(true);
-    // TODO: submit to API (orgName, jobId, applyForm)
     setTimeout(() => {
       setApplySubmitting(false);
       closeApplyDialog();
@@ -143,19 +117,27 @@ export default function CareerJobDetailPage() {
     }, 600);
   };
 
-  if (!job) {
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-sm text-muted-foreground">Loading...</div>
+      </div>
+    );
+  }
+
+  if (error || !job) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background px-4">
         <div className="text-center space-y-3 max-w-sm">
           <h1 className="text-xl font-semibold">Job not found</h1>
           <p className="text-sm text-muted-foreground">
-            This job posting is no longer available or has not been published.
+            {error || "This job posting is no longer available."}
           </p>
           <Button
             variant="outline"
             size="sm"
             className="text-xs mt-4"
-            onClick={() => router.push(orgName ? `/${encodeURIComponent(orgName)}` : "/")}
+            onClick={() => router.push(`/${orgSlug}`)}
           >
             <Icon name="ChevronLeft" className="h-3.5 w-3.5 mr-1.5" /> View all positions
           </Button>
@@ -164,32 +146,22 @@ export default function CareerJobDetailPage() {
     );
   }
 
-  const isDraft = job.status === "draft";
+  const salary = formatSalary(job);
+  const location = formatLocation(job);
+  const employmentType = formatEmploymentType(job.employment_type);
 
   const metaItems = [
-    job.location && { iconName: "MapPin", label: job.location },
-    { iconName: "Briefcase", label: job.employmentType },
-    { iconName: "Clock", label: job.workplaceType },
-    job.salaryRange && { iconName: "DollarSign", label: job.salaryRange },
-    { iconName: "Building2", label: job.department },
+    { iconName: "MapPin", label: location },
+    { iconName: "Briefcase", label: employmentType },
+    { iconName: "Clock", label: job.workplace_type },
+    salary && { iconName: "DollarSign", label: salary },
+    job.department && { iconName: "Building2", label: job.department },
   ].filter(Boolean) as { iconName: IconName; label: string }[];
 
-  const listHref = orgName ? `/${encodeURIComponent(orgName)}` : "/";
+  const listHref = `/${orgSlug}`;
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Draft banner */}
-      {isDraft && (
-        <div className="border-b border-border bg-muted/50">
-          <div className="mx-auto max-w-3xl px-4 py-2.5">
-            <p className="text-xs text-muted-foreground text-center">
-              This job is not published yet. Only visible to your organization.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Header */}
       <header className="border-b border-border">
         <div className="mx-auto max-w-3xl px-4 py-3 flex items-center gap-3">
           <Button
@@ -202,31 +174,33 @@ export default function CareerJobDetailPage() {
           </Button>
           <div className="flex items-center gap-2.5 flex-1 min-w-0">
             <div className="h-7 w-7 rounded-md bg-foreground flex items-center justify-center shrink-0">
-              <span className="text-background text-[10px] font-bold">A</span>
+              <span className="text-background text-[10px] font-bold">
+                {orgName.charAt(0).toUpperCase()}
+              </span>
             </div>
-            <span className="text-xs text-muted-foreground truncate">
-              {job.organization}
+            <span className="text-xs text-muted-foreground truncate capitalize">
+              {job.org_name}
             </span>
           </div>
-          <Link
-            href={listHref}
-            className="text-xs text-muted-foreground hover:text-foreground transition-colors hidden sm:block"
-          >
-            All positions
-          </Link>
         </div>
       </header>
 
-      {/* Hero */}
       <div className="mx-auto max-w-3xl px-4 pt-8 md:pt-12 pb-6 md:pb-8">
         <div className="space-y-4">
           <div className="space-y-2">
-            <p className="text-xs font-medium text-muted-foreground">
-              {job.organization}
+            <p className="text-xs font-medium text-muted-foreground capitalize">
+              {job.org_name}
             </p>
-            <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">
-              {job.title}
-            </h1>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">
+                {job.title}
+              </h1>
+              {job.status === "draft" && (
+                <Badge variant="secondary" className="text-[10px] h-5 px-2">
+                  Draft
+                </Badge>
+              )}
+            </div>
           </div>
 
           <div className="flex flex-wrap gap-2">
@@ -241,7 +215,7 @@ export default function CareerJobDetailPage() {
             ))}
           </div>
 
-          <div className={cn("pt-2")}>
+          <div className="pt-2">
             <Button
               size={isMobile ? "lg" : "default"}
               className={cn("text-sm", isMobile && "w-full h-12")}
@@ -255,23 +229,25 @@ export default function CareerJobDetailPage() {
 
       <Separator />
 
-      {/* Content */}
       <div className="mx-auto max-w-3xl px-4 py-8 md:py-10 space-y-10">
-        <div
-          className="prose prose-sm max-w-none text-foreground 
-            [&_h2]:text-base [&_h2]:font-semibold [&_h2]:mt-8 [&_h2]:mb-3
-            [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:mt-6 [&_h3]:mb-2
-            [&_p]:text-sm [&_p]:leading-relaxed [&_p]:text-muted-foreground [&_p]:mb-3
-            [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:space-y-1.5
-            [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:space-y-1.5
-            [&_li]:text-sm [&_li]:text-muted-foreground [&_li]:leading-relaxed
-            [&_a]:text-foreground [&_a]:underline [&_a]:underline-offset-2"
-          dangerouslySetInnerHTML={{ __html: job.description }}
-        />
+        {job.description ? (
+          <div
+            className="prose prose-sm max-w-none text-foreground 
+              [&_h2]:text-base [&_h2]:font-semibold [&_h2]:mt-8 [&_h2]:mb-3
+              [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:mt-6 [&_h3]:mb-2
+              [&_p]:text-sm [&_p]:leading-relaxed [&_p]:text-muted-foreground [&_p]:mb-3
+              [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:space-y-1.5
+              [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:space-y-1.5
+              [&_li]:text-sm [&_li]:text-muted-foreground [&_li]:leading-relaxed
+              [&_a]:text-foreground [&_a]:underline [&_a]:underline-offset-2"
+            dangerouslySetInnerHTML={{ __html: job.description }}
+          />
+        ) : (
+          <p className="text-sm text-muted-foreground">No description available.</p>
+        )}
 
         <Separator />
 
-        {/* Bottom CTA */}
         <div className="text-center space-y-3 py-4">
           <h2 className="text-lg font-semibold">Interested in this role?</h2>
           <p className="text-sm text-muted-foreground max-w-md mx-auto">
@@ -288,7 +264,6 @@ export default function CareerJobDetailPage() {
         </div>
       </div>
 
-      {/* Apply dialog */}
       <Dialog
         open={applyDialogOpen}
         onOpenChange={(open) => {
@@ -300,7 +275,7 @@ export default function CareerJobDetailPage() {
           <DialogHeader>
             <DialogTitle>Apply for {job.title}</DialogTitle>
             <DialogDescription>
-              Submit your application to {job.organization}. We'll review it and get back to you.
+              Submit your application to {job.org_name}. We'll review it and get back to you.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleApplySubmit} className="space-y-4 mt-2">
@@ -375,18 +350,11 @@ export default function CareerJobDetailPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Footer */}
       <footer className="border-t border-border">
-        <div className="mx-auto max-w-3xl px-4 py-6 flex items-center justify-between">
-          <p className="text-xs text-muted-foreground">
-            © {new Date().getFullYear()} {job.organization}
+        <div className="mx-auto max-w-3xl px-4 py-6">
+          <p className="text-xs text-muted-foreground capitalize text-center">
+            © {new Date().getFullYear()} {job.org_name}
           </p>
-          <Link
-            href={listHref}
-            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-          >
-            View all positions
-          </Link>
         </div>
       </footer>
     </div>

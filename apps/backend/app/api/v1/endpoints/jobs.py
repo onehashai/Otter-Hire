@@ -107,11 +107,13 @@ async def create_job(
         org_id=current_user.org_id,
         created_by_user_id=current_user.id,
         title=body.title,
+        department="engineering",
         status="draft",
     )
     db.add(job)
     await db.flush()
 
+    # Add default hiring stages
     for name, position in DEFAULT_STAGES:
         stage = Stage(
             org_id=current_user.org_id,
@@ -120,6 +122,15 @@ async def create_job(
             position=position,
         )
         db.add(stage)
+
+    # Add job creator as recruiter by default
+    creator_team_member = JobTeamMember(
+        org_id=current_user.org_id,
+        job_id=job.id,
+        user_id=current_user.id,
+        role="recruiter",
+    )
+    db.add(creator_team_member)
 
     await db.commit()
 
@@ -296,6 +307,7 @@ async def publish_job(
             )
 
     job.status = "open"
+    job.visibility = "public"
     job.published_at = datetime.now(timezone.utc)
     await db.commit()
 
@@ -304,21 +316,22 @@ async def publish_job(
     )
 
 
-@router.post("/{job_id}/close", response_model=JobDetailResponse)
-async def close_job(
+@router.post("/{job_id}/archive", response_model=JobDetailResponse)
+async def archive_job(
     job_id: UUID,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("jobs:close")),
 ):
     job = await _get_job_or_404(db, job_id, current_user.org_id)
 
-    if job.status == "closed":
+    if job.status == "archived":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Job is already closed.",
+            detail="Job is already archived.",
         )
 
-    job.status = "closed"
+    job.status = "archived"
+    job.visibility = "internal"
     job.closed_at = datetime.now(timezone.utc)
     await db.commit()
 
@@ -342,6 +355,7 @@ async def unpublish_job(
         )
 
     job.status = "draft"
+    job.visibility = "internal"
     job.published_at = None
     await db.commit()
 

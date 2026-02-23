@@ -51,7 +51,6 @@ class JobUpdateRequest(BaseModel):
     currency: Optional[str] = Field(default=None, max_length=3)
     salary_timeframe: Optional[str] = Field(default=None, pattern=r"^(per_year|per_month|per_week|per_day|per_hour)$")
     description: Optional[str] = None
-    visibility: Optional[str] = Field(default=None, pattern=r"^(internal|careers|public)$")
     collect_resume: Optional[bool] = None
     collect_cover: Optional[bool] = None
     screening_questions: Optional[list[str]] = None

@@ -2046,3 +2046,276 @@ CORS_ORIGINS=https://app.onehash.ai
 
 - 2024-01-20: Next.js API proxy pattern implemented — replaced cross-subdomain cookie approach with same-origin proxy, updated `next.config.js` with rewrite rules, modified middleware matcher to exclude `/api/*`, updated environment variables for proxy configuration, tested and confirmed authentication working on `app.localhost:3000`
 
+
+---
+
+# PUBLIC CAREERS SITE (jobs subdomain)
+
+## Overview
+
+The public careers site allows organizations to showcase their open positions to candidates without requiring authentication. It runs on a separate subdomain (`jobs.<ROOT_HOST>`) from the authenticated application (`app.<ROOT_HOST>`).
+
+## URL Contract
+
+### Careers Home
+```
+jobs.<ROOT_HOST>/<orgSlug>
+```
+
+Where `orgSlug` = `<orgName>-<orgId>`
+
+**Examples:**
+- Development: `http://jobs.localhost:3000/onehash-0d7c1c20-acde-4a5f-acde-acde12345678`
+- Production: `https://jobs.onehash.ai/onehash-0d7c1c20-acde-4a5f-acde-acde12345678`
+
+### Job Detail
+```
+jobs.<ROOT_HOST>/<orgSlug>/<jobId>
+```
+
+**Examples:**
+- Development: `http://jobs.localhost:3000/onehash-0d7c1c20-acde-4a5f-acde-acde12345678/7d9f8e6c-1234-5678-9abc-def012345678`
+- Production: `https://jobs.onehash.ai/onehash-0d7c1c20-acde-4a5f-acde-acde12345678/7d9f8e6c-1234-5678-9abc-def012345678`
+
+## orgSlug Format
+
+The `orgSlug` combines the organization's display name with its UUID:
+- Format: `<orgName>-<orgId>`
+- orgName: Slug-like display name (may contain hyphens)
+- orgId: UUID from organizations table (5 segments separated by hyphens)
+
+**Parsing Logic:**
+1. Split orgSlug by `-`
+2. Last 5 segments = orgId (UUID format)
+3. All preceding segments = orgName
+4. Validate orgId matches UUID regex
+5. If parsing fails, return 404
+
+**Example:**
+- orgSlug: `acme-inc-0d7c1c20-acde-4a5f-acde-acde12345678`
+- orgName: `acme-inc`
+- orgId: `0d7c1c20-acde-4a5f-acde-acde12345678`
+
+## Host-Based Routing
+
+### Middleware Logic
+
+**File:** `apps/web/src/middleware.ts`
+
+The middleware detects the host and applies different routing rules:
+
+```typescript
+if (host.startsWith("jobs.")) {
+  // Public careers site - no auth enforcement
+  return NextResponse.next();
+}
+
+if (host.startsWith("app.")) {
+  // Authenticated app - full auth enforcement
+  // (existing logic unchanged)
+}
+```
+
+**Key Points:**
+- Jobs subdomain bypasses ALL authentication checks
+- No redirects to `/login`, `/verify`, or `/onboarding`
+- No cookie validation
+- Public pages render immediately
+
+### Route Groups
+
+**Authenticated App:** `(app-page-wrapper)/`
+- Requires authentication
+- Mounts `providers.tsx` with AuthSessionContext
+- Protected by middleware
+
+**Public Careers:** `(job-page-wrapper)/`
+- No authentication required
+- Does NOT mount `providers.tsx`
+- Clean public layout (no sidebar, no app nav)
+
+## Why Providers is Excluded
+
+The public careers site layout (`(job-page-wrapper)/layout.tsx`) does NOT import or mount `providers.tsx` because:
+
+1. **No Auth Required:** Public pages should load without cookies or JWT validation
+2. **Performance:** Avoids unnecessary `/auth/me` API calls on every page load
+3. **Separation of Concerns:** Public and authenticated experiences are completely isolated
+4. **Security:** Prevents accidental exposure of auth context to public pages
+
+## API Endpoints
+
+### Frontend API Client
+
+**File:** `apps/web/src/api/public/index.ts`
+
+```typescript
+getPublicJobs(orgId: string): Promise<PublicJobListItem[]>
+getPublicJobDetail(orgId: string, jobId: string): Promise<PublicJobDetail>
+```
+
+### Backend Endpoints (Required)
+
+**GET /public/orgs/{orgId}/jobs**
+- Returns list of published jobs for organization
+- Only includes jobs with `status = 'open'` and `visibility IN ('careers', 'public')`
+- No authentication required
+- Rate limited (e.g., 100 requests per minute per IP)
+
+**Response:**
+```json
+[
+  {
+    "id": "uuid",
+    "title": "Senior Frontend Engineer",
+    "department": "Engineering",
+    "location": "San Francisco, CA",
+    "employment_type": "full_time",
+    "workplace_type": "remote",
+    "salary_min": 14000000,
+    "salary_max": 18000000,
+    "salary_fixed": null,
+    "currency": "USD",
+    "salary_timeframe": "per_year",
+    "published_at": "2024-01-20T10:00:00Z"
+  }
+]
+```
+
+**GET /public/orgs/{orgId}/jobs/{jobId}**
+- Returns full job details including description
+- Only returns job if `status = 'open'` and `visibility IN ('careers', 'public')`
+- Returns 404 if job not found or not public
+- No authentication required
+- Rate limited
+
+**Response:**
+```json
+{
+  "id": "uuid",
+  "title": "Senior Frontend Engineer",
+  "description": "<h2>About the Role</h2><p>...</p>",
+  "department": "Engineering",
+  "employment_type": "full_time",
+  "workplace_type": "remote",
+  "country": "US",
+  "city": "San Francisco",
+  "salary_min": 14000000,
+  "salary_max": 18000000,
+  "salary_fixed": null,
+  "currency": "USD",
+  "salary_timeframe": "per_year",
+  "published_at": "2024-01-20T10:00:00Z",
+  "org_name": "Acme Inc"
+}
+```
+
+**Note:** Salary values are stored in cents (multiply by 100 before storing, divide by 100 when displaying).
+
+## Security Rules
+
+1. **No Data Leaks:** Only published jobs with public visibility are returned
+2. **No Org Enumeration:** Invalid orgId returns 404 (not 403)
+3. **No Job Enumeration:** Unpublished jobs return 404 (not 403)
+4. **Rate Limiting:** All public endpoints are rate limited by IP
+5. **No PII:** Job listings do not include internal team member details
+6. **CORS:** Backend must allow `jobs.<ROOT_HOST>` in CORS origins
+
+## Environment Variables
+
+### Frontend
+
+**Development:**
+```env
+NEXT_PUBLIC_APP_SUBDOMAIN=app
+NEXT_PUBLIC_JOBS_SUBDOMAIN=jobs
+NEXT_PUBLIC_APP_ROOT_HOST=localhost:3000
+NEXT_PUBLIC_API_URL=/api
+```
+
+**Production:**
+```env
+NEXT_PUBLIC_APP_SUBDOMAIN=app
+NEXT_PUBLIC_JOBS_SUBDOMAIN=jobs
+NEXT_PUBLIC_APP_ROOT_HOST=onehash.ai
+NEXT_PUBLIC_API_URL=/api
+```
+
+### Backend
+
+**Development:**
+```env
+CORS_ORIGINS=http://app.localhost:3000,http://jobs.localhost:3000
+```
+
+**Production:**
+```env
+CORS_ORIGINS=https://app.onehash.ai,https://jobs.onehash.ai
+```
+
+## Testing Locally
+
+### 1. Start Services
+```bash
+docker-compose up --build
+```
+
+### 2. Access Authenticated App
+```bash
+open http://app.localhost:3000
+```
+
+- Login with credentials
+- Navigate to Jobs → Create Job
+- Fill in job details
+- Click "Publish"
+
+### 3. Get Organization Slug
+
+From the authenticated app, get your organization ID:
+- Go to Settings → Workspace
+- Note your organization name (e.g., "onehash")
+- Get org ID from browser DevTools → Application → Cookies → `access_token` → decode JWT → `org_id`
+- Construct orgSlug: `<orgName>-<orgId>`
+
+Example: `onehash-0d7c1c20-acde-4a5f-acde-acde12345678`
+
+### 4. Access Public Careers Site
+```bash
+open http://jobs.localhost:3000/<orgSlug>
+```
+
+Example:
+```bash
+open http://jobs.localhost:3000/onehash-0d7c1c20-acde-4a5f-acde-acde12345678
+```
+
+### 5. Verify Published Job Appears
+
+- Published job should appear in the list
+- Click on job to view details
+- Verify "Apply" button works
+- Check that unpublished/draft jobs do NOT appear
+
+### 6. Test Cross-Subdomain Isolation
+
+- Open both `app.localhost:3000` and `jobs.localhost:3000` in same browser
+- Verify auth cookies from app subdomain do NOT affect jobs subdomain
+- Verify jobs subdomain loads without authentication
+- Verify app subdomain still requires login
+
+## DNS Configuration (Production)
+
+For production deployment, configure DNS records:
+
+**A/CNAME Records:**
+- `app.onehash.ai` → Frontend server/CDN
+- `jobs.onehash.ai` → Frontend server/CDN (same as app)
+- `api.onehash.ai` → Backend server (optional, if not using proxy)
+
+**Note:** Both `app` and `jobs` subdomains point to the same Next.js deployment. The middleware handles routing based on the host header.
+
+## Change Log
+
+- 2024-01-20: Public careers site implemented — added jobs subdomain routing, host-based middleware split, public API endpoints, orgSlug parsing, removed auth enforcement for public pages, updated environment variables and documentation
+

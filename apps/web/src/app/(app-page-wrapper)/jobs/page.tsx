@@ -23,6 +23,8 @@ import { jobNameSchema, type JobNameFormValues } from "@/lib/schemas/zodResolver
 import { DepartmentType, EmploymentType, JobStatusType } from "./[jobId]/constants";
 import { getJobs, createJob, type JobListItemResponse } from "@/api";
 import { toast } from "sonner";
+import { useAuthSession } from "@/app/providers";
+import { getJobsBaseUrl } from "@/lib/host";
 
 const allDepts: DepartmentType[] = ["engineering", "design", "data", "marketing", "sales", "operations", "hr"];
 const allTypes: EmploymentType[] = ["full_time", "part_time", "contract", "internship"];
@@ -53,6 +55,7 @@ export default function JobsPage() {
   const { t } = useTranslation();
   const isMobile = useIsMobile();
   const router = useRouter();
+  const { user } = useAuthSession();
 
   const [jobs, setJobs] = useState<JobListItemResponse[]>([]);
   const [loading, setLoading] = useState(true);
@@ -71,6 +74,24 @@ export default function JobsPage() {
     defaultValues: { jobName: "" },
     resolver: zodResolver(jobNameSchema),
   });
+
+  const generateOrgSlug = () => {
+    if (!user?.org_id || !user?.org_name) return null;
+    const slug = user.org_name.toLowerCase().replace(/\s+/g, '-');
+    return `${slug}-${user.org_id}`;
+  };
+
+  const openJobBoard = (e?: React.MouseEvent) => {
+    e?.preventDefault();
+    e?.stopPropagation();
+    const orgSlug = generateOrgSlug();
+    if (!orgSlug) {
+      toast.error("Unable to open job board");
+      return;
+    }
+    const url = `${getJobsBaseUrl()}/${orgSlug}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
 
   const fetchJobs = useCallback(async (signal?: AbortSignal) => {
     try {
@@ -248,6 +269,9 @@ export default function JobsPage() {
         actionLabel={t("create")}
         actionIcon="Plus"
         onAction={() => {}}
+        secondaryActionLabel="Job Board"
+        secondaryActionIcon="Link"
+        onSecondaryAction={() => {}}
         filterContent={<div />}
         hasActiveFilters={false}
         activeChips={[]}
@@ -268,6 +292,9 @@ export default function JobsPage() {
         actionLabel={t("create")}
         actionIcon="Plus"
         onAction={() => {}}
+        secondaryActionLabel="Job Board"
+        secondaryActionIcon="Link"
+        onSecondaryAction={() => {}}
         filterContent={<div />}
         hasActiveFilters={false}
         activeChips={[]}
@@ -290,6 +317,9 @@ export default function JobsPage() {
       actionLabel={t("create")}
       actionIcon="Plus"
       onAction={() => setCreateOpen(true)}
+      secondaryActionLabel="Job Board"
+      secondaryActionIcon="Link"
+      onSecondaryAction={openJobBoard}
       filterContent={filterContent}
       hasActiveFilters={hasFilters}
       activeChips={activeChips}

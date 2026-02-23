@@ -4,7 +4,6 @@ import { Country } from "country-state-city";
 export type EmploymentType = "full_time" | "part_time" | "contract" | "internship";
 export type DepartmentType = "engineering" | "design" | "marketing" | "sales" | "data" | "operations" | "hr";
 export type WorkplaceType = "remote" | "hybrid" | "onsite";
-export type JobStatusType = "draft" | "open" | "closed";
 export type VisibilityType = "internal" | "public";
 export type SalaryType = "hidden" | "fixed" | "range";
 export type TimeframeType = "per_year" | "per_month" | "per_week" | "per_day" | "per_hour";
@@ -55,10 +54,12 @@ export const workplaceTypes: WorkplaceType[] = [
   "onsite"
 ];
 
+export type JobStatusType = "draft" | "open" | "archived";
+
 export const jobStatuses: JobStatusType[] = [
   "draft",
   "open",
-  "closed"
+  "archived"
 ];
 
 export const salaryTypes: SalaryType[] = [

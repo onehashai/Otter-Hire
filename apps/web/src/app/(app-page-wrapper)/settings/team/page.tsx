@@ -9,7 +9,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useAuthSession } from "@/app/providers";
 import { RolesAndPermissionsTable } from "@/components/settings/team/rolesAndPermissionsTable";
 import { TeamMember, TeamMembersList as TeamMembers } from "@/components/settings/team/TeamMembersList";
-import { TeamInviteModal } from "@/components/settings/team/TeamInviteModal";
+import { TeamInviteModal } from "@/components/settings/team/teamInviteModal";
 import { type BackendRole, ASSIGNABLE_ROLES, formatRole } from "@/components/settings/team/lib/permissonMatrix";
 import {
   getOrgUsers,
@@ -18,9 +18,9 @@ import {
   removeOrgUser,
   type OrgUserResponse,
 } from "@/api";
-import { TeamMemberRoleChangeDialog } from "@/components/settings/team/TeamMemberRoleChangeDialog";
-import { TeamMemberRemoveDialog } from "@/components/settings/team/TeamMemberRemoveDialog";
-import { TeamOwnershipTransferDialog } from "@/components/settings/team/TeamOwnershipTransferDialog";
+import { TeamMemberRoleChangeDialog } from "@/components/settings/team/teamMemberRoleChangeDialog";
+import { TeamMemberRemoveDialog } from "@/components/settings/team/teamMemberRemoveDialog";
+import { TeamOwnershipTransferDialog } from "@/components/settings/team/teamOwnershipTransferDialog";
 import { useTranslation } from "react-i18next";
 
 function mapApiUser(u: OrgUserResponse): TeamMember {

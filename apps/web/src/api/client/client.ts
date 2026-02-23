@@ -44,7 +44,7 @@ export async function apiGet<T>(
   path: string,
   options: ApiGetOptions = {}
 ): Promise<T> {
-  const { credentials = "omit", cache = "no-store" } = options;
+  const { credentials = "include", cache = "no-store" } = options;
 
   const res = await fetch(`${API_BASE_URL}${path}`, {
     method: "GET",

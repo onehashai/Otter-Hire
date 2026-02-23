@@ -15,6 +15,9 @@ interface MainPagesLayoutProps {
   actionLabel: string;
   actionIcon: IconName;
   onAction: () => void;
+  secondaryActionLabel?: string;
+  secondaryActionIcon?: IconName;
+  onSecondaryAction?: (e?: React.MouseEvent) => void;
   filterContent?: ReactNode;
   filterTitle?: string;
   hasActiveFilters?: boolean;
@@ -30,6 +33,9 @@ export const MainPagesLayout = ({
   actionLabel,
   actionIcon,
   onAction,
+  secondaryActionLabel,
+  secondaryActionIcon,
+  onSecondaryAction,
   filterContent,
   filterTitle,
   hasActiveFilters = false,
@@ -86,6 +92,11 @@ export const MainPagesLayout = ({
           )
         )}
         <div className="flex-1" />
+        {secondaryActionLabel && secondaryActionIcon && onSecondaryAction && (
+          <Button variant="outline" size="sm" className="h-9 md:h-8 text-xs gap-1.5 shrink-0" onClick={(e) => onSecondaryAction(e)}>
+            <Icon name={secondaryActionIcon} className="h-3.5 w-3.5" /> {!isMobile && secondaryActionLabel}
+          </Button>
+        )}
         <Button size="sm" className="h-9 md:h-8 text-xs gap-1.5 shrink-0" onClick={onAction}>
           <Icon name={actionIcon} className="h-3.5 w-3.5" /> {actionLabel}
         </Button>

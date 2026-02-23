@@ -2,14 +2,14 @@ from sqlalchemy import Column, String, DateTime, ForeignKey, Index, CheckConstra
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
-import uuid
+from app.utils.uuid import uuid7
 from app.db.base import Base
 
 
 class Feedback(Base):
     __tablename__ = "feedback"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid7)
     org_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
     interview_id = Column(UUID(as_uuid=True), ForeignKey("interviews.id"), nullable=False)
     reviewer_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)

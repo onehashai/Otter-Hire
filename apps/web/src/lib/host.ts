@@ -17,3 +17,23 @@ export function getAppBaseUrl(): string {
   const protocol = host.includes("localhost") || host.includes("127.0.0.1") ? "http" : "https";
   return `${protocol}://${host}`;
 }
+
+export function getJobsHost(): string {
+  const subdomain = process.env.NEXT_PUBLIC_JOBS_SUBDOMAIN || "jobs";
+  const rootHost = process.env.NEXT_PUBLIC_APP_ROOT_HOST;
+
+  if (!rootHost) {
+    if (typeof window !== "undefined") {
+      return window.location.host;
+    }
+    return "localhost:3000";
+  }
+
+  return `${subdomain}.${rootHost}`;
+}
+
+export function getJobsBaseUrl(): string {
+  const host = getJobsHost();
+  const protocol = host.includes("localhost") || host.includes("127.0.0.1") ? "http" : "https";
+  return `${protocol}://${host}`;
+}

@@ -2,14 +2,14 @@ from sqlalchemy import Column, String, DateTime, ForeignKey, Index, UniqueConstr
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
-import uuid
+from app.utils.uuid import uuid7
 from app.db.base import Base
 
 
 class User(Base):
     __tablename__ = "users"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid7)
     org_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
     email = Column(String, nullable=False)
     hashed_password = Column(String, nullable=False)

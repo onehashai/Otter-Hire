@@ -2,14 +2,14 @@ from sqlalchemy import Column, String, DateTime, ForeignKey, Index, CheckConstra
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
-import uuid
+from app.utils.uuid import uuid7
 from app.db.base import Base
 
 
 class Job(Base):
     __tablename__ = "jobs"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid7)
     org_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
     created_by_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     title = Column(String(255), nullable=False)
@@ -27,7 +27,7 @@ class Job(Base):
     currency = Column(String(3), server_default="USD")
     salary_timeframe = Column(String(10), server_default="per_year")
     status = Column(String(10), nullable=False, server_default="draft")
-    visibility = Column(String(10), nullable=False, server_default="internal")
+    visibility = Column(String(20), nullable=False, server_default="internal")
     collect_resume = Column(Boolean, nullable=False, server_default="true")
     collect_cover = Column(Boolean, nullable=False, server_default="false")
     screening_questions = Column(JSONB, server_default="[]")
@@ -38,8 +38,8 @@ class Job(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     __table_args__ = (
-        CheckConstraint("status IN ('draft', 'open', 'closed')", name="ck_jobs_status"),
-        CheckConstraint("visibility IN ('internal', 'careers', 'public')", name="ck_jobs_visibility"),
+        CheckConstraint("status IN ('draft', 'open', 'archived')", name="ck_jobs_status"),
+        CheckConstraint("visibility IN ('internal', 'public')", name="ck_jobs_visibility"),
         CheckConstraint("salary_type IN ('hidden', 'fixed', 'range')", name="ck_jobs_salary_type"),
         CheckConstraint("salary_min IS NULL OR salary_max IS NULL OR salary_min <= salary_max", name="ck_jobs_salary_range"),
         Index("ix_jobs_org_id", "org_id"),

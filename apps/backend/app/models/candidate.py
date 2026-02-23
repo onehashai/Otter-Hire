@@ -2,14 +2,14 @@ from sqlalchemy import Column, String, DateTime, ForeignKey, Index, CheckConstra
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
-import uuid
+from app.utils.uuid import uuid7
 from app.db.base import Base
 
 
 class Candidate(Base):
     __tablename__ = "candidates"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid7)
     org_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
     job_id = Column(UUID(as_uuid=True), ForeignKey("jobs.id"), nullable=False)
     stage_id = Column(UUID(as_uuid=True), ForeignKey("stages.id"))

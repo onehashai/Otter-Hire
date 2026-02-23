@@ -5,17 +5,29 @@ import { Icon } from "@onehash/ui/icon";
 import Link from "next/link";
 import { useTranslation } from "react-i18next";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useNavigationGuard } from "@/hooks/use-navigation-guard";
 import { useAuthSession } from "@/app/providers";
 import { Button } from "@onehash/ui/button";
 import { Card, CardContent } from "@onehash/ui/card";
 import { Badge } from "@onehash/ui/badge";
 import { Separator } from "@onehash/ui/separator";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@onehash/ui/sheet";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from "@onehash/ui/alert-dialog";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { JobSetupProvider, useJobSetup } from "./context";
 import { SETUP_SECTIONS, teamRoleLabels, type SetupStepSlug } from "./constants";
 import { isSetupValid, getFirstInvalidSection, getBasicInfoValidation } from "../../../../lib/validations/setupValidation";
+import { useEffect } from "react";
 
 function SetupLayoutInner({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -43,15 +55,44 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
     salaryFixed,
     salaryMin,
     salaryMax,
+    hasUnsavedChanges,
+    showUnsavedDialog,
     setBasicInfoAttemptedSave,
     setHiringDetailsAttemptedSave,
     handleSave,
     handlePublish,
     handleUnpublish,
+    handleDiscardChanges,
+    handleSaveAndNavigate,
+    handleCancelNavigation,
+    showUnsavedWarning,
     isLoading,
     isSaving,
     isPublishing,
   } = useJobSetup();
+
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasUnsavedChanges) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [hasUnsavedChanges]);
+
+  // Intercept all navigation when there are unsaved changes
+  useNavigationGuard(hasUnsavedChanges, showUnsavedWarning);
+
+  // Intercept back button click
+  const handleBackClick = () => {
+    if (hasUnsavedChanges) {
+      showUnsavedWarning("/jobs");
+    } else {
+      router.push("/jobs");
+    }
+  };
 
   const pathParts = pathname.split("/");
   const currentIndex = sections.findIndex((s) => s.slug === pathParts[pathParts.length - 1]);
@@ -192,7 +233,7 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
     return (
       <div className="flex flex-col min-h-[calc(100vh-8rem)]">
         <div className="flex items-center gap-2 mb-4">
-          <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={() => router.push("/jobs")}>
+          <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={handleBackClick}>
             <Icon name="ChevronLeft" className="h-4 w-4" />
           </Button>
           <div className="flex-1 min-w-0">
@@ -257,7 +298,7 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
   return (
     <div>
       <div className="flex items-center gap-3 mb-6">
-        <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => router.push("/jobs")}>
+        <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={handleBackClick}>
           <Icon name="ChevronLeft" className="h-4 w-4" />
         </Button>
         <div className="flex-1">
@@ -331,6 +372,20 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
         </Sheet>
         <AiSheet open={aiSheetOpen} onOpenChange={setAiSheetOpen} />
       </div>
+      <AlertDialog open={showUnsavedDialog} onOpenChange={handleCancelNavigation}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Unsaved Changes</AlertDialogTitle>
+            <AlertDialogDescription>
+              You have unsaved changes. Do you want to save them before leaving?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={handleDiscardChanges}>Discard</AlertDialogCancel>
+            <AlertDialogAction onClick={handleSaveAndNavigate}>Save Changes</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

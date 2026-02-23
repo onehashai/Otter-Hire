@@ -70,7 +70,6 @@ export type JobDetailResponse = {
     currency?: string;
     salary_timeframe?: string;
     description?: string | null;
-    visibility?: string;
     collect_resume?: boolean;
     collect_cover?: boolean;
     screening_questions?: string[];

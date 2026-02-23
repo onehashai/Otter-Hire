@@ -73,7 +73,7 @@ export default function JobInfoPage() {
       />
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <SelectField
-          label={t("department")}
+          label="Job Categories"
           value={department}
           onValueChange={setDepartment}
           options={departments.map((d) => ({ value: d, label: t(d) }))}
@@ -134,13 +134,6 @@ export default function JobInfoPage() {
           maxOptions={200}
         />
       </div>
-      <SelectField
-        label={t("status")}
-        value={status}
-        onValueChange={setStatus}
-        options={jobStatuses.map((s) => ({ value: s, label: t(s) }))}
-        placeholder={t("select")}
-      />
     </div>
   );
 }

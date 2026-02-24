@@ -17,6 +17,7 @@ class HiringStageResponse(BaseModel):
     id: UUID
     name: str
     position: int
+    is_required: bool = False
 
 
 class TeamMemberRequest(BaseModel):
@@ -30,6 +31,7 @@ class TeamMemberResponse(BaseModel):
     name: Optional[str] = None
     email: Optional[str] = None
     role: str
+    user_role: Optional[str] = None
 
 
 class JobCreateRequest(BaseModel):
@@ -38,7 +40,7 @@ class JobCreateRequest(BaseModel):
 
 class JobUpdateRequest(BaseModel):
     title: Optional[str] = Field(default=None, min_length=1, max_length=100)
-    department: Optional[str] = Field(default=None, max_length=50)
+    category: Optional[str] = Field(default=None, max_length=50)
     employment_type: Optional[str] = Field(default=None, pattern=r"^(full_time|part_time|contract|internship)$")
     workplace_type: Optional[str] = Field(default=None, pattern=r"^(remote|hybrid|onsite)$")
     country: Optional[str] = Field(default=None, max_length=2)
@@ -62,7 +64,7 @@ class JobUpdateRequest(BaseModel):
 class JobListItemResponse(BaseModel):
     id: UUID
     title: str
-    department: Optional[str] = None
+    category: Optional[str] = None
     employment_type: Optional[str] = None
     status: str
     candidate_count: int = 0
@@ -73,7 +75,7 @@ class JobListItemResponse(BaseModel):
 class JobDetailResponse(BaseModel):
     id: UUID
     title: str
-    department: Optional[str] = None
+    category: Optional[str] = None
     employment_type: Optional[str] = None
     workplace_type: Optional[str] = None
     country: Optional[str] = None

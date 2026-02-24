@@ -11,7 +11,7 @@ import { Icon } from "@onehash/ui/icon";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { signupSchema, type SignupFormValues } from "@/lib/schemas/zodResolver";
-import { signup } from "@/api/index";
+import { signup, acceptInvite } from "@/api/index";
 
 const PASSWORD_RULES = [
   { label: "At least 8 characters", test: (pw: string) => pw.length >= 8 },
@@ -27,11 +27,12 @@ export default function Signup() {
   const searchParams = useSearchParams();
   const { t } = useTranslation();
   const inviteToken = searchParams.get("invite");
+  const inviteEmail = searchParams.get("invite_email");
 
   const form = useForm<SignupFormValues>({
     resolver: zodResolver(signupSchema),
     defaultValues: {
-      email: "",
+      email: inviteEmail ?? "",
       password: "",
       confirmPassword: "",
     },
@@ -44,14 +45,31 @@ export default function Signup() {
   const onSubmit = async (data: SignupFormValues) => {
     form.clearErrors("root");
     try {
+      if (typeof inviteToken === "string" && inviteToken.trim()) {
+        if (
+          typeof inviteEmail === "string" &&
+          inviteEmail.trim() &&
+          data.email.trim().toLowerCase() !== inviteEmail.trim().toLowerCase()
+        ) {
+          form.setError("root", { message: "Use the invited email address to continue." });
+          return;
+        }
+        await acceptInvite({
+          token: inviteToken.trim(),
+          password: data.password,
+        });
+        sessionStorage.setItem("signup_email", data.email);
+        sessionStorage.removeItem("invite_token");
+        router.replace("/verify");
+        router.refresh();
+        return;
+      }
+
       await signup({
         email: data.email,
         password: data.password,
       });
       sessionStorage.setItem("signup_email", data.email);
-      if (typeof inviteToken === "string" && inviteToken.trim()) {
-        sessionStorage.setItem("invite_token", inviteToken.trim());
-      }
       router.replace("/verify");
       router.refresh();
     } catch (err) {
@@ -167,6 +185,7 @@ export default function Signup() {
                           placeholder="acme@example.com"
                           className="h-10 text-sm"
                           autoComplete="email"
+                          disabled={Boolean(inviteToken && inviteEmail)}
                           error={fieldState.error?.message}
                         />
                       </FormControl>

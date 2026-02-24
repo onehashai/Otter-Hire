@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@onehash/ui/button";
+import { Badge } from "@onehash/ui/badge";
 import { Separator } from "@onehash/ui/separator";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@onehash/ui/dialog";
 import { InputField } from "@onehash/ui/input";
@@ -155,13 +156,25 @@ export default function CareerJobDetailPage() {
     { iconName: "Briefcase", label: employmentType },
     { iconName: "Clock", label: job.workplace_type },
     salary && { iconName: "DollarSign", label: salary },
-    job.department && { iconName: "Building2", label: job.department },
+    job.category && { iconName: "Building2", label: job.category },
   ].filter(Boolean) as { iconName: IconName; label: string }[];
 
   const listHref = `/${orgSlug}`;
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Status Banner for Org Members */}
+      {job.status === "draft" && (
+        <div className="bg-black text-white text-center py-2.5 text-sm font-medium">
+          This job is saved as draft
+        </div>
+      )}
+      {job.status === "archived" && (
+        <div className="bg-black text-white text-center py-2.5 text-sm font-medium">
+          This job is archived
+        </div>
+      )}
+      
       <header className="border-b border-border">
         <div className="mx-auto max-w-3xl px-4 py-3 flex items-center gap-3">
           <Button

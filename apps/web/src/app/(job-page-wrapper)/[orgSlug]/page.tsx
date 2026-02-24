@@ -62,7 +62,7 @@ export default function CareersListPage() {
   const [orgName, setOrgName] = useState("");
   
   const [search, setSearch] = useState("");
-  const [deptFilter, setDeptFilter] = useState("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
   const [locationFilter, setLocationFilter] = useState("all");
 
   useEffect(() => {
@@ -86,8 +86,8 @@ export default function CareersListPage() {
       });
   }, [orgSlug]);
 
-  const allDepartments = useMemo(() => {
-    const depts = jobs.map((j) => j.department).filter(Boolean) as string[];
+  const allCategories = useMemo(() => {
+    const depts = jobs.map((j) => j.category).filter(Boolean) as string[];
     return [...new Set(depts)];
   }, [jobs]);
 
@@ -102,16 +102,16 @@ export default function CareersListPage() {
         const q = search.toLowerCase();
         if (
           !job.title.toLowerCase().includes(q) &&
-          !(job.department || "").toLowerCase().includes(q)
+          !(job.category || "").toLowerCase().includes(q)
         )
           return false;
       }
-      if (deptFilter !== "all" && job.department !== deptFilter) return false;
+      if (categoryFilter !== "all" && job.category !== categoryFilter) return false;
       if (locationFilter !== "all" && formatLocation(job) !== locationFilter)
         return false;
       return true;
     });
-  }, [jobs, search, deptFilter, locationFilter]);
+  }, [jobs, search, categoryFilter, locationFilter]);
 
   if (loading) {
     return (
@@ -159,15 +159,15 @@ export default function CareersListPage() {
                 className="pl-9 h-9 text-sm"
               />
             </div>
-            {allDepartments.length > 0 && (
+            {allCategories.length > 0 && (
               <div className="flex flex-col gap-1">
-                <label className="text-xs text-muted-foreground">Department</label>
+                <label className="text-xs text-muted-foreground">Category</label>
                 <SelectField
-                  value={deptFilter}
-                  onValueChange={setDeptFilter}
+                  value={categoryFilter}
+                  onValueChange={setCategoryFilter}
                   options={[
-                    { value: "all", label: "All Departments" },
-                    ...allDepartments.map((d) => ({ value: d, label: d })),
+                    { value: "all", label: "All Categories" },
+                    ...allCategories.map((d) => ({ value: d, label: d })),
                   ]}
                 />
               </div>
@@ -247,9 +247,9 @@ export default function CareersListPage() {
                               Draft
                             </Badge>
                           )}
-                          {job.department && (
+                          {job.category && (
                             <Badge variant="secondary" className="text-[10px] h-5 px-2">
-                              {job.department}
+                              {job.category}
                             </Badge>
                           )}
                         </div>

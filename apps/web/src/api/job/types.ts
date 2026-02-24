@@ -2,6 +2,7 @@ export type JobHiringStageResponse = {
     id: string;
     name: string;
     position: number;
+    is_required: boolean;
 };
 
 export type JobTeamMemberResponse = {
@@ -10,13 +11,14 @@ export type JobTeamMemberResponse = {
     name: string | null;
     email: string | null;
     role: string;
+    user_role: string | null;
 };
 
 
 export type JobListItemResponse = {
     id: string;
     title: string;
-    department: string | null;
+    category: string | null;
     employment_type: string | null;
     status: string;
     candidate_count: number;
@@ -27,7 +29,7 @@ export type JobListItemResponse = {
 export type JobDetailResponse = {
     id: string;
     title: string;
-    department: string | null;
+    category: string | null;
     employment_type: string | null;
     workplace_type: string | null;
     country: string | null;
@@ -57,7 +59,7 @@ export type JobDetailResponse = {
 
   export type JobUpdatePayload = {
     title?: string;
-    department?: string | null;
+    category?: string | null;
     employment_type?: string | null;
     workplace_type?: string;
     country?: string | null;
@@ -74,6 +76,6 @@ export type JobDetailResponse = {
     collect_cover?: boolean;
     screening_questions?: string[];
     pipeline_template?: string;
-    hiring_stages?: { name: string; position: number }[];
+    hiring_stages?: { id?: string; name: string; position: number }[];
     team_members?: { user_id: string; role: string }[];
   };

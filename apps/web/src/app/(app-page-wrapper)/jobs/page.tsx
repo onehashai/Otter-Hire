@@ -8,7 +8,7 @@ import { Calendar } from "@onehash/ui/calendar";
 import { MultiSelect } from "@onehash/ui/select";
 import { MainPagesLayout } from "@/components/common/MainPagesLayout";
 import { format, isAfter, isBefore, subDays, startOfDay } from "date-fns";
-import { DepartmentType, EmploymentType, JobStatusType } from "./[jobId]/constants";
+import { CategoryType, EmploymentType, JobStatusType } from "./[jobId]/constants";
 import { getJobs, createJob, type JobListItemResponse } from "@/api";
 import { toast } from "sonner";
 import { useAuthSession } from "@/app/providers";
@@ -18,13 +18,14 @@ import { CreateJobModal } from "@/components/jobs/CreateJobModal";
 import { JobsListSkeleton } from "@/components/jobs/Skeleton";
 import { EmptyCard, ErrorCard } from "@onehash/ui/card";
 import { useSetPageMetadata } from "@/hooks/useSetPageMetadata";
-
-const allDepts: DepartmentType[] = ["engineering", "design", "data", "marketing", "sales", "operations", "hr"];
+import { useIsMobile } from "@/hooks/use-mobile";
+import { useRouter } from "next/navigation";
+const allCategories: CategoryType[] = ["engineering", "design", "data", "marketing", "sales", "operations", "hr"];
 const allTypes: EmploymentType[] = ["full_time", "part_time", "contract", "internship"];
-const allStatuses = ["open", "draft", "closed"] as const;
+const allStatuses = ["open", "draft", "archived"] as const;
 
-const statusKey: Record<JobStatusType, string> = { open: "open", draft: "draft", closed: "closed" };
-const deptKey: Record<DepartmentType, string> = {
+const statusKey: Record<JobStatusType, string> = { open: "open", draft: "draft", archived: "archived" };
+const categoryKey: Record<CategoryType, string> = {
   engineering: "engineering",
   design: "design",
   data: "data",
@@ -58,11 +59,29 @@ export default function JobsPage() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
-  const [deptFilter, setDeptFilter] = useState<string[]>([]);
+  const [categoryFilter, setCategoryFilter] = useState<string[]>([]);
   const [typeFilter, setTypeFilter] = useState<string[]>([]);
   const [datePreset, setDatePreset] = useState<DatePreset>(null);
   const [dateRange, setDateRange] = useState<{ from?: Date; to?: Date }>({});
   const [createOpen, setCreateOpen] = useState(false);
+
+  const generateOrgSlug = () => {
+    if (!user?.org_id || !user?.org_name) return null;
+    const slug = user.org_name.toLowerCase().replace(/\s+/g, '-');
+    return `${slug}-${user.org_id}`;
+  };
+
+  const openJobBoard = (e?: React.MouseEvent) => {
+    e?.preventDefault();
+    e?.stopPropagation();
+    const orgSlug = generateOrgSlug();
+    if (!orgSlug) {
+      toast.error("Unable to open job board");
+      return;
+    }
+    const url = `${getJobsBaseUrl()}/${orgSlug}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
 
   const fetchJobs = useCallback(async (signal?: AbortSignal) => {
     try {
@@ -90,18 +109,18 @@ export default function JobsPage() {
     else if (preset === null) { setDateRange({}); }
   };
 
-  const hasFilters = statusFilter.length > 0 || deptFilter.length > 0 || typeFilter.length > 0 || datePreset !== null;
+  const hasFilters = statusFilter.length > 0 || categoryFilter.length > 0 || typeFilter.length > 0 || datePreset !== null;
 
   const clearAll = () => {
-    setStatusFilter([]); setDeptFilter([]); setTypeFilter([]);
+    setStatusFilter([]); setCategoryFilter([]); setTypeFilter([]);
     setDatePreset(null); setDateRange({});
   };
 
   const filtered = useMemo(() => {
     return jobs.filter((job) => {
-      if (search && !job.title.toLowerCase().includes(search.toLowerCase()) && !(job.department ?? "").toLowerCase().includes(search.toLowerCase())) return false;
+      if (search && !job.title.toLowerCase().includes(search.toLowerCase()) && !(job.category ?? "").toLowerCase().includes(search.toLowerCase())) return false;
       if (statusFilter.length && !statusFilter.includes(job.status as JobStatusType)) return false;
-      if (deptFilter.length && !deptFilter.includes((job.department ?? "") as DepartmentType)) return false;
+      if (categoryFilter.length && !categoryFilter.includes((job.category ?? "") as CategoryType)) return false;
       if (typeFilter.length && !typeFilter.includes((job.employment_type ?? "") as EmploymentType)) return false;
       if (dateRange.from) {
         const jobDate = new Date(job.updated_at);
@@ -113,15 +132,15 @@ export default function JobsPage() {
       }
       return true;
     });
-  }, [jobs, search, statusFilter, deptFilter, typeFilter, dateRange]);
+  }, [jobs, search, statusFilter, categoryFilter, typeFilter, dateRange]);
 
   const statusOptions = allStatuses.map((s) => ({ value: s, label: t(statusKey[s]) }));
-  const deptOptions = allDepts.map((d) => ({ value: d, label: t(deptKey[d]) }));
+  const categoryOptions = allCategories.map((d) => ({ value: d, label: t(categoryKey[d]) }));
   const typeOptions = allTypes.map((tp) => ({ value: tp, label: t(typeKey[tp]) }));
 
   const activeChips: { label: string; clear: () => void }[] = [];
   statusFilter.forEach((s) => activeChips.push({ label: t(statusKey[s as JobStatusType]), clear: () => setStatusFilter((p) => p.filter((v) => v !== s)) }));
-  deptFilter.forEach((d) => activeChips.push({ label: t(deptKey[d as DepartmentType]), clear: () => setDeptFilter((p) => p.filter((v) => v !== d)) }));
+  categoryFilter.forEach((d) => activeChips.push({ label: t(categoryKey[d as CategoryType]), clear: () => setCategoryFilter((p) => p.filter((v) => v !== d)) }));
   typeFilter.forEach((tp) => activeChips.push({ label: t(typeKey[tp as EmploymentType]), clear: () => setTypeFilter((p) => p.filter((v) => v !== tp)) }));
   if (datePreset) {
     let dateLabel: string;
@@ -151,11 +170,11 @@ export default function JobsPage() {
         showSelectAllClear
       />
       <MultiSelect
-        label={t("department")}
-        value={deptFilter}
-        onValueChange={setDeptFilter}
-        options={deptOptions}
-        placeholder="All departments"
+        label={t("category")}
+        value={categoryFilter}
+        onValueChange={setCategoryFilter}
+        options={categoryOptions}
+        placeholder="All categories"
         triggerClassName="h-8 text-xs"
         showSelectAllClear
       />

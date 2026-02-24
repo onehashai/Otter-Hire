@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import verify_access_token
 from app.db.session import get_db
+from app.models.org_membership import OrgMembership
 from app.models.user import User
 
 
@@ -23,10 +24,26 @@ async def get_current_user(
     except Exception as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token") from exc
 
-    result = await db.execute(select(User).where(User.id == user_id, User.org_id == org_id))
+    result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+
+    membership_result = await db.execute(
+        select(OrgMembership).where(
+            OrgMembership.user_id == user_id,
+            OrgMembership.org_id == org_id,
+            OrgMembership.status != "disabled",
+        )
+    )
+    membership = membership_result.scalar_one_or_none()
+    if membership is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Membership not found")
+
+    # Compatibility shim: existing handlers expect org-scoped attrs on current_user.
+    user.org_id = membership.org_id
+    user.role = membership.role
+    user.status = membership.status
 
     return user
 

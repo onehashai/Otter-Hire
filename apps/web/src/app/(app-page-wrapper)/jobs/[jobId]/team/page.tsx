@@ -1,47 +1,67 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Button } from "@onehash/ui/button";
+import { Badge } from "@onehash/ui/badge";
 import { InputField } from "@onehash/ui/input";
 import { Separator } from "@onehash/ui/separator";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@onehash/ui/sheet";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@onehash/ui/dialog";
-import { SelectField } from "@onehash/ui/select";
 import { Plus, X, Search, Users } from "lucide-react";
 import { useJobSetup } from "../context";
-import { mockOrganizationUsers, teamRoleLabels, type TeamRole } from "../constants";
+import { type TeamRole } from "../constants";
+import { getOrgUsers, type OrgUserResponse } from "@/api";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 
 export default function HiringTeamPage() {
-  const { t } = useTranslation();
   const isMobile = useIsMobile();
   const {
     teamMembers,
     addTeamMember,
     removeTeamMember,
-    updateTeamMemberRole,
   } = useJobSetup();
   const [addMemberOpen, setAddMemberOpen] = useState(false);
   const [memberSearch, setMemberSearch] = useState("");
-  const [selectedNewMemberRole, setSelectedNewMemberRole] = useState<TeamRole>("interviewer");
+  const [orgUsers, setOrgUsers] = useState<OrgUserResponse[]>([]);
 
-  const filteredUsers = mockOrganizationUsers.filter(
-    (u) =>  
-      !teamMembers.some((m) => m.id === u.id) &&
-      (u.name.toLowerCase().includes(memberSearch.toLowerCase()) ||
-        u.email.toLowerCase().includes(memberSearch.toLowerCase()))
+  useEffect(() => {
+    getOrgUsers().then(setOrgUsers).catch(() => {
+      toast.error("Unable to load organization users");
+    });
+  }, []);
+
+  const formatRoleLabel = (role?: string | null) =>
+    role ? role.replace(/_/g, " ").replace(/\b\w/g, (ch) => ch.toUpperCase()) : "Member";
+
+  const mapUserRoleToTeamRole = (role: string): TeamRole => {
+    if (role === "recruiter" || role === "hiring_manager" || role === "interviewer") {
+      return role;
+    }
+    return "recruiter";
+  };
+
+  const filteredUsers = useMemo(
+    () =>
+      orgUsers.filter(
+        (u) =>
+          !teamMembers.some((m) => m.user_id === u.id) &&
+          ((u.name ?? "").toLowerCase().includes(memberSearch.toLowerCase()) ||
+            u.email.toLowerCase().includes(memberSearch.toLowerCase()))
+      ),
+    [orgUsers, teamMembers, memberSearch]
   );
 
-  const addTeamMemberFromUser = (user: (typeof mockOrganizationUsers)[0]) => {
+  const addTeamMemberFromUser = (user: OrgUserResponse) => {
     addTeamMember({
       id: user.id,
-      name: user.name,
+      user_id: user.id,
+      name: user.name ?? user.email.split("@")[0] ?? "Unknown User",
       email: user.email,
-      role: selectedNewMemberRole,
+      role: mapUserRoleToTeamRole(user.role),
+      userRole: user.role,
     });
     setMemberSearch("");
-    setSelectedNewMemberRole("interviewer");
     setAddMemberOpen(false);
   };
 
@@ -54,15 +74,6 @@ export default function HiringTeamPage() {
           onChange={(e) => setMemberSearch(e.target.value)}
           placeholder="Search by name or email…"
           className="h-9 text-sm pl-9"
-        />
-      </div>
-      <div className="space-y-1.5">
-        <label className="text-xs font-medium text-muted-foreground">Assign role</label>
-        <SelectField
-          label="Assign role"
-          value={selectedNewMemberRole}
-          onValueChange={(v) => setSelectedNewMemberRole(v as TeamRole)}
-          options={(Object.entries(teamRoleLabels) as [TeamRole, string][]).map(([val, label]) => ({ value: val, label }))}
         />
       </div>
       <Separator />
@@ -79,12 +90,14 @@ export default function HiringTeamPage() {
             >
               <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-xs font-medium text-muted-foreground shrink-0">
                 {user.name
-                  .split(" ")
-                  .map((n) => n[0])
-                  .join("")}
+                  ? user.name
+                      .split(" ")
+                      .map((n) => n[0])
+                      .join("")
+                  : "U"}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium truncate">{user.name}</p>
+                <p className="text-sm font-medium truncate">{user.name ?? user.email}</p>
                 <p className="text-xs text-muted-foreground truncate">{user.email}</p>
               </div>
               <Plus className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -147,12 +160,9 @@ export default function HiringTeamPage() {
                   <p className="text-sm font-medium truncate">{member.name}</p>
                   <p className="text-xs text-muted-foreground truncate">{member.email}</p>
                 </div>
-                <SelectField  
-                  label={t("role")}
-                  value={member.role}
-                  onValueChange={(v) => updateTeamMemberRole(member.id, v as TeamRole)}
-                  options={(Object.entries(teamRoleLabels) as [TeamRole, string][]).map(([val, label]) => ({ value: val, label }))}
-                />
+                <Badge variant="secondary" className="capitalize text-xs">
+                  {formatRoleLabel(member.userRole)}
+                </Badge>
                 <Button
                   variant="ghost"
                   size="icon"

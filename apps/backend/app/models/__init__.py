@@ -10,6 +10,8 @@ from app.models.email import Email
 from app.models.interview import Interview
 from app.models.feedback import Feedback
 from app.models.activity import Activity
+from app.models.job_category import JobCategory
+from app.models.org_membership import OrgMembership
 
 __all__ = [
     "Organization",
@@ -24,4 +26,6 @@ __all__ = [
     "Interview",
     "Feedback",
     "Activity",
+    "JobCategory",
+    "OrgMembership",
 ]

@@ -2,6 +2,76 @@
 
 This document describes the actual implementation of three core systems in the OneHash ATS application: Frontend-Backend Communication, Authentication, and the Email Verification + Onboarding Lifecycle.
 
+## Current Implementation Status (2026-02-24)
+
+This repository currently contains a mix of:
+
+1. Stable baseline features already part of the previous implementation.
+2. New multi-org, invite, category, and pipeline enhancements that are implemented in the working tree and require runtime verification.
+
+The sections below remain valuable historical context. This status section is the authoritative snapshot of "what exists now" in code.
+
+### High-Impact Features Present in Current Codebase
+
+1. Multi-organization membership model introduced.
+2. Invite system moved to membership-aware behavior for existing and new users.
+3. Organization switching and creation wired into account menu.
+4. Job categories management moved from hardcoded department usage to DB-backed categories.
+5. Hiring stages behavior expanded (required stages, ordering, add/remove with backend control).
+6. Invite entry route normalized to `/invite/{token}` with compatibility redirect from `/accept-invite`.
+
+### Core Data Model Direction
+
+The platform is transitioning to:
+
+1. `users` as global account identity (unique email).
+2. `org_memberships` as per-organization role/status/invite source of truth.
+
+This resolves duplicate-account-by-email ambiguity and enables safe multi-org access switching.
+
+### New/Updated Backend Surfaces (Current Working Tree)
+
+1. `GET /organizations/memberships`:
+   - Lists active memberships for the logged-in account.
+2. `POST /organizations/switch`:
+   - Switches active org context by rotating auth cookie JWT payload (`org_id`, `role`).
+3. `POST /organizations`:
+   - Creates a new organization for current user and owner membership.
+   - Seeds default categories for the new organization.
+4. Invite flow endpoints:
+   - `GET /auth/invite/{token}`
+   - `POST /auth/accept-invite` (new-account invite path)
+   - `POST /auth/invite/{token}/accept-existing` (existing-account invite path)
+   - `POST /auth/invite/{token}/decline`
+
+### Frontend Behavior (Current Working Tree)
+
+1. Top-right organization menu:
+   - `New organization` opens modal and creates org.
+   - `Switch organization` is shown only if user has multiple active memberships.
+   - Switch list renders inside dropdown submenu and changes org context immediately.
+2. Invite screen (`/invite/[token]`):
+   - If session exists with same invited email, accept happens directly and context switches.
+   - If account exists but not logged in, redirects to login with prefilled invite email.
+   - If account does not exist, redirects to signup with prefilled invite email.
+3. Onboarding:
+   - Invite onboarding uses org prefill lock behavior.
+   - Regular onboarding remains editable for organization name.
+
+### Migrations in Working Tree
+
+Current migration set includes prior branch-merge migrations and new membership migration:
+
+1. `j5k6l7m8n9o0_merge_heads.py` (historical merge of earlier split heads; keep it).
+2. `l7m8n9o0p1q2_add_required_flag_to_stages.py`.
+3. `m9n0o1p2q3r4_add_org_memberships_and_global_user_identity.py`.
+
+Because multiple heads currently exist, runtime startup should use:
+
+`alembic upgrade heads`
+
+instead of `alembic upgrade head`.
+
 ---
 
 ## 1. Frontend ↔ Backend Communication
@@ -738,6 +808,17 @@ async def protected_route(user: User = Depends(require_active_user)):
 - 2026-02-18: Jobs backend V1 implemented — expanded Job model with 20+ fields, created JobTeamMember model, Alembic migration, Pydantic schemas, 7 API endpoints (create, update, list, detail, publish, close, unpublish) with multi-tenancy enforcement via JWT org_id.
 - 2026-02-18: Added JOB DOMAIN CONTRACT (Frozen – V1) section
 - 2026-02-18: Initial Replit environment setup — Next.js proxy rewrites, async DB URL handling, environment variables, workflow configuration
+- 2026-02-24: Introduced multi-organization account model with `org_memberships` and global-email `users` semantics. Authentication now resolves org context via membership and supports org-scoped role/status per account.
+- 2026-02-24: Added organization membership APIs and real organization switching flow from TopBar menu.
+- 2026-02-24: Added create-organization API and UI modal workflow to create additional orgs under same account and auto-switch context.
+- 2026-02-24: Invite flow modernization:
+  - primary route `/invite/{token}`
+  - compatibility route `/accept-invite` redirects to canonical route
+  - existing-account invite accept endpoint (`/auth/invite/{token}/accept-existing`)
+  - frontend logic supports direct accept when already logged in with invited email.
+- 2026-02-24: Categories system promoted to first-class backend domain (`job_categories` model/endpoints/migrations) with default category seeding.
+- 2026-02-24: Hiring stages enhancements include required-stage semantics (`Applied`, `Hired`), backend persistence, and stage lifecycle controls aligned with save/discard UX.
+- 2026-02-24: Docker startup command updated to `alembic upgrade heads` to tolerate multi-head migration state during transition.
 
 ---
 
@@ -2318,4 +2399,3 @@ For production deployment, configure DNS records:
 ## Change Log
 
 - 2024-01-20: Public careers site implemented — added jobs subdomain routing, host-based middleware split, public API endpoints, orgSlug parsing, removed auth enforcement for public pages, updated environment variables and documentation
-

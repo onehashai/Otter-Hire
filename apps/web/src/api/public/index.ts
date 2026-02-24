@@ -4,7 +4,7 @@ export type PublicJobListItem = {
   id: string;
   title: string;
   description: string | null;
-  department: string | null;
+  category: string | null;
   location: string | null;
   employment_type: string | null;
   workplace_type: string | null;
@@ -21,7 +21,7 @@ export type PublicJobDetail = {
   id: string;
   title: string;
   description: string | null;
-  department: string | null;
+  category: string | null;
   employment_type: string;
   workplace_type: string;
   country: string | null;

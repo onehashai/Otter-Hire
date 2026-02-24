@@ -25,7 +25,7 @@ import {
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { JobSetupProvider, useJobSetup } from "./context";
-import { SETUP_SECTIONS, teamRoleLabels, type SetupStepSlug } from "./constants";
+import { SETUP_SECTIONS, type SetupStepSlug } from "./constants";
 import { isSetupValid, getFirstInvalidSection, getBasicInfoValidation } from "../../../../lib/validations/setupValidation";
 import { useEffect } from "react";
 import { useSetPageMetadata } from "@/hooks/useSetPageMetadata";
@@ -172,11 +172,13 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
         size="sm"
         className="w-full h-8 text-xs gap-1.5"
         onClick={() => {
-          if (!orgName) {
+          if (!orgName || !id) {
             toast.error(t("preview_org_missing", "Organization not found. Cannot open preview."));
             return;
           }
-          router.push(`/${encodeURIComponent(orgName)}/${encodeURIComponent(id)}`);
+          const orgSlug = `${orgName.toLowerCase().replace(/\s+/g, '-')}-${user?.org_id}`;
+          const previewUrl = `${window.location.protocol}//${process.env.NEXT_PUBLIC_JOBS_SUBDOMAIN || 'jobs'}.${process.env.NEXT_PUBLIC_APP_ROOT_HOST || 'localhost:3000'}/${orgSlug}/${id}`;
+          window.open(previewUrl, '_blank', 'noopener,noreferrer');
         }}
       >
         <Icon name="Eye" className="h-3.5 w-3.5" /> {t("preview")}
@@ -210,7 +212,7 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
               </div>
               <span className="text-xs">{m.name}</span>
               <span className="text-[10px] text-muted-foreground">
-                · {teamRoleLabels[m.role]}
+                · {(m.userRole ?? "member").replace(/_/g, " ").replace(/\b\w/g, (ch) => ch.toUpperCase())}
               </span>
             </div>
           ))}

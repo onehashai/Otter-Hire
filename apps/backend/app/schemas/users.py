@@ -26,6 +26,7 @@ class UserResponse(BaseModel):
 class InviteUserRequest(BaseModel):
     email: EmailStr
     name: Optional[str] = None
+    role: AssignableRole = AssignableRole.employee
 
     @field_validator("email", mode="before")
     @classmethod

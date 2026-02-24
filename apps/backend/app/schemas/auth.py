@@ -19,6 +19,7 @@ class AuthUserResponse(BaseModel):
     email: EmailStr
     name: str
     role: str
+    status: str
     org_id: UUID
     org_name: str
     org_website: str | None
@@ -46,4 +47,11 @@ class OnboardingRequest(BaseModel):
 class AcceptInviteRequest(BaseModel):
     token: str
     password: str = Field(min_length=8)
-    name: str = Field(min_length=1)
+    name: str | None = None
+
+
+class InviteDetailsResponse(BaseModel):
+    org_name: str
+    role: str
+    email: EmailStr
+    account_exists: bool

@@ -3,6 +3,7 @@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 import { Button } from "@onehash/ui/button";
 import { InputField } from "@onehash/ui/input";
 import { Form, FormField, FormItem, FormControl } from "@onehash/ui/form";
@@ -15,7 +16,9 @@ import { useAuthSession } from "@/app/providers";
 export default function Onboarding() {
   const { t } = useTranslation();
   const router = useRouter();
-  const { refreshSession } = useAuthSession();
+  const { user, refreshSession } = useAuthSession();
+  const isInviteOnboarding = user?.status === "invited";
+  const shouldLockOrgName = isInviteOnboarding;
   const form = useForm<OnboardingFormValues>({
     resolver: zodResolver(onboardingSchema),
     defaultValues: {
@@ -25,6 +28,12 @@ export default function Onboarding() {
   });
 
   const loading = form.formState.isSubmitting;
+
+  useEffect(() => {
+    if (isInviteOnboarding && user?.org_name) {
+      form.setValue("organization", user.org_name, { shouldValidate: true });
+    }
+  }, [form, isInviteOnboarding, user?.org_name]);
 
   const onSubmit = async (data: OnboardingFormValues) => {
     form.clearErrors("root");
@@ -99,6 +108,7 @@ export default function Onboarding() {
                         placeholder="Acme Inc"
                         className="h-10 text-sm"
                         autoComplete="organization"
+                        disabled={shouldLockOrgName}
                         error={fieldState.error?.message}
                         showAsterisk
                       />

@@ -7,10 +7,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useRouter } from "next/navigation";
 import type { JobListItemResponse } from "@/api";
-import { DepartmentType, JobStatusType } from "@/app/(app-page-wrapper)/jobs/[jobId]/constants";
+import { CategoryType, JobStatusType } from "@/app/(app-page-wrapper)/jobs/[jobId]/constants";
 
 const statusKey: Record<JobStatusType, string> = { open: "open", draft: "draft", closed: "closed" };
-const deptKey: Record<DepartmentType, string> = {
+const categoryKey: Record<CategoryType, string> = {
   engineering: "engineering",
   design: "design",
   data: "data",
@@ -55,7 +55,7 @@ export function JobsList({ jobs }: JobsListProps) {
                 <Badge variant={statusVariant(job.status as JobStatusType)} className="text-[10px] shrink-0">{t(statusKey[job.status as JobStatusType] ?? job.status)}</Badge>
               </div>
               <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                {job.department && <span>{t(deptKey[job.department as DepartmentType] ?? job.department)}</span>}
+                {job.category && <span>{t(categoryKey[job.category as CategoryType] ?? job.category)}</span>}
                 <span>·</span>
                 <span>{job.candidate_count} {job.candidate_count === 1 ? t("candidate") : t("candidates")}</span>
                 <span>·</span>
@@ -78,7 +78,7 @@ export function JobsList({ jobs }: JobsListProps) {
           <TableHeader>
             <TableRow>
               <TableHead className="text-xs">{t("role")}</TableHead>
-              <TableHead className="text-xs">{t("department")}</TableHead>
+              <TableHead className="text-xs">{t("category")}</TableHead>
               <TableHead className="text-xs">{t("status")}</TableHead>
               <TableHead className="text-xs text-right">{t("candidates")}</TableHead>
               <TableHead className="text-xs text-right">{t("last_activity")}</TableHead>
@@ -88,7 +88,7 @@ export function JobsList({ jobs }: JobsListProps) {
             {jobs.map((job) => (
               <TableRow key={job.id} className="cursor-pointer hover:bg-muted/50" onClick={() => router.push(`/jobs/${job.id}/info`)}>
                 <TableCell className="text-sm font-medium">{job.title}</TableCell>
-                <TableCell className="text-xs text-muted-foreground">{job.department ? t(deptKey[job.department as DepartmentType] ?? job.department) : "—"}</TableCell>
+                <TableCell className="text-xs text-muted-foreground">{job.category ? t(categoryKey[job.category as CategoryType] ?? job.category) : "—"}</TableCell>
                 <TableCell><Badge variant={statusVariant(job.status as JobStatusType)} className="text-[10px]">{t(statusKey[job.status as JobStatusType] ?? job.status)}</Badge></TableCell>
                 <TableCell className="text-xs text-right">{job.candidate_count}</TableCell>
                 <TableCell className="text-xs text-muted-foreground text-right">{formatTimeAgo(job.updated_at)}</TableCell>

@@ -3,8 +3,8 @@
 import { useState } from "react";
 import { Button } from "@onehash/ui/button";
 import { InputField } from "@onehash/ui/input";
-import { Separator } from "@onehash/ui/separator";
-import { GripVertical, Plus, Trash2, Settings, Sparkles } from "lucide-react";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@onehash/ui/dialog";
+import { GripVertical, Plus, Trash2, Settings } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useJobSetup } from "../context";
@@ -12,12 +12,15 @@ import { useJobSetup } from "../context";
 export default function HiringStagesPage() {
   const {
     hiringStages,
-    addHiringStage,
-    removeHiringStage,
+    addHiringStageAndSave,
+    removeHiringStageAndSave,
     updateHiringStageName,
     reorderHiringStages,
   } = useJobSetup();
   const [stageDragIdx, setStageDragIdx] = useState<number | null>(null);
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [newStageName, setNewStageName] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleStageDragStart = (i: number) => setStageDragIdx(i);
   const handleStageDragOver = (e: React.DragEvent, i: number) => {
@@ -28,12 +31,42 @@ export default function HiringStagesPage() {
   };
   const handleStageDragEnd = () => setStageDragIdx(null);
 
-  const handleRemoveStage = (id: string) => {
+  const handleRemoveStage = async (id: string, isRequired?: boolean) => {
+    if (isRequired) {
+      toast.error("Applied and Hired stages cannot be deleted");
+      return;
+    }
     if (hiringStages.length <= 2) {
       toast.error("Pipeline must have at least 2 stages");
       return;
     }
-    removeHiringStage(id);
+    try {
+      setIsSubmitting(true);
+      await removeHiringStageAndSave(id);
+      toast.success("Stage deleted");
+    } catch {
+      // Error toast is handled in context executeSave
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleAddStage = async () => {
+    if (!newStageName.trim()) {
+      toast.error("Stage name is required");
+      return;
+    }
+    try {
+      setIsSubmitting(true);
+      await addHiringStageAndSave(newStageName);
+      setAddDialogOpen(false);
+      setNewStageName("");
+      toast.success("Stage added");
+    } catch {
+      // Error toast is handled in context executeSave
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -70,9 +103,13 @@ export default function HiringStagesPage() {
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
-              onClick={() => handleRemoveStage(stage.id)}
-              title="Delete stage"
+              className={cn(
+                "h-7 w-7 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground",
+                stage.isRequired && "opacity-40 group-hover:opacity-40 cursor-not-allowed"
+              )}
+              onClick={() => handleRemoveStage(stage.id, stage.isRequired)}
+              title={stage.isRequired ? "Required stage cannot be deleted" : "Delete stage"}
+              disabled={isSubmitting}
             >
               <Trash2 className="h-3.5 w-3.5" />
             </Button>
@@ -85,10 +122,41 @@ export default function HiringStagesPage() {
         variant="outline"
         size="sm"
         className="h-9 text-xs gap-1.5 w-full sm:w-auto"
-        onClick={addHiringStage}
+        onClick={() => setAddDialogOpen(true)}
+        disabled={isSubmitting}
       >
         <Plus className="h-3.5 w-3.5" /> Add Stage
       </Button>
+
+      <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Stage</DialogTitle>
+          </DialogHeader>
+          <InputField
+            label="Stage Name"
+            value={newStageName}
+            onChange={(e) => setNewStageName(e.target.value)}
+            placeholder="e.g. Assignment"
+            autoFocus
+          />
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setAddDialogOpen(false);
+                setNewStageName("");
+              }}
+              disabled={isSubmitting}
+            >
+              Discard
+            </Button>
+            <Button onClick={handleAddStage} disabled={isSubmitting}>
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

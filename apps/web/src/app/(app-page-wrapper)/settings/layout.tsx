@@ -11,6 +11,7 @@ const tabRoutes: { label: string; path: string }[] = [
   { label: "Profile", path: "/settings/profile" },
   { label: "Organization", path: "/settings/organization" },
   { label: "Team", path: "/settings/team" },
+  { label: "Categories", path: "/settings/categories" },
   { label: "Integrations", path: "/settings/integrations" },
   { label: "Custom Fields", path: "/settings/custom-fields" },
   { label: "Billing", path: "/settings/billing" },

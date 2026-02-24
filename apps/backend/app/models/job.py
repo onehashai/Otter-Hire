@@ -14,7 +14,7 @@ class Job(Base):
     created_by_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     title = Column(String(255), nullable=False)
     description = Column(Text)
-    department = Column(String(50))
+    category = Column(String(50))
     employment_type = Column(String(20), server_default="full_time")
     workplace_type = Column(String(10), server_default="remote")
     country = Column(String(2))

@@ -1,25 +1,27 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Button } from "@onehash/ui/button";
 import { InputField } from "@onehash/ui/input";
 import { SelectField, SearchableSelectField } from "@onehash/ui/select";
 import { Country, City } from "country-state-city";
 import { useJobSetup } from "../context";
-import { departments, employmentTypes, workplaceTypes, CITY_VALUE_SEP, getCityDisplayName, jobStatuses } from "../constants";
+import { employmentTypes, workplaceTypes, CITY_VALUE_SEP, getCityDisplayName, jobStatuses } from "../constants";
 import { useTranslation } from "react-i18next";
 import { getBasicInfoValidation } from "../../../../../lib/validations/setupValidation";
+import { getJobCategories, type JobCategoryResponse } from "@/api";
 
 export default function JobInfoPage() {
   const { t } = useTranslation();
   const [countrySearch, setCountrySearch] = useState("");
   const [titleTouched, setTitleTouched] = useState(false);
+  const [categories, setCategories] = useState<JobCategoryResponse[]>([]);
   const {
     title,
     setTitle,
     basicInfoAttemptedNext,
-    department,
-    setDepartment,
+    category,
+    setCategory,
     employmentType,
     setEmploymentType,
     workplaceType,
@@ -57,6 +59,10 @@ export default function JobInfoPage() {
     return t("job_name_invalid");
   }, [title, titleTouched, basicInfoAttemptedNext, t]);
 
+  useEffect(() => {
+    getJobCategories().then(setCategories).catch(() => {});
+  }, []);
+
   return (
     <div className="space-y-4">
       <InputField
@@ -74,9 +80,9 @@ export default function JobInfoPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <SelectField
           label="Job Categories"
-          value={department}
-          onValueChange={setDepartment}
-          options={departments.map((d) => ({ value: d, label: t(d) }))}
+          value={category}
+          onValueChange={setCategory}
+          options={categories.map((c) => ({ value: c.name, label: c.name }))}
           placeholder={t("select")}
         />
         <SelectField

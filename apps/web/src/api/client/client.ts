@@ -129,3 +129,19 @@ export async function apiFetch<T>(
   if (res.status === 204) return {} as T;
   return (await res.json()) as T;
 }
+
+export async function apiDelete(path: string): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    method: "DELETE",
+    headers: { Accept: "application/json" },
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    const message = await parseErrorResponse(
+      res,
+      `API request failed: ${res.status} ${res.statusText}`
+    );
+    throw new Error(message);
+  }
+}

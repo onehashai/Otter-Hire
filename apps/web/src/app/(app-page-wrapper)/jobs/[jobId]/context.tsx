@@ -12,7 +12,6 @@ import {
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import type { JobStatusType, SalaryType, TimeframeType, TeamRole } from "./constants";
-import { defaultHiringStages } from "./constants";
 import type { HiringStage, TeamMember } from "./constants";
 import { useTranslation } from "react-i18next";
 import {
@@ -30,7 +29,7 @@ export type Stage = { name: string; interviewer: string };
 export interface JobSetupState {
   jobId: string | null;
   title: string;
-  department: string;
+  category: string;
   employmentType: string;
   workplaceType: string;
   country: string;
@@ -72,7 +71,7 @@ export interface JobSetupState {
 const defaultState: JobSetupState = {
   jobId: null,
   title: "",
-  department: "engineering",
+  category: "Engineering",
   employmentType: "full_time",
   workplaceType: "remote",
   country: "",
@@ -96,7 +95,7 @@ const defaultState: JobSetupState = {
     { name: "Technical", interviewer: "" },
     { name: "Final", interviewer: "" },
   ],
-  hiringStages: defaultHiringStages.map((s) => ({ ...s, id: crypto.randomUUID() })),
+  hiringStages: [],
   teamMembers: [],
   published: false,
   linkCopied: false,
@@ -119,7 +118,7 @@ function mapApiToState(job: JobDetailResponse): Partial<JobSetupState> {
   return {
     jobId: job.id,
     title: job.title,
-    department: job.department ?? "",
+    category: job.category ?? "",
     employmentType: job.employment_type ?? "full_time",
     workplaceType: job.workplace_type ?? "remote",
     country: job.country ?? "",
@@ -137,13 +136,14 @@ function mapApiToState(job: JobDetailResponse): Partial<JobSetupState> {
     collectResume: job.collect_resume,
     collectCover: job.collect_cover,
     screeningQuestions: job.screening_questions ?? [],
-    hiringStages: job.hiring_stages.map((s) => ({ id: s.id, name: s.name })),
+    hiringStages: job.hiring_stages.map((s) => ({ id: s.id, name: s.name, isRequired: s.is_required })),
     teamMembers: job.team_members.map((m) => ({
       id: m.id,
       user_id: m.user_id,
       name: m.name ?? "",
       email: m.email ?? "",
       role: m.role as TeamRole,
+      userRole: m.user_role,
     })),
     published: job.status === "open",
     isLoading: false,
@@ -152,7 +152,7 @@ function mapApiToState(job: JobDetailResponse): Partial<JobSetupState> {
 
 type JobSetupContextValue = JobSetupState & {
   setTitle: (v: string) => void;
-  setDepartment: (v: string) => void;
+  setCategory: (v: string) => void;
   setEmploymentType: (v: string) => void;
   setWorkplaceType: (v: string) => void;
   setCountry: (v: string) => void;
@@ -189,7 +189,9 @@ type JobSetupContextValue = JobSetupState & {
   removeStage: (i: number) => void;
   updateStage: (i: number, field: "name" | "interviewer", val: string) => void;
   addHiringStage: () => void;
+  addHiringStageAndSave: (name: string) => Promise<void>;
   removeHiringStage: (id: string) => void;
+  removeHiringStageAndSave: (id: string) => Promise<void>;
   updateHiringStageName: (id: string, name: string) => void;
   reorderHiringStages: (fromIndex: number, toIndex: number) => void;
   addTeamMember: (member: Omit<TeamMember, "role"> & { role: TeamRole }) => void;
@@ -248,7 +250,7 @@ export function JobSetupProvider({ children }: { children: ReactNode }) {
   const buildPayload = useCallback((currentState: JobSetupState, includeRelations: boolean): JobUpdatePayload => {
     const payload: JobUpdatePayload = {
       title: currentState.title,
-      department: currentState.department || null,
+      category: currentState.category || null,
       employment_type: currentState.employmentType || null,
       workplace_type: currentState.workplaceType,
       country: currentState.country || null,
@@ -269,7 +271,7 @@ export function JobSetupProvider({ children }: { children: ReactNode }) {
     if (includeRelations || stagesDirtyRef.current) {
       payload.hiring_stages = currentState.hiringStages
         .filter((s) => s.name.trim())
-        .map((s, i) => ({ name: s.name, position: i }));
+        .map((s, i) => ({ id: s.id, name: s.name, position: i }));
       stagesDirtyRef.current = false;
     }
     if (includeRelations || teamDirtyRef.current) {
@@ -371,22 +373,69 @@ export function JobSetupProvider({ children }: { children: ReactNode }) {
     setState((s) => ({
       ...s,
       hiringStages: [...s.hiringStages, { id: crypto.randomUUID(), name: "" }],
+      hasUnsavedChanges: true,
     }));
   }, []);
+
+  const addHiringStageAndSave = useCallback(async (name: string) => {
+    const stageName = name.trim();
+    if (!stageName) return;
+
+    let nextStateSnapshot: JobSetupState | null = null;
+    stagesDirtyRef.current = true;
+    setState((s) => {
+      const nextState = {
+        ...s,
+        hiringStages: [...s.hiringStages, { id: crypto.randomUUID(), name: stageName }],
+        hasUnsavedChanges: true,
+      };
+      nextStateSnapshot = nextState;
+      return nextState;
+    });
+
+    if (!nextStateSnapshot?.jobId) return;
+    const payload = buildPayload(nextStateSnapshot, true);
+    await executeSave(payload);
+    setState((s) => ({ ...s, hasUnsavedChanges: false }));
+  }, [buildPayload, executeSave]);
 
   const removeHiringStage = useCallback((id: string) => {
     stagesDirtyRef.current = true;
     setState((s) => {
       if (s.hiringStages.length <= 2) return s;
-      return { ...s, hiringStages: s.hiringStages.filter((st) => st.id !== id) };
+      return { ...s, hiringStages: s.hiringStages.filter((st) => st.id !== id), hasUnsavedChanges: true };
     });
   }, []);
+
+  const removeHiringStageAndSave = useCallback(async (id: string) => {
+    let nextStateSnapshot: JobSetupState | null = null;
+    stagesDirtyRef.current = true;
+    setState((s) => {
+      if (s.hiringStages.length <= 2) {
+        nextStateSnapshot = s;
+        return s;
+      }
+      const nextState = {
+        ...s,
+        hiringStages: s.hiringStages.filter((st) => st.id !== id),
+        hasUnsavedChanges: true,
+      };
+      nextStateSnapshot = nextState;
+      return nextState;
+    });
+
+    if (!nextStateSnapshot?.jobId) return;
+    const payload = buildPayload(nextStateSnapshot, true);
+    await executeSave(payload);
+    setState((s) => ({ ...s, hasUnsavedChanges: false }));
+  }, [buildPayload, executeSave]);
 
   const updateHiringStageName = useCallback((id: string, name: string) => {
     stagesDirtyRef.current = true;
     setState((s) => ({
       ...s,
       hiringStages: s.hiringStages.map((st) => (st.id === id ? { ...st, name } : st)),
+      hasUnsavedChanges: true,
     }));
   }, []);
 
@@ -396,7 +445,7 @@ export function JobSetupProvider({ children }: { children: ReactNode }) {
       const reordered = [...s.hiringStages];
       const [moved] = reordered.splice(fromIndex, 1);
       reordered.splice(toIndex, 0, moved);
-      return { ...s, hiringStages: reordered };
+      return { ...s, hiringStages: reordered, hasUnsavedChanges: true };
     });
   }, []);
 
@@ -530,7 +579,7 @@ export function JobSetupProvider({ children }: { children: ReactNode }) {
   const value: JobSetupContextValue = {
     ...state,
     setTitle: (v) => { setState((s) => ({ ...s, title: v })); markUnsaved(); },
-    setDepartment: (v) => { setState((s) => ({ ...s, department: v })); markUnsaved(); },
+    setCategory: (v) => { setState((s) => ({ ...s, category: v })); markUnsaved(); },
     setEmploymentType: (v) => { setState((s) => ({ ...s, employmentType: v })); markUnsaved(); },
     setWorkplaceType: (v) => { setState((s) => ({ ...s, workplaceType: v })); markUnsaved(); },
     setCountry: (v) => { setState((s) => ({ ...s, country: v })); markUnsaved(); },
@@ -567,7 +616,9 @@ export function JobSetupProvider({ children }: { children: ReactNode }) {
     removeStage,
     updateStage,
     addHiringStage,
+    addHiringStageAndSave,
     removeHiringStage,
+    removeHiringStageAndSave,
     updateHiringStageName,
     reorderHiringStages,
     addTeamMember,

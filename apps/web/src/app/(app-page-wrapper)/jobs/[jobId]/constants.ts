@@ -2,7 +2,7 @@ import { TFunction } from "i18next";
 import { Country } from "country-state-city";
 
 export type EmploymentType = "full_time" | "part_time" | "contract" | "internship";
-export type DepartmentType = "engineering" | "design" | "marketing" | "sales" | "data" | "operations" | "hr";
+export type CategoryType = "engineering" | "design" | "marketing" | "sales" | "data" | "operations" | "hr";
 export type WorkplaceType = "remote" | "hybrid" | "onsite";
 export type VisibilityType = "internal" | "public";
 export type SalaryType = "hidden" | "fixed" | "range";
@@ -38,7 +38,7 @@ export const employmentTypes: EmploymentType[] = [
   "internship"
 ];
 
-export const departments: DepartmentType[] = [
+export const categories: CategoryType[] = [
   "engineering",
   "design",
   "marketing",
@@ -79,6 +79,7 @@ export const timeframes: TimeframeType[] = [
 export interface HiringStage {
   id: string;
   name: string;
+  isRequired?: boolean;
 }
 
 export interface TeamMember {
@@ -87,15 +88,8 @@ export interface TeamMember {
   name: string;
   email: string;
   role: TeamRole;
+  userRole?: string | null;
 }
-
-export const defaultHiringStages: HiringStage[] = [
-  { id: crypto.randomUUID(), name: "Applied" },
-  { id: crypto.randomUUID(), name: "Screening" },
-  { id: crypto.randomUUID(), name: "Interview" },
-  { id: crypto.randomUUID(), name: "Offer" },
-  { id: crypto.randomUUID(), name: "Hired" },
-];
 
 export const mockOrganizationUsers: { id: string; name: string; email: string }[] = [
   { id: "u1", name: "Jane Doe", email: "jane@acme.com" },
@@ -116,7 +110,7 @@ export const teamRoleLabels: Record<TeamRole, string> = {
 /** Mock data for edit mode */
 export const mockJob = {
   title: "Senior Frontend Engineer",
-  department: "engineering",
+  category: "Engineering",
   employmentType: "full_time",
   workplaceType: "remote",
   country: "US",
@@ -142,7 +136,7 @@ export const mockJob = {
     { name: "Culture Fit", interviewer: "Sarah Lee" },
     { name: "Final", interviewer: "Jane Doe" },
   ],
-  hiringStages: defaultHiringStages.map((s) => ({ ...s, id: crypto.randomUUID() })),
+  hiringStages: [],
   teamMembers: [
     { id: "u1", name: "Jane Doe", email: "jane@acme.com", role: "hiring_manager" as TeamRole },
     { id: "u2", name: "John Smith", email: "john@acme.com", role: "interviewer" as TeamRole },

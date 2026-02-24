@@ -11,6 +11,7 @@ export type AuthSessionResponse = {
   email: string;
   name: string;
   role: string;
+  status: string;
   org_id: string;
   org_name: string;
   org_website: string;
@@ -146,4 +147,5 @@ export type InviteDetailsResponse = {
   org_name: string;
   role: string;
   email: string;
+  account_exists: boolean;
 };

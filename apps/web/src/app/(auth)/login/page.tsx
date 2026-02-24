@@ -12,11 +12,16 @@ import { Form, FormField, FormItem, FormControl } from "@onehash/ui/form";
 import { Icon } from "@onehash/ui/icon";
 import { useTranslation } from "react-i18next";
 import { loginSchema, type LoginFormValues } from "@/lib/schemas/zodResolver";
-import { login } from "@/api/index";
+import { acceptExistingInvite, login } from "@/api/index";
 import { useAuthSession } from "@/app/providers";
 
 function isSafeRedirect(path: string): boolean {
   return path.startsWith("/invite/") && path.length > 8;
+}
+
+function getInviteTokenFromRedirect(path: string | null): string | null {
+  if (!path || !isSafeRedirect(path)) return null;
+  return path.replace(/^\/invite\//, "");
 }
 
 export default function Login() {
@@ -26,9 +31,10 @@ export default function Login() {
   const { refreshSession } = useAuthSession();
   const [mounted, setMounted] = useState(false);
   const redirectTo = searchParams.get("redirect");
+  const inviteEmail = searchParams.get("invite_email");
   const inviteRedirect = typeof redirectTo === "string" && isSafeRedirect(redirectTo) ? redirectTo : null;
   const signupHref = inviteRedirect
-    ? `/signup?invite=${encodeURIComponent(inviteRedirect.replace(/^\/invite\//, ""))}`
+    ? `/signup?invite=${encodeURIComponent(inviteRedirect.replace(/^\/invite\//, ""))}${inviteEmail ? `&invite_email=${encodeURIComponent(inviteEmail)}` : ""}`
     : "/signup";
 
   useEffect(() => {
@@ -38,7 +44,7 @@ export default function Login() {
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
-      email: "",
+      email: inviteEmail ?? "",
       password: "",
       remember: false,
     },
@@ -53,6 +59,10 @@ export default function Login() {
         email: data.email,
         password: data.password,
       });
+      const inviteToken = getInviteTokenFromRedirect(inviteRedirect);
+      if (inviteToken) {
+        await acceptExistingInvite(inviteToken);
+      }
       await refreshSession(true);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to sign in";

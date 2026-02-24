@@ -5,7 +5,7 @@ import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@onehash/ui/button";
 import { Icon } from "@onehash/ui/icon";
-import { getInviteDetails, acceptInvite, declineInvite, type InviteDetailsResponse } from "@/api/index";
+import { acceptExistingInvite, getInviteDetails, declineInvite, type InviteDetailsResponse } from "@/api/index";
 import { useAuthSession } from "@/app/providers";
 
 export default function InvitePage() {
@@ -16,7 +16,7 @@ export default function InvitePage() {
   const [details, setDetails] = useState<InviteDetailsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [accepting, setAccepting] = useState(false);
+  const [routingAccept, setRoutingAccept] = useState(false);
   const [declining, setDeclining] = useState(false);
 
   useEffect(() => {
@@ -50,19 +50,28 @@ export default function InvitePage() {
   }, [token]);
 
   const handleAccept = async () => {
-    if (!token) return;
-    setAccepting(true);
-    setError(null);
-    try {
-      await acceptInvite(token);
-      await refreshSession();
-      localStorage.setItem("session_updated", Date.now().toString());
-      router.replace("/");
-      router.refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to accept invite.");
-    } finally {
-      setAccepting(false);
+    if (!token || !details) return;
+    setRoutingAccept(true);
+    if (user && user.email.toLowerCase() === details.email.toLowerCase()) {
+      try {
+        await acceptExistingInvite(token);
+        await refreshSession(true);
+        localStorage.setItem("session_updated", Date.now().toString());
+        router.replace("/dashboard");
+        router.refresh();
+        return;
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to accept invite.");
+        setRoutingAccept(false);
+        return;
+      }
+    }
+    const inviteRedirect = `/invite/${encodeURIComponent(token)}`;
+    const inviteEmail = encodeURIComponent(details.email);
+    if (details.account_exists) {
+      router.push(`/login?redirect=${encodeURIComponent(inviteRedirect)}&invite_email=${inviteEmail}`);
+    } else {
+      router.push(`/signup?invite=${encodeURIComponent(token)}&invite_email=${inviteEmail}`);
     }
   };
 
@@ -72,11 +81,7 @@ export default function InvitePage() {
     setError(null);
     try {
       await declineInvite(token);
-      if (user) {
-        router.replace("/");
-      } else {
-        router.replace("/login");
-      }
+      router.replace("/login");
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to decline invite.");
@@ -84,10 +89,6 @@ export default function InvitePage() {
       setDeclining(false);
     }
   };
-
-  const inviteRedirect = token ? `/invite/${encodeURIComponent(token)}` : "";
-  const loginHref = inviteRedirect ? `/login?redirect=${encodeURIComponent(inviteRedirect)}` : "/login";
-  const signupHref = inviteRedirect ? `/signup?invite=${encodeURIComponent(token)}` : "/signup";
 
   if (sessionLoading || loading) {
     return (
@@ -182,44 +183,23 @@ export default function InvitePage() {
                 {error}
               </div>
             )}
-
-            {user ? (
-              <div className="space-y-3">
-                <Button
-                  className="w-full h-10 text-sm font-medium"
-                  disabled={accepting || declining}
-                  onClick={handleAccept}
-                >
-                  {accepting ? (
-                    <Icon name="Loader" className="h-4 w-4 animate-spin" />
-                  ) : (
-                    "Accept invite"
-                  )}
-                </Button>
-                <Button
-                  variant="outline"
-                  className="w-full h-10 text-sm"
-                  disabled={accepting || declining}
-                  onClick={handleDecline}
-                >
-                  {declining ? <Icon name="Loader" className="h-4 w-4 animate-spin" /> : "Decline"}
-                </Button>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <Link href={loginHref}>
-                  <Button className="w-full h-10 text-sm font-medium">Sign in to accept</Button>
-                </Link>
-                <Link href={signupHref}>
-                  <Button variant="outline" className="w-full h-10 text-sm">
-                    Create an account
-                  </Button>
-                </Link>
-                <p className="text-xs text-muted-foreground text-center pt-2">
-                  No organization setup—you&apos;ll join this team after signing up.
-                </p>
-              </div>
-            )}
+            <div className="space-y-3">
+              <Button
+                className="w-full h-10 text-sm font-medium"
+                disabled={routingAccept || declining}
+                onClick={handleAccept}
+              >
+                {routingAccept ? <Icon name="Loader" className="h-4 w-4 animate-spin" /> : "Accept invite"}
+              </Button>
+              <Button
+                variant="outline"
+                className="w-full h-10 text-sm"
+                disabled={routingAccept || declining}
+                onClick={handleDecline}
+              >
+                {declining ? <Icon name="Loader" className="h-4 w-4 animate-spin" /> : "Decline"}
+              </Button>
+            </div>
           </div>
         </div>
       </div>

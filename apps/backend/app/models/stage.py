@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, DateTime, ForeignKey, Index, Integer, UniqueConstraint
+from sqlalchemy import Column, String, DateTime, ForeignKey, Index, Integer, UniqueConstraint, Boolean
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
@@ -14,6 +14,7 @@ class Stage(Base):
     job_id = Column(UUID(as_uuid=True), ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False)
     name = Column(String(100), nullable=False)
     position = Column(Integer, nullable=False)
+    is_required = Column(Boolean, nullable=False, server_default="false")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (

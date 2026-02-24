@@ -32,12 +32,13 @@ DEFAULT_STAGES = [
     ("Offer", 3),
     ("Hired", 4),
 ]
+REQUIRED_STAGE_NAMES = {"Applied", "Hired"}
 
 
 def _build_detail_response(job: Job) -> JobDetailResponse:
     stages = sorted(job.stages, key=lambda s: s.position)
     hiring_stages = [
-        HiringStageResponse(id=s.id, name=s.name, position=s.position) for s in stages
+        HiringStageResponse(id=s.id, name=s.name, position=s.position, is_required=s.is_required) for s in stages
     ]
     team = []
     for tm in job.team_members:
@@ -48,11 +49,12 @@ def _build_detail_response(job: Job) -> JobDetailResponse:
             name=user.name if user else None,
             email=user.email if user else None,
             role=tm.role,
+            user_role=user.role if user else None,
         ))
     return JobDetailResponse(
         id=job.id,
         title=job.title,
-        department=job.department,
+        category=job.category,
         employment_type=job.employment_type,
         workplace_type=job.workplace_type,
         country=job.country,
@@ -107,7 +109,7 @@ async def create_job(
         org_id=current_user.org_id,
         created_by_user_id=current_user.id,
         title=body.title,
-        department="engineering",
+        category="Engineering",
         status="draft",
     )
     db.add(job)
@@ -120,6 +122,7 @@ async def create_job(
             job_id=job.id,
             name=name,
             position=position,
+            is_required=name in REQUIRED_STAGE_NAMES,
         )
         db.add(stage)
 
@@ -164,13 +167,49 @@ async def update_job(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Pipeline must have at least 2 stages",
             )
+
+        required_stages = {s.id: s.name for s in job.stages if s.is_required}
+        provided_stage_ids = {s.id for s in hiring_stages_input if s.id is not None}
+
+        if provided_stage_ids:
+            missing_required = [name for sid, name in required_stages.items() if sid not in provided_stage_ids]
+            if missing_required:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Required stages cannot be deleted: {', '.join(missing_required)}",
+                )
+        elif required_stages:
+            provided_stage_names = {s.name.strip().lower() for s in hiring_stages_input if s.name.strip()}
+            missing_required = [name for name in required_stages.values() if name.lower() not in provided_stage_names]
+            if missing_required:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Required stages cannot be deleted: {', '.join(missing_required)}",
+                )
+
+        for stage_data in hiring_stages_input:
+            stage_name = stage_data.name.strip()
+            if not stage_name:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Stage name cannot be empty",
+                )
+
+            if stage_data.id in required_stages and stage_name != required_stages[stage_data.id]:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Required stage '{required_stages[stage_data.id]}' cannot be renamed",
+                )
+
         await db.execute(delete(Stage).where(Stage.job_id == job.id))
         for i, stage_data in enumerate(hiring_stages_input):
+            stage_name = stage_data.name.strip()
             stage = Stage(
                 org_id=current_user.org_id,
                 job_id=job.id,
-                name=stage_data.name,
+                name=stage_name,
                 position=stage_data.position if stage_data.position is not None else i,
+                is_required=stage_data.id in required_stages,
             )
             db.add(stage)
         relations_changed = True
@@ -241,7 +280,7 @@ async def list_jobs(
         items.append(JobListItemResponse(
             id=job.id,
             title=job.title,
-            department=job.department,
+            category=job.category,
             employment_type=job.employment_type,
             status=job.status,
             candidate_count=count,

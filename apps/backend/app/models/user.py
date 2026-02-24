@@ -10,7 +10,7 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid7)
-    org_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
+    org_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=True)
     email = Column(String, nullable=False)
     hashed_password = Column(String, nullable=False)
     name = Column(String, nullable=False)
@@ -27,10 +27,10 @@ class User(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     __table_args__ = (
-        UniqueConstraint("org_id", "email", name="uq_users_org_email"),
+        UniqueConstraint("email", name="uq_users_email"),
         CheckConstraint("role IN ('owner', 'admin', 'recruiter', 'hiring_manager', 'interviewer', 'employee')", name="ck_users_role"),
         CheckConstraint("status IN ('invited', 'active', 'disabled')", name="ck_users_status"),
-        Index("ix_users_org_email", "org_id", "email"),
+        Index("ix_users_email", "email"),
     )
 
     organization = relationship("Organization")

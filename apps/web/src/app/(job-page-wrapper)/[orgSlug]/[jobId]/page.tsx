@@ -6,7 +6,14 @@ import Link from "next/link";
 import { Button } from "@onehash/ui/button";
 import { Badge } from "@onehash/ui/badge";
 import { Separator } from "@onehash/ui/separator";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@onehash/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@onehash/ui/dialog";
 import { InputField } from "@onehash/ui/input";
 import { Label } from "@onehash/ui/label";
 import { Icon } from "@onehash/ui/icon";
@@ -14,19 +21,21 @@ import type { IconName } from "@onehash/ui/icon";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { getPublicJobDetail, type PublicJobDetail } from "@/api";
+import { applyToPublicJob, getPublicJobDetail, type PublicJobDetail } from "@/api";
+
+type ApplyFile = { name: string; size: number; type: string };
 
 function parseOrgSlug(orgSlug: string): { orgName: string; orgId: string } | null {
   const parts = orgSlug.split("-");
   if (parts.length < 6) return null;
-  
+
   const uuidParts = parts.slice(-5);
   const orgId = uuidParts.join("-");
   const orgName = parts.slice(0, -5).join("-");
-  
+
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   if (!uuidRegex.test(orgId)) return null;
-  
+
   return { orgName, orgId };
 }
 
@@ -68,8 +77,8 @@ export default function CareerJobDetailPage() {
     fullName: "",
     email: "",
     phone: "",
-    resume: null as File | null,
-    coverLetter: "",
+    answers: {} as Record<string, unknown>,
+    files: {} as Record<string, ApplyFile | undefined>,
   });
   const [applySubmitting, setApplySubmitting] = useState(false);
 
@@ -97,25 +106,117 @@ export default function CareerJobDetailPage() {
   const openApplyDialog = () => setApplyDialogOpen(true);
   const closeApplyDialog = () => {
     setApplyDialogOpen(false);
-    setApplyForm({ fullName: "", email: "", phone: "", resume: null, coverLetter: "" });
+    setApplyForm({ fullName: "", email: "", phone: "", answers: {}, files: {} });
   };
+
+  const applicationSchema = (job?.application_form_schema ?? {}) as Record<string, unknown>;
+  const defaultFields = (applicationSchema.default_fields ?? {}) as Record<
+    string,
+    { visibility?: string; label?: string }
+  >;
+  const schemaProfileLinks = Array.isArray(applicationSchema.profile_links)
+    ? (applicationSchema.profile_links as Array<Record<string, unknown>>)
+    : [];
+  const schemaCustomFields = Array.isArray(applicationSchema.custom_fields)
+    ? (applicationSchema.custom_fields as Array<Record<string, unknown>>)
+    : [];
+  const profileLinkMap = new Map<string, Record<string, unknown>>();
+  for (const linkField of schemaProfileLinks) {
+    const key = String(linkField.key ?? linkField.id ?? "");
+    if (key) profileLinkMap.set(key, linkField);
+  }
+  const customFields: Array<Record<string, unknown>> = [];
+  for (const field of schemaCustomFields) {
+    const key = String(field.key ?? field.id ?? "");
+    if (key.startsWith("profile_link_")) {
+      profileLinkMap.set(key, field);
+      continue;
+    }
+    customFields.push(field);
+  }
+  const profileLinkFields = Array.from(profileLinkMap.values());
+
+  const fieldVisibility = (key: string, fallback: "required" | "optional" | "hidden" = "hidden") =>
+    (defaultFields[key]?.visibility as "required" | "optional" | "hidden" | undefined) ?? fallback;
+
+  const isRequired = (visibility: string) => visibility === "required";
+  const isVisible = (visibility: string) => visibility !== "hidden";
 
   const handleApplySubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!applyForm.fullName.trim() || !applyForm.email.trim()) {
-      toast.error("Please enter your name and email.");
-      return;
+    const fullNameVisibility = fieldVisibility("full_name", "required");
+    const emailVisibility = fieldVisibility("email", "required");
+    const phoneVisibility = fieldVisibility("phone", "optional");
+    const resumeVisibility = fieldVisibility("resume", "hidden");
+    const coverVisibility = fieldVisibility("cover_letter", "hidden");
+
+    if (isRequired(fullNameVisibility) && !applyForm.fullName.trim())
+      return toast.error("Full name is required.");
+    if (isRequired(emailVisibility) && !applyForm.email.trim())
+      return toast.error("Email is required.");
+    if (isRequired(phoneVisibility) && !applyForm.phone.trim())
+      return toast.error("Phone is required.");
+    if (isRequired(resumeVisibility) && !applyForm.files.resume)
+      return toast.error("Resume is required.");
+    if (isRequired(coverVisibility) && !applyForm.files.cover_letter) {
+      return toast.error("Cover letter is required.");
     }
-    if (!applyForm.resume) {
-      toast.error("Please upload your resume.");
-      return;
+
+    for (const field of [...profileLinkFields, ...customFields]) {
+      const key = String(field.key ?? field.id ?? "");
+      const label = String(field.label ?? key);
+      const visibility = String(field.visibility ?? "hidden");
+      if (!key || visibility === "hidden") continue;
+      if (visibility === "required") {
+        const val = applyForm.answers[key];
+        if (val == null || (typeof val === "string" && !val.trim())) {
+          return toast.error(`${label} is required.`);
+        }
+      }
     }
+
     setApplySubmitting(true);
-    setTimeout(() => {
-      setApplySubmitting(false);
-      closeApplyDialog();
-      toast.success("Application submitted. We'll be in touch!");
-    }, 600);
+    (async () => {
+      try {
+        const payloadAnswers: Record<string, unknown> = {};
+        for (const field of [...profileLinkFields, ...customFields]) {
+          const key = String(field.key ?? field.id ?? "");
+          const visibility = String(field.visibility ?? "hidden");
+          if (!key || visibility === "hidden") continue;
+          const val = applyForm.answers[key];
+          if (val == null) continue;
+          if (typeof val === "string") {
+            const trimmed = val.trim();
+            if (!trimmed) continue;
+            payloadAnswers[key] = trimmed;
+          } else if (Array.isArray(val)) {
+            if (val.length) payloadAnswers[key] = val;
+          } else {
+            payloadAnswers[key] = val;
+          }
+        }
+
+        const payloadFiles: Record<string, unknown> = {};
+        for (const [key, fileMeta] of Object.entries(applyForm.files)) {
+          if (!fileMeta) continue;
+          payloadFiles[key] = fileMeta.name;
+        }
+
+        await applyToPublicJob(parseOrgSlug(orgSlug)!.orgId, jobId, {
+          full_name: applyForm.fullName,
+          email: applyForm.email,
+          phone: applyForm.phone || null,
+          answers: payloadAnswers,
+          files: Object.keys(payloadFiles).length ? payloadFiles : undefined,
+        });
+        setApplySubmitting(false);
+        closeApplyDialog();
+        toast.success("Application submitted. We'll be in touch!");
+      } catch (err) {
+        setApplySubmitting(false);
+        toast.error(err instanceof Error ? err.message : "Failed to submit application");
+      }
+    })();
   };
 
   if (loading) {
@@ -174,7 +275,7 @@ export default function CareerJobDetailPage() {
           This job is archived
         </div>
       )}
-      
+
       <header className="border-b border-border">
         <div className="mx-auto max-w-3xl px-4 py-3 flex items-center gap-3">
           <Button
@@ -201,13 +302,9 @@ export default function CareerJobDetailPage() {
       <div className="mx-auto max-w-3xl px-4 pt-8 md:pt-12 pb-6 md:pb-8">
         <div className="space-y-4">
           <div className="space-y-2">
-            <p className="text-xs font-medium text-muted-foreground capitalize">
-              {job.org_name}
-            </p>
+            <p className="text-xs font-medium text-muted-foreground capitalize">{job.org_name}</p>
             <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">
-                {job.title}
-              </h1>
+              <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">{job.title}</h1>
               {job.status === "draft" && (
                 <Badge variant="secondary" className="text-[10px] h-5 px-2">
                   Draft
@@ -264,8 +361,7 @@ export default function CareerJobDetailPage() {
         <div className="text-center space-y-3 py-4">
           <h2 className="text-lg font-semibold">Interested in this role?</h2>
           <p className="text-sm text-muted-foreground max-w-md mx-auto">
-            We&apos;d love to hear from you. Apply now and our team will review
-            your application.
+            We&apos;d love to hear from you. Apply now and our team will review your application.
           </p>
           <Button
             size={isMobile ? "lg" : "default"}
@@ -281,77 +377,307 @@ export default function CareerJobDetailPage() {
         open={applyDialogOpen}
         onOpenChange={(open) => {
           setApplyDialogOpen(open);
-          if (!open) setApplyForm({ fullName: "", email: "", phone: "", resume: null, coverLetter: "" });
+          if (!open) setApplyForm({ fullName: "", email: "", phone: "", answers: {}, files: {} });
         }}
       >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
+        <DialogContent className="sm:max-w-md max-h-[85vh] overflow-hidden flex flex-col">
+          <DialogHeader className="shrink-0">
             <DialogTitle>Apply for {job.title}</DialogTitle>
             <DialogDescription>
               Submit your application to {job.org_name}. We'll review it and get back to you.
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleApplySubmit} className="space-y-4 mt-2">
-            <div>
-              <Label className="text-xs">Full name</Label>
-              <InputField
-                value={applyForm.fullName}
-                onChange={(e) => setApplyForm((f) => ({ ...f, fullName: e.target.value }))}
-                placeholder="Jane Doe"
-                className="mt-1.5 h-9 text-sm"
-                required
-              />
-            </div>
-            <div>
-              <Label className="text-xs">Email</Label>
-              <InputField
-                type="email"
-                value={applyForm.email}
-                onChange={(e) => setApplyForm((f) => ({ ...f, email: e.target.value }))}
-                placeholder="jane@example.com"
-                className="mt-1.5 h-9 text-sm"
-                required
-              />
-            </div>
-            <div>
-              <Label className="text-xs">Phone (optional)</Label>
-              <InputField
-                type="tel"
-                value={applyForm.phone}
-                onChange={(e) => setApplyForm((f) => ({ ...f, phone: e.target.value }))}
-                placeholder="+1 234 567 8900"
-                className="mt-1.5 h-9 text-sm"
-              />
-            </div>
-            <div>
-              <Label className="text-xs">Resume</Label>
-              <div className="mt-1.5 flex items-center gap-2">
-                <label className="flex-1 flex items-center justify-center gap-2 rounded-lg border border-border border-dashed px-4 py-3 text-xs text-muted-foreground hover:bg-muted/50 cursor-pointer transition-colors">
-                  <Icon name="Upload" className="h-4 w-4 shrink-0" />
-                  <span>{applyForm.resume ? applyForm.resume.name : "Choose file or drag and drop"}</span>
-                  <input
-                    type="file"
-                    accept=".pdf,.doc,.docx"
-                    className="sr-only"
-                    onChange={(e) => setApplyForm((f) => ({ ...f, resume: e.target.files?.[0] ?? null }))}
+          <form onSubmit={handleApplySubmit} className="mt-2 flex min-h-0 flex-1 flex-col">
+            <div className="space-y-4 overflow-y-auto pr-1">
+              {isVisible(fieldVisibility("full_name", "required")) && (
+                <div>
+                  <Label className="text-xs">
+                    {defaultFields.full_name?.label ?? "Full name"}{" "}
+                    {isRequired(fieldVisibility("full_name", "required")) ? "*" : "(optional)"}
+                  </Label>
+                  <InputField
+                    value={applyForm.fullName}
+                    onChange={(e) => setApplyForm((f) => ({ ...f, fullName: e.target.value }))}
+                    placeholder="Jane Doe"
+                    className="mt-1.5 h-9 text-sm"
+                    required={isRequired(fieldVisibility("full_name", "required"))}
                   />
-                </label>
-              </div>
+                </div>
+              )}
+              {isVisible(fieldVisibility("email", "required")) && (
+                <div>
+                  <Label className="text-xs">
+                    {defaultFields.email?.label ?? "Email"}{" "}
+                    {isRequired(fieldVisibility("email", "required")) ? "*" : "(optional)"}
+                  </Label>
+                  <InputField
+                    type="email"
+                    value={applyForm.email}
+                    onChange={(e) => setApplyForm((f) => ({ ...f, email: e.target.value }))}
+                    placeholder="jane@example.com"
+                    className="mt-1.5 h-9 text-sm"
+                    required={isRequired(fieldVisibility("email", "required"))}
+                  />
+                </div>
+              )}
+              {isVisible(fieldVisibility("phone", "optional")) && (
+                <div>
+                  <Label className="text-xs">
+                    {defaultFields.phone?.label ?? "Phone"}{" "}
+                    {isRequired(fieldVisibility("phone", "optional")) ? "*" : "(optional)"}
+                  </Label>
+                  <InputField
+                    type="tel"
+                    value={applyForm.phone}
+                    onChange={(e) => setApplyForm((f) => ({ ...f, phone: e.target.value }))}
+                    placeholder="+1 234 567 8900"
+                    className="mt-1.5 h-9 text-sm"
+                    required={isRequired(fieldVisibility("phone", "optional"))}
+                  />
+                </div>
+              )}
+              {isVisible(fieldVisibility("resume", "hidden")) && (
+                <div>
+                  <Label className="text-xs">
+                    {defaultFields.resume?.label ?? "Resume"}{" "}
+                    {isRequired(fieldVisibility("resume", "hidden")) ? "*" : "(optional)"}
+                  </Label>
+                  <div className="mt-1.5 flex items-center gap-2">
+                    <label className="flex-1 flex items-center justify-center gap-2 rounded-lg border border-border border-dashed px-4 py-3 text-xs text-muted-foreground hover:bg-muted/50 cursor-pointer transition-colors">
+                      <Icon name="Upload" className="h-4 w-4 shrink-0" />
+                      <span>{applyForm.files.resume?.name ?? "Choose file or drag and drop"}</span>
+                      <input
+                        type="file"
+                        accept=".pdf,.doc,.docx"
+                        className="sr-only"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          setApplyForm((f) => ({
+                            ...f,
+                            files: {
+                              ...f.files,
+                              resume: file
+                                ? { name: file.name, size: file.size, type: file.type }
+                                : undefined,
+                            },
+                          }));
+                        }}
+                      />
+                    </label>
+                  </div>
+                </div>
+              )}
+              {isVisible(fieldVisibility("cover_letter", "hidden")) && (
+                <div>
+                  <Label className="text-xs">
+                    {defaultFields.cover_letter?.label ?? "Cover letter"}{" "}
+                    {isRequired(fieldVisibility("cover_letter", "hidden")) ? "*" : "(optional)"}
+                  </Label>
+                  <div className="mt-1.5 flex items-center gap-2">
+                    <label className="flex-1 flex items-center justify-center gap-2 rounded-lg border border-border border-dashed px-4 py-3 text-xs text-muted-foreground hover:bg-muted/50 cursor-pointer transition-colors">
+                      <Icon name="Upload" className="h-4 w-4 shrink-0" />
+                      <span>
+                        {applyForm.files.cover_letter?.name ?? "Choose file or drag and drop"}
+                      </span>
+                      <input
+                        type="file"
+                        accept=".pdf,.doc,.docx,.txt"
+                        className="sr-only"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          setApplyForm((f) => ({
+                            ...f,
+                            files: {
+                              ...f.files,
+                              cover_letter: file
+                                ? { name: file.name, size: file.size, type: file.type }
+                                : undefined,
+                            },
+                          }));
+                        }}
+                      />
+                    </label>
+                  </div>
+                </div>
+              )}
+              {profileLinkFields.some((f) => String(f.visibility ?? "hidden") !== "hidden") && (
+                <div className="pt-1">
+                  <Label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    Profile Links
+                  </Label>
+                </div>
+              )}
+              {profileLinkFields
+                .filter((f) => String(f.visibility ?? "hidden") !== "hidden")
+                .map((field) => {
+                  const key = String(field.key ?? field.id ?? "");
+                  if (!key) return null;
+                  const label = String(field.label ?? key);
+                  const required = String(field.visibility ?? "optional") === "required";
+                  const value = applyForm.answers[key];
+                  return (
+                    <div key={key}>
+                      <Label className="text-xs">
+                        {label} {required ? "*" : "(optional)"}
+                      </Label>
+                      <InputField
+                        type="url"
+                        value={String(value ?? "")}
+                        onChange={(e) =>
+                          setApplyForm((f) => ({
+                            ...f,
+                            answers: { ...f.answers, [key]: e.target.value },
+                          }))
+                        }
+                        placeholder="https://"
+                        className="mt-1.5 h-9 text-sm"
+                      />
+                    </div>
+                  );
+                })}
+              {customFields.some((f) => String(f.visibility ?? "hidden") !== "hidden") && (
+                <div className="pt-1">
+                  <Label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    Additional Questions
+                  </Label>
+                </div>
+              )}
+              {customFields
+                .filter((f) => String(f.visibility ?? "hidden") !== "hidden")
+                .map((field) => {
+                  const key = String(field.key ?? field.id ?? "");
+                  if (!key) return null;
+                  const label = String(field.label ?? key);
+                  const type = String(field.type ?? "short_text");
+                  const required = String(field.visibility ?? "optional") === "required";
+                  const options = Array.isArray(field.options) ? (field.options as string[]) : [];
+                  const value = applyForm.answers[key];
+                  return (
+                    <div key={key}>
+                      <Label className="text-xs">
+                        {label} {required ? "*" : "(optional)"}
+                      </Label>
+                      {type === "long_text" ? (
+                        <textarea
+                          value={String(value ?? "")}
+                          onChange={(e) =>
+                            setApplyForm((f) => ({
+                              ...f,
+                              answers: { ...f.answers, [key]: e.target.value },
+                            }))
+                          }
+                          rows={3}
+                          className={cn(
+                            "mt-1.5 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background",
+                            "placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                          )}
+                        />
+                      ) : type === "single_select" ? (
+                        <select
+                          value={String(value ?? "")}
+                          onChange={(e) =>
+                            setApplyForm((f) => ({
+                              ...f,
+                              answers: { ...f.answers, [key]: e.target.value },
+                            }))
+                          }
+                          className="mt-1.5 h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                        >
+                          <option value="">Select</option>
+                          {options.map((opt) => (
+                            <option key={opt} value={opt}>
+                              {opt}
+                            </option>
+                          ))}
+                        </select>
+                      ) : type === "multi_select" ? (
+                        <div className="mt-1.5 space-y-1">
+                          {options.map((opt) => {
+                            const selected = Array.isArray(value) ? (value as string[]) : [];
+                            return (
+                              <label key={opt} className="flex items-center gap-2 text-sm">
+                                <input
+                                  type="checkbox"
+                                  checked={selected.includes(opt)}
+                                  onChange={(e) => {
+                                    const next = new Set(selected);
+                                    if (e.target.checked) next.add(opt);
+                                    else next.delete(opt);
+                                    setApplyForm((f) => ({
+                                      ...f,
+                                      answers: { ...f.answers, [key]: Array.from(next) },
+                                    }));
+                                  }}
+                                />
+                                {opt}
+                              </label>
+                            );
+                          })}
+                        </div>
+                      ) : type === "yes_no" ? (
+                        <select
+                          value={String(value ?? "")}
+                          onChange={(e) =>
+                            setApplyForm((f) => ({
+                              ...f,
+                              answers: { ...f.answers, [key]: e.target.value },
+                            }))
+                          }
+                          className="mt-1.5 h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                        >
+                          <option value="">Select</option>
+                          <option value="yes">Yes</option>
+                          <option value="no">No</option>
+                        </select>
+                      ) : type === "file_upload" ? (
+                        <label className="mt-1.5 flex-1 flex items-center justify-center gap-2 rounded-lg border border-border border-dashed px-4 py-3 text-xs text-muted-foreground hover:bg-muted/50 cursor-pointer transition-colors">
+                          <Icon name="Upload" className="h-4 w-4 shrink-0" />
+                          <span>
+                            {applyForm.files[key]?.name ?? "Choose file or drag and drop"}
+                          </span>
+                          <input
+                            type="file"
+                            className="sr-only"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              setApplyForm((f) => ({
+                                ...f,
+                                files: {
+                                  ...f.files,
+                                  [key]: file
+                                    ? { name: file.name, size: file.size, type: file.type }
+                                    : undefined,
+                                },
+                              }));
+                            }}
+                          />
+                        </label>
+                      ) : (
+                        <InputField
+                          type={
+                            type === "number"
+                              ? "number"
+                              : type === "date"
+                                ? "date"
+                                : type === "url"
+                                  ? "url"
+                                  : "text"
+                          }
+                          value={String(value ?? "")}
+                          onChange={(e) =>
+                            setApplyForm((f) => ({
+                              ...f,
+                              answers: { ...f.answers, [key]: e.target.value },
+                            }))
+                          }
+                          className="mt-1.5 h-9 text-sm"
+                        />
+                      )}
+                    </div>
+                  );
+                })}
             </div>
-            <div>
-              <Label className="text-xs">Cover letter (optional)</Label>
-              <textarea
-                value={applyForm.coverLetter}
-                onChange={(e) => setApplyForm((f) => ({ ...f, coverLetter: e.target.value }))}
-                placeholder="Tell us why you're a great fit..."
-                rows={3}
-                className={cn(
-                  "mt-1.5 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background",
-                  "placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                )}
-              />
-            </div>
-            <DialogFooter className="gap-2 sm:gap-0">
+            <DialogFooter className="mt-4 shrink-0 border-t pt-3 gap-2 sm:gap-0">
               <Button type="button" variant="outline" size="sm" onClick={closeApplyDialog}>
                 Cancel
               </Button>

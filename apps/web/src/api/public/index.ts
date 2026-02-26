@@ -1,4 +1,4 @@
-import { apiGet } from "../client/client";
+import { apiFetch, apiGet } from "../client/client";
 
 export type PublicJobListItem = {
   id: string;
@@ -34,6 +34,20 @@ export type PublicJobDetail = {
   published_at: string;
   org_name: string;
   status: string;
+  application_form_schema: Record<string, unknown>;
+};
+
+export type PublicApplyPayload = {
+  full_name: string;
+  email: string;
+  phone?: string | null;
+  answers: Record<string, unknown>;
+  files?: Record<string, unknown> | null;
+};
+
+export type PublicApplyResponse = {
+  id: string;
+  status: string;
 };
 
 export async function getPublicJobs(orgId: string): Promise<PublicJobListItem[]> {
@@ -42,4 +56,15 @@ export async function getPublicJobs(orgId: string): Promise<PublicJobListItem[]>
 
 export async function getPublicJobDetail(orgId: string, jobId: string): Promise<PublicJobDetail> {
   return apiGet<PublicJobDetail>(`/public/orgs/${orgId}/jobs/${jobId}`);
+}
+
+export async function applyToPublicJob(
+  orgId: string,
+  jobId: string,
+  payload: PublicApplyPayload,
+): Promise<PublicApplyResponse> {
+  return apiFetch<PublicApplyResponse>(`/public/orgs/${orgId}/jobs/${jobId}/apply`, {
+    method: "POST",
+    body: payload,
+  });
 }

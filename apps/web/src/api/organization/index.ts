@@ -5,3 +5,5 @@ export * from "./removeMember";
 export * from "./inviteMember";
 export * from "./memberships";
 export * from "./create";
+export * from "./avatar";
+export * from "./me";

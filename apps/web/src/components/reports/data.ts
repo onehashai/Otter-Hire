@@ -1,11 +1,4 @@
-import {
-  Users,
-  Briefcase,
-  UserCheck,
-  Clock,
-  ThumbsUp,
-  ArrowRight,
-} from "lucide-react";
+import { Users, Briefcase, UserCheck, Clock, ThumbsUp, ArrowRight } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 export type KPIDataItem = {
@@ -73,11 +66,46 @@ export const recruiterData = [
 ];
 
 export const jobPerformance = [
-  { id: "1", title: "Senior Frontend Engineer", applicants: 186, conversion: "5.4%", timeToHire: "18d", status: "Active" },
-  { id: "2", title: "Product Designer", applicants: 142, conversion: "4.2%", timeToHire: "22d", status: "Active" },
-  { id: "3", title: "Backend Engineer", applicants: 128, conversion: "3.9%", timeToHire: "25d", status: "Active" },
-  { id: "4", title: "Data Analyst", applicants: 96, conversion: "6.3%", timeToHire: "15d", status: "Closed" },
-  { id: "5", title: "DevOps Engineer", applicants: 74, conversion: "2.7%", timeToHire: "30d", status: "Active" },
+  {
+    id: "1",
+    title: "Senior Frontend Engineer",
+    applicants: 186,
+    conversion: "5.4%",
+    timeToHire: "18d",
+    status: "Active",
+  },
+  {
+    id: "2",
+    title: "Product Designer",
+    applicants: 142,
+    conversion: "4.2%",
+    timeToHire: "22d",
+    status: "Active",
+  },
+  {
+    id: "3",
+    title: "Backend Engineer",
+    applicants: 128,
+    conversion: "3.9%",
+    timeToHire: "25d",
+    status: "Active",
+  },
+  {
+    id: "4",
+    title: "Data Analyst",
+    applicants: 96,
+    conversion: "6.3%",
+    timeToHire: "15d",
+    status: "Closed",
+  },
+  {
+    id: "5",
+    title: "DevOps Engineer",
+    applicants: 74,
+    conversion: "2.7%",
+    timeToHire: "30d",
+    status: "Active",
+  },
 ];
 
 export const chartConfig = {

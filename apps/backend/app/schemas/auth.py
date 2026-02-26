@@ -23,6 +23,7 @@ class AuthUserResponse(BaseModel):
     org_id: UUID
     org_name: str
     org_website: str | None
+    org_avatar_url: str | None = None
     is_verified: bool
     is_onboarded: bool
 

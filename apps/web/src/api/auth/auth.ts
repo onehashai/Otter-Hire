@@ -15,6 +15,7 @@ export type AuthSessionResponse = {
   org_id: string;
   org_name: string;
   org_website: string;
+  org_avatar_url?: string | null;
   is_verified: boolean;
   is_onboarded: boolean;
 };
@@ -91,7 +92,10 @@ export async function verifyEmail(token: string): Promise<{ ok: boolean }> {
     if (res.status === 429) {
       throw new Error(handle429Error(res));
     }
-    const message = await parseErrorResponse(res, `Verification failed: ${res.status} ${res.statusText}`);
+    const message = await parseErrorResponse(
+      res,
+      `Verification failed: ${res.status} ${res.statusText}`,
+    );
     throw new Error(message);
   }
 
@@ -128,7 +132,10 @@ export async function completeOnboarding(data: {
   });
 
   if (!res.ok) {
-    const message = await parseErrorResponse(res, `Onboarding failed: ${res.status} ${res.statusText}`);
+    const message = await parseErrorResponse(
+      res,
+      `Onboarding failed: ${res.status} ${res.statusText}`,
+    );
     throw new Error(message);
   }
 
@@ -141,6 +148,7 @@ export type OrgUserResponse = {
   email: string;
   role: string;
   status: string;
+  avatar_url?: string | null;
 };
 
 export type InviteDetailsResponse = {

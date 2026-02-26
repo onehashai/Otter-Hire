@@ -5,17 +5,21 @@ import { Button } from "@onehash/ui/button";
 import { Icon } from "@onehash/ui/icon";
 
 interface Document {
+  id?: string;
   name: string;
   type: string;
   date: string;
   size: string;
+  url?: string;
 }
 
 interface DocumentsTabProps {
   documents: Document[];
+  onUploadDocument?: () => void;
+  onDeleteDocument?: (documentId: string) => void;
 }
 
-export function DocumentsTab({ documents }: DocumentsTabProps) {
+export function DocumentsTab({ documents, onUploadDocument, onDeleteDocument }: DocumentsTabProps) {
   return (
     <div className="space-y-3">
       {documents.length === 0 ? (
@@ -25,7 +29,7 @@ export function DocumentsTab({ documents }: DocumentsTabProps) {
               <Icon name="ScrollText" className="h-4 w-4 text-muted-foreground" />
             </div>
             <p className="text-xs text-muted-foreground">No documents uploaded</p>
-            <Button size="sm" className="h-7 text-xs gap-1.5">
+            <Button size="sm" className="h-7 text-xs gap-1.5" onClick={onUploadDocument}>
               <Icon name="Upload" className="h-3 w-3" /> Upload Document
             </Button>
           </CardContent>
@@ -33,7 +37,7 @@ export function DocumentsTab({ documents }: DocumentsTabProps) {
       ) : (
         <>
           {documents.map((doc, i) => (
-            <Card key={i}>
+            <Card key={doc.id ?? i}>
               <CardContent className="p-3 flex items-center gap-3">
                 <div className="h-9 w-9 rounded-md bg-muted flex items-center justify-center shrink-0">
                   <Icon name="ScrollText" className="h-4 w-4 text-muted-foreground" />
@@ -44,10 +48,35 @@ export function DocumentsTab({ documents }: DocumentsTabProps) {
                     {doc.type} · {doc.size} · {doc.date}
                   </p>
                 </div>
+                {doc.url ? (
+                  <a
+                    className="text-xs text-muted-foreground hover:underline"
+                    href={doc.url}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    View
+                  </a>
+                ) : null}
+                {doc.id && onDeleteDocument ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-[10px]"
+                    onClick={() => onDeleteDocument(doc.id as string)}
+                  >
+                    Delete
+                  </Button>
+                ) : null}
               </CardContent>
             </Card>
           ))}
-          <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5 w-full">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs gap-1.5 w-full"
+            onClick={onUploadDocument}
+          >
             <Icon name="Upload" className="h-3.5 w-3.5" /> Upload Document
           </Button>
         </>

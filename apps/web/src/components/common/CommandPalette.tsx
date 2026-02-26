@@ -12,16 +12,15 @@ import {
   CommandSeparator,
 } from "@onehash/ui/command";
 import {
-  LayoutDashboard,
+  // TODO(mvp-nav): Re-enable Dashboard in command palette after MVP launch.
+  // LayoutDashboard,
   Briefcase,
   Users,
-  Kanban,
   Calendar,
-  Mail,
-  UserSearch,
-  BarChart3,
-  Zap,
-  Bot,
+  // TODO(mvp-nav): Re-enable Reports/Automations/AI Assistant icons after MVP launch.
+  // BarChart3,
+  // Zap,
+  // Bot,
   Settings,
   Plus,
   UserPlus,
@@ -29,14 +28,17 @@ import {
 } from "lucide-react";
 
 const pages = [
-  { title: "Dashboard", url: "/", icon: LayoutDashboard },
+  // TODO(mvp-nav): Re-enable Dashboard in command palette after MVP launch.
+  // { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Jobs", url: "/jobs", icon: Briefcase },
   { title: "Candidates", url: "/candidates", icon: Users },
-  { title: "Pipeline", url: "/pipeline", icon: Kanban },
   { title: "Interviews", url: "/interviews", icon: Calendar },
-  { title: "Reports", url: "/reports", icon: BarChart3 },
-  { title: "Automations", url: "/automations", icon: Zap },
-  { title: "AI Assistant", url: "/ai-assistant", icon: Bot },
+  // TODO(mvp-nav): Re-enable Reports in command palette after MVP launch.
+  // { title: "Reports", url: "/reports", icon: BarChart3 },
+  // TODO(mvp-nav): Re-enable Automations in command palette after MVP launch.
+  // { title: "Automations", url: "/automations", icon: Zap },
+  // TODO(mvp-nav): Re-enable AI Assistant in command palette after MVP launch.
+  // { title: "AI Assistant", url: "/ai-assistant", icon: Bot },
   { title: "Settings", url: "/settings/profile", icon: Settings },
 ];
 

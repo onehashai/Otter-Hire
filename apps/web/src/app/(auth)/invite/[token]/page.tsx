@@ -5,7 +5,12 @@ import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@onehash/ui/button";
 import { Icon } from "@onehash/ui/icon";
-import { acceptExistingInvite, getInviteDetails, declineInvite, type InviteDetailsResponse } from "@/api/index";
+import {
+  acceptExistingInvite,
+  getInviteDetails,
+  declineInvite,
+  type InviteDetailsResponse,
+} from "@/api/index";
 import { useAuthSession } from "@/app/providers";
 
 export default function InvitePage() {
@@ -57,7 +62,9 @@ export default function InvitePage() {
         await acceptExistingInvite(token);
         await refreshSession(true);
         localStorage.setItem("session_updated", Date.now().toString());
-        router.replace("/dashboard");
+        // TODO(mvp-nav): Restore dashboard redirect after MVP launch.
+        // router.replace("/dashboard");
+        router.replace("/");
         router.refresh();
         return;
       } catch (err) {
@@ -69,7 +76,9 @@ export default function InvitePage() {
     const inviteRedirect = `/invite/${encodeURIComponent(token)}`;
     const inviteEmail = encodeURIComponent(details.email);
     if (details.account_exists) {
-      router.push(`/login?redirect=${encodeURIComponent(inviteRedirect)}&invite_email=${inviteEmail}`);
+      router.push(
+        `/login?redirect=${encodeURIComponent(inviteRedirect)}&invite_email=${inviteEmail}`,
+      );
     } else {
       router.push(`/signup?invite=${encodeURIComponent(token)}&invite_email=${inviteEmail}`);
     }
@@ -116,7 +125,9 @@ export default function InvitePage() {
               <div className="mx-auto h-12 w-12 rounded-full bg-destructive/10 flex items-center justify-center mb-5">
                 <Icon name="CircleAlert" className="h-5 w-5 text-destructive" />
               </div>
-              <h2 className="text-xl font-semibold tracking-tight mb-2">Invalid or expired invite</h2>
+              <h2 className="text-xl font-semibold tracking-tight mb-2">
+                Invalid or expired invite
+              </h2>
               <p className="text-sm text-muted-foreground mb-6">{error}</p>
               <Link href="/login">
                 <Button variant="outline" className="w-full h-10 text-sm">
@@ -153,7 +164,8 @@ export default function InvitePage() {
             to join the team.
           </h1>
           <p className="text-muted-foreground text-sm leading-relaxed">
-            Create an account or sign in to accept this invitation. You won&apos;t need to create an organization—you&apos;ll join the existing one.
+            Create an account or sign in to accept this invitation. You won&apos;t need to create an
+            organization—you&apos;ll join the existing one.
           </p>
         </div>
       </div>
@@ -175,7 +187,8 @@ export default function InvitePage() {
               Join {details?.org_name ?? "the team"}
             </h2>
             <p className="text-sm text-muted-foreground text-center mb-6">
-              You&apos;ve been invited to join as <span className="font-medium text-foreground">{details?.role ?? "a member"}</span>.
+              You&apos;ve been invited to join as{" "}
+              <span className="font-medium text-foreground">{details?.role ?? "a member"}</span>.
             </p>
 
             {error && (
@@ -189,7 +202,11 @@ export default function InvitePage() {
                 disabled={routingAccept || declining}
                 onClick={handleAccept}
               >
-                {routingAccept ? <Icon name="Loader" className="h-4 w-4 animate-spin" /> : "Accept invite"}
+                {routingAccept ? (
+                  <Icon name="Loader" className="h-4 w-4 animate-spin" />
+                ) : (
+                  "Accept invite"
+                )}
               </Button>
               <Button
                 variant="outline"

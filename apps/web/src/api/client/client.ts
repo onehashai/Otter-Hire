@@ -40,10 +40,7 @@ export type ApiGetOptions = {
   cache?: RequestCache;
 };
 
-export async function apiGet<T>(
-  path: string,
-  options: ApiGetOptions = {}
-): Promise<T> {
+export async function apiGet<T>(path: string, options: ApiGetOptions = {}): Promise<T> {
   const { credentials = "include", cache = "no-store" } = options;
 
   const res = await fetch(`${API_BASE_URL}${path}`, {
@@ -67,7 +64,7 @@ export type ApiPostOptions = {
 export async function apiPost<T>(
   path: string,
   body: object,
-  options: ApiPostOptions = {}
+  options: ApiPostOptions = {},
 ): Promise<T> {
   const { credentials = "include" } = options;
 
@@ -84,7 +81,7 @@ export async function apiPost<T>(
     }
     const message = await parseErrorResponse(
       res,
-      `API request failed: ${res.status} ${res.statusText}`
+      `API request failed: ${res.status} ${res.statusText}`,
     );
     throw new Error(message);
   }
@@ -120,7 +117,12 @@ export async function apiFetch<T>(
     let message = `Request failed: ${res.status} ${res.statusText}`;
     try {
       const data = (await res.json()) as { detail?: string; error?: string };
-      const msg = typeof data.detail === "string" ? data.detail : typeof data.error === "string" ? data.error : "";
+      const msg =
+        typeof data.detail === "string"
+          ? data.detail
+          : typeof data.error === "string"
+            ? data.error
+            : "";
       if (msg.trim()) message = msg;
     } catch {}
     throw new Error(message);
@@ -140,7 +142,7 @@ export async function apiDelete(path: string): Promise<void> {
   if (!res.ok) {
     const message = await parseErrorResponse(
       res,
-      `API request failed: ${res.status} ${res.statusText}`
+      `API request failed: ${res.status} ${res.statusText}`,
     );
     throw new Error(message);
   }

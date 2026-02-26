@@ -87,7 +87,7 @@ export default function HiringStagesPage() {
             onDragEnd={handleStageDragEnd}
             className={cn(
               "group flex items-center gap-2 rounded-lg border border-border bg-card p-3 transition-all",
-              stageDragIdx === i && "opacity-50 border-dashed"
+              stageDragIdx === i && "opacity-50 border-dashed",
             )}
           >
             <GripVertical className="h-4 w-4 text-muted-foreground/40 shrink-0 cursor-grab active:cursor-grabbing" />
@@ -105,7 +105,7 @@ export default function HiringStagesPage() {
               size="icon"
               className={cn(
                 "h-7 w-7 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground",
-                stage.isRequired && "opacity-40 group-hover:opacity-40 cursor-not-allowed"
+                stage.isRequired && "opacity-40 group-hover:opacity-40 cursor-not-allowed",
               )}
               onClick={() => handleRemoveStage(stage.id, stage.isRequired)}
               title={stage.isRequired ? "Required stage cannot be deleted" : "Delete stage"}

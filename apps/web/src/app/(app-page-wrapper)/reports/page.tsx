@@ -3,13 +3,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@onehash/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@onehash/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@onehash/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@onehash/ui/tabs";
 import { Download } from "lucide-react";
 import { useSetPageMetadata } from "@/hooks/useSetPageMetadata";
@@ -76,7 +70,7 @@ export default function ReportsPage() {
             </TabsTrigger>
           ))}
         </TabsList>
-       
+
         <TabsContent value="jobs" className="mt-4 space-y-4">
           <JobPerformanceSection />
         </TabsContent>
@@ -84,7 +78,6 @@ export default function ReportsPage() {
         <TabsContent value="recruiters" className="mt-4 space-y-4">
           <RecruiterComparisonTable />
         </TabsContent>
-
       </Tabs>
     </div>
   );

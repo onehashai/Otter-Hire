@@ -1,9 +1,10 @@
-from sqlalchemy import Column, String, DateTime, ForeignKey, Index, Integer
-from sqlalchemy.dialects.postgresql import UUID, JSONB
-from sqlalchemy.sql import func
+from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
-from app.utils.uuid import uuid7
+from sqlalchemy.sql import func
+
 from app.db.base import Base
+from app.utils.uuid import uuid7
 
 
 class Interview(Base):
@@ -21,9 +22,7 @@ class Interview(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
-    __table_args__ = (
-        Index("ix_interviews_org_scheduled", "org_id", "scheduled_at"),
-    )
+    __table_args__ = (Index("ix_interviews_org_scheduled", "org_id", "scheduled_at"),)
 
     organization = relationship("Organization")
     job = relationship("Job")

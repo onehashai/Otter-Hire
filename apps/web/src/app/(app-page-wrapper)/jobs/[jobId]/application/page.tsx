@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@onehash/ui/button";
 import { InputField } from "@onehash/ui/input";
 import { Label } from "@onehash/ui/label";
@@ -37,6 +37,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 type FieldVisibility = "required" | "optional" | "hidden";
 
 interface DefaultLinkField {
+  key: string;
   platform: string;
   icon: React.ReactNode;
   visibility: FieldVisibility;
@@ -75,13 +76,56 @@ const answerTypeLabels: Record<AnswerType, string> = {
 };
 
 const defaultLinkFields: DefaultLinkField[] = [
-  { platform: "LinkedIn", icon: <Linkedin className="h-4 w-4" />, visibility: "optional" },
-  { platform: "GitHub", icon: <Github className="h-4 w-4" />, visibility: "optional" },
-  { platform: "Portfolio / Personal Website", icon: <Link2 className="h-4 w-4" />, visibility: "optional" },
-  { platform: "Twitter / X", icon: <FileText className="h-4 w-4" />, visibility: "hidden" },
-  { platform: "Dribbble", icon: <Palette className="h-4 w-4" />, visibility: "hidden" },
-  { platform: "Behance", icon: <Palette className="h-4 w-4" />, visibility: "hidden" },
+  {
+    key: "profile_link_linkedin",
+    platform: "LinkedIn",
+    icon: <Linkedin className="h-4 w-4" />,
+    visibility: "optional",
+  },
+  {
+    key: "profile_link_github",
+    platform: "GitHub",
+    icon: <Github className="h-4 w-4" />,
+    visibility: "optional",
+  },
+  {
+    key: "profile_link_portfolio",
+    platform: "Portfolio / Personal Website",
+    icon: <Link2 className="h-4 w-4" />,
+    visibility: "optional",
+  },
+  {
+    key: "profile_link_twitter_x",
+    platform: "Twitter / X",
+    icon: <FileText className="h-4 w-4" />,
+    visibility: "hidden",
+  },
+  {
+    key: "profile_link_dribbble",
+    platform: "Dribbble",
+    icon: <Palette className="h-4 w-4" />,
+    visibility: "hidden",
+  },
+  {
+    key: "profile_link_behance",
+    platform: "Behance",
+    icon: <Palette className="h-4 w-4" />,
+    visibility: "hidden",
+  },
 ];
+
+function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableStringify(item)).join(",")}]`;
+  }
+  const obj = value as Record<string, unknown>;
+  const keys = Object.keys(obj).sort();
+  const entries = keys.map((key) => `${JSON.stringify(key)}:${stableStringify(obj[key])}`);
+  return `{${entries.join(",")}}`;
+}
 
 function VisibilityDropdown({
   value,
@@ -100,10 +144,14 @@ function VisibilityDropdown({
     );
   }
   return (
-    <SelectField 
-      label="Visibility" 
-      value={value} 
-      onValueChange={(v) => onChange(v as FieldVisibility)} options={[{ value: "required", label: "Required" }, { value: "optional", label: "Optional" }, { value: "hidden", label: "Hidden" }]} 
+    <SelectField
+      value={value}
+      onValueChange={(v) => onChange(v as FieldVisibility)}
+      options={[
+        { value: "required", label: "Required" },
+        { value: "optional", label: "Optional" },
+        { value: "hidden", label: "Hidden" },
+      ]}
     />
   );
 }
@@ -134,14 +182,35 @@ export default function ApplicationFormPage() {
     setCollectResume,
     collectCover,
     setCollectCover,
+    applicationFormSchema,
+    setApplicationFormSchema,
   } = useJobSetup();
+
+  const parsedSchema = useMemo(() => {
+    const schema = (applicationFormSchema ?? {}) as Record<string, unknown>;
+    const defaults = (schema.default_fields ?? {}) as Record<
+      string,
+      { visibility?: FieldVisibility }
+    >;
+    const profileLinks = Array.isArray(schema.profile_links)
+      ? (schema.profile_links as Array<Record<string, unknown>>)
+      : [];
+    const custom = Array.isArray(schema.custom_fields)
+      ? (schema.custom_fields as Array<Record<string, unknown>>)
+      : [];
+    return { defaults, profileLinks, custom };
+  }, [applicationFormSchema]);
 
   /* ───── application form state ───── */
   const [phoneVisibility, setPhoneVisibility] = useState<FieldVisibility>("optional");
-  const [resumeVisibility, setResumeVisibility] = useState<FieldVisibility>("required");
-  const [coverLetterVisibility, setCoverLetterVisibility] = useState<FieldVisibility>("hidden");
+  const [resumeVisibility, setResumeVisibility] = useState<FieldVisibility>(
+    collectResume ? "required" : "hidden",
+  );
+  const [coverLetterVisibility, setCoverLetterVisibility] = useState<FieldVisibility>(
+    collectCover ? "optional" : "hidden",
+  );
   const [linkFields, setLinkFields] = useState<DefaultLinkField[]>(() =>
-    defaultLinkFields.map((l) => ({ ...l }))
+    defaultLinkFields.map((l) => ({ ...l })),
   );
   const [customQuestions, setCustomQuestions] = useState<CustomQuestion[]>([]);
   const [questionDialogOpen, setQuestionDialogOpen] = useState(false);
@@ -152,11 +221,10 @@ export default function ApplicationFormPage() {
   const [qOptions, setQOptions] = useState<string[]>(["", ""]);
   const [qAllowOther, setQAllowOther] = useState(false);
   const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const initializedFromSchemaRef = useRef(false);
 
   const setLinkVisibility = (idx: number, val: FieldVisibility) => {
-    setLinkFields((prev) =>
-      prev.map((l, i) => (i === idx ? { ...l, visibility: val } : l))
-    );
+    setLinkFields((prev) => prev.map((l, i) => (i === idx ? { ...l, visibility: val } : l)));
   };
 
   const openAddQuestion = () => {
@@ -199,8 +267,8 @@ export default function ApplicationFormPage() {
                 options: finalOptions,
                 allowOther: qAllowOther,
               }
-            : q
-        )
+            : q,
+        ),
       );
     } else {
       setCustomQuestions((prev) => [
@@ -236,14 +304,110 @@ export default function ApplicationFormPage() {
 
   /* Cover letter visibility sync with context (optional/hidden drives collectCover) */
   const effectiveCoverVisibility = collectCover
-    ? (coverLetterVisibility === "hidden" ? "optional" : coverLetterVisibility)
+    ? coverLetterVisibility === "hidden"
+      ? "optional"
+      : coverLetterVisibility
     : "hidden";
   const setCoverVisibilityAndContext = (v: FieldVisibility) => {
     setCoverLetterVisibility(v);
     setCollectCover(v !== "hidden");
   };
 
-  function QuestionFormFields() {
+  useEffect(() => {
+    if (initializedFromSchemaRef.current) return;
+    const phone = parsedSchema.defaults.phone?.visibility;
+    const resume = parsedSchema.defaults.resume?.visibility;
+    const cover = parsedSchema.defaults.cover_letter?.visibility;
+    if (phone) setPhoneVisibility(phone);
+    if (resume) setResumeVisibility(resume);
+    if (cover) setCoverLetterVisibility(cover);
+
+    const linkMap = new Map<string, FieldVisibility>();
+    const questionFields: Array<Record<string, unknown>> = [];
+
+    for (const field of parsedSchema.profileLinks) {
+      const key = String(field.key ?? field.id ?? "");
+      const visibility = (field.visibility as FieldVisibility | undefined) ?? "hidden";
+      if (key) linkMap.set(key, visibility);
+    }
+
+    // Backward compatibility: older schema versions may have profile links inside custom_fields.
+    for (const field of parsedSchema.custom) {
+      const key = String(field.key ?? field.id ?? "");
+      const visibility = (field.visibility as FieldVisibility | undefined) ?? "hidden";
+      if (key.startsWith("profile_link_")) {
+        linkMap.set(key, visibility);
+        continue;
+      }
+      questionFields.push(field);
+    }
+
+    setLinkFields(
+      defaultLinkFields.map((field) => ({
+        ...field,
+        visibility: linkMap.get(field.key) ?? field.visibility,
+      })),
+    );
+
+    if (questionFields.length > 0) {
+      const nextCustom = questionFields.map((field, idx) => ({
+        id: String(field.id ?? `custom_${idx + 1}`),
+        title: String(field.label ?? `Question ${idx + 1}`),
+        answerType: (field.type as AnswerType) ?? "short_text",
+        required: field.visibility === "required",
+        options: Array.isArray(field.options) ? (field.options as string[]) : undefined,
+        allowOther: Boolean(field.allowOther ?? false),
+      }));
+      setCustomQuestions(nextCustom);
+    }
+    initializedFromSchemaRef.current = true;
+  }, [parsedSchema]);
+
+  useEffect(() => {
+    const linkFieldsSchema = linkFields.map((link) => ({
+      id: link.key,
+      key: link.key,
+      label: link.platform,
+      type: "url",
+      visibility: link.visibility,
+    }));
+    const questionFieldsSchema = customQuestions.map((q) => ({
+      id: q.id,
+      key: q.id,
+      label: q.title,
+      type: q.answerType,
+      visibility: q.required ? "required" : "optional",
+      ...(q.options && q.options.length > 0 ? { options: q.options } : {}),
+      ...(q.allowOther ? { allowOther: true } : {}),
+    }));
+    const schema = {
+      version: 1,
+      default_fields: {
+        full_name: { visibility: "required", label: "Full Name" },
+        email: { visibility: "required", label: "Email" },
+        phone: { visibility: phoneVisibility, label: "Phone Number" },
+        resume: { visibility: resumeVisibility, label: "Resume" },
+        cover_letter: { visibility: effectiveCoverVisibility, label: "Cover Letter" },
+      },
+      profile_links: linkFieldsSchema,
+      custom_fields: questionFieldsSchema,
+    };
+    const next = stableStringify(schema);
+    const current = stableStringify(applicationFormSchema ?? {});
+    if (next !== current) {
+      setApplicationFormSchema(schema);
+    }
+  }, [
+    phoneVisibility,
+    resumeVisibility,
+    effectiveCoverVisibility,
+    linkFields,
+    customQuestions,
+    applicationFormSchema,
+    setApplicationFormSchema,
+  ]);
+
+  const renderQuestionFormFields = () => {
     const showOptions = qType === "single_select" || qType === "multi_select";
     return (
       <>
@@ -256,10 +420,13 @@ export default function ApplicationFormPage() {
           />
         </FieldRow>
         <FieldRow label="Answer Type">
-          <SelectField 
-            label="Answer Type" 
-            value={qType} onValueChange={(v) => setQType(v as AnswerType)} 
-            options={(Object.entries(answerTypeLabels) as [AnswerType, string][]).map(([val, label]) => ({ value: val, label }))} 
+          <SelectField
+            label="Answer Type"
+            value={qType}
+            onValueChange={(v) => setQType(v as AnswerType)}
+            options={(Object.entries(answerTypeLabels) as [AnswerType, string][]).map(
+              ([val, label]) => ({ value: val, label }),
+            )}
           />
         </FieldRow>
         {showOptions && (
@@ -304,7 +471,10 @@ export default function ApplicationFormPage() {
                   onCheckedChange={(v) => setQAllowOther(!!v)}
                   id="allow-other"
                 />
-                <Label htmlFor="allow-other" className="text-xs text-muted-foreground cursor-pointer">
+                <Label
+                  htmlFor="allow-other"
+                  className="text-xs text-muted-foreground cursor-pointer"
+                >
                   Allow "Other" answer
                 </Label>
               </div>
@@ -321,7 +491,7 @@ export default function ApplicationFormPage() {
         </div>
       </>
     );
-  }
+  };
 
   return (
     <div className="space-y-6">
@@ -388,14 +558,17 @@ export default function ApplicationFormPage() {
               <div
                 className={cn(
                   "flex items-center justify-between px-4 py-3 bg-card",
-                  link.visibility === "hidden" && "opacity-50"
+                  link.visibility === "hidden" && "opacity-50",
                 )}
               >
                 <div className="flex items-center gap-3">
                   <span className="text-muted-foreground">{link.icon}</span>
                   <span className="text-sm font-medium">{link.platform}</span>
                 </div>
-                <VisibilityDropdown value={link.visibility} onChange={(v) => setLinkVisibility(idx, v)} />
+                <VisibilityDropdown
+                  value={link.visibility}
+                  onChange={(v) => setLinkVisibility(idx, v)}
+                />
               </div>
             </div>
           ))}
@@ -429,7 +602,12 @@ export default function ApplicationFormPage() {
             <p className="text-xs text-muted-foreground/70 mb-4">
               Add screening questions for candidates to answer.
             </p>
-            <Button variant="outline" size="sm" className="text-xs gap-1.5" onClick={openAddQuestion}>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-xs gap-1.5"
+              onClick={openAddQuestion}
+            >
               <Plus className="h-3.5 w-3.5" /> Add Question
             </Button>
           </div>
@@ -444,7 +622,7 @@ export default function ApplicationFormPage() {
                 onDragEnd={handleQuestionDragEnd}
                 className={cn(
                   "group flex items-center gap-2 rounded-lg border border-border bg-card p-3 transition-colors",
-                  dragIdx === i && "opacity-50 border-dashed"
+                  dragIdx === i && "opacity-50 border-dashed",
                 )}
               >
                 <GripVertical className="h-4 w-4 text-muted-foreground/40 shrink-0 cursor-grab" />
@@ -494,9 +672,7 @@ export default function ApplicationFormPage() {
                 {editingQuestion ? "Edit Question" : "Add Application Question"}
               </SheetTitle>
             </SheetHeader>
-            <div className="mt-4 space-y-4 pb-20">
-              <QuestionFormFields />
-            </div>
+            <div className="mt-4 space-y-4 pb-20">{renderQuestionFormFields()}</div>
             <div className="fixed bottom-0 left-0 right-0 bg-background border-t border-border p-4">
               <Button
                 className="w-full h-11 text-sm"
@@ -516,9 +692,7 @@ export default function ApplicationFormPage() {
                 {editingQuestion ? "Edit Question" : "Add Application Question"}
               </DialogTitle>
             </DialogHeader>
-            <div className="space-y-4 py-2">
-              <QuestionFormFields />
-            </div>
+            <div className="space-y-4 py-2">{renderQuestionFormFields()}</div>
             <DialogFooter>
               <Button variant="outline" size="sm" onClick={() => setQuestionDialogOpen(false)}>
                 Cancel

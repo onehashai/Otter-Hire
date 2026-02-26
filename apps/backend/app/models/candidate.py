@@ -1,9 +1,10 @@
-from sqlalchemy import Column, String, DateTime, ForeignKey, Index, CheckConstraint
-from sqlalchemy.dialects.postgresql import UUID, JSONB
-from sqlalchemy.sql import func
+from sqlalchemy import CheckConstraint, Column, DateTime, ForeignKey, Index, String
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
-from app.utils.uuid import uuid7
+from sqlalchemy.sql import func
+
 from app.db.base import Base
+from app.utils.uuid import uuid7
 
 
 class Candidate(Base):
@@ -11,13 +12,14 @@ class Candidate(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid7)
     org_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
-    job_id = Column(UUID(as_uuid=True), ForeignKey("jobs.id"), nullable=False)
+    job_id = Column(UUID(as_uuid=True), ForeignKey("jobs.id"), nullable=True)
     stage_id = Column(UUID(as_uuid=True), ForeignKey("stages.id"))
     status = Column(String, nullable=False)
     name = Column(String, nullable=False)
     email = Column(String, nullable=False)
     phone = Column(String)
-    resume_url = Column(String)
+    location = Column(String)
+    profile_links = Column(JSONB)
     source = Column(String)
     tags = Column(JSONB)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

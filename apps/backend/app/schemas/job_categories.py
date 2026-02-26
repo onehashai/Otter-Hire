@@ -10,3 +10,4 @@ class JobCategoryResponse(BaseModel):
     name: str
     is_system_default: bool
     created_at: str
+    usage_count: int = 0

@@ -24,7 +24,9 @@ export function KPICard({ title, value, change, trend, icon: Icon }: KPIDataItem
           ) : (
             <TrendingDown className="h-3 w-3 text-muted-foreground" />
           )}
-          <span className={`text-[11px] font-medium ${isPositive ? "text-foreground" : "text-muted-foreground"}`}>
+          <span
+            className={`text-[11px] font-medium ${isPositive ? "text-foreground" : "text-muted-foreground"}`}
+          >
             {change > 0 ? "+" : ""}
             {change}%
           </span>

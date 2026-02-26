@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import  Link from "next/link";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@onehash/ui/button";
 import { InputField } from "@onehash/ui/input";
@@ -13,7 +13,10 @@ import { useTranslation } from "react-i18next";
 const passwordRules = [
   { label: "At least 8 characters", test: (pw: string) => pw.length >= 8 },
   { label: "One uppercase letter", test: (pw: string) => /[A-Z]/.test(pw) },
-  { label: "One number or symbol", test: (pw: string) => /[0-9!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(pw) },
+  {
+    label: "One number or symbol",
+    test: (pw: string) => /[0-9!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(pw),
+  },
 ];
 
 export default function ResetPassword() {
@@ -107,7 +110,9 @@ export default function ResetPassword() {
         <div className="rounded-xl border border-border bg-card p-8 shadow-sm">
           <div className="mb-6">
             <h2 className="text-xl font-semibold tracking-tight">Set new password</h2>
-            <p className="text-sm text-muted-foreground mt-1">Choose a strong password for your account</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Choose a strong password for your account
+            </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -118,7 +123,9 @@ export default function ResetPassword() {
             )}
 
             <div className="space-y-1.5">
-              <Label htmlFor="newPassword" className="text-xs font-medium text-muted-foreground">New password</Label>
+              <Label htmlFor="newPassword" className="text-xs font-medium text-muted-foreground">
+                New password
+              </Label>
               <div className="relative">
                 <InputField
                   id="newPassword"
@@ -136,7 +143,11 @@ export default function ResetPassword() {
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                   tabIndex={-1}
                 >
-                  {showPassword ? <Icon name="EyeOff" className="h-4 w-4" /> : <Icon name="Eye" className="h-4 w-4" />}
+                  {showPassword ? (
+                    <Icon name="EyeOff" className="h-4 w-4" />
+                  ) : (
+                    <Icon name="Eye" className="h-4 w-4" />
+                  )}
                 </button>
               </div>
               {password.length > 0 && (
@@ -148,10 +159,12 @@ export default function ResetPassword() {
                       ) : (
                         <Icon name="X" className="h-3 w-3 text-muted-foreground/50" />
                       )}
-                      <span className={cn(
-                        "text-[11px] transition-colors",
-                        ruleResults[i] ? "text-foreground" : "text-muted-foreground/60"
-                      )}>
+                      <span
+                        className={cn(
+                          "text-[11px] transition-colors",
+                          ruleResults[i] ? "text-foreground" : "text-muted-foreground/60",
+                        )}
+                      >
                         {rule.label}
                       </span>
                     </div>
@@ -161,7 +174,12 @@ export default function ResetPassword() {
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="confirmNewPassword" className="text-xs font-medium text-muted-foreground">Confirm password</Label>
+              <Label
+                htmlFor="confirmNewPassword"
+                className="text-xs font-medium text-muted-foreground"
+              >
+                Confirm password
+              </Label>
               <div className="relative">
                 <InputField
                   id="confirmNewPassword"
@@ -171,7 +189,7 @@ export default function ResetPassword() {
                   placeholder="••••••••"
                   className={cn(
                     "h-10 text-sm pr-10",
-                    confirmPassword.length > 0 && !passwordsMatch && "border-destructive/50"
+                    confirmPassword.length > 0 && !passwordsMatch && "border-destructive/50",
                   )}
                   autoComplete="new-password"
                 />
@@ -181,11 +199,17 @@ export default function ResetPassword() {
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                   tabIndex={-1}
                 >
-                  {showConfirm ? <Icon name="EyeOff" className="h-4 w-4" /> : <Icon name="Eye" className="h-4 w-4" />}
+                  {showConfirm ? (
+                    <Icon name="EyeOff" className="h-4 w-4" />
+                  ) : (
+                    <Icon name="Eye" className="h-4 w-4" />
+                  )}
                 </button>
               </div>
               {confirmPassword.length > 0 && !passwordsMatch && (
-                <p className="text-[11px] text-destructive animate-in fade-in-0 duration-200">Passwords do not match</p>
+                <p className="text-[11px] text-destructive animate-in fade-in-0 duration-200">
+                  Passwords do not match
+                </p>
               )}
             </div>
 

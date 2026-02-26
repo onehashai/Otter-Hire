@@ -81,7 +81,11 @@ export default function HiringDetailsPage() {
             <Button
               key={type}
               type="button"
-              variant={salaryType === type ? "default" : "outline"} size="sm" className="h-9 text-xs flex-1" onClick={() => setSalaryType(type)}>
+              variant={salaryType === type ? "default" : "outline"}
+              size="sm"
+              className="h-9 text-xs flex-1"
+              onClick={() => setSalaryType(type)}
+            >
               {t(type)}
             </Button>
           ))}
@@ -155,11 +159,13 @@ export default function HiringDetailsPage() {
               value={timeframe}
               onValueChange={setTimeframe}
               options={timeframes.map((tf) => ({ value: tf, label: t(tf) }))}
-            placeholder={t("select")}
+              placeholder={t("select")}
             />
           </div>
           {salaryMin && salaryMax && Number(salaryMin) > Number(salaryMax) && (
-            <p className="text-xs text-destructive">Minimum salary must be less than or equal to maximum.</p>
+            <p className="text-xs text-destructive">
+              Minimum salary must be less than or equal to maximum.
+            </p>
           )}
         </>
       )}

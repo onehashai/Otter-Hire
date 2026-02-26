@@ -2,13 +2,19 @@ import { TFunction } from "i18next";
 import { Country } from "country-state-city";
 
 export type EmploymentType = "full_time" | "part_time" | "contract" | "internship";
-export type CategoryType = "engineering" | "design" | "marketing" | "sales" | "data" | "operations" | "hr";
+export type CategoryType =
+  | "engineering"
+  | "design"
+  | "marketing"
+  | "sales"
+  | "data"
+  | "operations"
+  | "hr";
 export type WorkplaceType = "remote" | "hybrid" | "onsite";
 export type VisibilityType = "internal" | "public";
 export type SalaryType = "hidden" | "fixed" | "range";
 export type TimeframeType = "per_year" | "per_month" | "per_week" | "per_day" | "per_hour";
 export type TeamRole = "hiring_manager" | "recruiter" | "interviewer" | "coordinator";
-
 
 export function getCountryName(isoCode: string): string {
   const c = Country.getCountryByCode(isoCode);
@@ -17,17 +23,18 @@ export function getCountryName(isoCode: string): string {
 
 export const CITY_VALUE_SEP = "|";
 export function getCityDisplayName(city: string): string {
-  return city.includes(CITY_VALUE_SEP) ? city.split(CITY_VALUE_SEP)[0] ?? city : city;
+  return city.includes(CITY_VALUE_SEP) ? (city.split(CITY_VALUE_SEP)[0] ?? city) : city;
 }
 
-export const SETUP_SECTIONS = (t: TFunction<"translation", undefined>) => [
-  { slug: "info", label: t("job_info") },
-  { slug: "description", label: t("job_description") },
-  { slug: "details", label: t("hiring_details") },
-  { slug: "application", label: t("application_form") },
-  { slug: "stages", label: t("hiring_stages") },
-  { slug: "team", label: t("hiring_team") },
-] as const;
+export const SETUP_SECTIONS = (t: TFunction<"translation", undefined>) =>
+  [
+    { slug: "info", label: t("job_info") },
+    { slug: "description", label: t("job_description") },
+    { slug: "details", label: t("hiring_details") },
+    { slug: "application", label: t("application_form") },
+    { slug: "stages", label: t("hiring_stages") },
+    { slug: "team", label: t("hiring_team") },
+  ] as const;
 
 export type SetupStepSlug = ReturnType<typeof SETUP_SECTIONS>[number]["slug"];
 
@@ -35,7 +42,7 @@ export const employmentTypes: EmploymentType[] = [
   "full_time",
   "part_time",
   "contract",
-  "internship"
+  "internship",
 ];
 
 export const categories: CategoryType[] = [
@@ -45,28 +52,16 @@ export const categories: CategoryType[] = [
   "sales",
   "data",
   "operations",
-  "hr"
+  "hr",
 ];
 
-export const workplaceTypes: WorkplaceType[] = [
-  "remote",
-  "hybrid",
-  "onsite"
-];
+export const workplaceTypes: WorkplaceType[] = ["remote", "hybrid", "onsite"];
 
 export type JobStatusType = "draft" | "open" | "archived";
 
-export const jobStatuses: JobStatusType[] = [
-  "draft",
-  "open",
-  "archived"
-];
+export const jobStatuses: JobStatusType[] = ["draft", "open", "archived"];
 
-export const salaryTypes: SalaryType[] = [
-  "hidden",
-  "fixed",
-  "range"
-];
+export const salaryTypes: SalaryType[] = ["hidden", "fixed", "range"];
 
 export const timeframes: TimeframeType[] = [
   "per_year",
@@ -112,7 +107,7 @@ export const mockJob = {
   title: "Senior Frontend Engineer",
   category: "Engineering",
   employmentType: "full_time",
-  workplaceType: "remote",
+  workplaceType: "onsite",
   country: "US",
   city: "San Francisco",
   hiringManager: "Jane Doe",

@@ -10,36 +10,32 @@ if (isClient) {
   i18n.use(HttpBackend);
 }
 
-i18n
-  .use(initReactI18next)
-  .init({
-    lng: isClient ? (localStorage.getItem("language") || "en") : "en",
-    fallbackLng: "en",
-    defaultNS: "common",
-    ns: ["common"],
-    interpolation: {
-      escapeValue: false,
+i18n.use(initReactI18next).init({
+  lng: isClient ? localStorage.getItem("language") || "en" : "en",
+  fallbackLng: "en",
+  defaultNS: "common",
+  ns: ["common"],
+  interpolation: {
+    escapeValue: false,
+  },
+  // HttpBackend options — only relevant on the client
+  ...(isClient && {
+    backend: {
+      loadPath: "/static/locales/{{lng}}/{{ns}}.json",
     },
-    // HttpBackend options — only relevant on the client
-    ...(isClient && {
-      backend: {
-        loadPath: "/static/locales/{{lng}}/{{ns}}.json",
-      },
-    }),
-    // During SSR, provide empty resources so rendering doesn't block
-    ...(!isClient && {
-      resources: { en: { common: {} } },
-    }),
-  });
+  }),
+  // During SSR, provide empty resources so rendering doesn't block
+  ...(!isClient && {
+    resources: { en: { common: {} } },
+  }),
+});
 
 export default i18n;
 
 /**
  * Available languages for the language switcher.
  */
-export const languages = [
-  { code: "en", label: "English" },
-] as const;
+export const languages = [{ code: "en", label: "English" }] as const;
 
 /**
  * Change the active language and persist to localStorage.

@@ -32,7 +32,8 @@ export default function Login() {
   const [mounted, setMounted] = useState(false);
   const redirectTo = searchParams.get("redirect");
   const inviteEmail = searchParams.get("invite_email");
-  const inviteRedirect = typeof redirectTo === "string" && isSafeRedirect(redirectTo) ? redirectTo : null;
+  const inviteRedirect =
+    typeof redirectTo === "string" && isSafeRedirect(redirectTo) ? redirectTo : null;
   const signupHref = inviteRedirect
     ? `/signup?invite=${encodeURIComponent(inviteRedirect.replace(/^\/invite\//, ""))}${inviteEmail ? `&invite_email=${encodeURIComponent(inviteEmail)}` : ""}`
     : "/signup";
@@ -82,8 +83,7 @@ export default function Login() {
         <div
           className="absolute inset-0 opacity-[0.03]"
           style={{
-            backgroundImage:
-              "radial-gradient(circle, hsl(var(--foreground)) 1px, transparent 1px)",
+            backgroundImage: "radial-gradient(circle, hsl(var(--foreground)) 1px, transparent 1px)",
             backgroundSize: "24px 24px",
           }}
         />
@@ -100,8 +100,8 @@ export default function Login() {
             simplified.
           </h1>
           <p className="text-muted-foreground text-sm leading-relaxed">
-            Streamline your recruitment pipeline with an intuitive,
-            distraction-free experience built for modern teams.
+            Streamline your recruitment pipeline with an intuitive, distraction-free experience
+            built for modern teams.
           </p>
         </div>
       </div>
@@ -119,9 +119,7 @@ export default function Login() {
 
           <div className="lg:rounded-xl lg:border lg:border-border lg:bg-card lg:p-8 lg:shadow-sm">
             <div className="mb-6">
-              <h2 className="text-xl font-semibold tracking-tight">
-                Welcome back
-              </h2>
+              <h2 className="text-xl font-semibold tracking-tight">Welcome back</h2>
               <p className="text-sm text-muted-foreground mt-1">
                 Sign in to your account to continue
               </p>
@@ -159,65 +157,55 @@ export default function Login() {
                 <div className="w-full border-t border-border" />
               </div>
               <div className="relative flex justify-center">
-                <span className="bg-card px-3 text-xs text-muted-foreground lg:bg-card">
-                  or
-                </span>
+                <span className="bg-card px-3 text-xs text-muted-foreground lg:bg-card">or</span>
               </div>
             </div>
 
             <Form form={form} onSubmit={onSubmit} className="space-y-4">
-                {form.formState.errors.root?.message && (
-                  <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-sm text-destructive">
-                    {form.formState.errors.root.message}
-                  </div>
+              {form.formState.errors.root?.message && (
+                <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-sm text-destructive">
+                  {form.formState.errors.root.message}
+                </div>
+              )}
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field, fieldState }) => (
+                  <FormItem>
+                    <FormControl>
+                      <InputField
+                        {...field}
+                        label={t("email")}
+                        type="email"
+                        placeholder="acme@example.com"
+                        autoComplete="email"
+                        error={fieldState.error?.message}
+                      />
+                    </FormControl>
+                  </FormItem>
                 )}
-                <FormField
-                  control={form.control}
-                  name="email"
-                  render={({ field, fieldState }) => (
-                    <FormItem>
-                      <FormControl>
-                        <InputField
-                          {...field}
-                          label={t("email")}
-                          type="email"
-                          placeholder="acme@example.com"
-                          autoComplete="email"
-                          error={fieldState.error?.message}
-                        />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
+              />
 
-                <FormField
-                  control={form.control}
-                  name="password"
-                  render={({ field, fieldState }) => (
-                    <FormItem>
-                      <FormControl>
-                        <PasswordField
-                          {...field}
-                          label={t("password")}
-                          placeholder="••••••••"
-                          autoComplete="current-password"
-                          error={fieldState.error?.message}
-                        />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-                <Button
-                  type="submit"
-                  className="w-full h-10 text-sm font-medium"
-                  disabled={loading}
-                >
-                  {loading ? (
-                    <Icon name="Loader" className="h-4 w-4 animate-spin" />
-                  ) : (
-                    t("sign_in")
-                  )}
-                </Button>
+              <FormField
+                control={form.control}
+                name="password"
+                render={({ field, fieldState }) => (
+                  <FormItem>
+                    <FormControl>
+                      <PasswordField
+                        {...field}
+                        label={t("password")}
+                        placeholder="••••••••"
+                        autoComplete="current-password"
+                        error={fieldState.error?.message}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+              <Button type="submit" className="w-full h-10 text-sm font-medium" disabled={loading}>
+                {loading ? <Icon name="Loader" className="h-4 w-4 animate-spin" /> : t("sign_in")}
+              </Button>
             </Form>
 
             <p className="text-center text-xs text-muted-foreground mt-5">

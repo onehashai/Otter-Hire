@@ -1,14 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import {
-  Mail,
-  Bell,
-  MessageSquare,
-  ArrowRight,
-  UserPlus,
-  Tag,
-  X,
-  Calendar,
-} from "lucide-react";
+import { Mail, Bell, MessageSquare, ArrowRight, UserPlus, Tag, X, Calendar } from "lucide-react";
 
 export type Scope = "all" | "specific_job" | "specific_pipeline";
 export type TriggerCategory = "candidate" | "job" | "time-based";

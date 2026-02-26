@@ -15,11 +15,14 @@ export default function AIAssistantPage() {
           </div>
           <h2 className="text-base md:text-lg font-semibold mb-1">AI Assistant</h2>
           <p className="text-xs md:text-sm text-muted-foreground text-center max-w-sm">
-            Ask me anything about your hiring pipeline, candidates, or let me help draft job descriptions.
+            Ask me anything about your hiring pipeline, candidates, or let me help draft job
+            descriptions.
           </p>
           <div className="flex flex-wrap gap-2 mt-4 md:mt-6 justify-center">
             {["Summarize candidates", "Draft job description", "Interview questions"].map((s) => (
-              <Button key={s} variant="outline" size="sm" className="text-xs h-8 md:h-7">{s}</Button>
+              <Button key={s} variant="outline" size="sm" className="text-xs h-8 md:h-7">
+                {s}
+              </Button>
             ))}
           </div>
         </CardContent>

@@ -3,20 +3,20 @@ from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status, Request
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.security import create_access_token, hash_password, verify_password
 from app.db.session import get_db
 from app.deps.auth import get_current_user
-from app.models.organization import Organization
-from app.models.org_membership import OrgMembership
-from app.models.user import User
 from app.models.job_category import JobCategory
+from app.models.org_membership import OrgMembership
+from app.models.organization import Organization
+from app.models.user import User
 from app.schemas.auth import (
     AcceptInviteRequest,
     AuthUserResponse,
@@ -44,6 +44,7 @@ def _to_user_response(user: User, membership: OrgMembership) -> AuthUserResponse
         org_id=membership.org_id,
         org_name="",
         org_website=None,
+        org_avatar_url=None,
         is_verified=user.is_verified,
         is_onboarded=user.is_onboarded,
     )
@@ -74,7 +75,9 @@ def _set_access_cookie(response: Response, token: str) -> None:
 
 @router.post("/signup", response_model=AuthUserResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit("5/15 minutes")
-async def signup(request: Request, payload: SignupRequest, response: Response, db: AsyncSession = Depends(get_db)) -> AuthUserResponse:
+async def signup(
+    request: Request, payload: SignupRequest, response: Response, db: AsyncSession = Depends(get_db)
+) -> AuthUserResponse:
     normalized_email = payload.email.lower()
 
     existing_user = await db.execute(select(User).where(User.email == normalized_email))
@@ -93,7 +96,9 @@ async def signup(request: Request, payload: SignupRequest, response: Response, d
 
     raw_token = secrets.token_urlsafe(32)
     token_hash = sha256(raw_token.encode()).hexdigest()
-    token_expires_at = datetime.now(timezone.utc) + timedelta(hours=settings.verification_token_expire_hours)
+    token_expires_at = datetime.now(timezone.utc) + timedelta(
+        hours=settings.verification_token_expire_hours
+    )
 
     user = User(
         id=uuid4(),
@@ -131,7 +136,9 @@ async def signup(request: Request, payload: SignupRequest, response: Response, d
 
 @router.post("/login", response_model=AuthUserResponse)
 @limiter.limit("5/15 minutes")
-async def login(request: Request, payload: LoginRequest, response: Response, db: AsyncSession = Depends(get_db)) -> AuthUserResponse:
+async def login(
+    request: Request, payload: LoginRequest, response: Response, db: AsyncSession = Depends(get_db)
+) -> AuthUserResponse:
     normalized_email = payload.email.lower()
     result = await db.execute(select(User).where(User.email == normalized_email))
     user = result.scalar_one_or_none()
@@ -147,7 +154,9 @@ async def login(request: Request, payload: LoginRequest, response: Response, db:
     )
     membership = membership_result.scalars().first()
     if membership is None:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No active organization membership")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="No active organization membership"
+        )
 
     token = _create_session_token(user, membership)
     _set_access_cookie(response, token)
@@ -155,7 +164,9 @@ async def login(request: Request, payload: LoginRequest, response: Response, db:
 
 
 @router.get("/me", response_model=AuthUserResponse)
-async def me(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> AuthUserResponse:
+async def me(
+    current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+) -> AuthUserResponse:
     membership_result = await db.execute(
         select(OrgMembership).where(
             OrgMembership.user_id == current_user.id,
@@ -168,10 +179,11 @@ async def me(current_user: User = Depends(get_current_user), db: AsyncSession = 
 
     org_result = await db.execute(select(Organization).where(Organization.id == membership.org_id))
     organization = org_result.scalar_one()
-    
+
     response = _to_user_response(current_user, membership)
     response.org_name = organization.name
     response.org_website = organization.website
+    response.org_avatar_url = organization.avatar_url
     return response
 
 
@@ -184,7 +196,9 @@ async def logout(response: Response) -> Response:
 
 @router.post("/verify", response_model=VerifyEmailResponse)
 @limiter.limit("10/15 minutes")
-async def verify_email(request: Request, payload: VerifyEmailRequest, db: AsyncSession = Depends(get_db)) -> VerifyEmailResponse:
+async def verify_email(
+    request: Request, payload: VerifyEmailRequest, db: AsyncSession = Depends(get_db)
+) -> VerifyEmailResponse:
     token_hash = sha256(payload.token.encode()).hexdigest()
     now = datetime.now(timezone.utc)
 
@@ -197,7 +211,9 @@ async def verify_email(request: Request, payload: VerifyEmailRequest, db: AsyncS
     user = result.scalar_one_or_none()
 
     if user is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired verification token")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired verification token"
+        )
 
     user.is_verified = True
     user.verified_at = now
@@ -220,7 +236,9 @@ async def resend_verification(
     if user and not user.is_verified:
         raw_token = secrets.token_urlsafe(32)
         token_hash = sha256(raw_token.encode()).hexdigest()
-        token_expires_at = datetime.now(timezone.utc) + timedelta(hours=settings.verification_token_expire_hours)
+        token_expires_at = datetime.now(timezone.utc) + timedelta(
+            hours=settings.verification_token_expire_hours
+        )
 
         user.verification_token_hash = token_hash
         user.verification_token_expires_at = token_expires_at
@@ -240,10 +258,14 @@ async def onboarding(
     db: AsyncSession = Depends(get_db),
 ) -> AuthUserResponse:
     if not current_user.is_verified:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Email verification required")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Email verification required"
+        )
 
     if current_user.is_onboarded:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User already onboarded")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="User already onboarded"
+        )
 
     membership_result = await db.execute(
         select(OrgMembership).where(
@@ -315,7 +337,9 @@ async def accept_invite(
     membership.invite_token_expires_at = None
     raw_token = secrets.token_urlsafe(32)
     token_hash = sha256(raw_token.encode()).hexdigest()
-    token_expires_at = datetime.now(timezone.utc) + timedelta(hours=settings.verification_token_expire_hours)
+    token_expires_at = datetime.now(timezone.utc) + timedelta(
+        hours=settings.verification_token_expire_hours
+    )
     user.verification_token_hash = token_hash
     user.verification_token_expires_at = token_expires_at
 
@@ -358,7 +382,10 @@ async def accept_existing_invite(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invite not found")
 
     if invited_user.email.lower() != current_user.email.lower():
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invite email does not match logged-in account")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invite email does not match logged-in account",
+        )
 
     invited_user.name = current_user.name
     invited_user.hashed_password = current_user.hashed_password

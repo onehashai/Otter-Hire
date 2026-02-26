@@ -14,7 +14,10 @@ export function FunnelSection() {
         <div className="space-y-2">
           {stages.map((stage, i) => {
             const pct = Math.round((stage.value / stages[0].value) * 100);
-            const dropOff = i > 0 ? Math.round(((stages[i - 1].value - stage.value) / stages[i - 1].value) * 100) : 0;
+            const dropOff =
+              i > 0
+                ? Math.round(((stages[i - 1].value - stage.value) / stages[i - 1].value) * 100)
+                : 0;
             return (
               <div key={stage.name} className="space-y-1">
                 <div className="flex items-center justify-between text-xs">
@@ -22,9 +25,7 @@ export function FunnelSection() {
                   <div className="flex items-center gap-2">
                     <span className="text-muted-foreground">{stage.value.toLocaleString()}</span>
                     {i > 0 && (
-                      <span className="text-[10px] text-muted-foreground">
-                        -{dropOff}%
-                      </span>
+                      <span className="text-[10px] text-muted-foreground">-{dropOff}%</span>
                     )}
                   </div>
                 </div>

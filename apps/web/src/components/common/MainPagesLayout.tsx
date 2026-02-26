@@ -51,7 +51,10 @@ export const MainPagesLayout = ({
     <div className="space-y-3 md:space-y-4">
       <div className="flex items-center gap-2">
         <div className="relative flex-1 md:flex-none">
-          <Icon name="Search" className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+          <Icon
+            name="Search"
+            className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground"
+          />
           <InputField
             placeholder={t("search") + "..."}
             value={searchValue}
@@ -60,10 +63,15 @@ export const MainPagesLayout = ({
           />
         </div>
 
-        {filterContent && (
-          isMobile ? (
+        {filterContent &&
+          (isMobile ? (
             <>
-              <Button variant="outline" size="sm" className="h-9 text-xs gap-1.5 shrink-0" onClick={() => setFilterOpen(true)}>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9 text-xs gap-1.5 shrink-0"
+                onClick={() => setFilterOpen(true)}
+              >
                 <Icon name="Filter" className="h-3.5 w-3.5" />
                 {hasActiveFilters && <span className="h-1.5 w-1.5 rounded-full bg-foreground" />}
               </Button>
@@ -89,12 +97,17 @@ export const MainPagesLayout = ({
                 {filterContent}
               </PopoverContent>
             </Popover>
-          )
-        )}
+          ))}
         <div className="flex-1" />
         {secondaryActionLabel && secondaryActionIcon && onSecondaryAction && (
-          <Button variant="outline" size="sm" className="h-9 md:h-8 text-xs gap-1.5 shrink-0" onClick={(e) => onSecondaryAction(e)}>
-            <Icon name={secondaryActionIcon} className="h-3.5 w-3.5" /> {!isMobile && secondaryActionLabel}
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9 md:h-8 text-xs gap-1.5 shrink-0"
+            onClick={(e) => onSecondaryAction(e)}
+          >
+            <Icon name={secondaryActionIcon} className="h-3.5 w-3.5" />{" "}
+            {!isMobile && secondaryActionLabel}
           </Button>
         )}
         <Button size="sm" className="h-9 md:h-8 text-xs gap-1.5 shrink-0" onClick={onAction}>
@@ -105,13 +118,23 @@ export const MainPagesLayout = ({
       {activeChips && activeChips.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {activeChips.map((chip, i) => (
-            <Badge key={i} variant="secondary" className="text-[10px] gap-1 pr-1 cursor-pointer hover:bg-muted" onClick={chip.clear}>
+            <Badge
+              key={i}
+              variant="secondary"
+              className="text-[10px] gap-1 pr-1 cursor-pointer hover:bg-muted"
+              onClick={chip.clear}
+            >
               {chip.label}
               <Icon name="X" className="h-2.5 w-2.5" />
             </Badge>
           ))}
           {onClearAllFilters && (
-            <Button variant="ghost" size="sm" className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground" onClick={onClearAllFilters}>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground"
+              onClick={onClearAllFilters}
+            >
               {t("clear_all")}
             </Button>
           )}

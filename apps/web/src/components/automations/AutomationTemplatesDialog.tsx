@@ -26,10 +26,7 @@ export interface AutomationTemplatesDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-export function AutomationTemplatesDialog({
-  open,
-  onOpenChange,
-}: AutomationTemplatesDialogProps) {
+export function AutomationTemplatesDialog({ open, onOpenChange }: AutomationTemplatesDialogProps) {
   const router = useRouter();
 
   const handleSelectTemplate = () => {

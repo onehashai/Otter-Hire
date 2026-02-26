@@ -13,20 +13,14 @@ function isJobsSubdomain(host: string): boolean {
   return host.startsWith(`${jobsSubdomain}.`);
 }
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   const headersList = headers();
   const host = headersList.get("host") || "";
   const isPublicSite = isJobsSubdomain(host);
 
   return (
     <html lang="en" suppressHydrationWarning>
-      <body>
-        {isPublicSite ? children : <Providers>{children}</Providers>}
-      </body>
+      <body>{isPublicSite ? children : <Providers>{children}</Providers>}</body>
     </html>
   );
 }

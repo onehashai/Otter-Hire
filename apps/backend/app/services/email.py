@@ -7,19 +7,25 @@ import httpx
 from app.core.config import settings
 from app.core.logging import logger
 from app.email_templates import EmailContent
-from app.email_templates.verification import build_verification_email
 from app.email_templates.invite import build_invite_email
+from app.email_templates.verification import build_verification_email
 
 
-async def send_email(to_email: str, content: EmailContent, *, fallback_url: str | None = None) -> None:
+async def send_email(
+    to_email: str, content: EmailContent, *, fallback_url: str | None = None
+) -> None:
     if settings.is_production:
         await _send_via_zeptomail(to_email, content.subject, content.html, content.text)
     else:
-        await _send_via_mailtrap(to_email, content.subject, content.html, content.text, fallback_url=fallback_url)
+        await _send_via_mailtrap(
+            to_email, content.subject, content.html, content.text, fallback_url=fallback_url
+        )
 
 
 async def send_verification_email(to_email: str, verify_url: str) -> None:
-    content = build_verification_email(verify_url, expiry_hours=settings.verification_token_expire_hours)
+    content = build_verification_email(
+        verify_url, expiry_hours=settings.verification_token_expire_hours
+    )
     await send_email(to_email, content, fallback_url=verify_url)
 
 
@@ -41,7 +47,14 @@ async def send_invite_email(
 async def _send_via_mailtrap(
     to_email: str, subject: str, html_body: str, text_body: str, *, fallback_url: str | None = None
 ) -> None:
-    if not all([settings.mailtrap_host, settings.mailtrap_port, settings.mailtrap_username, settings.mailtrap_password]):
+    if not all(
+        [
+            settings.mailtrap_host,
+            settings.mailtrap_port,
+            settings.mailtrap_username,
+            settings.mailtrap_password,
+        ]
+    ):
         logger.warning("Mailtrap config missing. Printing URL to console:")
         if fallback_url:
             logger.warning(f"Action URL: {fallback_url}")

@@ -2,24 +2,27 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select, func as sa_func, delete
+from sqlalchemy import delete, select
+from sqlalchemy import func as sa_func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.db.session import get_db
 from app.core.permissions import require_permission
-from app.deps.job_scope import require_job_access, ASSIGNED_ONLY_ROLES
+from app.db.session import get_db
+from app.deps.job_scope import ASSIGNED_ONLY_ROLES, require_job_access
 from app.models.candidate import Candidate
 from app.models.job import Job
 from app.models.job_team_member import JobTeamMember
 from app.models.stage import Stage
 from app.models.user import User
 from app.schemas.jobs import (
-    JobCreateRequest,
-    JobUpdateRequest,
-    JobListItemResponse,
-    JobDetailResponse,
     HiringStageResponse,
+    JobCreateRequest,
+    JobDetailResponse,
+    JobListItemResponse,
+    JobPipelineResponse,
+    JobUpdateRequest,
+    PipelineCandidateResponse,
     TeamMemberResponse,
 )
 
@@ -35,22 +38,109 @@ DEFAULT_STAGES = [
 REQUIRED_STAGE_NAMES = {"Applied", "Hired"}
 
 
+def _default_application_form_schema(job: Job) -> dict:
+    profile_links = [
+        {
+            "id": "profile_link_linkedin",
+            "key": "profile_link_linkedin",
+            "label": "LinkedIn",
+            "type": "url",
+            "visibility": "optional",
+        },
+        {
+            "id": "profile_link_github",
+            "key": "profile_link_github",
+            "label": "GitHub",
+            "type": "url",
+            "visibility": "optional",
+        },
+        {
+            "id": "profile_link_portfolio",
+            "key": "profile_link_portfolio",
+            "label": "Portfolio / Personal Website",
+            "type": "url",
+            "visibility": "optional",
+        },
+        {
+            "id": "profile_link_twitter_x",
+            "key": "profile_link_twitter_x",
+            "label": "Twitter / X",
+            "type": "url",
+            "visibility": "hidden",
+        },
+        {
+            "id": "profile_link_dribbble",
+            "key": "profile_link_dribbble",
+            "label": "Dribbble",
+            "type": "url",
+            "visibility": "hidden",
+        },
+        {
+            "id": "profile_link_behance",
+            "key": "profile_link_behance",
+            "label": "Behance",
+            "type": "url",
+            "visibility": "hidden",
+        },
+    ]
+    return {
+        "version": 1,
+        "default_fields": {
+            "full_name": {"visibility": "required", "label": "Full Name"},
+            "email": {"visibility": "required", "label": "Email"},
+            "phone": {"visibility": "optional", "label": "Phone Number"},
+            "resume": {
+                "visibility": "required" if job.collect_resume else "hidden",
+                "label": "Resume",
+            },
+            "cover_letter": {
+                "visibility": "optional" if job.collect_cover else "hidden",
+                "label": "Cover Letter",
+            },
+        },
+        "profile_links": profile_links,
+        "custom_fields": [
+            {
+                "id": f"screening_{idx}",
+                "key": f"screening_{idx}",
+                "label": q,
+                "type": "short_text",
+                "visibility": "optional",
+            }
+            for idx, q in enumerate((job.screening_questions or []), start=1)
+        ],
+    }
+
+
+def _normalized_application_form_schema(job: Job) -> dict:
+    schema = dict(job.application_form_schema or _default_application_form_schema(job))
+    defaults = _default_application_form_schema(job)
+    schema.setdefault("version", 1)
+    schema.setdefault("default_fields", defaults["default_fields"])
+    schema.setdefault("custom_fields", [])
+    schema.setdefault("profile_links", defaults["profile_links"])
+    return schema
+
+
 def _build_detail_response(job: Job) -> JobDetailResponse:
     stages = sorted(job.stages, key=lambda s: s.position)
     hiring_stages = [
-        HiringStageResponse(id=s.id, name=s.name, position=s.position, is_required=s.is_required) for s in stages
+        HiringStageResponse(id=s.id, name=s.name, position=s.position, is_required=s.is_required)
+        for s in stages
     ]
     team = []
     for tm in job.team_members:
         user = tm.user
-        team.append(TeamMemberResponse(
-            id=tm.id,
-            user_id=tm.user_id,
-            name=user.name if user else None,
-            email=user.email if user else None,
-            role=tm.role,
-            user_role=user.role if user else None,
-        ))
+        team.append(
+            TeamMemberResponse(
+                id=tm.id,
+                user_id=tm.user_id,
+                name=user.name if user else None,
+                email=user.email if user else None,
+                role=tm.role,
+                user_role=user.role if user else None,
+            )
+        )
     return JobDetailResponse(
         id=job.id,
         title=job.title,
@@ -72,6 +162,7 @@ def _build_detail_response(job: Job) -> JobDetailResponse:
         collect_resume=job.collect_resume,
         collect_cover=job.collect_cover,
         screening_questions=job.screening_questions or [],
+        application_form_schema=_normalized_application_form_schema(job),
         pipeline_template=job.pipeline_template,
         hiring_stages=hiring_stages,
         team_members=team,
@@ -110,8 +201,12 @@ async def create_job(
         created_by_user_id=current_user.id,
         title=body.title,
         category="Engineering",
+        workplace_type="onsite",
+        collect_resume=True,
+        collect_cover=False,
         status="draft",
     )
+    job.application_form_schema = _default_application_form_schema(job)
     db.add(job)
     await db.flush()
 
@@ -137,9 +232,7 @@ async def create_job(
 
     await db.commit()
 
-    return _build_detail_response(
-        await _get_job_or_404(db, job.id, current_user.org_id)
-    )
+    return _build_detail_response(await _get_job_or_404(db, job.id, current_user.org_id))
 
 
 @router.patch("/{job_id}", response_model=JobDetailResponse)
@@ -172,15 +265,23 @@ async def update_job(
         provided_stage_ids = {s.id for s in hiring_stages_input if s.id is not None}
 
         if provided_stage_ids:
-            missing_required = [name for sid, name in required_stages.items() if sid not in provided_stage_ids]
+            missing_required = [
+                name for sid, name in required_stages.items() if sid not in provided_stage_ids
+            ]
             if missing_required:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Required stages cannot be deleted: {', '.join(missing_required)}",
                 )
         elif required_stages:
-            provided_stage_names = {s.name.strip().lower() for s in hiring_stages_input if s.name.strip()}
-            missing_required = [name for name in required_stages.values() if name.lower() not in provided_stage_names]
+            provided_stage_names = {
+                s.name.strip().lower() for s in hiring_stages_input if s.name.strip()
+            }
+            missing_required = [
+                name
+                for name in required_stages.values()
+                if name.lower() not in provided_stage_names
+            ]
             if missing_required:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
@@ -236,9 +337,7 @@ async def update_job(
 
     db.expunge_all()
 
-    return _build_detail_response(
-        await _get_job_or_404(db, job_id_val, org_id_val)
-    )
+    return _build_detail_response(await _get_job_or_404(db, job_id_val, org_id_val))
 
 
 @router.get("", response_model=list[JobListItemResponse])
@@ -264,29 +363,28 @@ async def list_jobs(
     )
 
     if current_user.role in ASSIGNED_ONLY_ROLES:
-        stmt = (
-            stmt.join(
-                JobTeamMember,
-                (JobTeamMember.job_id == Job.id) & (JobTeamMember.user_id == current_user.id),
-            )
-            .distinct(Job.id)
-        )
+        stmt = stmt.join(
+            JobTeamMember,
+            (JobTeamMember.job_id == Job.id) & (JobTeamMember.user_id == current_user.id),
+        ).distinct(Job.id)
 
     result = await db.execute(stmt)
     items = []
     for row in result.all():
         job = row[0]
         count = row[1]
-        items.append(JobListItemResponse(
-            id=job.id,
-            title=job.title,
-            category=job.category,
-            employment_type=job.employment_type,
-            status=job.status,
-            candidate_count=count,
-            created_at=job.created_at,
-            updated_at=job.updated_at,
-        ))
+        items.append(
+            JobListItemResponse(
+                id=job.id,
+                title=job.title,
+                category=job.category,
+                employment_type=job.employment_type,
+                status=job.status,
+                candidate_count=count,
+                created_at=job.created_at,
+                updated_at=job.updated_at,
+            )
+        )
     return items
 
 
@@ -300,6 +398,50 @@ async def get_job(
     return _build_detail_response(job)
 
 
+@router.get("/{job_id}/pipeline", response_model=JobPipelineResponse)
+async def get_job_pipeline(
+    job_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("jobs:read")),
+):
+    job = await require_job_access(job_id, db, current_user)
+    stages = sorted(job.stages, key=lambda s: s.position)
+    fallback_stage_id = stages[0].id if stages else None
+
+    candidate_result = await db.execute(
+        select(Candidate)
+        .where(Candidate.org_id == current_user.org_id, Candidate.job_id == job.id)
+        .order_by(Candidate.updated_at.desc(), Candidate.created_at.desc())
+    )
+    candidates = candidate_result.scalars().all()
+
+    return JobPipelineResponse(
+        id=job.id,
+        title=job.title,
+        status=job.status,
+        stages=[
+            HiringStageResponse(
+                id=stage.id,
+                name=stage.name,
+                position=stage.position,
+                is_required=stage.is_required,
+            )
+            for stage in stages
+        ],
+        candidates=[
+            PipelineCandidateResponse(
+                id=candidate.id,
+                name=candidate.name,
+                email=candidate.email,
+                stage_id=candidate.stage_id or fallback_stage_id,
+                created_at=candidate.created_at,
+                updated_at=candidate.updated_at,
+            )
+            for candidate in candidates
+        ],
+    )
+
+
 @router.post("/{job_id}/publish", response_model=JobDetailResponse)
 async def publish_job(
     job_id: UUID,
@@ -311,7 +453,10 @@ async def publish_job(
     if job.status != "draft":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Cannot publish a job with status '{job.status}'. Only draft jobs can be published.",
+            detail=(
+                f"Cannot publish a job with status '{job.status}'. "
+                "Only draft jobs can be published."
+            ),
         )
 
     if not job.title or not job.title.strip():
@@ -350,9 +495,7 @@ async def publish_job(
     job.published_at = datetime.now(timezone.utc)
     await db.commit()
 
-    return _build_detail_response(
-        await _get_job_or_404(db, job.id, current_user.org_id)
-    )
+    return _build_detail_response(await _get_job_or_404(db, job.id, current_user.org_id))
 
 
 @router.post("/{job_id}/archive", response_model=JobDetailResponse)
@@ -374,9 +517,7 @@ async def archive_job(
     job.closed_at = datetime.now(timezone.utc)
     await db.commit()
 
-    return _build_detail_response(
-        await _get_job_or_404(db, job.id, current_user.org_id)
-    )
+    return _build_detail_response(await _get_job_or_404(db, job.id, current_user.org_id))
 
 
 @router.post("/{job_id}/unpublish", response_model=JobDetailResponse)
@@ -390,7 +531,10 @@ async def unpublish_job(
     if job.status != "open":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Cannot unpublish a job with status '{job.status}'. Only open jobs can be unpublished.",
+            detail=(
+                f"Cannot unpublish a job with status '{job.status}'. "
+                "Only open jobs can be unpublished."
+            ),
         )
 
     job.status = "draft"
@@ -398,6 +542,4 @@ async def unpublish_job(
     job.published_at = None
     await db.commit()
 
-    return _build_detail_response(
-        await _get_job_or_404(db, job.id, current_user.org_id)
-    )
+    return _build_detail_response(await _get_job_or_404(db, job.id, current_user.org_id))

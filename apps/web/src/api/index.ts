@@ -32,7 +32,12 @@ export * from "./job/index";
 export * from "./job/types";
 
 // Invite
-export { getInviteDetails, acceptInvite, declineInvite, acceptExistingInvite } from "./invite/index";
+export {
+  getInviteDetails,
+  acceptInvite,
+  declineInvite,
+  acceptExistingInvite,
+} from "./invite/index";
 
 // Health
 export { getHealth, type HealthResponse } from "./health/status";
@@ -42,3 +47,9 @@ export * from "./public/index";
 
 // Job Categories
 export * from "./job-categories/index";
+
+// Candidates
+export * from "./candidates/index";
+
+// Users
+export * from "./users/index";

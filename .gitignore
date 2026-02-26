@@ -36,3 +36,5 @@ apps/backend/venv/
 venv/
 __pycache__/
 *.pyc
+apps/backend/storage/local/*
+!apps/backend/storage/local/.gitkeep

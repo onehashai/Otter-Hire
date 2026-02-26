@@ -1,8 +1,10 @@
 from typing import Optional
 from uuid import UUID
-from fastapi import Request, Header
-from app.schemas.common import RequestContextSchema, UserContext
+
+from fastapi import Header, Request
+
 from app.core.logging import logger
+from app.schemas.common import RequestContextSchema, UserContext
 
 
 class RequestContext:
@@ -17,7 +19,7 @@ class RequestContext:
 async def get_request_context(
     request: Request,
     x_org_id: Optional[str] = Header(None, alias="X-ORG-ID"),
-    authorization: Optional[str] = Header(None)
+    authorization: Optional[str] = Header(None),
 ) -> RequestContext:
     org_id = None
     if x_org_id:

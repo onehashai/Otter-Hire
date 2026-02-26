@@ -1,6 +1,14 @@
 "use client";
 
-import { createContext, useContext, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  createContext,
+  useContext,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "@/components/common/ThemeProvider";
@@ -45,26 +53,29 @@ export function Providers({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const inflightRef = useRef<Promise<AuthSessionResponse | null> | null>(null);
 
-  const refreshSession = useCallback(async (force?: boolean): Promise<AuthSessionResponse | null> => {
-    if (!force && inflightRef.current) return inflightRef.current;
-    if (force) inflightRef.current = null;
-    const promise = (async () => {
-      try {
-        const me = await getAuthSession();
-        setUser(me);
-        return me;
-      } catch {
-        setUser(null);
-        return null;
-      } finally {
-        setLoading(false);
-        setSessionVersion((v) => v + 1);
-        inflightRef.current = null;
-      }
-    })();
-    inflightRef.current = promise;
-    return promise;
-  }, []);
+  const refreshSession = useCallback(
+    async (force?: boolean): Promise<AuthSessionResponse | null> => {
+      if (!force && inflightRef.current) return inflightRef.current;
+      if (force) inflightRef.current = null;
+      const promise = (async () => {
+        try {
+          const me = await getAuthSession();
+          setUser(me);
+          return me;
+        } catch {
+          setUser(null);
+          return null;
+        } finally {
+          setLoading(false);
+          setSessionVersion((v) => v + 1);
+          inflightRef.current = null;
+        }
+      })();
+      inflightRef.current = promise;
+      return promise;
+    },
+    [],
+  );
 
   const clearSession = useCallback(() => {
     inflightRef.current = null;
@@ -114,13 +125,15 @@ export function Providers({ children }: { children: React.ReactNode }) {
     }
 
     if (isAuthRoute || isLifecycleRoute) {
-      router.replace("/dashboard");
+      // TODO(mvp-nav): Restore dashboard landing route after MVP launch.
+      // router.replace("/dashboard");
+      router.replace("/");
     }
   }, [user, loading, pathname, router, sessionVersion]);
 
   const authValue = useMemo(
     () => ({ user, loading, refreshSession, clearSession }),
-    [user, loading, refreshSession, clearSession]
+    [user, loading, refreshSession, clearSession],
   );
 
   if (loading) {

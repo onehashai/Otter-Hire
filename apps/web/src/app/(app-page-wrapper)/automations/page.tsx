@@ -47,8 +47,7 @@ export default function AutomationsPage() {
       )
         return false;
       if (statusFilter.length && !statusFilter.includes(a.status)) return false;
-      if (triggerFilter.length && !triggerFilter.includes(a.triggerType))
-        return false;
+      if (triggerFilter.length && !triggerFilter.includes(a.triggerType)) return false;
       return true;
     });
   }, [search, statusFilter, triggerFilter, automations]);
@@ -83,17 +82,16 @@ export default function AutomationsPage() {
     activeChips.push({
       label: `Status: ${s}`,
       clear: () => setStatusFilter((p) => p.filter((v) => v !== s)),
-    })
+    }),
   );
   triggerFilter.forEach((tr) =>
     activeChips.push({
       label: `Trigger: ${triggerTypeLabel(tr)}`,
       clear: () => setTriggerFilter((p) => p.filter((v) => v !== tr)),
-    })
+    }),
   );
 
-  const showEmptyState =
-    automations.length === 0 && !search && !hasActiveFilters;
+  const showEmptyState = automations.length === 0 && !search && !hasActiveFilters;
 
   return (
     <MainPagesLayout

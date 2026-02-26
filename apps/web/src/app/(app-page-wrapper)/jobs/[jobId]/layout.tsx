@@ -26,7 +26,11 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { JobSetupProvider, useJobSetup } from "./context";
 import { SETUP_SECTIONS, type SetupStepSlug } from "./constants";
-import { isSetupValid, getFirstInvalidSection, getBasicInfoValidation } from "../../../../lib/validations/setupValidation";
+import {
+  isSetupValid,
+  getFirstInvalidSection,
+  getBasicInfoValidation,
+} from "../../../../lib/validations/setupValidation";
 import { useEffect } from "react";
 import { useSetPageMetadata } from "@/hooks/useSetPageMetadata";
 
@@ -118,14 +122,19 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
   };
 
   const onSave = () => {
-    if (!isSetupValid(validationState)) {
-      const first = getFirstInvalidSection(validationState);
-      if (first) {
-        setBasicInfoAttemptedSave(first.slug === "info");
-        setHiringDetailsAttemptedSave(first.slug === "details");
-        toast.error(first.messageParams ? t(first.messageKey, first.messageParams) : t(first.messageKey));
-        goTo(first.slug);
+    const basicInfoValidation = getBasicInfoValidation(validationState);
+    if (!basicInfoValidation.valid) {
+      const titleError = basicInfoValidation.titleError;
+      setBasicInfoAttemptedSave(true);
+      setHiringDetailsAttemptedSave(false);
+      if (titleError === "min") {
+        toast.error(t("min_char_length", { count: 1 }));
+      } else if (titleError === "max") {
+        toast.error(t("max_char_length", { count: 100 }));
+      } else {
+        toast.error(t("job_name_required"));
       }
+      goTo("info");
       return;
     }
     setBasicInfoAttemptedSave(false);
@@ -139,7 +148,9 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
       if (first) {
         setBasicInfoAttemptedSave(first.slug === "info");
         setHiringDetailsAttemptedSave(first.slug === "details");
-        toast.error(first.messageParams ? t(first.messageKey, first.messageParams) : t(first.messageKey));
+        toast.error(
+          first.messageParams ? t(first.messageKey, first.messageParams) : t(first.messageKey),
+        );
         goTo(first.slug);
       }
       return;
@@ -154,7 +165,9 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
       const first = getFirstInvalidSection(validationState);
       if (first?.slug === "info") {
         setBasicInfoAttemptedSave(true);
-        toast.error(first.messageParams ? t(first.messageKey, first.messageParams) : t(first.messageKey));
+        toast.error(
+          first.messageParams ? t(first.messageKey, first.messageParams) : t(first.messageKey),
+        );
         return;
       }
     }
@@ -176,9 +189,9 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
             toast.error(t("preview_org_missing", "Organization not found. Cannot open preview."));
             return;
           }
-          const orgSlug = `${orgName.toLowerCase().replace(/\s+/g, '-')}-${user?.org_id}`;
-          const previewUrl = `${window.location.protocol}//${process.env.NEXT_PUBLIC_JOBS_SUBDOMAIN || 'jobs'}.${process.env.NEXT_PUBLIC_APP_ROOT_HOST || 'localhost:3000'}/${orgSlug}/${id}`;
-          window.open(previewUrl, '_blank', 'noopener,noreferrer');
+          const orgSlug = `${orgName.toLowerCase().replace(/\s+/g, "-")}-${user?.org_id}`;
+          const previewUrl = `${window.location.protocol}//${process.env.NEXT_PUBLIC_JOBS_SUBDOMAIN || "jobs"}.${process.env.NEXT_PUBLIC_APP_ROOT_HOST || "localhost:3000"}/${orgSlug}/${id}`;
+          window.open(previewUrl, "_blank", "noopener,noreferrer");
         }}
       >
         <Icon name="Eye" className="h-3.5 w-3.5" /> {t("preview")}
@@ -194,11 +207,13 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
       <div>
         <p className="text-xs text-muted-foreground mb-1.5">Pipeline</p>
         <div className="flex flex-wrap gap-1">
-          {hiringStages.filter((s) => s.name).map((s) => (
-            <Badge key={s.id} variant="secondary" className="text-[10px] font-normal">
-              {s.name}
-            </Badge>
-          ))}
+          {hiringStages
+            .filter((s) => s.name)
+            .map((s) => (
+              <Badge key={s.id} variant="secondary" className="text-[10px] font-normal">
+                {s.name}
+              </Badge>
+            ))}
         </div>
       </div>
       <Separator />
@@ -208,11 +223,17 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
           {teamMembers.map((m) => (
             <div key={m.id} className="flex items-center gap-2">
               <div className="h-6 w-6 rounded-full bg-muted flex items-center justify-center text-[10px] font-medium text-muted-foreground shrink-0">
-                {m.name.split(" ").map((n) => n[0]).join("")}
+                {m.name
+                  .split(" ")
+                  .map((n) => n[0])
+                  .join("")}
               </div>
               <span className="text-xs">{m.name}</span>
               <span className="text-[10px] text-muted-foreground">
-                · {(m.userRole ?? "member").replace(/_/g, " ").replace(/\b\w/g, (ch) => ch.toUpperCase())}
+                ·{" "}
+                {(m.userRole ?? "member")
+                  .replace(/_/g, " ")
+                  .replace(/\b\w/g, (ch) => ch.toUpperCase())}
               </span>
             </div>
           ))}
@@ -242,7 +263,12 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
     return (
       <div className="flex flex-col min-h-[calc(100vh-8rem)]">
         <div className="flex items-center gap-2 mb-4">
-          <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={handleBackClick}>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9 shrink-0"
+            onClick={handleBackClick}
+          >
             <Icon name="ChevronLeft" className="h-4 w-4" />
           </Button>
           <div className="flex-1 min-w-0">
@@ -251,7 +277,12 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
               Step {currentStep + 1} of {sections.length} · {sections[currentStep].label}
             </p>
           </div>
-          <Button variant="ghost" size="sm" className="text-xs h-8" onClick={() => setSummaryOpen(true)}>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-xs h-8"
+            onClick={() => setSummaryOpen(true)}
+          >
             {t("summary")}
           </Button>
         </div>
@@ -261,7 +292,7 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
               key={i}
               className={cn(
                 "h-1 flex-1 rounded-full transition-colors",
-                i <= currentStep ? "bg-foreground" : "bg-border"
+                i <= currentStep ? "bg-foreground" : "bg-border",
               )}
             />
           ))}
@@ -284,7 +315,13 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
               onClick={published ? onSave : onPublish}
               disabled={isSaving || isPublishing}
             >
-              {isSaving ? "Saving..." : isPublishing ? "Publishing..." : published ? "Save Changes" : "Publish Job"}
+              {isSaving
+                ? "Saving..."
+                : isPublishing
+                  ? "Publishing..."
+                  : published
+                    ? "Save Changes"
+                    : "Publish Job"}
             </Button>
           )}
         </div>
@@ -292,7 +329,9 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
           <SheetContent side="bottom" className="h-[70vh] rounded-t-2xl">
             <SheetHeader>
               <SheetTitle className="text-base">Job Summary</SheetTitle>
-              <SheetDescription className="text-xs">Review details before publishing.</SheetDescription>
+              <SheetDescription className="text-xs">
+                Review details before publishing.
+              </SheetDescription>
             </SheetHeader>
             <div className="mt-4">
               <SummaryContent />
@@ -313,16 +352,33 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
         <div className="flex-1">
           <h1 className="text-lg font-semibold">{title || "Create Job"}</h1>
         </div>
-        <Button variant="outline" size="sm" className="h-8 text-xs" onClick={onSave} disabled={isSaving || isPublishing}>
-          {isSaving ? (t("saving") || "Saving...") : t("save")}
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 text-xs"
+          onClick={onSave}
+          disabled={isSaving || isPublishing}
+        >
+          {isSaving ? t("saving") || "Saving..." : t("save")}
         </Button>
         {published ? (
-          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={handleUnpublish} disabled={isSaving || isPublishing}>
-            {isPublishing ? (t("processing") || "Processing...") : t("unpublish")}
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs"
+            onClick={handleUnpublish}
+            disabled={isSaving || isPublishing}
+          >
+            {isPublishing ? t("processing") || "Processing..." : t("unpublish")}
           </Button>
         ) : (
-          <Button size="sm" className="h-8 text-xs" onClick={onPublish} disabled={isSaving || isPublishing}>
-            {isPublishing ? (t("publishing") || "Publishing...") : t("publish")}
+          <Button
+            size="sm"
+            className="h-8 text-xs"
+            onClick={onPublish}
+            disabled={isSaving || isPublishing}
+          >
+            {isPublishing ? t("publishing") || "Publishing..." : t("publish")}
           </Button>
         )}
       </div>
@@ -334,7 +390,7 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
             className={cn(
               "px-3 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition-colors",
               "hover:bg-muted text-muted-foreground",
-              currentSlug === s.slug && "bg-muted text-foreground"
+              currentSlug === s.slug && "bg-muted text-foreground",
             )}
           >
             {s.label}
@@ -372,7 +428,9 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
           <SheetContent side="bottom" className="h-[60vh] rounded-t-2xl lg:hidden">
             <SheetHeader>
               <SheetTitle className="text-base">Job Summary</SheetTitle>
-              <SheetDescription className="text-xs">Review details before publishing.</SheetDescription>
+              <SheetDescription className="text-xs">
+                Review details before publishing.
+              </SheetDescription>
             </SheetHeader>
             <div className="mt-4">
               <SummaryContent />
@@ -415,12 +473,21 @@ function AiSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (v: bool
         </SheetHeader>
         <div className="mt-6 space-y-3">
           {[
-            { label: "Generate full description", desc: "Create a complete JD from the job title and details" },
+            {
+              label: "Generate full description",
+              desc: "Create a complete JD from the job title and details",
+            },
             { label: "Improve tone", desc: "Make the language more professional and inclusive" },
             { label: "Shorten", desc: "Condense the description while keeping key points" },
             { label: "Expand", desc: "Add more detail to responsibilities and requirements" },
-            { label: "Add responsibilities section", desc: "Generate a structured list of responsibilities" },
-            { label: "Add requirements section", desc: "Generate a structured list of requirements" },
+            {
+              label: "Add responsibilities section",
+              desc: "Generate a structured list of responsibilities",
+            },
+            {
+              label: "Add requirements section",
+              desc: "Generate a structured list of requirements",
+            },
           ].map((action) => (
             <button
               key={action.label}

@@ -9,10 +9,38 @@ import { InterviewsList, type Interview } from "@/components/interviews/Intervie
 import { useSetPageMetadata } from "@/hooks/useSetPageMetadata";
 
 const interviews: Interview[] = [
-  { candidate: "Alex Rivera", role: "Sr. Frontend Engineer", time: "10:00 AM", interviewer: "Sarah M.", type: "Technical", link: true },
-  { candidate: "Jordan Lee", role: "Engineering Manager", time: "11:30 AM", interviewer: "Mike T.", type: "Cultural", link: true },
-  { candidate: "Sam Chen", role: "Data Scientist", time: "2:00 PM", interviewer: "Lisa K.", type: "Screening", link: false },
-  { candidate: "Emma Wilson", role: "Frontend Engineer", time: "3:30 PM", interviewer: "Sarah M.", type: "Technical", link: true },
+  {
+    candidate: "Alex Rivera",
+    role: "Sr. Frontend Engineer",
+    time: "10:00 AM",
+    interviewer: "Sarah M.",
+    type: "Technical",
+    link: true,
+  },
+  {
+    candidate: "Jordan Lee",
+    role: "Engineering Manager",
+    time: "11:30 AM",
+    interviewer: "Mike T.",
+    type: "Cultural",
+    link: true,
+  },
+  {
+    candidate: "Sam Chen",
+    role: "Data Scientist",
+    time: "2:00 PM",
+    interviewer: "Lisa K.",
+    type: "Screening",
+    link: false,
+  },
+  {
+    candidate: "Emma Wilson",
+    role: "Frontend Engineer",
+    time: "3:30 PM",
+    interviewer: "Sarah M.",
+    type: "Technical",
+    link: true,
+  },
 ];
 
 const interviewTypes = ["Technical", "Cultural", "Screening"];
@@ -42,7 +70,8 @@ export default function InterviewsPage() {
         interview.role.toLowerCase().includes(q) ||
         interview.interviewer.toLowerCase().includes(q);
       const matchType = typeFilter.length === 0 || typeFilter.includes(interview.type);
-      const matchInterviewer = interviewerFilter.length === 0 || interviewerFilter.includes(interview.interviewer);
+      const matchInterviewer =
+        interviewerFilter.length === 0 || interviewerFilter.includes(interview.interviewer);
       return matchSearch && matchType && matchInterviewer;
     });
   }, [search, typeFilter, interviewerFilter]);
@@ -55,8 +84,18 @@ export default function InterviewsPage() {
   };
 
   const activeChips: { label: string; clear: () => void }[] = [];
-  typeFilter.forEach((t) => activeChips.push({ label: `Type: ${t}`, clear: () => setTypeFilter((prev) => prev.filter((v) => v !== t)) }));
-  interviewerFilter.forEach((i) => activeChips.push({ label: `Interviewer: ${i}`, clear: () => setInterviewerFilter((prev) => prev.filter((v) => v !== i)) }));
+  typeFilter.forEach((t) =>
+    activeChips.push({
+      label: `Type: ${t}`,
+      clear: () => setTypeFilter((prev) => prev.filter((v) => v !== t)),
+    }),
+  );
+  interviewerFilter.forEach((i) =>
+    activeChips.push({
+      label: `Interviewer: ${i}`,
+      clear: () => setInterviewerFilter((prev) => prev.filter((v) => v !== i)),
+    }),
+  );
 
   const filterContent = (
     <div className="space-y-4 p-1">
@@ -79,7 +118,12 @@ export default function InterviewsPage() {
         showSelectAllClear
       />
       {activeFiltersCount > 0 && (
-        <Button variant="ghost" size="sm" className="w-full text-xs h-8 text-muted-foreground" onClick={clearAllFilters}>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-full text-xs h-8 text-muted-foreground"
+          onClick={clearAllFilters}
+        >
           {t("clear_all")}
         </Button>
       )}

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -41,7 +41,9 @@ class JobCreateRequest(BaseModel):
 class JobUpdateRequest(BaseModel):
     title: Optional[str] = Field(default=None, min_length=1, max_length=100)
     category: Optional[str] = Field(default=None, max_length=50)
-    employment_type: Optional[str] = Field(default=None, pattern=r"^(full_time|part_time|contract|internship)$")
+    employment_type: Optional[str] = Field(
+        default=None, pattern=r"^(full_time|part_time|contract|internship)$"
+    )
     workplace_type: Optional[str] = Field(default=None, pattern=r"^(remote|hybrid|onsite)$")
     country: Optional[str] = Field(default=None, max_length=2)
     city: Optional[str] = Field(default=None, max_length=255)
@@ -51,11 +53,14 @@ class JobUpdateRequest(BaseModel):
     salary_max: Optional[int] = None
     salary_fixed: Optional[int] = None
     currency: Optional[str] = Field(default=None, max_length=3)
-    salary_timeframe: Optional[str] = Field(default=None, pattern=r"^(per_year|per_month|per_week|per_day|per_hour)$")
+    salary_timeframe: Optional[str] = Field(
+        default=None, pattern=r"^(per_year|per_month|per_week|per_day|per_hour)$"
+    )
     description: Optional[str] = None
     collect_resume: Optional[bool] = None
     collect_cover: Optional[bool] = None
     screening_questions: Optional[list[str]] = None
+    application_form_schema: Optional[dict[str, Any]] = None
     pipeline_template: Optional[str] = Field(default=None, max_length=20)
     hiring_stages: Optional[list[HiringStageRequest]] = None
     team_members: Optional[list[TeamMemberRequest]] = None
@@ -93,6 +98,7 @@ class JobDetailResponse(BaseModel):
     collect_resume: bool
     collect_cover: bool
     screening_questions: list[str] = []
+    application_form_schema: dict[str, Any] = {}
     pipeline_template: Optional[str] = None
     hiring_stages: list[HiringStageResponse] = []
     team_members: list[TeamMemberResponse] = []
@@ -101,3 +107,20 @@ class JobDetailResponse(BaseModel):
     closed_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
+
+
+class PipelineCandidateResponse(BaseModel):
+    id: UUID
+    name: str
+    email: Optional[str] = None
+    stage_id: Optional[UUID] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class JobPipelineResponse(BaseModel):
+    id: UUID
+    title: str
+    status: str
+    stages: list[HiringStageResponse] = []
+    candidates: list[PipelineCandidateResponse] = []

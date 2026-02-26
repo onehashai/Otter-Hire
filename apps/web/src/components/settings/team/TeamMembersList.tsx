@@ -3,7 +3,7 @@
 import { Card, CardContent } from "@onehash/ui/card";
 import { Button } from "@onehash/ui/button";
 import { Badge } from "@onehash/ui/badge";
-import { Avatar, AvatarFallback } from "@onehash/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@onehash/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,6 +22,7 @@ export interface TeamMember {
   email: string;
   role: BackendRole;
   status: string;
+  avatar_url?: string | null;
 }
 
 const roleBadgeClass: Record<BackendRole, string> = {
@@ -35,7 +36,12 @@ const roleBadgeClass: Record<BackendRole, string> = {
 
 function getInitials(name: string) {
   if (!name) return "?";
-  return name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
+  return name
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
 }
 
 function formatStatus(status: string): { label: string; active: boolean } {
@@ -60,12 +66,15 @@ function canChangeRole(
   target: TeamMember,
   currentUserId: string,
   isOwner: boolean,
-  isAdmin: boolean
+  isAdmin: boolean,
 ): { allowed: boolean; reason?: string } {
-  if (target.id === currentUserId) return { allowed: false, reason: "You cannot change your own role." };
+  if (target.id === currentUserId)
+    return { allowed: false, reason: "You cannot change your own role." };
   if (target.role === "owner") return { allowed: false, reason: "Owner role cannot be changed." };
-  if (target.role === "admin" && !isOwner) return { allowed: false, reason: "Only the Owner can modify Admin roles." };
-  if (!isOwner && !isAdmin) return { allowed: false, reason: "You don't have permission to change roles." };
+  if (target.role === "admin" && !isOwner)
+    return { allowed: false, reason: "Only the Owner can modify Admin roles." };
+  if (!isOwner && !isAdmin)
+    return { allowed: false, reason: "You don't have permission to change roles." };
   return { allowed: true };
 }
 
@@ -73,12 +82,14 @@ function canRemove(
   target: TeamMember,
   currentUserId: string,
   isOwner: boolean,
-  isAdmin: boolean
+  isAdmin: boolean,
 ): { allowed: boolean; reason?: string } {
   if (target.id === currentUserId) return { allowed: false, reason: "You cannot remove yourself." };
   if (target.role === "owner") return { allowed: false, reason: "The Owner cannot be removed." };
-  if (target.role === "admin" && !isOwner) return { allowed: false, reason: "Only the Owner can remove Admins." };
-  if (!isOwner && !isAdmin) return { allowed: false, reason: "You don't have permission to remove members." };
+  if (target.role === "admin" && !isOwner)
+    return { allowed: false, reason: "Only the Owner can remove Admins." };
+  if (!isOwner && !isAdmin)
+    return { allowed: false, reason: "You don't have permission to remove members." };
   return { allowed: true };
 }
 
@@ -118,14 +129,21 @@ export function TeamMembersList({
                     Change role
                   </div>
                 </TooltipTrigger>
-                <TooltipContent side="left"><p className="text-xs">{roleCheck.reason}</p></TooltipContent>
+                <TooltipContent side="left">
+                  <p className="text-xs">{roleCheck.reason}</p>
+                </TooltipContent>
               </Tooltip>
             )}
             {isPending && (
-              <DropdownMenuItem onClick={() => onResendInvite(member)}>Resend invite</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onResendInvite(member)}>
+                Resend invite
+              </DropdownMenuItem>
             )}
             {removeCheck.allowed ? (
-              <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => onRemoveClick(member)}>
+              <DropdownMenuItem
+                className="text-destructive focus:text-destructive"
+                onClick={() => onRemoveClick(member)}
+              >
                 Remove from team
               </DropdownMenuItem>
             ) : (
@@ -135,7 +153,9 @@ export function TeamMembersList({
                     Remove from team
                   </div>
                 </TooltipTrigger>
-                <TooltipContent side="left"><p className="text-xs">{removeCheck.reason}</p></TooltipContent>
+                <TooltipContent side="left">
+                  <p className="text-xs">{removeCheck.reason}</p>
+                </TooltipContent>
               </Tooltip>
             )}
           </DropdownMenuContent>
@@ -151,7 +171,12 @@ export function TeamMembersList({
           <div className="py-16 text-center space-y-3">
             <Icon name="Users" className="h-10 w-10 mx-auto text-muted-foreground/40" />
             <p className="text-sm text-muted-foreground">No team members yet</p>
-            <Button size="sm" variant="outline" className="text-xs h-8 gap-1.5" onClick={onInviteClick}>
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-xs h-8 gap-1.5"
+              onClick={onInviteClick}
+            >
               <Icon name="Plus" className="h-3.5 w-3.5" /> Invite your first team member
             </Button>
           </div>
@@ -162,7 +187,12 @@ export function TeamMembersList({
               return (
                 <div key={m.id} className="p-4 flex items-start gap-3">
                   <Avatar className="h-9 w-9 shrink-0">
-                    <AvatarFallback className="text-xs bg-muted">{getInitials(m.name)}</AvatarFallback>
+                    {m.avatar_url ? (
+                      <AvatarImage src={m.avatar_url} alt={m.name || m.email} />
+                    ) : null}
+                    <AvatarFallback className="text-xs bg-muted">
+                      {getInitials(m.name)}
+                    </AvatarFallback>
                   </Avatar>
                   <div className="flex-1 min-w-0 space-y-1">
                     <div className="flex items-center justify-between gap-2">
@@ -171,7 +201,14 @@ export function TeamMembersList({
                     </div>
                     <p className="text-xs text-muted-foreground truncate">{m.email}</p>
                     <div className="flex items-center gap-2 flex-wrap min-w-0">
-                      <Badge variant="secondary" className={cn("text-[10px] px-2 py-0 h-5 font-medium border-0", roleBadgeClass[m.role])} title={formatRole(m.role)}>
+                      <Badge
+                        variant="secondary"
+                        className={cn(
+                          "text-[10px] px-2 py-0 h-5 font-medium border-0",
+                          roleBadgeClass[m.role],
+                        )}
+                        title={formatRole(m.role)}
+                      >
                         {formatRole(m.role)}
                       </Badge>
                       {!st.active && (
@@ -201,7 +238,12 @@ export function TeamMembersList({
                     <TableCell className="py-3">
                       <div className="flex items-center gap-3">
                         <Avatar className="h-8 w-8">
-                          <AvatarFallback className="text-xs bg-muted">{getInitials(m.name)}</AvatarFallback>
+                          {m.avatar_url ? (
+                            <AvatarImage src={m.avatar_url} alt={m.name || m.email} />
+                          ) : null}
+                          <AvatarFallback className="text-xs bg-muted">
+                            {getInitials(m.name)}
+                          </AvatarFallback>
                         </Avatar>
                         <div className="min-w-0">
                           <p className="text-sm font-medium truncate">{m.name || m.email}</p>
@@ -210,13 +252,25 @@ export function TeamMembersList({
                       </div>
                     </TableCell>
                     <TableCell className="py-3">
-                      <Badge variant="secondary" className={cn("text-[10px] px-2 py-0 h-5 font-medium border-0 truncate max-w-full min-w-0", roleBadgeClass[m.role])} title={formatRole(m.role)}>
+                      <Badge
+                        variant="secondary"
+                        className={cn(
+                          "text-[10px] px-2 py-0 h-5 font-medium border-0 truncate max-w-full min-w-0",
+                          roleBadgeClass[m.role],
+                        )}
+                        title={formatRole(m.role)}
+                      >
                         {formatRole(m.role)}
                       </Badge>
                     </TableCell>
                     <TableCell className="py-3">
                       <div className="flex items-center gap-1.5">
-                        <span className={cn("h-1.5 w-1.5 rounded-full", st.active ? "bg-foreground" : "bg-muted-foreground/40")} />
+                        <span
+                          className={cn(
+                            "h-1.5 w-1.5 rounded-full",
+                            st.active ? "bg-foreground" : "bg-muted-foreground/40",
+                          )}
+                        />
                         <span className="text-xs text-muted-foreground">{st.label}</span>
                       </div>
                     </TableCell>

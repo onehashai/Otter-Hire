@@ -20,10 +20,7 @@ import { toast } from "sonner";
 import { useSetPageMetadata } from "@/hooks/useSetPageMetadata";
 import { useTranslation } from "react-i18next";
 import { OverviewTab } from "@/components/automations/tabs/OverviewTab";
-import {
-  ExecutionLog,
-  type ExecutionLogEntry,
-} from "@/components/automations/tabs/ExecutionLog";
+import { ExecutionLog, type ExecutionLogEntry } from "@/components/automations/tabs/ExecutionLog";
 import { ExecutionDetailsDialog } from "@/components/automations/tabs/ExecutionDetailsDialog";
 
 const mockAutomation = {
@@ -170,9 +167,7 @@ export default function AutomationDetailPage() {
           </Button>
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h1 className="text-base font-semibold truncate">
-                {mockAutomation.name}
-              </h1>
+              <h1 className="text-base font-semibold truncate">{mockAutomation.name}</h1>
               <Badge
                 variant={isActive ? "default" : "secondary"}
                 className="text-[10px] capitalize shrink-0"
@@ -231,11 +226,7 @@ export default function AutomationDetailPage() {
         </TabsContent>
 
         <TabsContent value="executions" className="mt-4">
-          <ExecutionLog
-            logs={mockLogs}
-            onLogSelect={setSelectedLog}
-            isMobile={isMobile}
-          />
+          <ExecutionLog logs={mockLogs} onLogSelect={setSelectedLog} isMobile={isMobile} />
         </TabsContent>
       </Tabs>
 
@@ -254,7 +245,7 @@ export default function AutomationDetailPage() {
             <DialogDescription className="text-xs">
               {t(
                 "delete_automation_description",
-                "This will permanently remove this automation and all its execution history."
+                "This will permanently remove this automation and all its execution history.",
               )}
             </DialogDescription>
           </DialogHeader>
@@ -267,12 +258,7 @@ export default function AutomationDetailPage() {
             >
               {t("cancel", "Cancel")}
             </Button>
-            <Button
-              variant="destructive"
-              size="sm"
-              className="text-xs"
-              onClick={handleDelete}
-            >
+            <Button variant="destructive" size="sm" className="text-xs" onClick={handleDelete}>
               {t("delete", "Delete")}
             </Button>
           </DialogFooter>

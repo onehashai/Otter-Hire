@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "lint:fix": "next lint --fix",
+    "format": "prettier . --write --ignore-path .prettierignore",
+    "format:check": "prettier . --check --ignore-path .prettierignore"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

@@ -6,16 +6,7 @@ import { Card, CardContent } from "@onehash/ui/card";
 import { Button } from "@onehash/ui/button";
 import { Badge } from "@onehash/ui/badge";
 import { Separator } from "@onehash/ui/separator";
-import {
-  ArrowLeft,
-  Save,
-  Zap,
-  ChevronDown,
-  ChevronUp,
-  Play,
-  Tag,
-  FileText,
-} from "lucide-react";
+import { ArrowLeft, Save, Zap, ChevronDown, ChevronUp, Play, Tag, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { useSetPageMetadata } from "@/hooks/useSetPageMetadata";
 import { useTranslation } from "react-i18next";
@@ -45,15 +36,11 @@ export default function AutomationEditPage() {
     subtitle: t("edit_automation_subtitle"),
   });
 
-  const [name, setName] = useState(
-    isEdit ? "Auto-reject unqualified" : ""
-  );
+  const [name, setName] = useState(isEdit ? "Auto-reject unqualified" : "");
   const [scope, setScope] = useState<Scope>("all");
   const [selectedJob, setSelectedJob] = useState("");
 
-  const [selectedTrigger, setSelectedTrigger] = useState<string>(
-    isEdit ? "candidate_applied" : ""
-  );
+  const [selectedTrigger, setSelectedTrigger] = useState<string>(isEdit ? "candidate_applied" : "");
   const [triggerStage, setTriggerStage] = useState("");
   const [triggerDays, setTriggerDays] = useState("5");
 
@@ -70,7 +57,7 @@ export default function AutomationEditPage() {
             config: { template: "rejection" },
           },
         ]
-      : []
+      : [],
   );
 
   const [emailPreviewOpen, setEmailPreviewOpen] = useState(false);
@@ -91,9 +78,7 @@ export default function AutomationEditPage() {
   };
 
   const updateCondition = (id: string, field: string, value: string) => {
-    setConditions((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, [field]: value } : c))
-    );
+    setConditions((prev) => prev.map((c) => (c.id === id ? { ...c, [field]: value } : c)));
   };
 
   const removeCondition = (id: string) => {
@@ -116,9 +101,7 @@ export default function AutomationEditPage() {
 
   const updateActionConfig = (id: string, key: string, value: string) => {
     setActions((prev) =>
-      prev.map((a) =>
-        a.id === id ? { ...a, config: { ...a.config, [key]: value } } : a
-      )
+      prev.map((a) => (a.id === id ? { ...a, config: { ...a.config, [key]: value } } : a)),
     );
   };
 
@@ -168,9 +151,7 @@ export default function AutomationEditPage() {
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <span className="text-[10px] text-muted-foreground">
-            Step {step}
-          </span>
+          <span className="text-[10px] text-muted-foreground">Step {step}</span>
           {step === 3 && (
             <Badge variant="outline" className="text-[9px]">
               Optional
@@ -215,15 +196,14 @@ export default function AutomationEditPage() {
             </h1>
           </div>
         </div>
-          <Button
-            type="button"
-            size="sm"
-            className="h-8 text-xs gap-1.5"
-            onClick={() => handleSave(false)}
-          >
-            <Save className="h-3.5 w-3.5" />{" "}
-            {t("save")}
-          </Button>
+        <Button
+          type="button"
+          size="sm"
+          className="h-8 text-xs gap-1.5"
+          onClick={() => handleSave(false)}
+        >
+          <Save className="h-3.5 w-3.5" /> {t("save")}
+        </Button>
       </div>
 
       <Separator />
@@ -297,10 +277,7 @@ export default function AutomationEditPage() {
         actions={actions}
       />
 
-      <EmailPreview
-        open={emailPreviewOpen}
-        onOpenChange={setEmailPreviewOpen}
-      />
+      <EmailPreview open={emailPreviewOpen} onOpenChange={setEmailPreviewOpen} />
     </div>
   );
 }

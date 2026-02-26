@@ -1,9 +1,20 @@
-from sqlalchemy import Column, String, DateTime, ForeignKey, Index, CheckConstraint, Text, Integer, Boolean
-from sqlalchemy.dialects.postgresql import UUID, JSONB
-from sqlalchemy.sql import func
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    Column,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+)
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
-from app.utils.uuid import uuid7
+from sqlalchemy.sql import func
+
 from app.db.base import Base
+from app.utils.uuid import uuid7
 
 
 class Job(Base):
@@ -16,7 +27,7 @@ class Job(Base):
     description = Column(Text)
     category = Column(String(50))
     employment_type = Column(String(20), server_default="full_time")
-    workplace_type = Column(String(10), server_default="remote")
+    workplace_type = Column(String(10), server_default="onsite")
     country = Column(String(2))
     city = Column(String(255))
     openings = Column(Integer, nullable=False, server_default="1")
@@ -31,6 +42,7 @@ class Job(Base):
     collect_resume = Column(Boolean, nullable=False, server_default="true")
     collect_cover = Column(Boolean, nullable=False, server_default="false")
     screening_questions = Column(JSONB, server_default="[]")
+    application_form_schema = Column(JSONB, nullable=False, server_default="{}")
     pipeline_template = Column(String(20), server_default="standard")
     published_at = Column(DateTime(timezone=True))
     closed_at = Column(DateTime(timezone=True))
@@ -41,12 +53,17 @@ class Job(Base):
         CheckConstraint("status IN ('draft', 'open', 'archived')", name="ck_jobs_status"),
         CheckConstraint("visibility IN ('internal', 'public')", name="ck_jobs_visibility"),
         CheckConstraint("salary_type IN ('hidden', 'fixed', 'range')", name="ck_jobs_salary_type"),
-        CheckConstraint("salary_min IS NULL OR salary_max IS NULL OR salary_min <= salary_max", name="ck_jobs_salary_range"),
+        CheckConstraint(
+            "salary_min IS NULL OR salary_max IS NULL OR salary_min <= salary_max",
+            name="ck_jobs_salary_range",
+        ),
         Index("ix_jobs_org_id", "org_id"),
         Index("ix_jobs_org_status", "org_id", "status"),
     )
 
     organization = relationship("Organization")
     created_by = relationship("User")
-    stages = relationship("Stage", back_populates="job", order_by="Stage.position", cascade="all, delete-orphan")
+    stages = relationship(
+        "Stage", back_populates="job", order_by="Stage.position", cascade="all, delete-orphan"
+    )
     team_members = relationship("JobTeamMember", back_populates="job", cascade="all, delete-orphan")

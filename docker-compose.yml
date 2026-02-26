@@ -29,6 +29,15 @@ services:
       ACCESS_TOKEN_EXPIRE_MINUTES: 10080
       FRONTEND_BASE_URL: http://app.localhost:3000
       COOKIE_DOMAIN: ""
+      # Storage (local dev)
+      LOCAL_STORAGE_ROOT: storage/local
+      MAX_UPLOAD_BYTES: 1048576
+      # Storage (S3 - enable with IS_PRODUCTION=true)
+      # AWS_S3_BUCKET: your-bucket
+      # AWS_S3_REGION: ap-south-1
+      # AWS_ACCESS_KEY_ID: your-access-key
+      # AWS_SECRET_ACCESS_KEY: your-secret-key
+      # AWS_S3_ATTACHMENTS_ENV: staging
       MAILTRAP_HOST: sandbox.smtp.mailtrap.io
       MAILTRAP_PORT: 2525
       MAILTRAP_USERNAME: 4d1305c1a56091

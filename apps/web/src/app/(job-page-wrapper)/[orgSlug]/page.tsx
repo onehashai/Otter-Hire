@@ -6,14 +6,7 @@ import { useParams } from "next/navigation";
 import { InputField } from "@onehash/ui/input";
 import { Badge } from "@onehash/ui/badge";
 import { SelectField } from "@onehash/ui/select";
-import {
-  Search,
-  MapPin,
-  Briefcase,
-  Clock,
-  DollarSign,
-  ArrowRight,
-} from "lucide-react";
+import { Search, MapPin, Briefcase, Clock, DollarSign, ArrowRight } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { getPublicJobs, type PublicJobListItem } from "@/api";
@@ -21,14 +14,14 @@ import { getPublicJobs, type PublicJobListItem } from "@/api";
 function parseOrgSlug(orgSlug: string): { orgName: string; orgId: string } | null {
   const parts = orgSlug.split("-");
   if (parts.length < 6) return null;
-  
+
   const uuidParts = parts.slice(-5);
   const orgId = uuidParts.join("-");
   const orgName = parts.slice(0, -5).join("-");
-  
+
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   if (!uuidRegex.test(orgId)) return null;
-  
+
   return { orgName, orgId };
 }
 
@@ -55,12 +48,12 @@ export default function CareersListPage() {
   const params = useParams();
   const orgSlug = params?.orgSlug as string;
   const isMobile = useIsMobile();
-  
+
   const [jobs, setJobs] = useState<PublicJobListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [orgName, setOrgName] = useState("");
-  
+
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [locationFilter, setLocationFilter] = useState("all");
@@ -72,9 +65,9 @@ export default function CareersListPage() {
       setLoading(false);
       return;
     }
-    
+
     setOrgName(parsed.orgName);
-    
+
     getPublicJobs(parsed.orgId)
       .then((data) => {
         setJobs(data);
@@ -100,15 +93,11 @@ export default function CareersListPage() {
     return jobs.filter((job) => {
       if (search) {
         const q = search.toLowerCase();
-        if (
-          !job.title.toLowerCase().includes(q) &&
-          !(job.category || "").toLowerCase().includes(q)
-        )
+        if (!job.title.toLowerCase().includes(q) && !(job.category || "").toLowerCase().includes(q))
           return false;
       }
       if (categoryFilter !== "all" && job.category !== categoryFilter) return false;
-      if (locationFilter !== "all" && formatLocation(job) !== locationFilter)
-        return false;
+      if (locationFilter !== "all" && formatLocation(job) !== locationFilter) return false;
       return true;
     });
   }, [jobs, search, categoryFilter, locationFilter]);
@@ -190,8 +179,7 @@ export default function CareersListPage() {
 
         <div className="mx-auto max-w-4xl px-4 pb-3">
           <p className="text-xs text-muted-foreground">
-            {filtered.length}{" "}
-            {filtered.length === 1 ? "position" : "positions"} available
+            {filtered.length} {filtered.length === 1 ? "position" : "positions"} available
           </p>
         </div>
 
@@ -203,8 +191,8 @@ export default function CareersListPage() {
               </div>
               <h2 className="text-base font-medium">No open positions</h2>
               <p className="text-sm text-muted-foreground max-w-sm mx-auto">
-                We don&apos;t have any matching openings right now. Check back
-                soon or adjust your filters.
+                We don&apos;t have any matching openings right now. Check back soon or adjust your
+                filters.
               </p>
             </div>
           ) : (
@@ -213,23 +201,23 @@ export default function CareersListPage() {
                 const salary = formatSalary(job);
                 const location = formatLocation(job);
                 const daysAgo = Math.floor(
-                  (Date.now() - new Date(job.published_at).getTime()) / (1000 * 60 * 60 * 24)
+                  (Date.now() - new Date(job.published_at).getTime()) / (1000 * 60 * 60 * 24),
                 );
                 const timeAgo =
                   daysAgo === 0
                     ? "Today"
                     : daysAgo === 1
-                    ? "1 day ago"
-                    : daysAgo < 7
-                    ? `${daysAgo} days ago`
-                    : daysAgo < 14
-                    ? "1 week ago"
-                    : daysAgo < 30
-                    ? `${Math.floor(daysAgo / 7)} weeks ago`
-                    : daysAgo < 60
-                    ? "1 month ago"
-                    : `${Math.floor(daysAgo / 30)} months ago`;
-                
+                      ? "1 day ago"
+                      : daysAgo < 7
+                        ? `${daysAgo} days ago`
+                        : daysAgo < 14
+                          ? "1 week ago"
+                          : daysAgo < 30
+                            ? `${Math.floor(daysAgo / 7)} weeks ago`
+                            : daysAgo < 60
+                              ? "1 month ago"
+                              : `${Math.floor(daysAgo / 30)} months ago`;
+
                 return (
                   <Link
                     key={job.id}
@@ -253,20 +241,21 @@ export default function CareersListPage() {
                             </Badge>
                           )}
                         </div>
-                        
+
                         {job.description && (
                           <p className="text-xs text-muted-foreground line-clamp-1">
                             {job.description.replace(/<[^>]*>/g, "").substring(0, 100)}
                           </p>
                         )}
-                        
+
                         <div className="flex flex-wrap gap-x-3 gap-y-1">
                           <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
                             <MapPin className="h-3 w-3" /> {location}
                           </span>
                           {job.employment_type && (
                             <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                              <Clock className="h-3 w-3" /> {formatEmploymentType(job.employment_type)}
+                              <Clock className="h-3 w-3" />{" "}
+                              {formatEmploymentType(job.employment_type)}
                             </span>
                           )}
                           {salary && (

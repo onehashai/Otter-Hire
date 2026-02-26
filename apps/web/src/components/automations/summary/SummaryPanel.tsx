@@ -34,14 +34,10 @@ export function SummaryPanel({
     <div className="space-y-4">
       <Card>
         <CardContent className="p-4 space-y-3">
-          <p className="text-xs font-medium text-muted-foreground">
-            {t("details", "Details")}
-          </p>
+          <p className="text-xs font-medium text-muted-foreground">{t("details", "Details")}</p>
           <div className="space-y-2.5">
             <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">
-                {t("status")}
-              </span>
+              <span className="text-xs text-muted-foreground">{t("status")}</span>
               <Badge
                 variant={isActive ? "default" : "secondary"}
                 className="text-[10px] capitalize"
@@ -51,23 +47,17 @@ export function SummaryPanel({
             </div>
             <Separator />
             <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">
-                {t("executions", "Executions")}
-              </span>
+              <span className="text-xs text-muted-foreground">{t("executions", "Executions")}</span>
               <span className="text-sm font-medium">{executionCount}</span>
             </div>
             <Separator />
             <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">
-                {t("created_by", "Created by")}
-              </span>
+              <span className="text-xs text-muted-foreground">{t("created_by", "Created by")}</span>
               <span className="text-xs">{createdBy}</span>
             </div>
             <Separator />
             <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">
-                {t("created", "Created")}
-              </span>
+              <span className="text-xs text-muted-foreground">{t("created", "Created")}</span>
               <span className="text-xs">{createdAt}</span>
             </div>
             <Separator />

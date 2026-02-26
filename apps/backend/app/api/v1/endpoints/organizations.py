@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+import os
+
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,6 +19,8 @@ from app.schemas.organization import (
     SwitchOrganizationRequest,
     UpdateOrganizationRequest,
 )
+from app.services.media import ensure_avatar_type, read_upload_with_size_check
+from app.services.storage import storage_service
 from app.utils.uuid import uuid7
 
 router = APIRouter(prefix="/organizations", tags=["organizations"])
@@ -41,9 +45,7 @@ async def update_my_organization(
     current_user: User = Depends(require_active_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(Organization).where(Organization.id == current_user.org_id)
-    )
+    result = await db.execute(select(Organization).where(Organization.id == current_user.org_id))
     organization = result.scalar_one()
 
     organization.name = body.name
@@ -56,6 +58,86 @@ async def update_my_organization(
         id=organization.id,
         name=organization.name,
         website=organization.website,
+        avatar_url=organization.avatar_url,
+    )
+
+
+@router.get("/me", response_model=OrganizationResponse)
+async def get_my_organization(
+    current_user: User = Depends(require_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(Organization).where(Organization.id == current_user.org_id))
+    organization = result.scalar_one()
+    return OrganizationResponse(
+        id=organization.id,
+        name=organization.name,
+        website=organization.website,
+        avatar_url=organization.avatar_url,
+    )
+
+
+@router.post("/me/avatar", response_model=OrganizationResponse)
+async def upload_my_organization_avatar(
+    file: UploadFile = File(...),
+    current_user: User = Depends(require_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    ensure_avatar_type(file.content_type)
+    raw = await read_upload_with_size_check(file)
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    if not ext:
+        content_type = (file.content_type or "").lower()
+        ext_map = {
+            "image/jpeg": ".jpg",
+            "image/jpg": ".jpg",
+            "image/png": ".png",
+            "image/webp": ".webp",
+            "image/gif": ".gif",
+            "image/bmp": ".bmp",
+            "image/tiff": ".tiff",
+        }
+        ext = ext_map.get(content_type, ".img")
+
+    result = await db.execute(select(Organization).where(Organization.id == current_user.org_id))
+    organization = result.scalar_one()
+
+    object_key = f"orgs/{current_user.org_id}/avatar/{current_user.org_id}_avatar{ext}"
+    await storage_service.write_bytes(
+        object_key, raw, (file.content_type or "application/octet-stream")
+    )
+    avatar_url = await storage_service.resolve_url(object_key)
+    if organization.avatar_url and organization.avatar_url != avatar_url:
+        await storage_service.delete_by_url(organization.avatar_url)
+    organization.avatar_url = avatar_url
+    await db.commit()
+    await db.refresh(organization)
+
+    return OrganizationResponse(
+        id=organization.id,
+        name=organization.name,
+        website=organization.website,
+        avatar_url=organization.avatar_url,
+    )
+
+
+@router.delete("/me/avatar", response_model=OrganizationResponse)
+async def delete_my_organization_avatar(
+    current_user: User = Depends(require_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(Organization).where(Organization.id == current_user.org_id))
+    organization = result.scalar_one()
+    if organization.avatar_url:
+        await storage_service.delete_by_url(organization.avatar_url)
+    organization.avatar_url = None
+    await db.commit()
+    await db.refresh(organization)
+    return OrganizationResponse(
+        id=organization.id,
+        name=organization.name,
+        website=organization.website,
+        avatar_url=None,
     )
 
 
@@ -104,7 +186,9 @@ async def switch_organization(
     )
     row = membership_result.first()
     if row is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Active membership not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Active membership not found"
+        )
 
     membership, organization = row
     token = create_access_token(

@@ -5,21 +5,10 @@ import { Button } from "@onehash/ui/button";
 import { InputField } from "@onehash/ui/input";
 import { Label } from "@onehash/ui/label";
 import { Textarea } from "@onehash/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@onehash/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@onehash/ui/select";
 import { X, Zap, Eye } from "lucide-react";
 import { FieldRow } from "./FieldRow";
-import {
-  actionTypes,
-  stages,
-  emailTemplates,
-  type Action,
-} from "./types";
+import { actionTypes, stages, emailTemplates, type Action } from "./types";
 
 export interface ActionsStepProps {
   actions: Action[];
@@ -74,20 +63,14 @@ export function ActionsStep({
                     <div className="flex gap-2">
                       <Select
                         value={a.config.template ?? ""}
-                        onValueChange={(v) =>
-                          onUpdateActionConfig(a.id, "template", v)
-                        }
+                        onValueChange={(v) => onUpdateActionConfig(a.id, "template", v)}
                       >
                         <SelectTrigger className="h-8 text-xs flex-1">
                           <SelectValue placeholder="Select template" />
                         </SelectTrigger>
                         <SelectContent>
                           {emailTemplates.map((tmpl) => (
-                            <SelectItem
-                              key={tmpl.id}
-                              value={tmpl.id}
-                              className="text-xs"
-                            >
+                            <SelectItem key={tmpl.id} value={tmpl.id} className="text-xs">
                               {tmpl.label}
                             </SelectItem>
                           ))}
@@ -110,9 +93,7 @@ export function ActionsStep({
                 <FieldRow label="Move to">
                   <Select
                     value={a.config.stage ?? ""}
-                    onValueChange={(v) =>
-                      onUpdateActionConfig(a.id, "stage", v)
-                    }
+                    onValueChange={(v) => onUpdateActionConfig(a.id, "stage", v)}
                   >
                     <SelectTrigger className="h-8 text-xs">
                       <SelectValue placeholder="Select stage" />
@@ -131,9 +112,7 @@ export function ActionsStep({
                 <FieldRow label="Assign to">
                   <Select
                     value={a.config.recruiter ?? ""}
-                    onValueChange={(v) =>
-                      onUpdateActionConfig(a.id, "recruiter", v)
-                    }
+                    onValueChange={(v) => onUpdateActionConfig(a.id, "recruiter", v)}
                   >
                     <SelectTrigger className="h-8 text-xs">
                       <SelectValue placeholder="Select recruiter" />
@@ -156,9 +135,7 @@ export function ActionsStep({
                 <FieldRow label="Tag name">
                   <InputField
                     value={a.config.tag ?? ""}
-                    onChange={(e) =>
-                      onUpdateActionConfig(a.id, "tag", e.target.value)
-                    }
+                    onChange={(e) => onUpdateActionConfig(a.id, "tag", e.target.value)}
                     className="h-8 text-xs"
                     placeholder="e.g. Senior"
                   />
@@ -168,9 +145,7 @@ export function ActionsStep({
                 <FieldRow label="Note content">
                   <Textarea
                     value={a.config.note ?? ""}
-                    onChange={(e) =>
-                      onUpdateActionConfig(a.id, "note", e.target.value)
-                    }
+                    onChange={(e) => onUpdateActionConfig(a.id, "note", e.target.value)}
                     className="text-xs min-h-[50px] resize-none"
                     placeholder="Note text..."
                   />
@@ -180,9 +155,7 @@ export function ActionsStep({
                 <FieldRow label="Message">
                   <InputField
                     value={a.config.message ?? ""}
-                    onChange={(e) =>
-                      onUpdateActionConfig(a.id, "message", e.target.value)
-                    }
+                    onChange={(e) => onUpdateActionConfig(a.id, "message", e.target.value)}
                     className="h-8 text-xs"
                     placeholder="Notification message"
                   />
@@ -194,9 +167,7 @@ export function ActionsStep({
       })}
 
       <div className="space-y-2">
-        <Label className="text-xs font-medium text-muted-foreground">
-          Add an action
-        </Label>
+        <Label className="text-xs font-medium text-muted-foreground">Add an action</Label>
         {["Communication", "Candidate", "Interview"].map((cat) => {
           const items = actionTypes.filter((at) => at.category === cat);
           return (

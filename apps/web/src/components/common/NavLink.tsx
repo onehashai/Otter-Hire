@@ -15,9 +15,7 @@ const NavLink = forwardRef<HTMLAnchorElement, NavLinkProps>(
   ({ className, activeClassName, end, href, ...props }, ref) => {
     const pathname = usePathname();
     const hrefString = typeof href === "string" ? href : href.pathname || "";
-    const isActive = end
-      ? pathname === hrefString
-      : pathname.startsWith(hrefString);
+    const isActive = end ? pathname === hrefString : pathname.startsWith(hrefString);
 
     return (
       <Link

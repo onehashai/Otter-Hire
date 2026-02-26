@@ -26,14 +26,20 @@ export const InterviewsList = ({ interviews }: InterviewsListProps) => {
   return (
     <div className="space-y-2">
       {interviews.map((i) => (
-        <Card key={i.candidate + i.time} className="active:bg-muted/50 md:hover:shadow-sm transition-all">
+        <Card
+          key={i.candidate + i.time}
+          className="active:bg-muted/50 md:hover:shadow-sm transition-all"
+        >
           <CardContent className={isMobile ? "p-4" : "p-4 flex items-center justify-between"}>
             {isMobile ? (
               <>
                 <div className="flex items-center gap-2.5 mb-2">
                   <Avatar className="h-8 w-8">
                     <AvatarFallback className="text-xs bg-muted">
-                      {i.candidate.split(" ").map(n => n[0]).join("")}
+                      {i.candidate
+                        .split(" ")
+                        .map((n) => n[0])
+                        .join("")}
                     </AvatarFallback>
                   </Avatar>
                   <div className="flex-1">
@@ -47,7 +53,9 @@ export const InterviewsList = ({ interviews }: InterviewsListProps) => {
                     <span className="text-xs text-muted-foreground">· {i.interviewer}</span>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <Badge variant="secondary" className="text-[10px]">{i.type}</Badge>
+                    <Badge variant="secondary" className="text-[10px]">
+                      {i.type}
+                    </Badge>
                     {i.link && (
                       <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1">
                         <Video className="h-3 w-3" /> Join
@@ -65,16 +73,23 @@ export const InterviewsList = ({ interviews }: InterviewsListProps) => {
                   <div className="h-8 w-px bg-border" />
                   <Avatar className="h-7 w-7">
                     <AvatarFallback className="text-[10px] bg-muted">
-                      {i.candidate.split(" ").map(n => n[0]).join("")}
+                      {i.candidate
+                        .split(" ")
+                        .map((n) => n[0])
+                        .join("")}
                     </AvatarFallback>
                   </Avatar>
                   <div>
                     <p className="text-sm font-medium">{i.candidate}</p>
-                    <p className="text-[11px] text-muted-foreground">{i.role} · {i.interviewer}</p>
+                    <p className="text-[11px] text-muted-foreground">
+                      {i.role} · {i.interviewer}
+                    </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Badge variant="secondary" className="text-[10px]">{i.type}</Badge>
+                  <Badge variant="secondary" className="text-[10px]">
+                    {i.type}
+                  </Badge>
                   {i.link && (
                     <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1">
                       <Video className="h-3 w-3" /> Join

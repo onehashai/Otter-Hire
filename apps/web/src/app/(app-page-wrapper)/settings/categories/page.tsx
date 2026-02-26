@@ -8,7 +8,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { InputField } from "@onehash/ui/input";
 import { Icon } from "@onehash/ui/icon";
 import { toast } from "sonner";
-import { getJobCategories, createJobCategory, deleteJobCategory, type JobCategoryResponse } from "@/api";
+import {
+  getJobCategories,
+  createJobCategory,
+  deleteJobCategory,
+  type JobCategoryResponse,
+} from "@/api";
 
 export default function CategoriesPage() {
   const [categories, setCategories] = useState<JobCategoryResponse[]>([]);
@@ -18,6 +23,9 @@ export default function CategoriesPage() {
   const [categoryToDelete, setCategoryToDelete] = useState<JobCategoryResponse | null>(null);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [inUseDialogOpen, setInUseDialogOpen] = useState(false);
+  const [inUseCategoryName, setInUseCategoryName] = useState("");
+  const [inUseCount, setInUseCount] = useState<number | null>(null);
 
   const fetchCategories = async () => {
     try {
@@ -63,7 +71,16 @@ export default function CategoriesPage() {
       setCategoryToDelete(null);
       fetchCategories();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to delete category");
+      const message = err instanceof Error ? err.message : "Failed to delete category";
+      const inUseMatch = message.match(/used by\s+(\d+)\s+job/i);
+      if (inUseMatch) {
+        setInUseCategoryName(categoryToDelete.name);
+        setInUseCount(Number(inUseMatch[1]));
+        setDeleteDialogOpen(false);
+        setInUseDialogOpen(true);
+      } else {
+        toast.error(message);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -74,7 +91,9 @@ export default function CategoriesPage() {
       <div className="space-y-6">
         <div>
           <h2 className="text-base md:text-lg font-semibold mb-1">Job Categories</h2>
-          <p className="text-xs text-muted-foreground">Manage department categories for your jobs</p>
+          <p className="text-xs text-muted-foreground">
+            Manage department categories for your jobs
+          </p>
         </div>
         <div className="text-sm text-muted-foreground">Loading...</div>
       </div>
@@ -87,9 +106,15 @@ export default function CategoriesPage() {
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2 className="text-base md:text-lg font-semibold mb-1">Job Categories</h2>
-            <p className="text-xs text-muted-foreground">Manage department categories for your jobs</p>
+            <p className="text-xs text-muted-foreground">
+              Manage department categories for your jobs
+            </p>
           </div>
-          <Button size="sm" className="text-xs h-9 md:h-8 gap-1.5 shrink-0" onClick={() => setAddDialogOpen(true)}>
+          <Button
+            size="sm"
+            className="text-xs h-9 md:h-8 gap-1.5 shrink-0"
+            onClick={() => setAddDialogOpen(true)}
+          >
             <Icon name="Plus" className="h-3.5 w-3.5" />
             Add Category
           </Button>
@@ -116,11 +141,21 @@ export default function CategoriesPage() {
                         size="sm"
                         className="h-8 w-8 p-0"
                         onClick={() => {
+                          const usageCount = Number(cat.usage_count ?? 0);
+                          if (usageCount > 0) {
+                            setInUseCategoryName(cat.name);
+                            setInUseCount(usageCount);
+                            setInUseDialogOpen(true);
+                            return;
+                          }
                           setCategoryToDelete(cat);
                           setDeleteDialogOpen(true);
                         }}
                       >
-                        <Icon name="Trash2" className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+                        <Icon
+                          name="Trash2"
+                          className="h-4 w-4 text-muted-foreground hover:text-destructive"
+                        />
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -143,7 +178,9 @@ export default function CategoriesPage() {
             className="mt-2"
           />
           <DialogFooter>
-            <Button variant="outline" onClick={() => setAddDialogOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setAddDialogOpen(false)}>
+              Cancel
+            </Button>
             <Button onClick={handleAdd} disabled={submitting}>
               {submitting ? "Adding..." : "Add"}
             </Button>
@@ -157,13 +194,32 @@ export default function CategoriesPage() {
             <DialogTitle>Delete Category</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            Are you sure you want to delete "{categoryToDelete?.name}"? This action cannot be undone.
+            Are you sure you want to delete "{categoryToDelete?.name}"? This action cannot be
+            undone.
           </p>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
+              Cancel
+            </Button>
             <Button variant="destructive" onClick={handleDelete} disabled={submitting}>
               {submitting ? "Deleting..." : "Delete"}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={inUseDialogOpen} onOpenChange={setInUseDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Category In Use</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            "{inUseCategoryName}" cannot be deleted because it is currently used by{" "}
+            <span className="font-medium text-foreground">{inUseCount ?? 0}</span> job
+            {(inUseCount ?? 0) === 1 ? "" : "s"}.
+          </p>
+          <DialogFooter>
+            <Button onClick={() => setInUseDialogOpen(false)}>OK</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

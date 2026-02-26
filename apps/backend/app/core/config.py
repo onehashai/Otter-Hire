@@ -13,20 +13,25 @@ class Settings(BaseSettings):
     def database_url(self) -> str:
         url = self.database_url_raw
         if url.startswith("postgres://"):
-            url = "postgresql+psycopg://" + url[len("postgres://"):]
+            url = "postgresql+psycopg://" + url[len("postgres://") :]
         elif url.startswith("postgresql://"):
-            url = "postgresql+psycopg://" + url[len("postgresql://"):]
+            url = "postgresql+psycopg://" + url[len("postgresql://") :]
         return url
+
     is_production: bool = Field(default=False, validation_alias="IS_PRODUCTION")
     cors_origins_raw: str = Field(default="", validation_alias="CORS_ORIGINS")
     jwt_secret_key: str = Field(validation_alias="JWT_SECRET_KEY")
     jwt_algorithm: str = Field(default="HS256", validation_alias="JWT_ALGORITHM")
-    access_token_expire_minutes: int = Field(default=60 * 24 * 7, validation_alias="ACCESS_TOKEN_EXPIRE_MINUTES")
+    access_token_expire_minutes: int = Field(
+        default=60 * 24 * 7, validation_alias="ACCESS_TOKEN_EXPIRE_MINUTES"
+    )
     log_level: str = "INFO"
 
     # Frontend URL
-    frontend_base_url: str = Field(default="http://localhost:3000", validation_alias="FRONTEND_BASE_URL")
-    
+    frontend_base_url: str = Field(
+        default="http://localhost:3000", validation_alias="FRONTEND_BASE_URL"
+    )
+
     # Cookie domain (empty for localhost, .domain.com for production)
     cookie_domain: str = Field(default="", validation_alias="COOKIE_DOMAIN")
 
@@ -38,13 +43,28 @@ class Settings(BaseSettings):
     mailtrap_from_email: str | None = Field(default=None, validation_alias="MAILTRAP_FROM_EMAIL")
 
     # Token expiry (configurable)
-    verification_token_expire_hours: int = Field(default=24, validation_alias="VERIFICATION_TOKEN_EXPIRE_HOURS")
+    verification_token_expire_hours: int = Field(
+        default=24, validation_alias="VERIFICATION_TOKEN_EXPIRE_HOURS"
+    )
     invite_token_expire_days: int = Field(default=7, validation_alias="INVITE_TOKEN_EXPIRE_DAYS")
 
     # ZeptoMail (prod)
     zeptomail_api_key: str | None = Field(default=None, validation_alias="ZEPTOMAIL_API_KEY")
     zeptomail_from_email: str | None = Field(default=None, validation_alias="ZEPTOMAIL_FROM_EMAIL")
     zeptomail_from_name: str | None = Field(default=None, validation_alias="ZEPTOMAIL_FROM_NAME")
+
+    # Storage
+    local_storage_root: str = Field(default="storage/local", validation_alias="LOCAL_STORAGE_ROOT")
+    max_upload_bytes: int = Field(default=1024 * 1024, validation_alias="MAX_UPLOAD_BYTES")
+    aws_s3_bucket: str | None = Field(default=None, validation_alias="AWS_S3_BUCKET")
+    aws_s3_region: str | None = Field(default=None, validation_alias="AWS_S3_REGION")
+    aws_access_key_id: str | None = Field(default=None, validation_alias="AWS_ACCESS_KEY_ID")
+    aws_secret_access_key: str | None = Field(
+        default=None, validation_alias="AWS_SECRET_ACCESS_KEY"
+    )
+    aws_s3_attachments_env: str = Field(
+        default="staging", validation_alias="AWS_S3_ATTACHMENTS_ENV"
+    )
 
     @property
     def cors_origins(self) -> list[str]:

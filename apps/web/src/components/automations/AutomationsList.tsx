@@ -20,14 +20,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@onehash/ui/dialog";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@onehash/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@onehash/ui/table";
 import { Plus, Zap, MoreHorizontal, Copy, Trash2, Pencil } from "lucide-react";
 import { AutomationTemplatesDialog } from "./AutomationTemplatesDialog";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -124,8 +117,7 @@ export const allTriggerTypes: { value: TriggerType; label: string }[] = [
 export const triggerTypeLabel = (t: TriggerType): string =>
   t === "candidate" ? "Candidate" : t === "job" ? "Job" : "Time-based";
 
-const statusVariant = (s: AutomationStatus) =>
-  s === "active" ? "default" : "secondary";
+const statusVariant = (s: AutomationStatus) => (s === "active" ? "default" : "secondary");
 
 export interface AutomationsListProps {
   filtered: Automation[];
@@ -150,16 +142,15 @@ export function AutomationsList({
   const [deleteDialog, setDeleteDialog] = useState<string | null>(null);
   const [templatesOpenInternal, setTemplatesOpenInternal] = useState(false);
   const templatesOpen = templatesOpenProp ?? templatesOpenInternal;
-  const setTemplatesOpen =
-    onTemplatesOpenChange ?? setTemplatesOpenInternal;
+  const setTemplatesOpen = onTemplatesOpenChange ?? setTemplatesOpenInternal;
 
   const navigate = (path: string) => router.push(path);
 
   const handleToggle = (id: string) => {
     setAutomations((prev) =>
       prev.map((a) =>
-        a.id === id ? { ...a, status: a.status === "active" ? "paused" : "active" } : a
-      )
+        a.id === id ? { ...a, status: a.status === "active" ? "paused" : "active" } : a,
+      ),
     );
     toast.success("Automation updated");
   };
@@ -276,10 +267,7 @@ export function AutomationsList({
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge
-                        variant={statusVariant(a.status)}
-                        className="text-[10px] capitalize"
-                      >
+                      <Badge variant={statusVariant(a.status)} className="text-[10px] capitalize">
                         {a.status}
                       </Badge>
                     </TableCell>
@@ -291,9 +279,7 @@ export function AutomationsList({
                     <TableCell className="text-xs text-muted-foreground">
                       {a.lastTriggered ?? "Never"}
                     </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {a.createdBy}
-                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{a.createdBy}</TableCell>
                     <TableCell onClick={(e) => e.stopPropagation()}>
                       <Switch
                         checked={a.status === "active"}
@@ -384,10 +370,7 @@ export function AutomationsList({
         </DialogContent>
       </Dialog>
 
-      <AutomationTemplatesDialog
-        open={templatesOpen}
-        onOpenChange={setTemplatesOpen}
-      />
+      <AutomationTemplatesDialog open={templatesOpen} onOpenChange={setTemplatesOpen} />
     </>
   );
 }

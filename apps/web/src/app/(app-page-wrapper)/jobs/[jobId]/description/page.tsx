@@ -21,7 +21,7 @@ export default function JobDescriptionPage() {
           className="h-7 text-xs gap-1.5"
           onClick={() => setAiSheetOpen(true)}
         >
-          <Sparkles className="h-3 w-3" /> 
+          <Sparkles className="h-3 w-3" />
           {t("ai_assist")}
         </Button>
       </div>

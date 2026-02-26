@@ -18,14 +18,20 @@ interface TeamOwnershipTransferDialogProps {
   onConfirm: () => void;
 }
 
-export function TeamOwnershipTransferDialog({ member, onOpenChange, onConfirm }: TeamOwnershipTransferDialogProps) {
+export function TeamOwnershipTransferDialog({
+  member,
+  onOpenChange,
+  onConfirm,
+}: TeamOwnershipTransferDialogProps) {
   return (
     <AlertDialog open={!!member} onOpenChange={(open) => !open && onOpenChange(false)}>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle className="text-base">Transfer ownership</AlertDialogTitle>
           <AlertDialogDescription className="text-sm">
-            Are you sure you want to transfer ownership to <span className="font-medium text-foreground">{member?.name}</span>? You will be downgraded to Admin. This action requires careful consideration.
+            Are you sure you want to transfer ownership to{" "}
+            <span className="font-medium text-foreground">{member?.name}</span>? You will be
+            downgraded to Admin. This action requires careful consideration.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

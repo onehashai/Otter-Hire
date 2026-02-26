@@ -1,22 +1,122 @@
+import os
 import secrets
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.permissions import require_permission
 from app.db.session import get_db
+from app.deps.auth import require_active_user
 from app.models.org_membership import OrgMembership
 from app.models.organization import Organization
 from app.models.user import User
-from app.schemas.users import InviteUserRequest, UpdateUserRoleRequest, UserResponse
+from app.schemas.users import (
+    InviteUserRequest,
+    ProfileResponse,
+    UpdateProfileRequest,
+    UpdateUserRoleRequest,
+    UserResponse,
+)
 from app.services.email import send_invite_email
+from app.services.media import ensure_avatar_type, read_upload_with_size_check
+from app.services.storage import storage_service
 
 router = APIRouter(prefix="/users", tags=["users"])
+
+
+@router.get("/me/profile", response_model=ProfileResponse)
+async def get_my_profile(
+    current_user: User = Depends(require_active_user),
+):
+    return ProfileResponse(
+        id=current_user.id,
+        email=current_user.email,
+        name=current_user.name,
+        avatar_url=current_user.avatar_url,
+    )
+
+
+@router.patch("/me/profile", response_model=ProfileResponse)
+async def update_my_profile(
+    body: UpdateProfileRequest,
+    current_user: User = Depends(require_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    next_name = body.name.strip()
+    if not next_name:
+        raise HTTPException(status_code=422, detail="Name is required")
+    current_user.name = next_name
+    await db.commit()
+    return ProfileResponse(
+        id=current_user.id,
+        email=current_user.email,
+        name=current_user.name,
+        avatar_url=current_user.avatar_url,
+    )
+
+
+@router.post("/me/avatar", response_model=ProfileResponse)
+async def upload_my_avatar(
+    file: UploadFile = File(...),
+    current_user: User = Depends(require_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    ensure_avatar_type(file.content_type)
+    raw = await read_upload_with_size_check(file)
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    if not ext:
+        content_type = (file.content_type or "").lower()
+        ext_map = {
+            "image/jpeg": ".jpg",
+            "image/jpg": ".jpg",
+            "image/png": ".png",
+            "image/webp": ".webp",
+            "image/gif": ".gif",
+            "image/bmp": ".bmp",
+            "image/tiff": ".tiff",
+        }
+        ext = ext_map.get(content_type, ".img")
+    object_key = (
+        f"orgs/{current_user.org_id}/users/{current_user.id}/avatar/{current_user.id}_avatar{ext}"
+    )
+    await storage_service.write_bytes(
+        object_key, raw, (file.content_type or "application/octet-stream")
+    )
+    avatar_url = await storage_service.resolve_url(object_key)
+
+    if current_user.avatar_url and current_user.avatar_url != avatar_url:
+        await storage_service.delete_by_url(current_user.avatar_url)
+
+    current_user.avatar_url = avatar_url
+    await db.commit()
+    return ProfileResponse(
+        id=current_user.id,
+        email=current_user.email,
+        name=current_user.name,
+        avatar_url=current_user.avatar_url,
+    )
+
+
+@router.delete("/me/avatar", response_model=ProfileResponse)
+async def delete_my_avatar(
+    current_user: User = Depends(require_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if current_user.avatar_url:
+        await storage_service.delete_by_url(current_user.avatar_url)
+    current_user.avatar_url = None
+    await db.commit()
+    return ProfileResponse(
+        id=current_user.id,
+        email=current_user.email,
+        name=current_user.name,
+        avatar_url=None,
+    )
 
 
 @router.get("", response_model=list[UserResponse])
@@ -38,6 +138,7 @@ async def list_users(
             name=user.name,
             role=membership.role,
             status=membership.status,
+            avatar_url=user.avatar_url,
         )
         for user, membership in rows
     ]
@@ -66,7 +167,9 @@ async def invite_user(
         if existing_membership.status == "invited":
             raw_token = secrets.token_urlsafe(32)
             token_hash = sha256(raw_token.encode()).hexdigest()
-            token_expires_at = datetime.now(timezone.utc) + timedelta(days=settings.invite_token_expire_days)
+            token_expires_at = datetime.now(timezone.utc) + timedelta(
+                days=settings.invite_token_expire_days
+            )
 
             existing_membership.invite_token_hash = token_hash
             existing_membership.invite_token_expires_at = token_expires_at
@@ -77,7 +180,9 @@ async def invite_user(
             await db.refresh(existing_user)
             await db.refresh(existing_membership)
 
-            org_result = await db.execute(select(Organization).where(Organization.id == current_user.org_id))
+            org_result = await db.execute(
+                select(Organization).where(Organization.id == current_user.org_id)
+            )
             org = org_result.scalar_one()
 
             invite_url = f"{settings.frontend_base_url}/invite/{raw_token}"
@@ -94,6 +199,7 @@ async def invite_user(
                 name=existing_user.name,
                 role=existing_membership.role,
                 status=existing_membership.status,
+                avatar_url=existing_user.avatar_url,
             )
 
         raise HTTPException(
@@ -103,7 +209,9 @@ async def invite_user(
 
     raw_token = secrets.token_urlsafe(32)
     token_hash = sha256(raw_token.encode()).hexdigest()
-    token_expires_at = datetime.now(timezone.utc) + timedelta(days=settings.invite_token_expire_days)
+    token_expires_at = datetime.now(timezone.utc) + timedelta(
+        days=settings.invite_token_expire_days
+    )
 
     new_user = existing_user or User(
         org_id=current_user.org_id,
@@ -132,7 +240,9 @@ async def invite_user(
     await db.refresh(new_user)
     await db.refresh(membership)
 
-    org_result = await db.execute(select(Organization).where(Organization.id == current_user.org_id))
+    org_result = await db.execute(
+        select(Organization).where(Organization.id == current_user.org_id)
+    )
     org = org_result.scalar_one()
 
     invite_url = f"{settings.frontend_base_url}/invite/{raw_token}"
@@ -149,6 +259,7 @@ async def invite_user(
         name=new_user.name,
         role=membership.role,
         status=membership.status,
+        avatar_url=new_user.avatar_url,
     )
 
 
@@ -189,6 +300,7 @@ async def update_user_role(
         name=target.name,
         role=membership.role,
         status=membership.status,
+        avatar_url=target.avatar_url,
     )
 
 

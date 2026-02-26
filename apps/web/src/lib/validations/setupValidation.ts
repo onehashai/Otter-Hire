@@ -28,7 +28,7 @@ export function getBasicInfoValidation(state: Pick<JobSetupState, "title">): Bas
 }
 
 export function getHiringDetailsValidation(
-  state: Pick<JobSetupState, "salaryType" | "salaryFixed" | "salaryMin" | "salaryMax">
+  state: Pick<JobSetupState, "salaryType" | "salaryFixed" | "salaryMin" | "salaryMax">,
 ): HiringDetailsValidation {
   const { salaryType, salaryFixed, salaryMin, salaryMax } = state;
   if (salaryType !== "fixed" && salaryType !== "range") {

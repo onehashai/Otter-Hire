@@ -1,0 +1,164 @@
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Optional
+from uuid import UUID
+
+from pydantic import BaseModel, Field
+
+
+class CandidateListItemResponse(BaseModel):
+    id: UUID
+    name: str
+    email: str
+    phone: Optional[str] = None
+    location: Optional[str] = None
+    profile_links: dict[str, str] = {}
+    source: Optional[str] = None
+    tags: list[str] = []
+    status: str
+    job_id: Optional[UUID] = None
+    job_title: Optional[str] = None
+    stage_id: Optional[UUID] = None
+    stage_name: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class CandidateDetailResponse(CandidateListItemResponse):
+    pass
+
+
+class CandidateCreateRequest(BaseModel):
+    job_id: Optional[UUID] = None
+    name: str = Field(min_length=1, max_length=255)
+    email: str = Field(min_length=3, max_length=320)
+    phone: Optional[str] = None
+    location: Optional[str] = None
+    profile_links: dict[str, str] = {}
+    stage_id: Optional[UUID] = None
+    source: Optional[str] = Field(default="manual", max_length=100)
+    tags: list[str] = []
+    status: str = Field(default="active", pattern=r"^(active|rejected|hired)$")
+
+
+class CandidateStageUpdateRequest(BaseModel):
+    stage_id: UUID
+
+
+class CandidateStatusUpdateRequest(BaseModel):
+    status: str = Field(pattern=r"^(active|rejected|hired)$")
+
+
+class CandidateUpdateRequest(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=255)
+    email: Optional[str] = Field(default=None, min_length=3, max_length=320)
+    phone: Optional[str] = None
+    location: Optional[str] = None
+    profile_links: Optional[dict[str, str]] = None
+    job_id: Optional[UUID] = None
+    clear_job: bool = False
+
+
+class CandidateListResponse(BaseModel):
+    items: list[CandidateListItemResponse]
+    total: int
+    limit: int
+    offset: int
+
+
+class CandidateBulkStageUpdateRequest(BaseModel):
+    candidate_ids: list[UUID] = Field(min_length=1)
+    stage_id: UUID
+
+
+class CandidateBulkStatusUpdateRequest(BaseModel):
+    candidate_ids: list[UUID] = Field(min_length=1)
+    status: str = Field(pattern=r"^(active|rejected|hired)$")
+
+
+class CandidateBulkUpdateResponse(BaseModel):
+    updated_count: int
+
+
+class CandidateNoteRequest(BaseModel):
+    content: str = Field(min_length=1, max_length=5000)
+
+
+class CandidateNoteResponse(BaseModel):
+    id: UUID
+    author_user_id: UUID
+    author_name: Optional[str] = None
+    content: str
+    created_at: datetime
+
+
+class CandidateActivityResponse(BaseModel):
+    id: UUID
+    type: str
+    metadata: dict = {}
+    created_by_user_id: UUID
+    created_by_name: Optional[str] = None
+    created_at: datetime
+
+
+class CandidateOverviewResponse(BaseModel):
+    notes: list[CandidateNoteResponse] = []
+    activities: list[CandidateActivityResponse] = []
+
+
+class CandidateInterviewCreateRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=255)
+    scheduled_at: datetime
+    duration_minutes: Optional[int] = Field(default=None, ge=1, le=480)
+    meeting_link: Optional[str] = None
+    interviewer_ids: list[UUID] = []
+
+
+class CandidateInterviewResponse(BaseModel):
+    id: UUID
+    title: str
+    scheduled_at: datetime
+    duration_minutes: Optional[int] = None
+    meeting_link: Optional[str] = None
+    interviewer_ids: list[UUID] = []
+    created_at: datetime
+    updated_at: datetime
+
+
+class CandidateFeedbackCreateRequest(BaseModel):
+    rating: Optional[int] = Field(default=None, ge=1, le=5)
+    decision: str = Field(pattern=r"^(yes|no|maybe)$")
+    comments: Optional[str] = None
+
+
+class CandidateFeedbackResponse(BaseModel):
+    id: UUID
+    interview_id: UUID
+    reviewer_user_id: UUID
+    reviewer_name: Optional[str] = None
+    rating: Optional[int] = None
+    decision: str
+    comments: Optional[str] = None
+    created_at: datetime
+
+
+class CandidateEvaluationResponse(BaseModel):
+    average_rating: float = 0.0
+    counts: dict[str, int] = {}
+    feedback: list[CandidateFeedbackResponse] = []
+
+
+class CandidateDocumentResponse(BaseModel):
+    id: UUID
+    field_key: str
+    name: str
+    url: str
+    object_key: str
+    mime_type: str
+    size_bytes: int
+    doc_type: str
+    size_label: Optional[str] = None
+    created_by_user_id: Optional[UUID] = None
+    created_by_name: Optional[str] = None
+    created_at: datetime

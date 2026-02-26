@@ -1,16 +1,21 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { Calendar, UserSearch, BarChart3, Zap, Bot, Settings, Sun, Moon } from "lucide-react";
+import { Calendar, Settings, Sun, Moon } from "lucide-react";
+// TODO(mvp-nav): Re-enable Reports/Automations/AI Assistant icons in mobile drawer after MVP launch.
+// import { BarChart3, Zap, Bot } from "lucide-react";
 import { useTheme } from "@/components/common/ThemeProvider";
 import { Separator } from "@onehash/ui/separator";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@onehash/ui/drawer";
 
 const moreItems = [
   { title: "Interviews", url: "/interviews", icon: Calendar },
-  { title: "Reports", url: "/reports", icon: BarChart3 },
-  { title: "Automations", url: "/automations", icon: Zap },
-  { title: "AI Assistant", url: "/ai-assistant", icon: Bot },
+  // TODO(mvp-nav): Re-enable Reports in mobile drawer after MVP launch.
+  // { title: "Reports", url: "/reports", icon: BarChart3 },
+  // TODO(mvp-nav): Re-enable Automations in mobile drawer after MVP launch.
+  // { title: "Automations", url: "/automations", icon: Zap },
+  // TODO(mvp-nav): Re-enable AI Assistant in mobile drawer after MVP launch.
+  // { title: "AI Assistant", url: "/ai-assistant", icon: Bot },
   { title: "Settings", url: "/settings/profile", icon: Settings },
 ];
 
@@ -50,7 +55,11 @@ export function MobileMoreDrawer({ open, onOpenChange }: MobileMoreDrawerProps) 
             onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
             className="flex items-center gap-3 w-full rounded-lg px-3 py-3 text-sm text-foreground hover:bg-muted transition-colors min-h-[44px]"
           >
-            {theme === "dark" ? <Sun className="h-5 w-5 text-muted-foreground" /> : <Moon className="h-5 w-5 text-muted-foreground" />}
+            {theme === "dark" ? (
+              <Sun className="h-5 w-5 text-muted-foreground" />
+            ) : (
+              <Moon className="h-5 w-5 text-muted-foreground" />
+            )}
             <span>{theme === "dark" ? "Light mode" : "Dark mode"}</span>
           </button>
         </div>

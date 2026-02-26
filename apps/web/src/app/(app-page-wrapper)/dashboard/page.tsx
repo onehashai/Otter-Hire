@@ -36,14 +36,18 @@ export default function DashboardPage() {
             <div className="space-y-2.5 md:space-y-3">
               {["Applied", "Screened", "Interview", "Offer", "Hired"].map((stage, i) => (
                 <div key={stage} className="flex items-center gap-2 md:gap-3">
-                  <span className="text-[11px] md:text-xs text-muted-foreground w-14 md:w-16">{stage}</span>
+                  <span className="text-[11px] md:text-xs text-muted-foreground w-14 md:w-16">
+                    {stage}
+                  </span>
                   <div className="flex-1 h-5 md:h-6 bg-muted rounded-md overflow-hidden">
                     <div
                       className="h-full bg-foreground/10 rounded-md"
                       style={{ width: `${100 - i * 18}%` }}
                     />
                   </div>
-                  <span className="text-[11px] md:text-xs text-muted-foreground w-7 md:w-8 text-right">{[250, 180, 95, 32, 12][i]}</span>
+                  <span className="text-[11px] md:text-xs text-muted-foreground w-7 md:w-8 text-right">
+                    {[250, 180, 95, 32, 12][i]}
+                  </span>
                 </div>
               ))}
             </div>

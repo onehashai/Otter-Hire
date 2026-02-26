@@ -1,9 +1,20 @@
-from sqlalchemy import Column, String, DateTime, ForeignKey, Index, CheckConstraint, Integer, Text, UniqueConstraint
+from sqlalchemy import (
+    CheckConstraint,
+    Column,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
-from app.utils.uuid import uuid7
+from sqlalchemy.sql import func
+
 from app.db.base import Base
+from app.utils.uuid import uuid7
 
 
 class Feedback(Base):

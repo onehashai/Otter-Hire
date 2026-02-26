@@ -60,10 +60,13 @@ export default function ForgotPassword() {
     <div className="min-h-screen flex bg-background">
       {/* Left branding panel */}
       <div className="hidden lg:flex lg:w-1/2 items-center justify-center relative overflow-hidden bg-muted/30">
-        <div className="absolute inset-0 opacity-[0.03]" style={{
-          backgroundImage: "radial-gradient(circle, hsl(var(--foreground)) 1px, transparent 1px)",
-          backgroundSize: "24px 24px",
-        }} />
+        <div
+          className="absolute inset-0 opacity-[0.03]"
+          style={{
+            backgroundImage: "radial-gradient(circle, hsl(var(--foreground)) 1px, transparent 1px)",
+            backgroundSize: "24px 24px",
+          }}
+        />
         <div className="relative z-10 max-w-md px-12">
           <div className="flex items-center gap-2.5 mb-8">
             <div className="h-9 w-9 rounded-lg bg-foreground flex items-center justify-center">
@@ -72,7 +75,9 @@ export default function ForgotPassword() {
             <span className="text-lg font-semibold tracking-tight">ATS</span>
           </div>
           <h1 className="text-3xl font-semibold tracking-tight leading-tight mb-3">
-            We've got<br />your back.
+            We've got
+            <br />
+            your back.
           </h1>
           <p className="text-muted-foreground text-sm leading-relaxed">
             Happens to the best of us. Reset your password and get back to building your dream team.
@@ -94,14 +99,19 @@ export default function ForgotPassword() {
           <div className="lg:rounded-xl lg:border lg:border-border lg:bg-card lg:p-8 lg:shadow-sm">
             {!sent ? (
               <>
-                <Link href="/login" className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mb-6">
+                <Link
+                  href="/login"
+                  className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mb-6"
+                >
                   <Icon name="ArrowLeft" className="h-3.5 w-3.5" />
                   Back to login
                 </Link>
 
                 <div className="mb-6">
                   <h2 className="text-xl font-semibold tracking-tight">Reset your password</h2>
-                  <p className="text-sm text-muted-foreground mt-1">Enter the email associated with your account</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Enter the email associated with your account
+                  </p>
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-4">
@@ -112,7 +122,12 @@ export default function ForgotPassword() {
                   )}
 
                   <div className="space-y-1.5">
-                    <Label htmlFor="resetEmail" className="text-xs font-medium text-muted-foreground">{t("email")}</Label>
+                    <Label
+                      htmlFor="resetEmail"
+                      className="text-xs font-medium text-muted-foreground"
+                    >
+                      {t("email")}
+                    </Label>
                     <InputField
                       id="resetEmail"
                       type="email"
@@ -125,8 +140,16 @@ export default function ForgotPassword() {
                     />
                   </div>
 
-                  <Button type="submit" className="w-full h-10 text-sm font-medium" disabled={loading}>
-                    {loading ? <Icon name="Loader" className="h-4 w-4 animate-spin" /> : "Send reset link"}
+                  <Button
+                    type="submit"
+                    className="w-full h-10 text-sm font-medium"
+                    disabled={loading}
+                  >
+                    {loading ? (
+                      <Icon name="Loader" className="h-4 w-4 animate-spin" />
+                    ) : (
+                      "Send reset link"
+                    )}
                   </Button>
                 </form>
               </>
@@ -137,7 +160,8 @@ export default function ForgotPassword() {
                 </div>
                 <h2 className="text-xl font-semibold tracking-tight mb-2">Check your email</h2>
                 <p className="text-sm text-muted-foreground leading-relaxed max-w-[300px] mx-auto">
-                  We've sent a password reset link if an account exists for <span className="text-foreground font-medium">{email}</span>.
+                  We've sent a password reset link if an account exists for{" "}
+                  <span className="text-foreground font-medium">{email}</span>.
                 </p>
 
                 <div className="mt-6 space-y-3">
@@ -149,7 +173,10 @@ export default function ForgotPassword() {
                   >
                     {resendDisabled ? `Resend in ${resendTimer}s` : "Resend email"}
                   </Button>
-                  <Link href="/login" className="block text-xs text-muted-foreground hover:text-foreground transition-colors">
+                  <Link
+                    href="/login"
+                    className="block text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  >
                     Back to login
                   </Link>
                 </div>

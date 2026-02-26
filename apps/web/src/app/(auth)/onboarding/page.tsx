@@ -44,6 +44,8 @@ export default function Onboarding() {
       });
       await refreshSession();
       localStorage.setItem("session_updated", Date.now().toString());
+      // TODO(mvp-nav): Restore dashboard/home redirect after MVP launch.
+      // router.replace("/");
       router.replace("/");
       router.refresh();
     } catch (err) {
@@ -72,63 +74,59 @@ export default function Onboarding() {
           </div>
 
           <Form form={form} onSubmit={onSubmit} className="space-y-4">
-              {form.formState.errors.root?.message && (
-                <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-sm text-destructive">
-                  {form.formState.errors.root.message}
-                </div>
-              )}
-              <FormField
-                control={form.control}
-                name="fullName"
-                render={({ field, fieldState }) => (
-                  <FormItem>
-                    <FormControl>
-                      <InputField
-                        {...field}
-                        label={t("full_name")}
-                        placeholder="Jane Doe"
-                        className="h-10 text-sm"
-                        autoComplete="name"
-                        error={fieldState.error?.message}
-                        showAsterisk
-                      />
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="organization"
-                render={({ field, fieldState }) => (
-                  <FormItem>
-                    <FormControl>
-                      <InputField
-                        {...field}
-                        label={t("organization_name")}
-                        placeholder="Acme Inc"
-                        className="h-10 text-sm"
-                        autoComplete="organization"
-                        disabled={shouldLockOrgName}
-                        error={fieldState.error?.message}
-                        showAsterisk
-                      />
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
-              <div className="pt-2">
-                <Button
-                  type="submit"
-                  className="w-full h-10 text-sm font-medium"
-                  disabled={loading}
-                >
-                  {loading ? (
-                    <Icon name="Loader" className="h-4 w-4 animate-spin" />
-                  ) : (
-                    t("continue_to_dashboard")
-                  )}
-                </Button>
+            {form.formState.errors.root?.message && (
+              <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-sm text-destructive">
+                {form.formState.errors.root.message}
               </div>
+            )}
+            <FormField
+              control={form.control}
+              name="fullName"
+              render={({ field, fieldState }) => (
+                <FormItem>
+                  <FormControl>
+                    <InputField
+                      {...field}
+                      label={t("full_name")}
+                      placeholder="Jane Doe"
+                      className="h-10 text-sm"
+                      autoComplete="name"
+                      error={fieldState.error?.message}
+                      showAsterisk
+                    />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="organization"
+              render={({ field, fieldState }) => (
+                <FormItem>
+                  <FormControl>
+                    <InputField
+                      {...field}
+                      label={t("organization_name")}
+                      placeholder="Acme Inc"
+                      className="h-10 text-sm"
+                      autoComplete="organization"
+                      disabled={shouldLockOrgName}
+                      error={fieldState.error?.message}
+                      showAsterisk
+                    />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+            <div className="pt-2">
+              <Button type="submit" className="w-full h-10 text-sm font-medium" disabled={loading}>
+                {loading ? (
+                  <Icon name="Loader" className="h-4 w-4 animate-spin" />
+                ) : (
+                  t("continue_to_dashboard")
+                )}
+              </Button>
+            </div>
           </Form>
         </div>
       </div>

@@ -30,10 +30,7 @@ const signupPasswordSchema = z
   .string()
   .min(8, "At least 8 characters")
   .regex(/[A-Z]/, "One uppercase letter")
-  .regex(
-    /[0-9!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/,
-    "One number or symbol"
-  );
+  .regex(/[0-9!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/, "One number or symbol");
 
 export const signupSchema = z
   .object({

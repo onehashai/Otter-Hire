@@ -1,9 +1,18 @@
-from sqlalchemy import Column, String, DateTime, ForeignKey, Index, UniqueConstraint, CheckConstraint
+from sqlalchemy import (
+    CheckConstraint,
+    Column,
+    DateTime,
+    ForeignKey,
+    Index,
+    String,
+    UniqueConstraint,
+)
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
-from app.utils.uuid import uuid7
+from sqlalchemy.sql import func
+
 from app.db.base import Base
+from app.utils.uuid import uuid7
 
 
 class JobTeamMember(Base):
@@ -18,7 +27,10 @@ class JobTeamMember(Base):
 
     __table_args__ = (
         UniqueConstraint("job_id", "user_id", name="uq_job_team_member"),
-        CheckConstraint("role IN ('hiring_manager', 'recruiter', 'interviewer', 'coordinator')", name="ck_job_team_role"),
+        CheckConstraint(
+            "role IN ('hiring_manager', 'recruiter', 'interviewer', 'coordinator')",
+            name="ck_job_team_role",
+        ),
         Index("ix_job_team_members_job", "job_id"),
     )
 

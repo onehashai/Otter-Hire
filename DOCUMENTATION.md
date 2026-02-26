@@ -72,6 +72,331 @@ Because multiple heads currently exist, runtime startup should use:
 
 instead of `alembic upgrade head`.
 
+### Latest Delta (2026-02-25) – Working Tree Reconciliation
+
+The following items are implemented in the current codebase (including uncommitted working tree changes) and were not fully captured above:
+
+1. Job pipeline API for real job board data:
+   - `GET /jobs/{job_id}/pipeline` added.
+   - Returns job metadata, ordered stages, and candidates mapped by `stage_id`.
+   - Backend file: `apps/backend/app/api/v1/endpoints/jobs.py`.
+   - Schema file: `apps/backend/app/schemas/jobs.py`.
+
+2. Public application form is now schema-driven and enforced at submit-time:
+   - Public job detail includes `application_form_schema`.
+   - Public apply validates required/optional/hidden behavior from schema for default fields, profile links, and custom fields.
+   - Submission rejects unknown answer keys.
+   - Backend files:
+     - `apps/backend/app/api/v1/endpoints/public.py`
+     - `apps/backend/app/schemas/public_jobs.py`
+
+3. Job applications persistence introduced:
+   - New table: `job_applications` (stores candidate submission payload + schema snapshot/version).
+   - New job column: `jobs.application_form_schema` (JSONB).
+   - Files:
+     - Migration: `apps/backend/alembic/versions/n0o1p2q3r4s5_add_application_form_schema_and_job_applications.py`
+     - Model: `apps/backend/app/models/job_application.py`
+     - Job model update: `apps/backend/app/models/job.py`
+
+4. Jobs UI updated to card-based listing and pipeline drilldown:
+   - Jobs table replaced by cards.
+   - Card click opens job form.
+   - `View Pipeline` button opens job-specific pipeline.
+   - Files:
+     - `apps/web/src/components/jobs/JobsList.tsx`
+     - `apps/web/src/app/(app-page-wrapper)/pipeline/[id]/page.tsx`
+     - `apps/web/src/components/pipeline/PipelineBoard.tsx`
+     - `apps/web/src/api/job/get.ts`
+     - `apps/web/src/api/job/types.ts`
+
+5. Pipeline route behavior:
+   - `/pipeline` now redirects to `/jobs`.
+   - Job-specific pipeline is loaded via `/pipeline/{jobId}`.
+   - File: `apps/web/src/app/(app-page-wrapper)/pipeline/page.tsx`.
+
+6. Branding click behavior:
+   - Sidebar ATS logo/title now routes to app root (`/`), which resolves correctly on local/prod app domains.
+   - File: `apps/web/src/components/common/AppSidebar.tsx`.
+
+7. Candidates module backend (new API surface):
+   - Added candidates router with org-scoped endpoints:
+     - `GET /candidates` (search/filter/pagination)
+     - `GET /candidates/{candidate_id}`
+     - `PATCH /candidates/{candidate_id}/stage`
+     - `PATCH /candidates/{candidate_id}/status`
+   - Files:
+     - `apps/backend/app/api/v1/endpoints/candidates.py`
+     - `apps/backend/app/schemas/candidates.py`
+     - `apps/backend/app/api/v1/router.py`
+
+8. Public apply to candidate pipeline ingestion:
+   - `POST /public/orgs/{org_id}/jobs/{job_id}/apply` now also upserts candidate into `candidates`.
+   - Candidate is created in first stage (by stage position) for that job when no existing candidate exists for same `org_id + job_id + email`.
+   - Existing candidate is refreshed with latest name/phone/resume when applicable.
+   - File: `apps/backend/app/api/v1/endpoints/public.py`.
+
+9. Candidates frontend moved from dummy to API-backed (core pages):
+   - Candidates list page now fetches from backend (`GET /candidates`) and applies UI filtering client-side.
+   - Candidate detail page now fetches from backend (`GET /candidates/{id}`) and renders using existing components with real summary data.
+   - New frontend API module:
+     - `apps/web/src/api/candidates/index.ts`
+     - exported via `apps/web/src/api/index.ts`
+   - Updated pages:
+     - `apps/web/src/app/(app-page-wrapper)/candidates/page.tsx`
+     - `apps/web/src/app/(app-page-wrapper)/candidates/[candidateId]/page.tsx`
+
+10. Candidates Phase-2 hardening (pagination, bulk, pipeline persistence):
+   - Added paginated list endpoint with metadata:
+     - `GET /candidates/paginated` returns `{ items, total, limit, offset }`.
+   - Added bulk candidate action endpoints:
+     - `PATCH /candidates/actions/bulk/status`
+     - `PATCH /candidates/actions/bulk/stage`
+   - Route safety:
+     - Bulk endpoints intentionally use `/actions/bulk/*` namespace to avoid conflict with `/{candidate_id}` UUID routes.
+   - Pipeline drag/drop persistence:
+     - Frontend pipeline board now calls backend `PATCH /candidates/{candidate_id}/stage` on drop.
+     - UI uses optimistic move + rollback on API failure.
+   - Files:
+     - Backend:
+       - `apps/backend/app/api/v1/endpoints/candidates.py`
+       - `apps/backend/app/schemas/candidates.py`
+     - Frontend:
+       - `apps/web/src/api/candidates/index.ts`
+       - `apps/web/src/app/(app-page-wrapper)/pipeline/[id]/page.tsx`
+       - `apps/web/src/components/pipeline/PipelineBoard.tsx`
+     - `apps/web/src/app/(app-page-wrapper)/candidates/page.tsx`
+     - `apps/web/src/components/candidates/CandidatesList.tsx`
+
+11. Candidates Phase-3 completion (remaining plan items):
+   - Bulk stage move UX implemented on candidates list:
+     - Reuses existing dialog/select components.
+     - Enforces single-job selection before opening stage chooser.
+     - Loads job stages dynamically from job API and calls bulk stage update endpoint.
+   - Server-side pagination controls added to candidates page:
+     - Uses `GET /candidates/paginated` with `limit/offset/search`.
+     - Adds previous/next paging controls and page indicator.
+   - Frontend files:
+     - `apps/web/src/app/(app-page-wrapper)/candidates/page.tsx`
+     - `apps/web/src/api/candidates/index.ts`
+
+12. Manual candidate add flow (ATS internal):
+   - Backend:
+     - Added `POST /candidates` for manual candidate creation.
+     - Validates job belongs to current org.
+     - Validates provided stage belongs to same job/org (or auto-assigns first stage if omitted).
+     - Prevents duplicate candidate for same `org_id + job_id + email` (returns `409`).
+   - Frontend:
+     - Candidates page `Add` action now opens modal form (job, name, email, optional phone).
+     - Submits to `POST /candidates` and updates list immediately on success.
+   - Files:
+     - `apps/backend/app/api/v1/endpoints/candidates.py`
+     - `apps/backend/app/schemas/candidates.py`
+     - `apps/web/src/api/candidates/index.ts`
+     - `apps/web/src/app/(app-page-wrapper)/candidates/page.tsx`
+
+13. Candidate audit trail + rich filters/sort + detail data integration:
+   - Backend candidates list filtering/sorting extended:
+     - Filters: `search`, `job_id`, `stage_id`, `status`, `source`, `tag`
+     - Sorting: `sort_by` (`updated_at|created_at|name|status|job_title|stage_name`) and `sort_order` (`asc|desc`)
+     - Supported on both:
+       - `GET /candidates`
+       - `GET /candidates/paginated`
+   - Audit/activity logging integrated on candidate mutations:
+     - create candidate
+     - stage change (single and bulk)
+     - status change (single and bulk)
+     - note create
+     - interview schedule
+     - feedback submit
+     - document add
+   - New candidate detail APIs:
+     - `GET /candidates/{candidate_id}/overview` (notes + activities)
+     - `POST /candidates/{candidate_id}/notes`
+     - `GET /candidates/{candidate_id}/interviews`
+     - `POST /candidates/{candidate_id}/interviews`
+     - `POST /candidates/{candidate_id}/interviews/{interview_id}/feedback`
+     - `GET /candidates/{candidate_id}/evaluation`
+     - `GET /candidates/{candidate_id}/documents`
+     - `POST /candidates/{candidate_id}/documents`
+   - New DB-backed documents table:
+     - model: `apps/backend/app/models/candidate_document.py`
+     - migration: `apps/backend/alembic/versions/o1p2q3r4s5t6_add_candidate_documents_table.py`
+   - Candidate detail frontend integration:
+     - Overview tab now loads notes/activity from API and supports add note.
+     - Interviews/Evaluation/Documents tabs now read live backend data.
+     - files:
+       - `apps/web/src/app/(app-page-wrapper)/candidates/[candidateId]/page.tsx`
+    - `apps/web/src/components/candidates/tabs/OverviewTab.tsx`
+    - `apps/web/src/api/candidates/index.ts`
+
+14. Candidate tab workflow tooling completion (reuse-only UI):
+   - Interviews tab:
+     - Schedule Interview action wired to backend.
+     - Add Feedback action wired per interview.
+   - Evaluation tab:
+     - Shows backend decision counts and feedback list (reviewer, decision, rating, comments, date).
+   - Documents tab:
+     - Upload/Add document action wired to backend (URL-based document entry).
+   - Overview tab:
+     - Add Note is fully functional and persists to DB.
+   - Candidate detail page now orchestrates all tab actions through dialogs using existing design system components only.
+   - Files:
+     - `apps/web/src/app/(app-page-wrapper)/candidates/[candidateId]/page.tsx`
+     - `apps/web/src/components/candidates/tabs/InterviewsTab.tsx`
+     - `apps/web/src/components/candidates/tabs/EvaluationTab.tsx`
+     - `apps/web/src/components/candidates/tabs/DocumentsTab.tsx`
+     - `apps/web/src/components/candidates/tabs/OverviewTab.tsx`
+     - `apps/web/src/api/candidates/index.ts`
+
+### Latest Delta (2026-02-26) – Storage, Avatars, Candidate Domain Hardening
+
+The following module-level changes were added after the previous section and are required for accurate current-state documentation:
+
+1. Storage abstraction (single service, env-driven backend):
+   - Added unified storage service with local/S3 behavior selected via environment flags.
+   - Local storage path mirrors production object key structure.
+   - Backend files:
+     - `apps/backend/app/services/storage.py`
+     - `apps/backend/app/services/media.py`
+     - `apps/backend/app/core/config.py`
+   - Environment and infra:
+     - `apps/backend/.env.example`
+     - `docker-compose.yml`
+     - `apps/backend/storage/`
+
+2. User avatar persistence model simplified:
+   - `users.avatar_url` is the persisted DB source of truth.
+   - Legacy profile image key flow removed from active usage.
+   - Endpoints:
+     - `GET /users/me/profile`
+     - `POST /users/me/avatar`
+     - `DELETE /users/me/avatar`
+   - Backend files:
+     - `apps/backend/app/models/user.py`
+     - `apps/backend/app/schemas/users.py`
+     - `apps/backend/app/api/v1/endpoints/users.py`
+
+3. Organization avatar support added:
+   - `organizations.avatar_url` added and used by settings/top bar.
+   - Endpoints:
+     - `GET /organizations/me`
+     - `POST /organizations/me/avatar`
+     - `DELETE /organizations/me/avatar`
+   - Backend files:
+     - `apps/backend/app/models/organization.py`
+     - `apps/backend/app/schemas/organization.py`
+     - `apps/backend/app/api/v1/endpoints/organizations.py`
+
+4. File-serving route for local storage:
+   - Added backend route for serving local file URLs used in dev mode.
+   - Backend files:
+     - `apps/backend/app/api/v1/endpoints/files.py`
+     - `apps/backend/app/api/v1/router.py`
+
+5. Candidate documents re-normalized to dedicated table:
+   - Reintroduced `candidate_documents` as canonical multi-document model.
+   - `candidates.doc_url` removed.
+   - Document records now carry metadata (`field_key`, `doc_type`, `url`, `object_key`, mime/size/version, soft-delete fields).
+   - Backend files:
+     - `apps/backend/app/models/candidate_document.py`
+     - `apps/backend/app/models/candidate.py`
+     - `apps/backend/app/schemas/candidates.py`
+     - `apps/backend/app/api/v1/endpoints/candidates.py`
+
+6. Candidate core schema evolved for talent-pool support:
+   - `candidates.job_id` and `candidates.stage_id` are nullable.
+   - Added candidate-level `location` and `profile_links` for editable detail panel data.
+   - Manual candidates can be created without assigning a job initially.
+   - Backend files:
+     - `apps/backend/app/models/candidate.py`
+     - `apps/backend/app/schemas/candidates.py`
+     - `apps/backend/app/api/v1/endpoints/candidates.py`
+
+7. Public apply ingestion now writes candidate document rows:
+   - Public application `files` payload is validated against allowed configured file keys.
+   - Accepted file entries (resume/cover_letter/custom file fields) are persisted to `candidate_documents`.
+   - Backend files:
+     - `apps/backend/app/api/v1/endpoints/public.py`
+     - `apps/backend/app/schemas/public_jobs.py`
+
+8. Candidate detail UX + persistence updates:
+   - Candidate right summary card now supports editing (name, email, phone, location, profile links, job assignment/clear).
+   - Resume & links card edit behavior is wired to backend document/profile-links updates.
+   - Manual and job-board candidates share the same editable flow.
+   - Frontend files:
+     - `apps/web/src/app/(app-page-wrapper)/candidates/[candidateId]/page.tsx`
+     - `apps/web/src/components/candidates/summary/SummaryPanel.tsx`
+     - `apps/web/src/components/candidates/tabs/DocumentsTab.tsx`
+     - `apps/web/src/api/candidates/index.ts`
+
+9. Candidate list columns adjusted for MVP:
+   - Removed non-functional Rating/Recruiter columns from candidates list view.
+   - Frontend files:
+     - `apps/web/src/components/candidates/CandidatesList.tsx`
+     - `apps/web/src/app/(app-page-wrapper)/candidates/page.tsx`
+
+10. Job edit/save behavior hardening:
+   - Save now persists tab changes reliably and does not over-block on publish-only constraints.
+   - Hiring Team tab now participates in unsaved-changes guard.
+   - Frontend files:
+     - `apps/web/src/app/(app-page-wrapper)/jobs/[jobId]/layout.tsx`
+     - `apps/web/src/app/(app-page-wrapper)/jobs/[jobId]/context.tsx`
+
+11. New job defaults:
+   - Default workplace type for new jobs is now `onsite`.
+   - Files:
+     - `apps/backend/app/models/job.py`
+     - `apps/backend/app/api/v1/endpoints/jobs.py`
+     - `apps/web/src/app/(app-page-wrapper)/jobs/[jobId]/constants.ts`
+     - `apps/web/src/app/(app-page-wrapper)/jobs/[jobId]/context.tsx`
+
+12. Candidate overview timeline refined:
+   - Overview timeline now emphasizes hiring-status events rather than generic document noise.
+   - Frontend files:
+     - `apps/web/src/components/candidates/tabs/OverviewTab.tsx`
+     - `apps/web/src/app/(app-page-wrapper)/candidates/[candidateId]/page.tsx`
+
+13. Team/settings avatar consistency:
+   - Team list and top bar now consume avatar URLs when present and fallback correctly.
+   - Frontend files:
+     - `apps/web/src/components/settings/team/TeamMembersList.tsx`
+     - `apps/web/src/components/common/TopBar.tsx`
+
+14. Migration chain additions (latest working tree):
+   - `p2q3r4s5t6u7_add_profile_image_key_to_users.py`
+   - `q3r4s5t6u7v8_add_object_key_to_candidate_documents.py`
+   - `r4s5t6u7v8w9_simplify_file_urls_to_users_and_candidates.py`
+   - `s5t6u7v8w9x0_add_avatar_url_to_organizations.py`
+   - `t6u7v8w9x0y1_restore_candidate_documents_and_drop_doc_url.py`
+   - `u7v8w9x0y1z2_drop_resume_url_from_candidates.py`
+   - `v8w9x0y1z2a3_make_candidate_job_optional.py`
+   - `w9x0y1z2a3b4_add_candidate_location_and_profile_links.py`
+   - `x0y1z2a3b4c5_set_jobs_workplace_default_onsite.py`
+
+### Temporarily Disabled for MVP
+
+The following are intentionally hidden with TODO markers for easy rollback after MVP:
+
+1. Dashboard landing content at app root:
+   - `apps/web/src/app/(app-page-wrapper)/page.tsx`
+
+2. Auth redirect target forced to `/` (instead of dashboard route):
+   - `apps/web/src/app/providers.tsx`
+   - `apps/web/src/components/common/TopBar.tsx`
+   - `apps/web/src/app/(auth)/invite/[token]/page.tsx`
+   - `apps/web/src/app/(auth)/verify/page.tsx`
+   - `apps/web/src/app/(auth)/onboarding/page.tsx`
+
+3. Navigation items hidden for MVP:
+   - Sidebar hidden items (Dashboard, Reports, Automations, AI Assistant):
+     - `apps/web/src/components/common/AppSidebar.tsx`
+   - Bottom nav hidden Home/Dashboard:
+     - `apps/web/src/components/common/BottomNav.tsx`
+   - Command palette hidden items (Dashboard, Reports, Automations, AI Assistant):
+     - `apps/web/src/components/common/CommandPalette.tsx`
+   - Mobile more drawer hidden items (Reports, Automations, AI Assistant):
+     - `apps/web/src/components/common/MobileMoreDrawer.tsx`
+
 ---
 
 ## 1. Frontend ↔ Backend Communication

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, Suspense, useCallback, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@onehash/ui/button";
@@ -20,6 +20,32 @@ function VerifyEmailContent() {
   const [verifying, setVerifying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [email, setEmail] = useState<string>("");
+  const verifiedTokenRef = useRef<string | null>(null);
+
+  const handleVerify = useCallback(
+    async (token: string) => {
+      setVerifying(true);
+      setError(null);
+      try {
+        await verifyEmail(token);
+        sessionStorage.removeItem("signup_email");
+        const inviteToken = sessionStorage.getItem("invite_token");
+        sessionStorage.removeItem("invite_token");
+        await refreshSession();
+        localStorage.setItem("session_updated", Date.now().toString());
+        if (inviteToken) {
+          router.replace(`/invite/${encodeURIComponent(inviteToken)}`);
+        } else {
+          router.replace("/onboarding");
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Verification failed";
+        setError(message);
+        setVerifying(false);
+      }
+    },
+    [refreshSession, router],
+  );
 
   useEffect(() => {
     const inviteToken = sessionStorage.getItem("invite_token");
@@ -32,6 +58,8 @@ function VerifyEmailContent() {
       return;
     }
     if (user?.is_verified && user?.is_onboarded) {
+      // TODO(mvp-nav): Restore dashboard/home redirect after MVP launch.
+      // router.replace("/");
       router.replace("/");
       return;
     }
@@ -52,32 +80,11 @@ function VerifyEmailContent() {
     }
 
     const token = searchParams.get("token");
-    if (token && !verifying) {
+    if (token && verifiedTokenRef.current !== token) {
+      verifiedTokenRef.current = token;
       handleVerify(token);
     }
-  }, []);
-
-  const handleVerify = async (token: string) => {
-    setVerifying(true);
-    setError(null);
-    try {
-      await verifyEmail(token);
-      sessionStorage.removeItem("signup_email");
-      const inviteToken = sessionStorage.getItem("invite_token");
-      sessionStorage.removeItem("invite_token");
-      await refreshSession();
-      localStorage.setItem("session_updated", Date.now().toString());
-      if (inviteToken) {
-        router.replace(`/invite/${encodeURIComponent(inviteToken)}`);
-      } else {
-        router.replace("/onboarding");
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Verification failed";
-      setError(message);
-      setVerifying(false);
-    }
-  };
+  }, [handleVerify, router, searchParams, user?.is_onboarded, user?.is_verified]);
 
   const startResendTimer = (initialSeconds = 30) => {
     setResendDisabled(true);
@@ -182,13 +189,15 @@ function VerifyEmailContent() {
 
 export default function VerifyEmail() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12">
-        <div className="w-full max-w-[420px] text-center">
-          <Icon name="Loader" className="h-8 w-8 animate-spin mx-auto text-muted-foreground" />
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12">
+          <div className="w-full max-w-[420px] text-center">
+            <Icon name="Loader" className="h-8 w-8 animate-spin mx-auto text-muted-foreground" />
+          </div>
         </div>
-      </div>
-    }>
+      }
+    >
       <VerifyEmailContent />
     </Suspense>
   );

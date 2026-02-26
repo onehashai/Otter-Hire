@@ -1,11 +1,11 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import Link from "next/link";
 import { Button } from "@onehash/ui/button";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { pipelineJobs } from "../data";
-import { PipelineBoard } from "@/components/pipeline/PipelineBoard";
+import { getJobPipeline, type JobPipelineResponse, updateCandidateStage } from "@/api";
+import { PipelineBoard, type PipelineJob } from "@/components/pipeline/PipelineBoard";
 
 export default function PipelineJobPage() {
   const params = useParams();
@@ -13,18 +13,70 @@ export default function PipelineJobPage() {
   const isMobile = useIsMobile();
   const id = params?.id as string | undefined;
 
-  const job = id ? pipelineJobs.find((j) => j.id === id) ?? null : null;
+  const [pipeline, setPipeline] = useState<JobPipelineResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSwitchJob = (newId: string) => {
-    router.push(`/pipeline/${newId}`);
-  };
+  useEffect(() => {
+    if (!id) {
+      setError("Job not found.");
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const data = await getJobPipeline(id);
+        if (!cancelled) {
+          setPipeline(data);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Failed to load pipeline.");
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
 
-  if (!id || !job) {
+  const job = useMemo<PipelineJob | null>(() => {
+    if (!pipeline) return null;
+    return {
+      id: pipeline.id,
+      title: pipeline.title,
+      status: pipeline.status as PipelineJob["status"],
+      stages: pipeline.stages.map((stage) => ({
+        id: stage.id,
+        name: stage.name,
+        position: stage.position,
+      })),
+      candidates: pipeline.candidates.map((candidate) => ({
+        id: candidate.id,
+        name: candidate.name,
+        email: candidate.email,
+        stageId: candidate.stage_id ?? "",
+      })),
+    };
+  }, [pipeline]);
+
+  if (loading) {
+    return <p className="text-sm text-muted-foreground">Loading pipeline...</p>;
+  }
+
+  if (!id || !job || error) {
     return (
       <div className="space-y-4">
-        <p className="text-sm text-muted-foreground">Job not found.</p>
-        <Button variant="outline" size="sm" asChild>
-          <Link href="/pipeline">Back to Pipeline</Link>
+        <p className="text-sm text-muted-foreground">{error ?? "Job not found."}</p>
+        <Button variant="outline" size="sm" onClick={() => router.push("/jobs")}>
+          Back to Jobs
         </Button>
       </div>
     );
@@ -33,10 +85,11 @@ export default function PipelineJobPage() {
   return (
     <PipelineBoard
       job={job}
-      allJobs={pipelineJobs}
-      onBack={() => router.push("/pipeline")}
-      onSwitchJob={handleSwitchJob}
+      onBack={() => router.push("/jobs")}
       isMobile={isMobile}
+      onMoveCandidate={async (candidateId, stageId) => {
+        await updateCandidateStage(candidateId, stageId);
+      }}
     />
   );
 }

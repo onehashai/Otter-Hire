@@ -3,10 +3,17 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Icon } from "@onehash/ui/icon";
-import { createOrganization, getOrganizationMemberships, logout, switchOrganization, type OrganizationMembership } from "@/api/index";
+import {
+  createOrganization,
+  getMyOrganization,
+  getOrganizationMemberships,
+  logout,
+  switchOrganization,
+  type OrganizationMembership,
+} from "@/api/index";
 import { useAuthSession } from "@/app/providers";
 import { usePageMetadata } from "@/contexts/PageMetadataContext";
-import { Avatar, AvatarFallback } from "@onehash/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@onehash/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,7 +26,14 @@ import {
 } from "@onehash/ui/dropdown-menu";
 import { Button } from "@onehash/ui/button";
 import { useTranslation } from "react-i18next";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@onehash/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@onehash/ui/dialog";
 import { InputField } from "@onehash/ui/input";
 
 export function TopBar() {
@@ -34,6 +48,7 @@ export function TopBar() {
   const [creatingOrg, setCreatingOrg] = useState(false);
   const [switchingOrgId, setSwitchingOrgId] = useState<string | null>(null);
   const [orgError, setOrgError] = useState<string | null>(null);
+  const [orgAvatarUrl, setOrgAvatarUrl] = useState<string | null>(null);
 
   const loadMemberships = async () => {
     setMenuLoadingMemberships(true);
@@ -52,6 +67,29 @@ export function TopBar() {
     void loadMemberships();
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!user?.org_id) {
+        setOrgAvatarUrl(null);
+        return;
+      }
+      try {
+        const org = await getMyOrganization();
+        if (!cancelled) {
+          setOrgAvatarUrl(org.avatar_url ?? null);
+        }
+      } catch {
+        if (!cancelled) {
+          setOrgAvatarUrl(user.org_avatar_url ?? null);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.org_id, user?.org_avatar_url]);
+
   const handleMenuOpenChange = (open: boolean) => {
     if (open) {
       void loadMemberships();
@@ -68,8 +106,11 @@ export function TopBar() {
       await switchOrganization(orgId);
       await refreshSession(true);
       localStorage.setItem("session_updated", Date.now().toString());
-      router.replace("/dashboard");
-      router.refresh();
+      // TODO(mvp-nav): Restore SPA redirect after MVP launch.
+      // router.replace("/dashboard");
+      // router.refresh();
+      // Force full app reload so all org-scoped pages/data refresh immediately.
+      window.location.assign("/");
     } catch (err) {
       setOrgError(err instanceof Error ? err.message : "Failed to switch organization.");
     } finally {
@@ -89,8 +130,11 @@ export function TopBar() {
       setCreateOpen(false);
       setNewOrgName("");
       await loadMemberships();
-      router.replace("/dashboard");
-      router.refresh();
+      // TODO(mvp-nav): Restore SPA redirect after MVP launch.
+      // router.replace("/dashboard");
+      // router.refresh();
+      // Force full app reload so newly switched org context is reflected everywhere.
+      window.location.assign("/");
     } catch (err) {
       setOrgError(err instanceof Error ? err.message : "Failed to create organization.");
     } finally {
@@ -125,22 +169,27 @@ export function TopBar() {
 
       <DropdownMenu onOpenChange={handleMenuOpenChange}>
         <DropdownMenuTrigger asChild>
-          <Button
-            variant="ghost"
-            className="h-8 w-32"
-          >
+          <Button variant="ghost" className="h-8 w-32">
             <Avatar className="h-6 w-6 border border-border">
+              {orgAvatarUrl ? (
+                <AvatarImage src={orgAvatarUrl} alt={user?.org_name || "Organization"} />
+              ) : null}
               <AvatarFallback className="text-[10px] bg-muted text-muted-foreground">
                 {initials}
               </AvatarFallback>
             </Avatar>
             <div className="flex flex-col items-start min-w-0 flex-1">
-              <span className="text-[10px] text-muted-foreground truncate max-w-full">{user?.org_name}</span>
+              <span className="text-[10px] text-muted-foreground truncate max-w-full">
+                {user?.org_name}
+              </span>
             </div>
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-48">
-          <DropdownMenuItem onClick={() => router.push("/settings/profile")} className="cursor-pointer">
+          <DropdownMenuItem
+            onClick={() => router.push("/settings/profile")}
+            className="cursor-pointer"
+          >
             <Icon name="Settings" className="mr-2 h-4 w-4" />
             {t("settings_title")}
           </DropdownMenuItem>
@@ -174,9 +223,14 @@ export function TopBar() {
                       >
                         <span className="truncate">{membership.org_name}</span>
                         {isCurrent ? (
-                          <span className="text-[10px] rounded bg-muted px-1.5 py-0.5 text-muted-foreground">Current</span>
+                          <span className="text-[10px] rounded bg-muted px-1.5 py-0.5 text-muted-foreground">
+                            Current
+                          </span>
                         ) : isSwitching ? (
-                          <Icon name="Loader" className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                          <Icon
+                            name="Loader"
+                            className="h-3.5 w-3.5 animate-spin text-muted-foreground"
+                          />
                         ) : null}
                       </DropdownMenuItem>
                     );
@@ -197,7 +251,9 @@ export function TopBar() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Create organization</DialogTitle>
-            <DialogDescription>Enter a name to create a new organization under your account.</DialogDescription>
+            <DialogDescription>
+              Enter a name to create a new organization under your account.
+            </DialogDescription>
           </DialogHeader>
 
           {orgError && (

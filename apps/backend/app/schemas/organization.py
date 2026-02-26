@@ -1,4 +1,5 @@
 from uuid import UUID
+
 from pydantic import BaseModel, Field
 
 
@@ -11,6 +12,7 @@ class OrganizationResponse(BaseModel):
     id: UUID
     name: str
     website: str | None
+    avatar_url: str | None = None
 
 
 class OrganizationMembershipResponse(BaseModel):

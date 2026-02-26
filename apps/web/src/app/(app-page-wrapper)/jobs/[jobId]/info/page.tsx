@@ -6,7 +6,13 @@ import { InputField } from "@onehash/ui/input";
 import { SelectField, SearchableSelectField } from "@onehash/ui/select";
 import { Country, City } from "country-state-city";
 import { useJobSetup } from "../context";
-import { employmentTypes, workplaceTypes, CITY_VALUE_SEP, getCityDisplayName, jobStatuses } from "../constants";
+import {
+  employmentTypes,
+  workplaceTypes,
+  CITY_VALUE_SEP,
+  getCityDisplayName,
+  jobStatuses,
+} from "../constants";
 import { useTranslation } from "react-i18next";
 import { getBasicInfoValidation } from "../../../../../lib/validations/setupValidation";
 import { getJobCategories, type JobCategoryResponse } from "@/api";
@@ -43,7 +49,10 @@ export default function JobInfoPage() {
     return countries.filter((c) => c.name.toLowerCase().includes(q));
   }, [countries, countrySearch]);
 
-  const cities = useMemo(() => (country ? (City.getCitiesOfCountry(country) ?? []) : []), [country]);
+  const cities = useMemo(
+    () => (country ? (City.getCitiesOfCountry(country) ?? []) : []),
+    [country],
+  );
   const filteredCities = useMemo(() => {
     if (!citySearch.trim()) return cities;
     const q = citySearch.toLowerCase();
@@ -60,7 +69,9 @@ export default function JobInfoPage() {
   }, [title, titleTouched, basicInfoAttemptedNext, t]);
 
   useEffect(() => {
-    getJobCategories().then(setCategories).catch(() => {});
+    getJobCategories()
+      .then(setCategories)
+      .catch(() => {});
   }, []);
 
   return (

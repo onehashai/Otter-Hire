@@ -1,20 +1,8 @@
 "use client";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@onehash/ui/card";
-import {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-} from "@onehash/ui/chart";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  AreaChart,
-  Area,
-} from "recharts";
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@onehash/ui/chart";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, AreaChart, Area } from "recharts";
 import { chartConfig, timeMetricsData, timeToHireTrend } from "./data";
 
 export function TimeMetrics() {
@@ -28,12 +16,32 @@ export function TimeMetrics() {
           <div>
             <p className="text-xs text-muted-foreground mb-3">Avg. Time in Stage</p>
             <ChartContainer config={chartConfig} className="h-[180px] w-full">
-              <BarChart data={timeMetricsData} layout="vertical" margin={{ left: 0, right: 16, top: 0, bottom: 0 }}>
-                <CartesianGrid horizontal={false} strokeDasharray="3 3" stroke="hsl(var(--border))" />
+              <BarChart
+                data={timeMetricsData}
+                layout="vertical"
+                margin={{ left: 0, right: 16, top: 0, bottom: 0 }}
+              >
+                <CartesianGrid
+                  horizontal={false}
+                  strokeDasharray="3 3"
+                  stroke="hsl(var(--border))"
+                />
                 <XAxis type="number" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
-                <YAxis dataKey="stage" type="category" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} width={70} />
+                <YAxis
+                  dataKey="stage"
+                  type="category"
+                  tick={{ fontSize: 10 }}
+                  tickLine={false}
+                  axisLine={false}
+                  width={70}
+                />
                 <ChartTooltip content={<ChartTooltipContent />} />
-                <Bar dataKey="avgDays" fill="hsl(var(--chart-2))" radius={[0, 4, 4, 0]} barSize={16} />
+                <Bar
+                  dataKey="avgDays"
+                  fill="hsl(var(--chart-2))"
+                  radius={[0, 4, 4, 0]}
+                  barSize={16}
+                />
               </BarChart>
             </ChartContainer>
           </div>

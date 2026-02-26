@@ -2,13 +2,7 @@
 
 import { Button } from "@onehash/ui/button";
 import { InputField } from "@onehash/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@onehash/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@onehash/ui/select";
 import { FieldRow } from "./FieldRow";
 import type { Scope } from "./types";
 

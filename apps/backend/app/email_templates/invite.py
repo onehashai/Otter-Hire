@@ -13,7 +13,10 @@ def build_invite_email(
     <html>
         <body>
             <h2>You're invited!</h2>
-            <p><strong>{inviter_name}</strong> has invited you to join <strong>{org_name}</strong> on OneHash ATS.</p>
+            <p>
+                <strong>{inviter_name}</strong> has invited you to join
+                <strong>{org_name}</strong> on OneHash ATS.
+            </p>
             <p>Click the link below to set up your account:</p>
             <p><a href="{invite_url}">Accept Invitation</a></p>
             <p>This link will expire in {expiry_days} days.</p>

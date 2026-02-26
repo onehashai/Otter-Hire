@@ -1,6 +1,6 @@
-from uuid import UUID
-from typing import Optional
 from enum import Enum
+from typing import Optional
+from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, field_validator
 
@@ -19,8 +19,20 @@ class UserResponse(BaseModel):
     name: str
     role: str
     status: str
+    avatar_url: Optional[str] = None
 
     model_config = {"from_attributes": True}
+
+
+class ProfileResponse(BaseModel):
+    id: UUID
+    email: str
+    name: str
+    avatar_url: Optional[str] = None
+
+
+class UpdateProfileRequest(BaseModel):
+    name: str
 
 
 class InviteUserRequest(BaseModel):

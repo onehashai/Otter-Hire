@@ -25,8 +25,6 @@ export interface Candidate {
   email: string;
   role: string;
   stage: string;
-  rating: number;
-  recruiter: string;
   lastActivity: string;
   appliedDate: string;
   tags: string[];
@@ -41,21 +39,6 @@ const stageVariant = (stage: string) => {
   return "secondary";
 };
 
-const RatingStars = ({ rating }: { rating: number }) => {
-  const full = Math.floor(rating);
-  return (
-    <div className="flex items-center gap-0.5">
-      {[1, 2, 3, 4, 5].map((i) => (
-        <div
-          key={i}
-          className={`h-2.5 w-2.5 rounded-full ${i <= full ? "bg-foreground" : "bg-muted"}`}
-        />
-      ))}
-      <span className="ml-1 text-xs text-muted-foreground">{rating.toFixed(1)}</span>
-    </div>
-  );
-};
-
 interface CandidatesListProps {
   candidates: Candidate[];
   selected: Set<string>;
@@ -63,6 +46,7 @@ interface CandidatesListProps {
   onToggleAll: () => void;
   onBulkAction: (action: string) => void;
   onClearSelection: () => void;
+  total?: number;
 }
 
 export function CandidatesList({
@@ -72,6 +56,7 @@ export function CandidatesList({
   onToggleAll,
   onBulkAction,
   onClearSelection,
+  total,
 }: CandidatesListProps) {
   const { t } = useTranslation();
   const router = useRouter();
@@ -80,22 +65,46 @@ export function CandidatesList({
 
   return (
     <>
+      {typeof total === "number" && (
+        <p className="text-xs text-muted-foreground mb-2">
+          Showing {candidates.length} of {total} candidates
+        </p>
+      )}
       {/* Bulk Actions */}
       {selected.size > 0 && (
         <Card>
           <CardContent className="p-2.5 flex items-center gap-2 flex-wrap">
-            <span className="text-xs font-medium">{t("selected_count", { count: selected.size })}</span>
+            <span className="text-xs font-medium">
+              {t("selected_count", { count: selected.size })}
+            </span>
             <div className="flex gap-1.5 ml-auto">
-              <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => onBulkAction("Move stage")}>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => onBulkAction("Move stage")}
+              >
                 <Icon name="UserCheck" className="h-3 w-3 mr-1" /> Move Stage
               </Button>
-              <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => onBulkAction("Assign recruiter")}>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => onBulkAction("Assign recruiter")}
+              >
                 {t("assign")}
               </Button>
-              <Button variant="outline" size="sm" className="h-7 text-xs text-destructive" onClick={() => onBulkAction("Reject")}>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs text-destructive"
+                onClick={() => onBulkAction("Reject")}
+              >
                 <Icon name="X" className="h-3 w-3 mr-1" /> {t("reject")}
               </Button>
-              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={onClearSelection}>{t("clear")}</Button>
+              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={onClearSelection}>
+                {t("clear")}
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -139,25 +148,27 @@ export function CandidatesList({
                   </div>
                   <Avatar className="h-8 w-8 shrink-0">
                     <AvatarFallback className="text-xs bg-muted">
-                      {c.name.split(" ").map((n) => n[0]).join("")}
+                      {c.name
+                        .split(" ")
+                        .map((n) => n[0])
+                        .join("")}
                     </AvatarFallback>
                   </Avatar>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-medium truncate">{c.name}</span>
-                      <Icon name="ChevronLeft" className="h-4 w-4 text-muted-foreground shrink-0 rotate-180" />
+                      <Icon
+                        name="ChevronLeft"
+                        className="h-4 w-4 text-muted-foreground shrink-0 rotate-180"
+                      />
                     </div>
                     <p className="text-xs text-muted-foreground truncate">{c.role}</p>
                     <div className="flex items-center gap-1.5 mt-2 flex-wrap">
                       <Badge variant={stageVariant(c.stage)} className="text-[10px]">
                         {c.stage}
                       </Badge>
-                      <RatingStars rating={c.rating} />
                     </div>
-                    <div className="flex items-center justify-between mt-2">
-                      <span className="text-[10px] text-muted-foreground">{c.recruiter}</span>
-                      <span className="text-[10px] text-muted-foreground">{c.lastActivity}</span>
-                    </div>
+                    <div className="mt-2 text-[10px] text-muted-foreground">{c.lastActivity}</div>
                   </div>
                 </div>
               </CardContent>
@@ -180,8 +191,6 @@ export function CandidatesList({
                   <TableHead className="text-xs">Candidate</TableHead>
                   <TableHead className="text-xs">Applied For</TableHead>
                   <TableHead className="text-xs">Stage</TableHead>
-                  <TableHead className="text-xs">Rating</TableHead>
-                  <TableHead className="text-xs">Recruiter</TableHead>
                   <TableHead className="text-xs text-right">Activity</TableHead>
                   <TableHead className="w-10" />
                 </TableRow>
@@ -194,13 +203,19 @@ export function CandidatesList({
                     onClick={() => router.push(`/candidates/${c.id}`)}
                   >
                     <TableCell onClick={(e) => e.stopPropagation()}>
-                      <Checkbox checked={selected.has(c.id)} onCheckedChange={() => onToggleSelect(c.id)} />
+                      <Checkbox
+                        checked={selected.has(c.id)}
+                        onCheckedChange={() => onToggleSelect(c.id)}
+                      />
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <Avatar className="h-7 w-7">
                           <AvatarFallback className="text-[10px] bg-muted">
-                            {c.name.split(" ").map((n) => n[0]).join("")}
+                            {c.name
+                              .split(" ")
+                              .map((n) => n[0])
+                              .join("")}
                           </AvatarFallback>
                         </Avatar>
                         <div>
@@ -215,11 +230,9 @@ export function CandidatesList({
                         {c.stage}
                       </Badge>
                     </TableCell>
-                    <TableCell>
-                      <RatingStars rating={c.rating} />
+                    <TableCell className="text-xs text-muted-foreground text-right">
+                      {c.lastActivity}
                     </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{c.recruiter}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground text-right">{c.lastActivity}</TableCell>
                     <TableCell onClick={(e) => e.stopPropagation()}>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -228,16 +241,24 @@ export function CandidatesList({
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-44">
-                          <DropdownMenuItem className="text-xs" onClick={() => toast({ title: "Stage updated" })}>
+                          <DropdownMenuItem
+                            className="text-xs"
+                            onClick={() => toast({ title: "Stage updated" })}
+                          >
                             <Icon name="UserCheck" className="h-3.5 w-3.5 mr-2" /> Move Stage
                           </DropdownMenuItem>
-                          <DropdownMenuItem className="text-xs" onClick={() => toast({ title: "Interview scheduled" })}>
+                          <DropdownMenuItem
+                            className="text-xs"
+                            onClick={() => toast({ title: "Interview scheduled" })}
+                          >
                             <Icon name="Clock" className="h-3.5 w-3.5 mr-2" /> Schedule Interview
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
                             className="text-xs text-destructive focus:text-destructive"
-                            onClick={() => toast({ title: "Candidate rejected", variant: "destructive" })}
+                            onClick={() =>
+                              toast({ title: "Candidate rejected", variant: "destructive" })
+                            }
                           >
                             <Icon name="X" className="h-3.5 w-3.5 mr-2" /> Reject
                           </DropdownMenuItem>

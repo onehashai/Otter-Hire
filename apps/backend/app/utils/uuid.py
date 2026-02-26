@@ -1,5 +1,7 @@
 """UUID utilities for generating UUIDv7."""
+
 from uuid import UUID as StdUUID
+
 from uuid_utils import uuid7 as _uuid7_gen
 
 

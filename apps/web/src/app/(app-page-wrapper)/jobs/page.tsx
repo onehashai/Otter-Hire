@@ -20,11 +20,23 @@ import { EmptyCard, ErrorCard } from "@onehash/ui/card";
 import { useSetPageMetadata } from "@/hooks/useSetPageMetadata";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useRouter } from "next/navigation";
-const allCategories: CategoryType[] = ["engineering", "design", "data", "marketing", "sales", "operations", "hr"];
+const allCategories: CategoryType[] = [
+  "engineering",
+  "design",
+  "data",
+  "marketing",
+  "sales",
+  "operations",
+  "hr",
+];
 const allTypes: EmploymentType[] = ["full_time", "part_time", "contract", "internship"];
 const allStatuses = ["open", "draft", "archived"] as const;
 
-const statusKey: Record<JobStatusType, string> = { open: "open", draft: "draft", archived: "archived" };
+const statusKey: Record<JobStatusType, string> = {
+  open: "open",
+  draft: "draft",
+  archived: "archived",
+};
 const categoryKey: Record<CategoryType, string> = {
   engineering: "engineering",
   design: "design",
@@ -48,7 +60,7 @@ export default function JobsPage() {
   const isMobile = useIsMobile();
   const router = useRouter();
   const { user } = useAuthSession();
-  
+
   useSetPageMetadata({
     title: t("jobs_title"),
     subtitle: t("jobs_subtitle"),
@@ -67,7 +79,7 @@ export default function JobsPage() {
 
   const generateOrgSlug = () => {
     if (!user?.org_id || !user?.org_name) return null;
-    const slug = user.org_name.toLowerCase().replace(/\s+/g, '-');
+    const slug = user.org_name.toLowerCase().replace(/\s+/g, "-");
     return `${slug}-${user.org_id}`;
   };
 
@@ -80,7 +92,7 @@ export default function JobsPage() {
       return;
     }
     const url = `${getJobsBaseUrl()}/${orgSlug}`;
-    window.open(url, '_blank', 'noopener,noreferrer');
+    window.open(url, "_blank", "noopener,noreferrer");
   };
 
   const fetchJobs = useCallback(async (signal?: AbortSignal) => {
@@ -103,25 +115,44 @@ export default function JobsPage() {
 
   const applyDatePreset = (preset: DatePreset) => {
     setDatePreset(preset);
-    if (preset === "today") { setDateRange({ from: startOfDay(new Date()), to: new Date() }); }
-    else if (preset === "7d") { setDateRange({ from: subDays(new Date(), 7), to: new Date() }); }
-    else if (preset === "30d") { setDateRange({ from: subDays(new Date(), 30), to: new Date() }); }
-    else if (preset === null) { setDateRange({}); }
+    if (preset === "today") {
+      setDateRange({ from: startOfDay(new Date()), to: new Date() });
+    } else if (preset === "7d") {
+      setDateRange({ from: subDays(new Date(), 7), to: new Date() });
+    } else if (preset === "30d") {
+      setDateRange({ from: subDays(new Date(), 30), to: new Date() });
+    } else if (preset === null) {
+      setDateRange({});
+    }
   };
 
-  const hasFilters = statusFilter.length > 0 || categoryFilter.length > 0 || typeFilter.length > 0 || datePreset !== null;
+  const hasFilters =
+    statusFilter.length > 0 ||
+    categoryFilter.length > 0 ||
+    typeFilter.length > 0 ||
+    datePreset !== null;
 
   const clearAll = () => {
-    setStatusFilter([]); setCategoryFilter([]); setTypeFilter([]);
-    setDatePreset(null); setDateRange({});
+    setStatusFilter([]);
+    setCategoryFilter([]);
+    setTypeFilter([]);
+    setDatePreset(null);
+    setDateRange({});
   };
 
   const filtered = useMemo(() => {
     return jobs.filter((job) => {
-      if (search && !job.title.toLowerCase().includes(search.toLowerCase()) && !(job.category ?? "").toLowerCase().includes(search.toLowerCase())) return false;
+      if (
+        search &&
+        !job.title.toLowerCase().includes(search.toLowerCase()) &&
+        !(job.category ?? "").toLowerCase().includes(search.toLowerCase())
+      )
+        return false;
       if (statusFilter.length && !statusFilter.includes(job.status as JobStatusType)) return false;
-      if (categoryFilter.length && !categoryFilter.includes((job.category ?? "") as CategoryType)) return false;
-      if (typeFilter.length && !typeFilter.includes((job.employment_type ?? "") as EmploymentType)) return false;
+      if (categoryFilter.length && !categoryFilter.includes((job.category ?? "") as CategoryType))
+        return false;
+      if (typeFilter.length && !typeFilter.includes((job.employment_type ?? "") as EmploymentType))
+        return false;
       if (dateRange.from) {
         const jobDate = new Date(job.updated_at);
         if (isBefore(jobDate, startOfDay(dateRange.from))) return false;
@@ -139,9 +170,24 @@ export default function JobsPage() {
   const typeOptions = allTypes.map((tp) => ({ value: tp, label: t(typeKey[tp]) }));
 
   const activeChips: { label: string; clear: () => void }[] = [];
-  statusFilter.forEach((s) => activeChips.push({ label: t(statusKey[s as JobStatusType]), clear: () => setStatusFilter((p) => p.filter((v) => v !== s)) }));
-  categoryFilter.forEach((d) => activeChips.push({ label: t(categoryKey[d as CategoryType]), clear: () => setCategoryFilter((p) => p.filter((v) => v !== d)) }));
-  typeFilter.forEach((tp) => activeChips.push({ label: t(typeKey[tp as EmploymentType]), clear: () => setTypeFilter((p) => p.filter((v) => v !== tp)) }));
+  statusFilter.forEach((s) =>
+    activeChips.push({
+      label: t(statusKey[s as JobStatusType]),
+      clear: () => setStatusFilter((p) => p.filter((v) => v !== s)),
+    }),
+  );
+  categoryFilter.forEach((d) =>
+    activeChips.push({
+      label: t(categoryKey[d as CategoryType]),
+      clear: () => setCategoryFilter((p) => p.filter((v) => v !== d)),
+    }),
+  );
+  typeFilter.forEach((tp) =>
+    activeChips.push({
+      label: t(typeKey[tp as EmploymentType]),
+      clear: () => setTypeFilter((p) => p.filter((v) => v !== tp)),
+    }),
+  );
   if (datePreset) {
     let dateLabel: string;
     if (datePreset === "custom" && dateRange.from) {
@@ -190,13 +236,21 @@ export default function JobsPage() {
       <div className="space-y-2">
         <Label className="text-xs font-medium text-muted-foreground">{t("last_activity")}</Label>
         <div className="flex flex-wrap gap-1.5">
-          {([
-            { key: "today", label: t("today") },
-            { key: "7d", label: t("last_n_days", { count: 7 }) },
-            { key: "30d", label: t("last_n_days", { count: 30 }) },
-            { key: "custom", label: t("custom") },
-          ] as const).map((p) => (
-            <Button key={p.key} variant={datePreset === p.key ? "default" : "outline"} size="sm" className="h-7 text-xs" onClick={() => applyDatePreset(datePreset === p.key ? null : p.key)}>
+          {(
+            [
+              { key: "today", label: t("today") },
+              { key: "7d", label: t("last_n_days", { count: 7 }) },
+              { key: "30d", label: t("last_n_days", { count: 30 }) },
+              { key: "custom", label: t("custom") },
+            ] as const
+          ).map((p) => (
+            <Button
+              key={p.key}
+              variant={datePreset === p.key ? "default" : "outline"}
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => applyDatePreset(datePreset === p.key ? null : p.key)}
+            >
               {p.label}
             </Button>
           ))}
@@ -214,13 +268,18 @@ export default function JobsPage() {
         )}
       </div>
       {hasFilters && (
-        <Button variant="ghost" size="sm" className="w-full text-xs h-8 text-muted-foreground" onClick={clearAll}>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-full text-xs h-8 text-muted-foreground"
+          onClick={clearAll}
+        >
           {t("clear_all")}
         </Button>
       )}
     </div>
   );
-  
+
   if (error) {
     return (
       <ErrorCard
@@ -228,7 +287,10 @@ export default function JobsPage() {
         title={t("error")}
         description={error}
         actionLabel={t("retry")}
-        onAction={() => { setLoading(true); fetchJobs(); }}
+        onAction={() => {
+          setLoading(true);
+          fetchJobs();
+        }}
       />
     );
   }

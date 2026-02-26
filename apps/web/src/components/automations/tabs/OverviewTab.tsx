@@ -60,20 +60,14 @@ export function OverviewTab({
   };
 
   return (
-    <div
-      className={
-        isMobile ? "space-y-4" : "grid grid-cols-[1fr_280px] gap-4"
-      }
-    >
+    <div className={isMobile ? "space-y-4" : "grid grid-cols-[1fr_280px] gap-4"}>
       <div className="space-y-4">
         {/* Trigger */}
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-3">
               <Zap className="h-4 w-4 text-muted-foreground" />
-              <p className="text-xs font-medium text-muted-foreground">
-                {t("trigger", "Trigger")}
-              </p>
+              <p className="text-xs font-medium text-muted-foreground">{t("trigger", "Trigger")}</p>
             </div>
             <p className="text-sm font-medium">{automation.trigger.type}</p>
             <p className="text-xs text-muted-foreground mt-0.5">
@@ -89,8 +83,7 @@ export function OverviewTab({
               <div className="flex items-center gap-2 mb-3">
                 <Tag className="h-4 w-4 text-muted-foreground" />
                 <p className="text-xs font-medium text-muted-foreground">
-                  {t("conditions", "Conditions")} (
-                  {automation.conditionLogic})
+                  {t("conditions", "Conditions")} ({automation.conditionLogic})
                 </p>
               </div>
               <div className="space-y-2">
@@ -99,9 +92,7 @@ export function OverviewTab({
                     <Badge variant="outline" className="text-[10px]">
                       {c.field}
                     </Badge>
-                    <span className="text-[10px] text-muted-foreground">
-                      {c.operator}
-                    </span>
+                    <span className="text-[10px] text-muted-foreground">{c.operator}</span>
                     <Badge variant="secondary" className="text-[10px]">
                       {c.value}
                     </Badge>
@@ -117,9 +108,7 @@ export function OverviewTab({
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-3">
               <Play className="h-4 w-4 text-muted-foreground" />
-              <p className="text-xs font-medium text-muted-foreground">
-                {t("actions", "Actions")}
-              </p>
+              <p className="text-xs font-medium text-muted-foreground">{t("actions", "Actions")}</p>
             </div>
             <div className="space-y-2">
               {automation.actions.map((a, i) => {
@@ -131,9 +120,7 @@ export function OverviewTab({
                     </div>
                     <div>
                       <p className="text-sm">{a.label}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {a.detail}
-                      </p>
+                      <p className="text-xs text-muted-foreground">{a.detail}</p>
                     </div>
                   </div>
                 );

@@ -5,6 +5,7 @@ export type JobCategoryResponse = {
   name: string;
   is_system_default: boolean;
   created_at: string;
+  usage_count?: number;
 };
 
 export type JobCategoryCreateRequest = {
@@ -15,7 +16,9 @@ export async function getJobCategories(): Promise<JobCategoryResponse[]> {
   return apiGet<JobCategoryResponse[]>("/organizations/categories");
 }
 
-export async function createJobCategory(data: JobCategoryCreateRequest): Promise<JobCategoryResponse> {
+export async function createJobCategory(
+  data: JobCategoryCreateRequest,
+): Promise<JobCategoryResponse> {
   return apiPost<JobCategoryResponse>("/organizations/categories", data);
 }
 

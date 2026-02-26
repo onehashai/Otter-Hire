@@ -17,10 +17,7 @@ export interface ExecutionDetailsDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-export function ExecutionDetailsDialog({
-  log,
-  onOpenChange,
-}: ExecutionDetailsDialogProps) {
+export function ExecutionDetailsDialog({ log, onOpenChange }: ExecutionDetailsDialogProps) {
   const { t } = useTranslation();
   const open = !!log;
 
@@ -32,51 +29,35 @@ export function ExecutionDetailsDialog({
             {t("execution_details", "Execution Details")}
           </DialogTitle>
           <DialogDescription className="text-xs">
-            {t(
-              "execution_details_description",
-              "Log entry for this execution."
-            )}
+            {t("execution_details_description", "Log entry for this execution.")}
           </DialogDescription>
         </DialogHeader>
         {log && (
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">
-                {t("candidate", "Candidate")}
-              </span>
+              <span className="text-xs text-muted-foreground">{t("candidate", "Candidate")}</span>
               <span className="text-sm font-medium">{log.candidateName}</span>
             </div>
             <Separator />
             <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">
-                {t("event", "Event")}
-              </span>
+              <span className="text-xs text-muted-foreground">{t("event", "Event")}</span>
               <span className="text-xs">{log.event}</span>
             </div>
             <Separator />
             <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">
-                {t("action", "Action")}
-              </span>
+              <span className="text-xs text-muted-foreground">{t("action", "Action")}</span>
               <span className="text-xs">{log.action}</span>
             </div>
             <Separator />
             <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">
-                {t("time", "Time")}
-              </span>
+              <span className="text-xs text-muted-foreground">{t("time", "Time")}</span>
               <span className="text-xs">{log.timestamp}</span>
             </div>
             <Separator />
             <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">
-                {t("status")}
-              </span>
+              <span className="text-xs text-muted-foreground">{t("status")}</span>
               {log.status === "success" ? (
-                <Badge
-                  variant="outline"
-                  className="text-[10px] text-primary border-primary/30"
-                >
+                <Badge variant="outline" className="text-[10px] text-primary border-primary/30">
                   Success
                 </Badge>
               ) : (
@@ -92,9 +73,7 @@ export function ExecutionDetailsDialog({
               <>
                 <Separator />
                 <div>
-                  <span className="text-xs text-muted-foreground">
-                    {t("detail", "Detail")}
-                  </span>
+                  <span className="text-xs text-muted-foreground">{t("detail", "Detail")}</span>
                   <p className="text-xs mt-1">{log.detail}</p>
                 </div>
               </>

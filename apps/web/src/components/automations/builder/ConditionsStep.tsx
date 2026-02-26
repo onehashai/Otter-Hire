@@ -3,13 +3,7 @@
 import { Button } from "@onehash/ui/button";
 import { InputField } from "@onehash/ui/input";
 import { Label } from "@onehash/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@onehash/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@onehash/ui/select";
 import { Plus, X } from "lucide-react";
 import { conditionFields, conditionOperators } from "./types";
 import type { Condition } from "./types";
@@ -54,18 +48,13 @@ export function ConditionsStep({
               </Button>
             ))}
           </div>
-          <Label className="text-xs text-muted-foreground">
-            of the following
-          </Label>
+          <Label className="text-xs text-muted-foreground">of the following</Label>
         </div>
       )}
 
       {conditions.map((c) => (
         <div key={c.id} className="flex items-center gap-2 flex-wrap">
-          <Select
-            value={c.field}
-            onValueChange={(v) => onUpdateCondition(c.id, "field", v)}
-          >
+          <Select value={c.field} onValueChange={(v) => onUpdateCondition(c.id, "field", v)}>
             <SelectTrigger className="h-8 text-xs w-[140px]">
               <SelectValue />
             </SelectTrigger>
@@ -77,10 +66,7 @@ export function ConditionsStep({
               ))}
             </SelectContent>
           </Select>
-          <Select
-            value={c.operator}
-            onValueChange={(v) => onUpdateCondition(c.id, "operator", v)}
-          >
+          <Select value={c.operator} onValueChange={(v) => onUpdateCondition(c.id, "operator", v)}>
             <SelectTrigger className="h-8 text-xs w-[140px]">
               <SelectValue />
             </SelectTrigger>
@@ -94,9 +80,7 @@ export function ConditionsStep({
           </Select>
           <InputField
             value={c.value}
-            onChange={(e) =>
-              onUpdateCondition(c.id, "value", e.target.value)
-            }
+            onChange={(e) => onUpdateCondition(c.id, "value", e.target.value)}
             className="h-8 text-xs w-[120px]"
             placeholder="Value"
           />

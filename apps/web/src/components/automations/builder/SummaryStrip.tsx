@@ -26,16 +26,12 @@ export function SummaryStrip({
   return (
     <Card>
       <CardContent className="p-4">
-        <p className="text-xs font-medium text-muted-foreground mb-2">
-          Summary
-        </p>
+        <p className="text-xs font-medium text-muted-foreground mb-2">Summary</p>
         <div className="flex items-center gap-2 flex-wrap">
           {currentTrigger && (
             <Badge variant="outline" className="text-[10px]">
               When: {currentTrigger.label}
-              {currentTrigger.hasStageSelect &&
-                triggerStage &&
-                ` → ${triggerStage}`}
+              {currentTrigger.hasStageSelect && triggerStage && ` → ${triggerStage}`}
               {currentTrigger.hasDaysInput && ` (${triggerDays} days)`}
             </Badge>
           )}

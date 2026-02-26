@@ -16,19 +16,17 @@ import { toast } from "sonner";
 
 export default function HiringTeamPage() {
   const isMobile = useIsMobile();
-  const {
-    teamMembers,
-    addTeamMember,
-    removeTeamMember,
-  } = useJobSetup();
+  const { teamMembers, addTeamMember, removeTeamMember } = useJobSetup();
   const [addMemberOpen, setAddMemberOpen] = useState(false);
   const [memberSearch, setMemberSearch] = useState("");
   const [orgUsers, setOrgUsers] = useState<OrgUserResponse[]>([]);
 
   useEffect(() => {
-    getOrgUsers().then(setOrgUsers).catch(() => {
-      toast.error("Unable to load organization users");
-    });
+    getOrgUsers()
+      .then(setOrgUsers)
+      .catch(() => {
+        toast.error("Unable to load organization users");
+      });
   }, []);
 
   const formatRoleLabel = (role?: string | null) =>
@@ -47,9 +45,9 @@ export default function HiringTeamPage() {
         (u) =>
           !teamMembers.some((m) => m.user_id === u.id) &&
           ((u.name ?? "").toLowerCase().includes(memberSearch.toLowerCase()) ||
-            u.email.toLowerCase().includes(memberSearch.toLowerCase()))
+            u.email.toLowerCase().includes(memberSearch.toLowerCase())),
       ),
-    [orgUsers, teamMembers, memberSearch]
+    [orgUsers, teamMembers, memberSearch],
   );
 
   const addTeamMemberFromUser = (user: OrgUserResponse) => {

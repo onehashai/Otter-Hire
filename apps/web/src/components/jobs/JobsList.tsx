@@ -3,13 +3,18 @@
 import { useTranslation } from "react-i18next";
 import { Card, CardContent } from "@onehash/ui/card";
 import { Badge } from "@onehash/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@onehash/ui/table";
-import { useIsMobile } from "@/hooks/use-mobile";
+import { Button } from "@onehash/ui/button";
+import { ChevronRight } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { JobListItemResponse } from "@/api";
 import { CategoryType, JobStatusType } from "@/app/(app-page-wrapper)/jobs/[jobId]/constants";
+import { cn } from "@/lib/utils";
 
-const statusKey: Record<JobStatusType, string> = { open: "open", draft: "draft", closed: "closed" };
+const statusKey: Record<JobStatusType, string> = {
+  open: "open",
+  draft: "draft",
+  archived: "archived",
+};
 const categoryKey: Record<CategoryType, string> = {
   engineering: "engineering",
   design: "design",
@@ -20,7 +25,8 @@ const categoryKey: Record<CategoryType, string> = {
   hr: "hr",
 };
 
-const statusVariant = (s: JobStatusType) => s === "open" ? "default" : s === "draft" ? "secondary" : "outline";
+const statusVariant = (s: JobStatusType) =>
+  s === "open" ? "default" : s === "draft" ? "secondary" : "outline";
 
 const formatTimeAgo = (dateStr: string) => {
   const date = new Date(dateStr);
@@ -41,67 +47,66 @@ interface JobsListProps {
 
 export function JobsList({ jobs }: JobsListProps) {
   const { t } = useTranslation();
-  const isMobile = useIsMobile();
   const router = useRouter();
 
-  if (isMobile) {
-    return (
-      <div className="space-y-2">
-        {jobs.map((job) => (
-          <Card key={job.id} className="active:bg-muted/50 transition-colors cursor-pointer" onClick={() => router.push(`/jobs/${job.id}/info`)}>
-            <CardContent className="p-4">
-              <div className="flex items-start justify-between mb-1.5">
-                <h3 className="text-sm font-medium leading-tight pr-2">{job.title}</h3>
-                <Badge variant={statusVariant(job.status as JobStatusType)} className="text-[10px] shrink-0">{t(statusKey[job.status as JobStatusType] ?? job.status)}</Badge>
-              </div>
-              <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                {job.category && <span>{t(categoryKey[job.category as CategoryType] ?? job.category)}</span>}
-                <span>·</span>
-                <span>{job.candidate_count} {job.candidate_count === 1 ? t("candidate") : t("candidates")}</span>
-                <span>·</span>
-                <span>{formatTimeAgo(job.updated_at)}</span>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-        {jobs.length === 0 && (
-          <p className="text-sm text-muted-foreground text-center py-8">{t("no_results")}</p>
-        )}
-      </div>
-    );
+  if (jobs.length === 0) {
+    return <p className="text-sm text-muted-foreground text-center py-8">{t("no_results")}</p>;
   }
 
   return (
-    <Card>
-      <CardContent className="p-0">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="text-xs">{t("role")}</TableHead>
-              <TableHead className="text-xs">{t("category")}</TableHead>
-              <TableHead className="text-xs">{t("status")}</TableHead>
-              <TableHead className="text-xs text-right">{t("candidates")}</TableHead>
-              <TableHead className="text-xs text-right">{t("last_activity")}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {jobs.map((job) => (
-              <TableRow key={job.id} className="cursor-pointer hover:bg-muted/50" onClick={() => router.push(`/jobs/${job.id}/info`)}>
-                <TableCell className="text-sm font-medium">{job.title}</TableCell>
-                <TableCell className="text-xs text-muted-foreground">{job.category ? t(categoryKey[job.category as CategoryType] ?? job.category) : "—"}</TableCell>
-                <TableCell><Badge variant={statusVariant(job.status as JobStatusType)} className="text-[10px]">{t(statusKey[job.status as JobStatusType] ?? job.status)}</Badge></TableCell>
-                <TableCell className="text-xs text-right">{job.candidate_count}</TableCell>
-                <TableCell className="text-xs text-muted-foreground text-right">{formatTimeAgo(job.updated_at)}</TableCell>
-              </TableRow>
-            ))}
-            {jobs.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={5} className="text-sm text-muted-foreground text-center py-8">{t("no_results")}</TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
+    <div className="space-y-2">
+      {jobs.map((job) => (
+        <Card
+          key={job.id}
+          className="cursor-pointer hover:shadow-sm active:bg-muted/50 transition-all"
+          onClick={() => router.push(`/jobs/${job.id}/info`)}
+        >
+          <CardContent className="p-4 py-3">
+            <div className="flex items-center gap-4">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-0.5">
+                  <h3 className="text-sm font-medium truncate">{job.title}</h3>
+                  <Badge
+                    variant={statusVariant(job.status as JobStatusType)}
+                    className="text-[10px] shrink-0"
+                  >
+                    {t(statusKey[job.status as JobStatusType] ?? job.status)}
+                  </Badge>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  <span>
+                    {job.category
+                      ? t(categoryKey[job.category as CategoryType] ?? job.category)
+                      : "—"}
+                  </span>
+                  <span>·</span>
+                  <span>{formatTimeAgo(job.updated_at)}</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 shrink-0">
+                <Button
+                  variant="default"
+                  size="sm"
+                  className="h-8 text-xs text-primary-foreground"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    router.push(`/pipeline/${job.id}`);
+                  }}
+                >
+                  View Pipeline
+                </Button>
+                <div className="text-right">
+                  <div className="text-sm font-medium">{job.candidate_count}</div>
+                  <div className="text-[10px] text-muted-foreground">
+                    {job.candidate_count === 1 ? t("candidate") : t("candidates")}
+                  </div>
+                </div>
+                <ChevronRight className={cn("h-4 w-4 text-muted-foreground")} />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
   );
 }

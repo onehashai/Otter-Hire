@@ -1,15 +1,15 @@
-from fastapi import FastAPI, Depends, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
-from app.core.config import settings
-from app.core.logging import setup_logging, logger
-from app.middleware.context import get_request_context, RequestContext
-from app.middleware.errors import http_exception_handler, generic_exception_handler
-from app.schemas.common import HealthResponse, RequestContextSchema
+from slowapi.util import get_remote_address
+
 from app.api.v1.router import api_router
+from app.core.config import settings
+from app.core.logging import logger, setup_logging
+from app.middleware.context import RequestContext, get_request_context
+from app.middleware.errors import generic_exception_handler, http_exception_handler
+from app.schemas.common import HealthResponse, RequestContextSchema
 
 setup_logging()
 

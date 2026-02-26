@@ -61,16 +61,10 @@ export function ActionButtons({ candidateName }: ActionButtonsProps) {
           >
             <Icon name="Clock" className="h-3.5 w-3.5 mr-2" /> Schedule Interview
           </DropdownMenuItem>
-          <DropdownMenuItem
-            className="text-xs"
-            onClick={() => toast({ title: "Email composed" })}
-          >
+          <DropdownMenuItem className="text-xs" onClick={() => toast({ title: "Email composed" })}>
             <Icon name="Send" className="h-3.5 w-3.5 mr-2" /> Send Email
           </DropdownMenuItem>
-          <DropdownMenuItem
-            className="text-xs"
-            onClick={() => toast({ title: "Offer created" })}
-          >
+          <DropdownMenuItem className="text-xs" onClick={() => toast({ title: "Offer created" })}>
             <Icon name="ScrollText" className="h-3.5 w-3.5 mr-2" /> Create Offer
           </DropdownMenuItem>
           <DropdownMenuSeparator />

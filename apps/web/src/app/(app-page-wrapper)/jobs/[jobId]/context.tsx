@@ -48,6 +48,7 @@ export interface JobSetupState {
   collectResume: boolean;
   collectCover: boolean;
   screeningQuestions: string[];
+  applicationFormSchema: Record<string, unknown>;
   stages: Stage[];
   hiringStages: HiringStage[];
   teamMembers: TeamMember[];
@@ -73,7 +74,7 @@ const defaultState: JobSetupState = {
   title: "",
   category: "Engineering",
   employmentType: "full_time",
-  workplaceType: "remote",
+  workplaceType: "onsite",
   country: "",
   city: "",
   hiringManager: "",
@@ -90,6 +91,7 @@ const defaultState: JobSetupState = {
   collectResume: true,
   collectCover: false,
   screeningQuestions: [],
+  applicationFormSchema: {},
   stages: [
     { name: "Phone Screen", interviewer: "" },
     { name: "Technical", interviewer: "" },
@@ -114,13 +116,26 @@ const defaultState: JobSetupState = {
   pendingNavigation: null,
 };
 
+function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableStringify(item)).join(",")}]`;
+  }
+  const obj = value as Record<string, unknown>;
+  const keys = Object.keys(obj).sort();
+  const entries = keys.map((key) => `${JSON.stringify(key)}:${stableStringify(obj[key])}`);
+  return `{${entries.join(",")}}`;
+}
+
 function mapApiToState(job: JobDetailResponse): Partial<JobSetupState> {
   return {
     jobId: job.id,
     title: job.title,
     category: job.category ?? "",
     employmentType: job.employment_type ?? "full_time",
-    workplaceType: job.workplace_type ?? "remote",
+    workplaceType: job.workplace_type ?? "onsite",
     country: job.country ?? "",
     city: job.city ?? "",
     status: job.status as JobStatusType,
@@ -136,7 +151,12 @@ function mapApiToState(job: JobDetailResponse): Partial<JobSetupState> {
     collectResume: job.collect_resume,
     collectCover: job.collect_cover,
     screeningQuestions: job.screening_questions ?? [],
-    hiringStages: job.hiring_stages.map((s) => ({ id: s.id, name: s.name, isRequired: s.is_required })),
+    applicationFormSchema: (job.application_form_schema ?? {}) as Record<string, unknown>,
+    hiringStages: job.hiring_stages.map((s) => ({
+      id: s.id,
+      name: s.name,
+      isRequired: s.is_required,
+    })),
     teamMembers: job.team_members.map((m) => ({
       id: m.id,
       user_id: m.user_id,
@@ -171,6 +191,7 @@ type JobSetupContextValue = JobSetupState & {
   setCollectResume: (v: boolean) => void;
   setCollectCover: (v: boolean) => void;
   setScreeningQuestions: (v: string[]) => void;
+  setApplicationFormSchema: (v: Record<string, unknown>) => void;
   setStages: (v: Stage[]) => void;
   setHiringStages: (v: HiringStage[]) => void;
   setTeamMembers: (v: TeamMember[]) => void;
@@ -241,78 +262,88 @@ export function JobSetupProvider({ children }: { children: ReactNode }) {
         }
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [id, router, t]);
 
   const stagesDirtyRef = useRef(false);
   const teamDirtyRef = useRef(false);
 
-  const buildPayload = useCallback((currentState: JobSetupState, includeRelations: boolean): JobUpdatePayload => {
-    const payload: JobUpdatePayload = {
-      title: currentState.title,
-      category: currentState.category || null,
-      employment_type: currentState.employmentType || null,
-      workplace_type: currentState.workplaceType,
-      country: currentState.country || null,
-      city: currentState.city || null,
-      openings: currentState.openings,
-      salary_type: currentState.salaryType,
-      salary_fixed: currentState.salaryFixed ? Number(currentState.salaryFixed) : null,
-      salary_min: currentState.salaryMin ? Number(currentState.salaryMin) : null,
-      salary_max: currentState.salaryMax ? Number(currentState.salaryMax) : null,
-      currency: currentState.currency,
-      salary_timeframe: currentState.timeframe,
-      description: currentState.description || null,
-      collect_resume: currentState.collectResume,
-      collect_cover: currentState.collectCover,
-      screening_questions: currentState.screeningQuestions,
-      pipeline_template: currentState.pipeline,
-    };
-    if (includeRelations || stagesDirtyRef.current) {
-      payload.hiring_stages = currentState.hiringStages
-        .filter((s) => s.name.trim())
-        .map((s, i) => ({ id: s.id, name: s.name, position: i }));
-      stagesDirtyRef.current = false;
-    }
-    if (includeRelations || teamDirtyRef.current) {
-      payload.team_members = currentState.teamMembers.map((m) => ({
-        user_id: m.user_id ?? m.id,
-        role: m.role,
-      }));
-      teamDirtyRef.current = false;
-    }
-    return payload;
-  }, []);
+  const buildPayload = useCallback(
+    (currentState: JobSetupState, includeRelations: boolean): JobUpdatePayload => {
+      const payload: JobUpdatePayload = {
+        title: currentState.title,
+        category: currentState.category || null,
+        employment_type: currentState.employmentType || null,
+        workplace_type: currentState.workplaceType,
+        country: currentState.country || null,
+        city: currentState.city || null,
+        openings: currentState.openings,
+        salary_type: currentState.salaryType,
+        salary_fixed: currentState.salaryFixed ? Number(currentState.salaryFixed) : null,
+        salary_min: currentState.salaryMin ? Number(currentState.salaryMin) : null,
+        salary_max: currentState.salaryMax ? Number(currentState.salaryMax) : null,
+        currency: currentState.currency,
+        salary_timeframe: currentState.timeframe,
+        description: currentState.description || null,
+        collect_resume: currentState.collectResume,
+        collect_cover: currentState.collectCover,
+        screening_questions: currentState.screeningQuestions,
+        application_form_schema: currentState.applicationFormSchema,
+        pipeline_template: currentState.pipeline,
+      };
+      if (includeRelations || stagesDirtyRef.current) {
+        payload.hiring_stages = currentState.hiringStages
+          .filter((s) => s.name.trim())
+          .map((s, i) => ({ id: s.id, name: s.name, position: i }));
+        stagesDirtyRef.current = false;
+      }
+      if (includeRelations || teamDirtyRef.current) {
+        payload.team_members = currentState.teamMembers.map((m) => ({
+          user_id: m.user_id ?? m.id,
+          role: m.role,
+        }));
+        teamDirtyRef.current = false;
+      }
+      return payload;
+    },
+    [],
+  );
 
-  const executeSave = useCallback(async (payload: JobUpdatePayload) => {
-    if (!id || savingRef.current) {
-      pendingSaveRef.current = payload;
-      return;
-    }
-    savingRef.current = true;
-    setState((s) => ({ ...s, isSaving: true }));
-    try {
-      const job = await updateJob(id, payload);
-      setState((s) => ({
-        ...s,
-        ...mapApiToState(job),
-        isSaving: false,
-        savedAt: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      }));
-      if (pendingSaveRef.current) {
-        const next = pendingSaveRef.current;
-        pendingSaveRef.current = null;
-        savingRef.current = false;
-        await executeSave(next);
+  const executeSave = useCallback(
+    async (payload: JobUpdatePayload) => {
+      if (!id || savingRef.current) {
+        pendingSaveRef.current = payload;
         return;
       }
-    } catch (err) {
-      setState((s) => ({ ...s, isSaving: false }));
-      toast.error(err instanceof Error ? err.message : "Failed to save");
-    } finally {
-      savingRef.current = false;
-    }
-  }, [id]);
+      savingRef.current = true;
+      setState((s) => ({ ...s, isSaving: true }));
+      try {
+        const job = await updateJob(id, payload);
+        setState((s) => ({
+          ...s,
+          ...mapApiToState(job),
+          isSaving: false,
+          hasUnsavedChanges: false,
+          savedAt: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        }));
+        if (pendingSaveRef.current) {
+          const next = pendingSaveRef.current;
+          pendingSaveRef.current = null;
+          savingRef.current = false;
+          await executeSave(next);
+          return;
+        }
+      } catch (err) {
+        setState((s) => ({ ...s, isSaving: false }));
+        throw err;
+      } finally {
+        savingRef.current = false;
+      }
+    },
+    [id],
+  );
 
   const debouncedSave = useCallback(() => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
@@ -320,7 +351,9 @@ export function JobSetupProvider({ children }: { children: ReactNode }) {
       setState((currentState) => {
         if (!currentState.jobId || !currentState.title.trim()) return currentState;
         const payload = buildPayload(currentState, false);
-        executeSave(payload);
+        void executeSave(payload).catch((err) => {
+          toast.error(err instanceof Error ? err.message : "Failed to save");
+        });
         return currentState;
       });
     }, 1500);
@@ -377,58 +410,68 @@ export function JobSetupProvider({ children }: { children: ReactNode }) {
     }));
   }, []);
 
-  const addHiringStageAndSave = useCallback(async (name: string) => {
-    const stageName = name.trim();
-    if (!stageName) return;
+  const addHiringStageAndSave = useCallback(
+    async (name: string) => {
+      const stageName = name.trim();
+      if (!stageName) return;
 
-    let nextStateSnapshot: JobSetupState | null = null;
-    stagesDirtyRef.current = true;
-    setState((s) => {
-      const nextState = {
-        ...s,
-        hiringStages: [...s.hiringStages, { id: crypto.randomUUID(), name: stageName }],
-        hasUnsavedChanges: true,
-      };
-      nextStateSnapshot = nextState;
-      return nextState;
-    });
+      let nextStateSnapshot: JobSetupState | null = null;
+      stagesDirtyRef.current = true;
+      setState((s) => {
+        const nextState = {
+          ...s,
+          hiringStages: [...s.hiringStages, { id: crypto.randomUUID(), name: stageName }],
+          hasUnsavedChanges: true,
+        };
+        nextStateSnapshot = nextState;
+        return nextState;
+      });
 
-    if (!nextStateSnapshot?.jobId) return;
-    const payload = buildPayload(nextStateSnapshot, true);
-    await executeSave(payload);
-    setState((s) => ({ ...s, hasUnsavedChanges: false }));
-  }, [buildPayload, executeSave]);
+      if (!nextStateSnapshot?.jobId) return;
+      const payload = buildPayload(nextStateSnapshot, true);
+      await executeSave(payload);
+      setState((s) => ({ ...s, hasUnsavedChanges: false }));
+    },
+    [buildPayload, executeSave],
+  );
 
   const removeHiringStage = useCallback((id: string) => {
     stagesDirtyRef.current = true;
     setState((s) => {
       if (s.hiringStages.length <= 2) return s;
-      return { ...s, hiringStages: s.hiringStages.filter((st) => st.id !== id), hasUnsavedChanges: true };
-    });
-  }, []);
-
-  const removeHiringStageAndSave = useCallback(async (id: string) => {
-    let nextStateSnapshot: JobSetupState | null = null;
-    stagesDirtyRef.current = true;
-    setState((s) => {
-      if (s.hiringStages.length <= 2) {
-        nextStateSnapshot = s;
-        return s;
-      }
-      const nextState = {
+      return {
         ...s,
         hiringStages: s.hiringStages.filter((st) => st.id !== id),
         hasUnsavedChanges: true,
       };
-      nextStateSnapshot = nextState;
-      return nextState;
     });
+  }, []);
 
-    if (!nextStateSnapshot?.jobId) return;
-    const payload = buildPayload(nextStateSnapshot, true);
-    await executeSave(payload);
-    setState((s) => ({ ...s, hasUnsavedChanges: false }));
-  }, [buildPayload, executeSave]);
+  const removeHiringStageAndSave = useCallback(
+    async (id: string) => {
+      let nextStateSnapshot: JobSetupState | null = null;
+      stagesDirtyRef.current = true;
+      setState((s) => {
+        if (s.hiringStages.length <= 2) {
+          nextStateSnapshot = s;
+          return s;
+        }
+        const nextState = {
+          ...s,
+          hiringStages: s.hiringStages.filter((st) => st.id !== id),
+          hasUnsavedChanges: true,
+        };
+        nextStateSnapshot = nextState;
+        return nextState;
+      });
+
+      if (!nextStateSnapshot?.jobId) return;
+      const payload = buildPayload(nextStateSnapshot, true);
+      await executeSave(payload);
+      setState((s) => ({ ...s, hasUnsavedChanges: false }));
+    },
+    [buildPayload, executeSave],
+  );
 
   const updateHiringStageName = useCallback((id: string, name: string) => {
     stagesDirtyRef.current = true;
@@ -454,6 +497,7 @@ export function JobSetupProvider({ children }: { children: ReactNode }) {
     setState((s) => ({
       ...s,
       teamMembers: [...s.teamMembers, { ...member, role: member.role }],
+      hasUnsavedChanges: true,
     }));
   }, []);
 
@@ -462,6 +506,7 @@ export function JobSetupProvider({ children }: { children: ReactNode }) {
     setState((s) => ({
       ...s,
       teamMembers: s.teamMembers.filter((m) => m.id !== id),
+      hasUnsavedChanges: true,
     }));
   }, []);
 
@@ -470,6 +515,7 @@ export function JobSetupProvider({ children }: { children: ReactNode }) {
     setState((s) => ({
       ...s,
       teamMembers: s.teamMembers.map((m) => (m.id === id ? { ...m, role } : m)),
+      hasUnsavedChanges: true,
     }));
   }, []);
 
@@ -480,11 +526,15 @@ export function JobSetupProvider({ children }: { children: ReactNode }) {
   const handleSave = useCallback(() => {
     setState((currentState) => {
       if (!currentState.jobId) return currentState;
-      const payload = buildPayload(currentState, true);
-      executeSave(payload).then(() => {
-        setState((s) => ({ ...s, hasUnsavedChanges: false }));
-        toast.success(t("draft_saved"));
-      });
+      const payload = buildPayload(currentState, false);
+      executeSave(payload)
+        .then(() => {
+          setState((s) => ({ ...s, hasUnsavedChanges: false }));
+          toast.success(t("draft_saved"));
+        })
+        .catch((err) => {
+          toast.error(err instanceof Error ? err.message : "Failed to save");
+        });
       return currentState;
     });
   }, [buildPayload, executeSave, t]);
@@ -553,13 +603,17 @@ export function JobSetupProvider({ children }: { children: ReactNode }) {
   const handleSaveAndNavigate = useCallback(() => {
     setState((currentState) => {
       if (!currentState.jobId) return currentState;
-      const payload = buildPayload(currentState, true);
-      executeSave(payload).then(() => {
-        setState((s) => ({ ...s, hasUnsavedChanges: false, showUnsavedDialog: false }));
-        if (currentState.pendingNavigation) {
-          router.push(currentState.pendingNavigation);
-        }
-      });
+      const payload = buildPayload(currentState, false);
+      executeSave(payload)
+        .then(() => {
+          setState((s) => ({ ...s, hasUnsavedChanges: false, showUnsavedDialog: false }));
+          if (currentState.pendingNavigation) {
+            router.push(currentState.pendingNavigation);
+          }
+        })
+        .catch((err) => {
+          toast.error(err instanceof Error ? err.message : "Failed to save");
+        });
       return currentState;
     });
   }, [buildPayload, executeSave, router]);
@@ -578,29 +632,102 @@ export function JobSetupProvider({ children }: { children: ReactNode }) {
 
   const value: JobSetupContextValue = {
     ...state,
-    setTitle: (v) => { setState((s) => ({ ...s, title: v })); markUnsaved(); },
-    setCategory: (v) => { setState((s) => ({ ...s, category: v })); markUnsaved(); },
-    setEmploymentType: (v) => { setState((s) => ({ ...s, employmentType: v })); markUnsaved(); },
-    setWorkplaceType: (v) => { setState((s) => ({ ...s, workplaceType: v })); markUnsaved(); },
-    setCountry: (v) => { setState((s) => ({ ...s, country: v })); markUnsaved(); },
-    setCity: (v) => { setState((s) => ({ ...s, city: v })); markUnsaved(); },
+    setTitle: (v) => {
+      setState((s) => ({ ...s, title: v }));
+      markUnsaved();
+    },
+    setCategory: (v) => {
+      setState((s) => ({ ...s, category: v }));
+      markUnsaved();
+    },
+    setEmploymentType: (v) => {
+      setState((s) => ({ ...s, employmentType: v }));
+      markUnsaved();
+    },
+    setWorkplaceType: (v) => {
+      setState((s) => ({ ...s, workplaceType: v }));
+      markUnsaved();
+    },
+    setCountry: (v) => {
+      setState((s) => ({ ...s, country: v }));
+      markUnsaved();
+    },
+    setCity: (v) => {
+      setState((s) => ({ ...s, city: v }));
+      markUnsaved();
+    },
     setHiringManager: (v) => setState((s) => ({ ...s, hiringManager: v })),
     setStatus: (v) => setState((s) => ({ ...s, status: v })),
-    setDescription: (v) => { setState((s) => ({ ...s, description: v })); markUnsaved(); },
-    setOpenings: (v) => { setState((s) => ({ ...s, openings: v })); markUnsaved(); },
-    setSalaryType: (v) => { setState((s) => ({ ...s, salaryType: v })); markUnsaved(); },
-    setSalaryFixed: (v) => { setState((s) => ({ ...s, salaryFixed: v })); markUnsaved(); },
-    setSalaryMin: (v) => { setState((s) => ({ ...s, salaryMin: v })); markUnsaved(); },
-    setSalaryMax: (v) => { setState((s) => ({ ...s, salaryMax: v })); markUnsaved(); },
-    setCurrency: (v) => { setState((s) => ({ ...s, currency: v })); markUnsaved(); },
-    setTimeframe: (v) => { setState((s) => ({ ...s, timeframe: v })); markUnsaved(); },
-    setPipeline: (v) => { setState((s) => ({ ...s, pipeline: v })); markUnsaved(); },
-    setCollectResume: (v) => { setState((s) => ({ ...s, collectResume: v })); markUnsaved(); },
-    setCollectCover: (v) => { setState((s) => ({ ...s, collectCover: v })); markUnsaved(); },
-    setScreeningQuestions: (v) => { setState((s) => ({ ...s, screeningQuestions: v })); markUnsaved(); },
+    setDescription: (v) => {
+      setState((s) => ({ ...s, description: v }));
+      markUnsaved();
+    },
+    setOpenings: (v) => {
+      setState((s) => ({ ...s, openings: v }));
+      markUnsaved();
+    },
+    setSalaryType: (v) => {
+      setState((s) => ({ ...s, salaryType: v }));
+      markUnsaved();
+    },
+    setSalaryFixed: (v) => {
+      setState((s) => ({ ...s, salaryFixed: v }));
+      markUnsaved();
+    },
+    setSalaryMin: (v) => {
+      setState((s) => ({ ...s, salaryMin: v }));
+      markUnsaved();
+    },
+    setSalaryMax: (v) => {
+      setState((s) => ({ ...s, salaryMax: v }));
+      markUnsaved();
+    },
+    setCurrency: (v) => {
+      setState((s) => ({ ...s, currency: v }));
+      markUnsaved();
+    },
+    setTimeframe: (v) => {
+      setState((s) => ({ ...s, timeframe: v }));
+      markUnsaved();
+    },
+    setPipeline: (v) => {
+      setState((s) => ({ ...s, pipeline: v }));
+      markUnsaved();
+    },
+    setCollectResume: (v) => {
+      setState((s) => ({ ...s, collectResume: v }));
+      markUnsaved();
+    },
+    setCollectCover: (v) => {
+      setState((s) => ({ ...s, collectCover: v }));
+      markUnsaved();
+    },
+    setScreeningQuestions: (v) => {
+      setState((s) => ({ ...s, screeningQuestions: v }));
+      markUnsaved();
+    },
+    setApplicationFormSchema: (v) => {
+      let changed = false;
+      setState((s) => {
+        const prev = stableStringify(s.applicationFormSchema ?? {});
+        const next = stableStringify(v ?? {});
+        changed = prev !== next;
+        if (!changed) return s;
+        return { ...s, applicationFormSchema: v };
+      });
+      if (changed) markUnsaved();
+    },
     setStages: (v) => setState((s) => ({ ...s, stages: v })),
-    setHiringStages: (v) => { stagesDirtyRef.current = true; setState((s) => ({ ...s, hiringStages: v })); markUnsaved(); },
-    setTeamMembers: (v) => { teamDirtyRef.current = true; setState((s) => ({ ...s, teamMembers: v })); markUnsaved(); },
+    setHiringStages: (v) => {
+      stagesDirtyRef.current = true;
+      setState((s) => ({ ...s, hiringStages: v }));
+      markUnsaved();
+    },
+    setTeamMembers: (v) => {
+      teamDirtyRef.current = true;
+      setState((s) => ({ ...s, teamMembers: v }));
+      markUnsaved();
+    },
     setPublished: (v) => setState((s) => ({ ...s, published: v })),
     setLinkCopied: (v) => setState((s) => ({ ...s, linkCopied: v })),
     setSavedAt: (v) => setState((s) => ({ ...s, savedAt: v })),
@@ -609,7 +736,8 @@ export function JobSetupProvider({ children }: { children: ReactNode }) {
     setAiSheetOpen: (v) => setState((s) => ({ ...s, aiSheetOpen: v })),
     setSummaryOpen: (v) => setState((s) => ({ ...s, summaryOpen: v })),
     setBasicInfoAttemptedSave: (v) => setState((s) => ({ ...s, basicInfoAttemptedNext: v })),
-    setHiringDetailsAttemptedSave: (v) => setState((s) => ({ ...s, hiringDetailsAttemptedSave: v })),
+    setHiringDetailsAttemptedSave: (v) =>
+      setState((s) => ({ ...s, hiringDetailsAttemptedSave: v })),
     addQuestion,
     removeQuestion,
     addStage,
@@ -635,11 +763,7 @@ export function JobSetupProvider({ children }: { children: ReactNode }) {
     showUnsavedWarning,
   };
 
-  return (
-    <JobSetupContext.Provider value={value}>
-      {children}
-    </JobSetupContext.Provider>
-  );
+  return <JobSetupContext.Provider value={value}>{children}</JobSetupContext.Provider>;
 }
 
 export function useJobSetup() {

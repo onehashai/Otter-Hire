@@ -2,7 +2,14 @@
 
 import { useState, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@onehash/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@onehash/ui/dialog";
 import { Button } from "@onehash/ui/button";
 import { SelectField } from "@onehash/ui/select";
 import { Icon } from "@onehash/ui/icon";
@@ -16,7 +23,12 @@ interface TeamInviteModalProps {
   isSubmitting: boolean;
 }
 
-export function TeamInviteModal({ open, onOpenChange, onSubmit, isSubmitting }: TeamInviteModalProps) {
+export function TeamInviteModal({
+  open,
+  onOpenChange,
+  onSubmit,
+  isSubmitting,
+}: TeamInviteModalProps) {
   const { t } = useTranslation();
   const [emailInput, setEmailInput] = useState("");
   const [emailError, setEmailError] = useState("");
@@ -42,7 +54,9 @@ export function TeamInviteModal({ open, onOpenChange, onSubmit, isSubmitting }: 
 
     const invalidEmails = parsedEmails.filter((e) => !isValidEmail(e));
     if (invalidEmails.length > 0) {
-      setEmailError(`Invalid email${invalidEmails.length > 1 ? "s" : ""}: ${invalidEmails.join(", ")}`);
+      setEmailError(
+        `Invalid email${invalidEmails.length > 1 ? "s" : ""}: ${invalidEmails.join(", ")}`,
+      );
       return;
     }
 
@@ -73,13 +87,18 @@ export function TeamInviteModal({ open, onOpenChange, onSubmit, isSubmitting }: 
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="text-base">Invite Team Members</DialogTitle>
-          <DialogDescription className="text-xs">Send invitations to join your organization.</DialogDescription>
+          <DialogDescription className="text-xs">
+            Send invitations to join your organization.
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-2">
           <BulkTextArea
             label="Emails"
             value={emailInput}
-            onChange={(value) => { setEmailInput(value); setEmailError(""); }}
+            onChange={(value) => {
+              setEmailInput(value);
+              setEmailError("");
+            }}
             placeholder="Enter emails separated by commas or new lines"
             hint="e.g. alice@example.com, bob@example.com"
             disabled={isSubmitting}
@@ -95,8 +114,21 @@ export function TeamInviteModal({ open, onOpenChange, onSubmit, isSubmitting }: 
           />
         </div>
         <DialogFooter>
-          <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => handleOpenChange(false)} disabled={isSubmitting}>Cancel</Button>
-          <Button size="sm" className="text-xs h-8 gap-1.5" onClick={handleSubmit} disabled={isSubmitting || emailCount === 0}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-xs h-8"
+            onClick={() => handleOpenChange(false)}
+            disabled={isSubmitting}
+          >
+            Cancel
+          </Button>
+          <Button
+            size="sm"
+            className="text-xs h-8 gap-1.5"
+            onClick={handleSubmit}
+            disabled={isSubmitting || emailCount === 0}
+          >
             {isSubmitting ? (
               <span className="animate-spin rounded-full h-3.5 w-3.5 border-b-2 border-current" />
             ) : (

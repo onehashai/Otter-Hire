@@ -4,6 +4,31 @@ const INTERNAL_API_BASE_URL = process.env.API_INTERNAL_URL ?? PUBLIC_API_BASE_UR
 export const API_BASE_URL =
   typeof window === "undefined" ? INTERNAL_API_BASE_URL : PUBLIC_API_BASE_URL;
 
+export type ApiErrorResponse = {
+  code?: string;
+  message?: string;
+  detail?: string;
+  error?: string;
+  details?: unknown;
+  request_id?: string;
+};
+
+export class ApiError extends Error {
+  status: number;
+  code?: string;
+  requestId?: string;
+  details?: unknown;
+
+  constructor(message: string, status: number, code?: string, requestId?: string, details?: unknown) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.code = code;
+    this.requestId = requestId;
+    this.details = details;
+  }
+}
+
 function formatRetryAfter(seconds: number): string {
   if (seconds < 60) {
     return `Too many attempts. Try again in ${seconds} ${seconds === 1 ? "second" : "seconds"}.`;
@@ -23,16 +48,47 @@ export function handle429Error(res: Response): string {
   return "Too many attempts. Please try again later.";
 }
 
-export async function parseErrorResponse(res: Response, defaultMessage: string): Promise<string> {
-  try {
-    const data = (await res.json()) as { detail?: string };
-    if (typeof data.detail === "string" && data.detail.trim()) {
-      return data.detail;
-    }
-  } catch {
-    // ignore
+function mapErrorCodeToMessage(status: number, code?: string, fallback?: string): string {
+  if (code === "AUTH_INVALID_CREDENTIALS" || (status === 401 && !code)) {
+    return "Email or password is incorrect.";
   }
-  return defaultMessage;
+  if (code === "RATE_LIMIT_EXCEEDED" || status === 429) {
+    return "Too many attempts. Please try again later.";
+  }
+  if (code === "VALIDATION_ERROR" || status === 422) {
+    return "Please check the form and try again.";
+  }
+  if (status === 403) {
+    return "You don't have permission to perform this action.";
+  }
+  if (status >= 500) {
+    return "Something went wrong. Please try again.";
+  }
+  return fallback || "Request failed";
+}
+
+async function readApiErrorBody(res: Response): Promise<ApiErrorResponse | null> {
+  try {
+    return (await res.json()) as ApiErrorResponse;
+  } catch {
+    return null;
+  }
+}
+
+async function toApiError(res: Response, fallback: string): Promise<ApiError> {
+  const body = await readApiErrorBody(res);
+  const rawMessage =
+    (typeof body?.message === "string" && body.message.trim()) ||
+    (typeof body?.detail === "string" && body.detail.trim()) ||
+    (typeof body?.error === "string" && body.error.trim()) ||
+    fallback;
+  const message = mapErrorCodeToMessage(res.status, body?.code, rawMessage);
+  return new ApiError(message, res.status, body?.code, body?.request_id, body?.details);
+}
+
+export async function parseErrorResponse(res: Response, defaultMessage: string): Promise<string> {
+  const err = await toApiError(res, defaultMessage);
+  return err.message;
 }
 
 export type ApiGetOptions = {
@@ -76,14 +132,8 @@ export async function apiPost<T>(
   });
 
   if (!res.ok) {
-    if (res.status === 429) {
-      throw new Error(handle429Error(res));
-    }
-    const message = await parseErrorResponse(
-      res,
-      `API request failed: ${res.status} ${res.statusText}`,
-    );
-    throw new Error(message);
+    const err = await toApiError(res, `API request failed: ${res.status} ${res.statusText}`);
+    throw err;
   }
 
   if (res.status === 204) {
@@ -111,21 +161,8 @@ export async function apiFetch<T>(
   });
 
   if (!res.ok) {
-    if (res.status === 429) {
-      throw new Error(handle429Error(res));
-    }
-    let message = `Request failed: ${res.status} ${res.statusText}`;
-    try {
-      const data = (await res.json()) as { detail?: string; error?: string };
-      const msg =
-        typeof data.detail === "string"
-          ? data.detail
-          : typeof data.error === "string"
-            ? data.error
-            : "";
-      if (msg.trim()) message = msg;
-    } catch {}
-    throw new Error(message);
+    const err = await toApiError(res, `Request failed: ${res.status} ${res.statusText}`);
+    throw err;
   }
 
   if (res.status === 204) return {} as T;
@@ -140,10 +177,7 @@ export async function apiDelete(path: string): Promise<void> {
   });
 
   if (!res.ok) {
-    const message = await parseErrorResponse(
-      res,
-      `API request failed: ${res.status} ${res.statusText}`,
-    );
-    throw new Error(message);
+    const err = await toApiError(res, `API request failed: ${res.status} ${res.statusText}`);
+    throw err;
   }
 }

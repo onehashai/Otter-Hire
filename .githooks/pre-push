@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "[pre-push] Running backend lint checks..."
+docker compose exec -T backend ruff check app
+docker compose exec -T backend ruff format app --check
+
+echo "[pre-push] Running frontend lint checks..."
+docker compose exec -T web npm run -s lint
+docker compose exec -T web npm run -s format:check
+
+echo "[pre-push] All checks passed."

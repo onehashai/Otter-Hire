@@ -15,7 +15,10 @@ async def get_current_user(
     access_token: str | None = Cookie(default=None),
 ) -> User:
     if not access_token:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "AUTH_NOT_AUTHENTICATED", "message": "Authentication required."},
+        )
 
     try:
         payload = verify_access_token(access_token)
@@ -23,13 +26,17 @@ async def get_current_user(
         org_id = UUID(str(payload.get("org_id")))
     except Exception as exc:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "AUTH_INVALID_TOKEN", "message": "Invalid or expired session."},
         ) from exc
 
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if user is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "AUTH_USER_NOT_FOUND", "message": "User account not found."},
+        )
 
     membership_result = await db.execute(
         select(OrgMembership).where(
@@ -40,7 +47,10 @@ async def get_current_user(
     )
     membership = membership_result.scalar_one_or_none()
     if membership is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Membership not found")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "AUTH_MEMBERSHIP_NOT_FOUND", "message": "Membership not found."},
+        )
 
     # Compatibility shim: existing handlers expect org-scoped attrs on current_user.
     user.org_id = membership.org_id
@@ -55,13 +65,13 @@ async def require_active_user(current_user: User = Depends(get_current_user)) ->
     if not current_user.is_verified:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Email verification required",
+            detail={"code": "AUTH_EMAIL_VERIFICATION_REQUIRED", "message": "Email verification required."},
         )
 
     if not current_user.is_onboarded:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Onboarding required",
+            detail={"code": "AUTH_ONBOARDING_REQUIRED", "message": "Onboarding required."},
         )
 
     return current_user

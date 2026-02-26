@@ -65,7 +65,10 @@ async def require_active_user(current_user: User = Depends(get_current_user)) ->
     if not current_user.is_verified:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail={"code": "AUTH_EMAIL_VERIFICATION_REQUIRED", "message": "Email verification required."},
+            detail={
+                "code": "AUTH_EMAIL_VERIFICATION_REQUIRED",
+                "message": "Email verification required.",
+            },
         )
 
     if not current_user.is_onboarded:

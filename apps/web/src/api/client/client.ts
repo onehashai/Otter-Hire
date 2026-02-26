@@ -19,7 +19,13 @@ export class ApiError extends Error {
   requestId?: string;
   details?: unknown;
 
-  constructor(message: string, status: number, code?: string, requestId?: string, details?: unknown) {
+  constructor(
+    message: string,
+    status: number,
+    code?: string,
+    requestId?: string,
+    details?: unknown,
+  ) {
     super(message);
     this.name = "ApiError";
     this.status = status;

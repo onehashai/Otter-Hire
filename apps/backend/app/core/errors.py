@@ -38,4 +38,3 @@ def make_error_payload(
         request_id=request_id or str(uuid4()),
         status_code=status_code,
     )
-

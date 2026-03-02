@@ -16,6 +16,7 @@ from email.parser import BytesParser
 from email.utils import parseaddr
 
 import boto3
+import redis
 from sqlalchemy import delete, select
 
 from app.core.config import settings
@@ -80,7 +81,30 @@ def _extract_text_and_attachments(raw_email: bytes) -> dict:
     }
 
 
+_ENQUEUED_TTL_SECONDS = 86400  # 24h - avoid re-enqueuing same key while workflow runs
+
+
+def _is_key_enqueued_in_redis(raw_key: str) -> bool:
+    """Check if key was recently enqueued (workflow may still be running)."""
+    try:
+        r = redis.Redis.from_url(settings.redis_url, decode_responses=True)
+        return bool(r.exists(f"inbound:enqueued:{raw_key}"))
+    except Exception:
+        return False
+
+
+def _mark_key_enqueued_in_redis(raw_key: str) -> None:
+    """Mark key as enqueued to avoid SES bridge re-enqueuing every poll cycle."""
+    try:
+        r = redis.Redis.from_url(settings.redis_url, decode_responses=True)
+        r.setex(f"inbound:enqueued:{raw_key}", _ENQUEUED_TTL_SECONDS, "1")
+    except Exception:
+        pass
+
+
 async def _is_key_already_processed(raw_key: str) -> bool:
+    if _is_key_enqueued_in_redis(raw_key):
+        return True
     async with AsyncSessionLocal() as db:
         result = await db.execute(
             select(InboundEmail.id).where(InboundEmail.raw_storage_key == raw_key).limit(1)
@@ -223,6 +247,7 @@ async def _process_raw_key(s3_client, bucket: str, key: str) -> None:
                 response_text,
             )
             return
+        _mark_key_enqueued_in_redis(key)
         logger.info("SES bridge enqueued key=%s status=%s", key, status)
         return
 

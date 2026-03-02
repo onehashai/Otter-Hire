@@ -30,6 +30,8 @@ async def run_worker() -> None:
             parse_and_create_candidate_activity,
             publish_update_activity,
         ],
+        max_concurrent_activities=50,
+        max_concurrent_workflow_tasks=20,
     )
     logger.info("Temporal inbound worker started task_queue=%s", settings.temporal_task_queue)
     await worker.run()

@@ -28,6 +28,7 @@ export interface TeamMember {
 const roleBadgeClass: Record<BackendRole, string> = {
   owner: "bg-foreground text-background",
   admin: "bg-foreground/80 text-background",
+  super_admin: "bg-foreground text-background",
   recruiter: "bg-muted text-foreground",
   hiring_manager: "bg-muted text-foreground",
   interviewer: "bg-muted text-muted-foreground",
@@ -71,6 +72,8 @@ function canChangeRole(
   if (target.id === currentUserId)
     return { allowed: false, reason: "You cannot change your own role." };
   if (target.role === "owner") return { allowed: false, reason: "Owner role cannot be changed." };
+  if (target.role === "super_admin")
+    return { allowed: false, reason: "Super Admin role cannot be changed." };
   if (target.role === "admin" && !isOwner)
     return { allowed: false, reason: "Only the Owner can modify Admin roles." };
   if (!isOwner && !isAdmin)
@@ -86,6 +89,8 @@ function canRemove(
 ): { allowed: boolean; reason?: string } {
   if (target.id === currentUserId) return { allowed: false, reason: "You cannot remove yourself." };
   if (target.role === "owner") return { allowed: false, reason: "The Owner cannot be removed." };
+  if (target.role === "super_admin")
+    return { allowed: false, reason: "Super Admin cannot be removed." };
   if (target.role === "admin" && !isOwner)
     return { allowed: false, reason: "Only the Owner can remove Admins." };
   if (!isOwner && !isAdmin)

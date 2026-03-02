@@ -20,6 +20,7 @@ PERMISSIONS = {
 
 ROLE_PERMISSIONS: dict[str, set[str]] = {
     "owner": set(PERMISSIONS),
+    "super_admin": set(PERMISSIONS),
     "admin": {
         "users:read",
         "users:invite",

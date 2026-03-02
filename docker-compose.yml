@@ -28,6 +28,18 @@ services:
     ports:
       - "7233:7233"
 
+  temporal-ui:
+    image: temporalio/ui:2.28.0
+    container_name: ats-temporal-ui
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_UI_PORT=8080
+      - TEMPORAL_UI_PUBLIC_PATH=/temporal-dashboard
+    ports:
+      - "8080:8080"
+    depends_on:
+      - temporal
+
   redis:
     image: redis:7-alpine
     container_name: ats-redis
@@ -106,7 +118,11 @@ services:
     volumes:
       - ./apps/backend:/app
     command: sh -lc "python -m app.workers.inbound_temporal_worker"
-
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f inbound_temporal_worker || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
   web:
     build:
@@ -120,10 +136,12 @@ services:
       NEXT_PUBLIC_APP_ROOT_HOST: localhost:3000
       NEXT_PUBLIC_INBOUND_EMAIL_DOMAIN: inbound.smartats.in
       API_INTERNAL_URL: http://backend:8000
+      TEMPORAL_UI_INTERNAL_URL: http://temporal-ui:8080
     ports:
       - "3000:3000"
     depends_on:
       - backend
+      - temporal-ui
     volumes:
       - ./apps/web:/app/apps/web
       - ./packages/ui:/app/packages/ui

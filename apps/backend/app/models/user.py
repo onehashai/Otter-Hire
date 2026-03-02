@@ -40,7 +40,7 @@ class User(Base):
     __table_args__ = (
         UniqueConstraint("email", name="uq_users_email"),
         CheckConstraint(
-            "role IN ('owner', 'admin', 'recruiter', 'hiring_manager', 'interviewer', 'employee')",
+            "role IN ('owner', 'admin', 'super_admin', 'recruiter', 'hiring_manager', 'interviewer', 'employee')",
             name="ck_users_role",
         ),
         CheckConstraint("status IN ('invited', 'active', 'disabled')", name="ck_users_status"),

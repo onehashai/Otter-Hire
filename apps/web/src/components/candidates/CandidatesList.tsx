@@ -236,7 +236,9 @@ export function CandidatesList({
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell className="text-xs text-muted-foreground text-center">{c.role}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground text-center">
+                      {c.role}
+                    </TableCell>
                     <TableCell className="text-xs text-muted-foreground text-center">
                       {sourceLabel(c.source)}
                     </TableCell>

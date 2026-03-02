@@ -531,7 +531,9 @@ export default function OrganizationSettings() {
                     Status: <span className="font-medium uppercase">{displayedInboxStatus}</span>
                   </div>
                   {verificationError ? (
-                    <div className="text-xs text-red-600">Verification error: {verificationError}</div>
+                    <div className="text-xs text-red-600">
+                      Verification error: {verificationError}
+                    </div>
                   ) : null}
                   {!isVerificationDone ? (
                     <div className="flex flex-wrap items-center gap-2">
@@ -559,8 +561,8 @@ export default function OrganizationSettings() {
                   )}
                   {verificationActionUrl && !isVerificationDone ? (
                     <div className="text-xs text-muted-foreground">
-                      Verification link ready. Click <span className="font-medium">Verify Now</span> to
-                      open provider confirmation.
+                      Verification link ready. Click <span className="font-medium">Verify Now</span>{" "}
+                      to open provider confirmation.
                     </div>
                   ) : null}
                 </>
@@ -586,7 +588,9 @@ export default function OrganizationSettings() {
           ) : (
             <div className="space-y-2 text-sm">
               <div>1. Complete provider verification in the opened tab.</div>
-              <div>2. Return here and click <span className="font-medium">I Have Verified</span>.</div>
+              <div>
+                2. Return here and click <span className="font-medium">I Have Verified</span>.
+              </div>
               {verificationError ? <div className="text-red-600">{verificationError}</div> : null}
             </div>
           )}

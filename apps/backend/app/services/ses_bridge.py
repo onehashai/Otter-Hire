@@ -107,10 +107,7 @@ def _extract_org_id_from_forwarding_address(inbox_address: str) -> str | None:
     if not match:
         return None
     hex_id = match.group(1)
-    return (
-        f"{hex_id[0:8]}-{hex_id[8:12]}-{hex_id[12:16]}-"
-        f"{hex_id[16:20]}-{hex_id[20:32]}"
-    )
+    return f"{hex_id[0:8]}-{hex_id[8:12]}-{hex_id[12:16]}-{hex_id[16:20]}-{hex_id[20:32]}"
 
 
 async def _resolve_inbox_context(inbox_address: str) -> tuple[str, str] | None:
@@ -310,9 +307,8 @@ async def run_ses_raw_bridge_loop(stop_event: asyncio.Event) -> None:
                 await _process_raw_key(s3_client, bucket, key)
 
             now = time.monotonic()
-            if (
-                now - last_cleanup_epoch
-                >= max(60, int(settings.inbound_ignored_cleanup_interval_seconds))
+            if now - last_cleanup_epoch >= max(
+                60, int(settings.inbound_ignored_cleanup_interval_seconds)
             ):
                 await _cleanup_ignored_inbound_records(s3_client, bucket)
                 last_cleanup_epoch = now

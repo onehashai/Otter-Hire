@@ -79,9 +79,7 @@ class Settings(BaseSettings):
     ses_raw_bridge_bucket: str | None = Field(
         default=None, validation_alias="SES_RAW_BRIDGE_BUCKET"
     )
-    ses_raw_bridge_prefix: str = Field(
-        default="", validation_alias="SES_RAW_BRIDGE_PREFIX"
-    )
+    ses_raw_bridge_prefix: str = Field(default="", validation_alias="SES_RAW_BRIDGE_PREFIX")
     ses_raw_bridge_poll_seconds: int = Field(
         default=30, validation_alias="SES_RAW_BRIDGE_POLL_SECONDS"
     )

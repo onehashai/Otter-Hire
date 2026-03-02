@@ -13,7 +13,16 @@ from uuid import UUID
 
 import pycountry
 import redis
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, WebSocket, WebSocketDisconnect
+from fastapi import (
+    APIRouter,
+    Depends,
+    Header,
+    HTTPException,
+    Request,
+    Response,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy import func, or_, select
@@ -1053,8 +1062,7 @@ async def ingest_inbound_email(
             continue
         safe_name = _guess_file_name(att.filename, f"attachment_{idx + 1}.bin")
         storage_key = (
-            f"orgs/{org_inbox.org_id}/inbox/attachments/{inbound_email.id}/"
-            f"{idx + 1}_{safe_name}"
+            f"orgs/{org_inbox.org_id}/inbox/attachments/{inbound_email.id}/{idx + 1}_{safe_name}"
         )
         await storage_service.write_bytes(
             storage_key, content, att.content_type or "application/octet-stream"

@@ -10,7 +10,11 @@ import redis
 from temporalio import activity
 
 from app.core.config import settings
-from app.services.ses_bridge import _extract_text_and_attachments, _post_to_inbound_api, _resolve_inbox_context
+from app.services.ses_bridge import (
+    _extract_text_and_attachments,
+    _post_to_inbound_api,
+    _resolve_inbox_context,
+)
 from app.workflows.types import InboundWorkflowInput
 
 

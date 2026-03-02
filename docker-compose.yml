@@ -1,5 +1,39 @@
 
 services:
+  temporal-postgres:
+    image: postgres:16-alpine
+    container_name: ats-temporal-postgres
+    environment:
+      POSTGRES_USER: temporal
+      POSTGRES_PASSWORD: temporal
+      POSTGRES_DB: temporal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U temporal -d temporal"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  temporal:
+    image: temporalio/auto-setup:1.25.2
+    container_name: ats-temporal
+    environment:
+      - DB=postgres12
+      - DB_PORT=5432
+      - POSTGRES_USER=temporal
+      - POSTGRES_PWD=temporal
+      - POSTGRES_SEEDS=temporal-postgres
+    depends_on:
+      temporal-postgres:
+        condition: service_healthy
+    ports:
+      - "7233:7233"
+
+  redis:
+    image: redis:7-alpine
+    container_name: ats-redis
+    ports:
+      - "6379:6379"
+
   postgres:
     image: postgres:16-alpine
     container_name: ats-postgres
@@ -20,37 +54,58 @@ services:
       context: ./apps/backend
       dockerfile: Dockerfile
     container_name: ats-backend
+    env_file:
+      - ./apps/backend/.env
     environment:
       DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/ats_db
-      IS_PRODUCTION: "false"
       CORS_ORIGINS: http://app.localhost:3000,http://jobs.localhost:3000,http://api.localhost:8000
-      JWT_SECRET_KEY: dev-secret-key-change-this
-      JWT_ALGORITHM: HS256
-      ACCESS_TOKEN_EXPIRE_MINUTES: 10080
       FRONTEND_BASE_URL: http://app.localhost:3000
       COOKIE_DOMAIN: ""
-      # Storage (local dev)
-      LOCAL_STORAGE_ROOT: storage/local
-      MAX_UPLOAD_BYTES: 1048576
-      # Storage (S3 - enable with IS_PRODUCTION=true)
-      # AWS_S3_BUCKET: your-bucket
-      # AWS_S3_REGION: ap-south-1
-      # AWS_ACCESS_KEY_ID: your-access-key
-      # AWS_SECRET_ACCESS_KEY: your-secret-key
-      # AWS_S3_ATTACHMENTS_ENV: staging
-      MAILTRAP_HOST: sandbox.smtp.mailtrap.io
-      MAILTRAP_PORT: 2525
-      MAILTRAP_USERNAME: 4d1305c1a56091
-      MAILTRAP_PASSWORD: 55ae258f81ce38
-      MAILTRAP_FROM_EMAIL: no-reply@onehash.ai
+      TEMPORAL_SERVER_URL: temporal:7233
     ports:
       - "8000:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/openapi.json', timeout=3)\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_started
+      temporal:
+        condition: service_started
     volumes:
       - ./apps/backend:/app
     command: sh -lc "alembic upgrade heads && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+
+  backend-worker:
+    build:
+      context: ./apps/backend
+      dockerfile: Dockerfile
+    container_name: ats-backend-worker
+    env_file:
+      - ./apps/backend/.env
+    environment:
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/ats_db
+      CORS_ORIGINS: http://app.localhost:3000,http://jobs.localhost:3000,http://api.localhost:8000
+      FRONTEND_BASE_URL: http://app.localhost:3000
+      COOKIE_DOMAIN: ""
+      INBOUND_INTERNAL_API_BASE_URL: http://backend:8000
+      TEMPORAL_SERVER_URL: temporal:7233
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      temporal:
+        condition: service_started
+      backend:
+        condition: service_healthy
+    volumes:
+      - ./apps/backend:/app
+    command: sh -lc "python -m app.workers.inbound_temporal_worker"
 
 
   web:
@@ -63,6 +118,7 @@ services:
       NEXT_PUBLIC_APP_SUBDOMAIN: app
       NEXT_PUBLIC_JOBS_SUBDOMAIN: jobs
       NEXT_PUBLIC_APP_ROOT_HOST: localhost:3000
+      NEXT_PUBLIC_INBOUND_EMAIL_DOMAIN: inbound.smartats.in
       API_INTERNAL_URL: http://backend:8000
     ports:
       - "3000:3000"

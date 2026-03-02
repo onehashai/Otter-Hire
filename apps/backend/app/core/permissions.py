@@ -15,6 +15,7 @@ PERMISSIONS = {
     "jobs:publish",
     "jobs:close",
     "jobs:unpublish",
+    "org:inbox:manage",
 }
 
 ROLE_PERMISSIONS: dict[str, set[str]] = {
@@ -31,6 +32,7 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "jobs:publish",
         "jobs:close",
         "jobs:unpublish",
+        "org:inbox:manage",
     },
     "recruiter": {
         "jobs:read",
@@ -40,6 +42,7 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "jobs:publish",
         "jobs:close",
         "jobs:unpublish",
+        "org:inbox:manage",
     },
     "hiring_manager": {
         "jobs:read",

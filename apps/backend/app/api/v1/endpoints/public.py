@@ -1,31 +1,82 @@
+import base64
+import binascii
+import hashlib
+import hmac
+import html
+import json
+import re
+import zipfile
+from datetime import datetime, timezone
+from io import BytesIO
 from typing import Optional
 from uuid import UUID
 
 import pycountry
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
+import redis
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, WebSocket, WebSocketDisconnect
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.security import verify_access_token
 from app.db.session import get_db
 from app.models.candidate import Candidate
 from app.models.candidate_document import CandidateDocument
+from app.models.email import InboundEmail, InboundEmailAttachment
 from app.models.job import Job
 from app.models.job_application import JobApplication
 from app.models.org_membership import OrgMembership
-from app.models.organization import Organization
+from app.models.organization import Organization, OrgInbox
 from app.models.stage import Stage
 from app.schemas.public_jobs import (
+    InboundEmailPayload,
     PublicJobApplyRequest,
     PublicJobApplyResponse,
     PublicJobDetail,
     PublicJobListItem,
 )
+from app.services.inbound_queue import enqueue_ses_raw_key
+from app.services.storage import storage_service
 
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
+
+
+def _extract_s3_event_entries(payload: dict) -> list[tuple[str, str]]:
+    entries: list[tuple[str, str]] = []
+    if not isinstance(payload, dict):
+        return entries
+
+    records = payload.get("Records")
+    if isinstance(records, list):
+        for record in records:
+            if not isinstance(record, dict):
+                continue
+            s3_obj = (record.get("s3") or {}) if isinstance(record.get("s3"), dict) else {}
+            bucket = ((s3_obj.get("bucket") or {}).get("name") or "").strip()
+            key = ((s3_obj.get("object") or {}).get("key") or "").strip()
+            if bucket and key:
+                entries.append((bucket, key))
+        if entries:
+            return entries
+
+    # SNS wrapper payload: {"Type":"Notification","Message":"{...s3 event...}"}
+    message_raw = payload.get("Message")
+    if isinstance(message_raw, str) and message_raw.strip():
+        try:
+            nested = json.loads(message_raw)
+        except Exception:
+            nested = None
+        if isinstance(nested, dict):
+            return _extract_s3_event_entries(nested)
+
+    bucket = str(payload.get("bucket") or "").strip()
+    key = str(payload.get("key") or "").strip()
+    if bucket and key:
+        entries.append((bucket, key))
+    return entries
 
 
 def get_country_name(iso_code: str) -> str:
@@ -130,6 +181,372 @@ def _guess_file_name(file_ref: str, fallback: str) -> str:
         name = cleaned.rsplit("/", 1)[-1]
         return name or fallback
     return cleaned
+
+
+def _is_resume_attachment(filename: str, content_type: str) -> bool:
+    lower_name = (filename or "").lower()
+    lower_type = (content_type or "").lower()
+    if lower_name.endswith(".pdf") or lower_type in {"application/pdf"}:
+        return True
+    if lower_name.endswith(".docx") or lower_type in {
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    }:
+        return True
+    if lower_name.endswith(".doc") or lower_type in {"application/msword"}:
+        return True
+    return False
+
+
+def _extract_email(text: str) -> Optional[str]:
+    match = re.search(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", text, re.IGNORECASE)
+    if not match:
+        return None
+    return match.group(0).strip().lower()
+
+
+def _extract_phone(text: str) -> Optional[str]:
+    candidates = re.finditer(r"(?:\+?\d[\d()\-\s]{8,}\d)", text)
+    best: Optional[str] = None
+    best_score = -1
+
+    for match in candidates:
+        raw = re.sub(r"\s+", " ", match.group(0)).strip()
+        # Common resume pattern: ZIP before phone, e.g. "68005 (402) 291-5432"
+        raw = re.sub(r"^\d{5}\s+(?=\()", "", raw)
+        score = _score_phone(raw)
+        if score <= 0:
+            continue
+
+        if score > best_score:
+            best_score = score
+            best = raw
+
+    return best
+
+
+def _extract_location(text: str) -> Optional[str]:
+    blocked_tokens = {
+        "bachelor",
+        "master",
+        "university",
+        "college",
+        "curriculum",
+        "vitae",
+        "resume",
+        "experience",
+        "education",
+        "objective",
+        "skills",
+        "certification",
+        "project",
+        "linkedin",
+        "github",
+    }
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    for line in lines[:20]:
+        if len(line) > 80:
+            continue
+        lowered = line.lower()
+        if "@" in lowered:
+            continue
+        if any(token in lowered for token in blocked_tokens):
+            continue
+        if re.search(r"\(\s*\(", line):
+            continue
+        alpha_count = sum(1 for ch in line if ch.isalpha())
+        if alpha_count < 4:
+            continue
+
+        # Primary pattern: "City, State/Region [ZIP optional]"
+        if re.fullmatch(r"[A-Za-z .'-]{2,40},\s*[A-Za-z .'-]{2,40}(?:\s+\d{4,6})?", line):
+            return line
+
+        # Secondary pattern: two clean words separated by comma, no excessive symbols.
+        symbol_count = sum(1 for ch in line if not (ch.isalnum() or ch.isspace() or ch in ",.-'"))
+        if symbol_count > 2:
+            continue
+        if "," in line and any(ch.isalpha() for ch in line):
+            return line
+    return None
+
+
+def _score_location(value: Optional[str]) -> int:
+    if not value:
+        return 0
+    line = value.strip()
+    lowered = line.lower()
+    if len(line) < 4 or len(line) > 80:
+        return 0
+
+    blocked_tokens = {
+        "bachelor",
+        "master",
+        "university",
+        "college",
+        "curriculum",
+        "vitae",
+        "resume",
+        "experience",
+        "education",
+        "objective",
+        "skills",
+        "certification",
+        "project",
+    }
+    if any(token in lowered for token in blocked_tokens):
+        return 0
+    if "@" in line:
+        return 0
+
+    score = 1
+    if "," in line:
+        score += 2
+    if re.fullmatch(r"[A-Za-z .'-]{2,40},\s*[A-Za-z .'-]{2,40}(?:\s+\d{4,6})?", line):
+        score += 3
+    if re.search(r"\(\s*\(", line):
+        score -= 3
+    symbol_count = sum(1 for ch in line if not (ch.isalnum() or ch.isspace() or ch in ",.-'"))
+    if symbol_count > 2:
+        score -= 2
+    return max(score, 0)
+
+
+def _should_replace_location(existing_location: Optional[str], new_location: Optional[str]) -> bool:
+    existing_score = _score_location(existing_location)
+    new_score = _score_location(new_location)
+    # Clear noisy existing OCR location when new parse no longer finds a reliable location.
+    if new_location is None and existing_score <= 1:
+        return True
+    if not new_location:
+        return False
+    if not existing_location:
+        return True
+    return new_score > existing_score
+
+
+def _extract_name(text: str, fallback_email: Optional[str]) -> Optional[str]:
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    for line in lines[:12]:
+        if len(line) > 80:
+            continue
+        if "@" in line:
+            continue
+        if re.fullmatch(r"[A-Za-z][A-Za-z .'-]{1,60}", line):
+            return line
+    if fallback_email and "@" in fallback_email:
+        local = fallback_email.split("@", 1)[0].replace(".", " ").replace("_", " ")
+        local = " ".join(part for part in local.split() if part)
+        if local:
+            return local.title()
+    return None
+
+
+def _looks_like_person_name(value: Optional[str]) -> bool:
+    if not value:
+        return False
+    name = value.strip()
+    if len(name) < 3 or len(name) > 80:
+        return False
+    if "@" in name:
+        return False
+    if re.search(r"\d", name):
+        return False
+    parts = [p for p in re.split(r"\s+", name) if p]
+    return len(parts) >= 2
+
+
+def _resume_confidence_score(
+    text: str,
+    extracted_name: Optional[str],
+    extracted_email: Optional[str],
+    extracted_phone: Optional[str],
+    extracted_location: Optional[str],
+) -> int:
+    normalized = re.sub(r"\s+", " ", (text or "")).strip().lower()
+    score = 0
+
+    if extracted_email and extracted_email.endswith("@invalid.local") is False:
+        score += 2
+    if extracted_phone:
+        score += 2
+    if _looks_like_person_name(extracted_name):
+        score += 2
+    if extracted_location:
+        score += 1
+
+    if len(normalized) >= 120:
+        score += 2
+    elif len(normalized) >= 60:
+        score += 1
+
+    resume_keywords = {
+        "experience",
+        "education",
+        "skills",
+        "projects",
+        "summary",
+        "employment",
+        "work history",
+        "certification",
+        "linkedin",
+        "github",
+    }
+    keyword_hits = sum(1 for keyword in resume_keywords if keyword in normalized)
+    score += min(keyword_hits, 3)
+
+    return score
+
+
+def _normalize_phone(value: Optional[str]) -> Optional[str]:
+    if not value:
+        return None
+    digits = re.sub(r"\D", "", value)
+    return digits or None
+
+
+def _score_phone(value: Optional[str]) -> int:
+    if not value:
+        return 0
+    raw = re.sub(r"\s+", " ", value).strip()
+    digits = re.sub(r"\D", "", raw)
+    if len(digits) < 10 or len(digits) > 15:
+        return 0
+
+    score = 0
+    if raw.startswith("+"):
+        score += 2
+    if "(" in raw and ")" in raw:
+        score += 2
+    if "-" in raw:
+        score += 1
+    if len(digits) in {10, 11}:
+        score += 2
+    if re.match(r"^\d{5}\s+\(", raw):
+        score -= 3
+    if len(raw) > 24:
+        score -= 1
+    return score
+
+
+def _should_replace_phone(existing_phone: Optional[str], new_phone: Optional[str]) -> bool:
+    if not new_phone:
+        return False
+    if not existing_phone:
+        return True
+    return _score_phone(new_phone) > _score_phone(existing_phone)
+
+
+def _parse_resume_bytes(filename: str, content_type: str, content: bytes) -> str:
+    def _is_low_text(value: str) -> bool:
+        normalized = re.sub(r"\s+", " ", (value or "")).strip()
+        return len(normalized) < 80
+
+    def _ocr_pdf_bytes(pdf_bytes: bytes) -> str:
+        import pypdfium2 as pdfium
+        import pytesseract
+
+        text_chunks: list[str] = []
+        pdf = pdfium.PdfDocument(pdf_bytes)
+        page_count = min(len(pdf), 3)
+        for page_index in range(page_count):
+            page = pdf[page_index]
+            pil_image = page.render(scale=2).to_pil()
+            ocr_text = pytesseract.image_to_string(pil_image)
+            if ocr_text and ocr_text.strip():
+                text_chunks.append(ocr_text.strip())
+        return "\n".join(text_chunks).strip()
+
+    def _ocr_docx_bytes(docx_bytes: bytes) -> str:
+        import pytesseract
+        from PIL import Image
+
+        text_chunks: list[str] = []
+        with zipfile.ZipFile(BytesIO(docx_bytes)) as archive:
+            media_files = [name for name in archive.namelist() if name.startswith("word/media/")]
+            for media_name in media_files[:4]:
+                image_bytes = archive.read(media_name)
+                try:
+                    image = Image.open(BytesIO(image_bytes))
+                    ocr_text = pytesseract.image_to_string(image)
+                    if ocr_text and ocr_text.strip():
+                        text_chunks.append(ocr_text.strip())
+                except Exception:
+                    continue
+        return "\n".join(text_chunks).strip()
+
+    lower_name = (filename or "").lower()
+    lower_type = (content_type or "").lower()
+    if lower_name.endswith(".pdf") or lower_type == "application/pdf":
+        from pdfminer.high_level import extract_text
+
+        parsed = (extract_text(BytesIO(content)) or "").strip()
+        if not _is_low_text(parsed):
+            return parsed
+        try:
+            ocr = _ocr_pdf_bytes(content)
+            if ocr:
+                return ocr
+        except Exception:
+            pass
+        return parsed
+    if lower_name.endswith(".docx") or lower_type == (
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    ):
+        from docx import Document
+
+        document = Document(BytesIO(content))
+        parsed = "\n".join((p.text or "").strip() for p in document.paragraphs).strip()
+        if not _is_low_text(parsed):
+            return parsed
+        try:
+            ocr = _ocr_docx_bytes(content)
+            if ocr:
+                return ocr
+        except Exception:
+            pass
+        return parsed
+    raise ValueError("Unsupported resume format")
+
+
+def _verify_hmac_signature(signature_header: str, secret: str, raw_body: bytes) -> bool:
+    if not signature_header.startswith("sha256="):
+        return False
+    provided = signature_header.split("=", 1)[1].strip()
+    expected = hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(provided, expected)
+
+
+def _detect_verification_provider(from_email: str, subject: str, body_text: str) -> str | None:
+    source = " ".join([from_email.lower(), subject.lower(), body_text.lower()])
+    if any(token in source for token in ["google", "gmail.com", "accounts.google.com"]):
+        return "gmail"
+    if any(token in source for token in ["outlook", "microsoft", "office365", "live.com"]):
+        return "outlook"
+    return None
+
+
+def _extract_verification_action(body_text: str) -> dict:
+    # Most providers include a confirmation link for forwarding verification.
+    url_match = re.search(r"https://[^\s<>\"]+", body_text)
+    if url_match:
+        return {"type": "link", "url": url_match.group(0)}
+    code_match = re.search(r"\b(\d{6,8})\b", body_text)
+    if code_match:
+        return {"type": "code", "code": code_match.group(1)}
+    return {"type": "manual"}
+
+
+def _is_verification_email(from_email: str, subject: str, body_text: str) -> bool:
+    source = " ".join([from_email.lower(), subject.lower(), body_text.lower()])
+    indicators = [
+        "forwarding",
+        "verify",
+        "verification",
+        "confirm",
+        "confirmation",
+        "verify your",
+    ]
+    return any(token in source for token in indicators)
 
 
 async def get_org_member_id(
@@ -552,3 +969,334 @@ async def apply_public_job(
         id=str(application.id),
         status=application.status,
     )
+
+
+@router.post("/inbound/email")
+@limiter.limit("30/minute")
+async def ingest_inbound_email(
+    request: Request,
+    signature: str = Header(default="", alias="X-OneHash-Signature"),
+    db: AsyncSession = Depends(get_db),
+):
+    raw_body = await request.body()
+    try:
+        payload = InboundEmailPayload.model_validate_json(raw_body)
+    except Exception:
+        raise HTTPException(status_code=422, detail="Invalid inbound payload")
+
+    inbox_address = payload.inbox_address.strip().lower()
+    inbox_result = await db.execute(select(OrgInbox).where(OrgInbox.inbox_address == inbox_address))
+    org_inbox = inbox_result.scalar_one_or_none()
+    if org_inbox is None:
+        raise HTTPException(status_code=404, detail="Inbox configuration not found")
+
+    secret = org_inbox.secret_hash or settings.inbound_webhook_secret
+    if not secret:
+        raise HTTPException(status_code=503, detail="Inbound webhook secret is not configured")
+    if not _verify_hmac_signature(signature, secret, raw_body):
+        raise HTTPException(status_code=401, detail="Invalid signature")
+    if payload.message_id:
+        existing_result = await db.execute(
+            select(InboundEmail).where(
+                InboundEmail.org_id == org_inbox.org_id,
+                InboundEmail.message_id == payload.message_id,
+            )
+        )
+        existing = existing_result.scalar_one_or_none()
+        if existing is not None:
+            return {
+                "status": "ok",
+                "message": "Already processed",
+                "inbound_email_id": str(existing.id),
+            }
+
+    has_resume = any(
+        _is_resume_attachment(att.filename, att.content_type) for att in (payload.attachments or [])
+    )
+    inbound_email = InboundEmail(
+        org_id=org_inbox.org_id,
+        inbox_address=inbox_address,
+        from_email=(payload.from_email or "").strip().lower() or None,
+        from_name=(payload.from_name or "").strip() or None,
+        subject=(payload.subject or "").strip() or None,
+        message_id=(payload.message_id or "").strip() or None,
+        received_at=payload.received_at or datetime.now(timezone.utc),
+        raw_storage_key=(payload.raw_storage_key or "").strip() or None,
+        email_kind="candidate",
+        has_resume_attachment=has_resume,
+        parse_status="ignored",
+        parse_error=None,
+    )
+    db.add(inbound_email)
+    await db.flush()
+
+    parsed_candidate: Candidate | None = None
+    parse_error: str | None = None
+    resume_attachment: InboundEmailAttachment | None = None
+    resume_text: str = ""
+    body_text = "\n".join(
+        [
+            payload.subject or "",
+            payload.text_body or "",
+            html.unescape(re.sub(r"<[^>]+>", " ", payload.html_body or "")),
+        ]
+    ).strip()
+
+    for idx, att in enumerate(payload.attachments or []):
+        if not att.content_base64:
+            continue
+        try:
+            content = base64.b64decode(att.content_base64, validate=True)
+        except (ValueError, binascii.Error):
+            continue
+        if len(content) > settings.inbound_max_attachment_bytes:
+            continue
+        safe_name = _guess_file_name(att.filename, f"attachment_{idx + 1}.bin")
+        storage_key = (
+            f"orgs/{org_inbox.org_id}/inbox/attachments/{inbound_email.id}/"
+            f"{idx + 1}_{safe_name}"
+        )
+        await storage_service.write_bytes(
+            storage_key, content, att.content_type or "application/octet-stream"
+        )
+        attachment_row = InboundEmailAttachment(
+            inbound_email_id=inbound_email.id,
+            filename=safe_name,
+            content_type=att.content_type or "application/octet-stream",
+            storage_key=storage_key,
+            size_bytes=len(content),
+            sha256=hashlib.sha256(content).hexdigest(),
+        )
+        db.add(attachment_row)
+
+        if resume_attachment is None and _is_resume_attachment(safe_name, att.content_type):
+            resume_attachment = attachment_row
+            try:
+                resume_text = _parse_resume_bytes(safe_name, att.content_type, content)
+            except Exception as exc:
+                parse_error = f"Resume parse failed: {exc}"
+
+    inbound_from_email = (inbound_email.from_email or "").strip()
+    inbound_subject = (inbound_email.subject or "").strip()
+    if _is_verification_email(inbound_from_email, inbound_subject, body_text):
+        provider = _detect_verification_provider(inbound_from_email, inbound_subject, body_text)
+        action = _extract_verification_action(body_text)
+        inbound_email.email_kind = "verification"
+        inbound_email.parse_status = "ignored"
+        inbound_email.parse_error = "Verification email captured"
+        org_inbox.verification_status = "action_required"
+        org_inbox.verification_provider = provider or "unknown"
+        org_inbox.verification_email_id = inbound_email.id
+        org_inbox.verification_action_type = action.get("type")
+        org_inbox.verification_action_payload = action
+        org_inbox.verification_detected_at = datetime.now(timezone.utc)
+        org_inbox.verification_error = None
+        org_inbox.status = "pending"
+        await db.commit()
+        return {
+            "status": "ok",
+            "message": "Verification email detected",
+            "inbound_email_id": str(inbound_email.id),
+        }
+
+    if org_inbox.status != "active":
+        inbound_email.parse_status = "ignored"
+        inbound_email.parse_error = "Inbox is pending verification"
+        await db.commit()
+        return {
+            "status": "ok",
+            "message": "Ignored: inbox pending verification",
+            "inbound_email_id": str(inbound_email.id),
+        }
+
+    if not has_resume or resume_attachment is None:
+        inbound_email.parse_status = "ignored"
+        inbound_email.parse_error = "No resume attachment found"
+        await db.commit()
+        return {
+            "status": "ok",
+            "message": "Ignored: no resume attachment",
+            "inbound_email_id": str(inbound_email.id),
+        }
+
+    if parse_error:
+        inbound_email.parse_status = "failed"
+        inbound_email.parse_error = parse_error
+        await db.commit()
+        return {
+            "status": "ok",
+            "message": "Stored with parse failure",
+            "inbound_email_id": str(inbound_email.id),
+        }
+
+    extracted_email = _extract_email(resume_text) or inbound_email.from_email
+    extracted_phone = _extract_phone(resume_text)
+    extracted_name = _extract_name(resume_text, extracted_email) or "Unknown Candidate"
+    extracted_location = _extract_location(resume_text)
+    confidence = _resume_confidence_score(
+        resume_text,
+        extracted_name,
+        extracted_email,
+        extracted_phone,
+        extracted_location,
+    )
+    min_confidence = max(1, int(settings.inbound_resume_min_confidence))
+    if confidence < min_confidence:
+        inbound_email.parse_status = "ignored"
+        inbound_email.parse_error = (
+            f"Low resume confidence ({confidence}<{min_confidence}); candidate not created"
+        )
+        await db.commit()
+        return {
+            "status": "ok",
+            "message": "Ignored: low resume confidence",
+            "inbound_email_id": str(inbound_email.id),
+        }
+
+    candidate_query = None
+    if extracted_email:
+        candidate_query = await db.execute(
+            select(Candidate).where(
+                Candidate.org_id == org_inbox.org_id,
+                func.lower(Candidate.email) == extracted_email.lower(),
+            )
+        )
+    elif extracted_phone:
+        normalized_phone = _normalize_phone(extracted_phone)
+        if normalized_phone:
+            candidate_query = await db.execute(
+                select(Candidate).where(
+                    Candidate.org_id == org_inbox.org_id,
+                    Candidate.phone.is_not(None),
+                    func.regexp_replace(Candidate.phone, r"\\D", "", "g") == normalized_phone,
+                )
+            )
+    candidate = candidate_query.scalars().first() if candidate_query is not None else None
+
+    if candidate is None:
+        candidate = Candidate(
+            org_id=org_inbox.org_id,
+            job_id=None,
+            stage_id=None,
+            status="active",
+            name=extracted_name,
+            email=extracted_email or f"unknown+{inbound_email.id}@invalid.local",
+            phone=extracted_phone,
+            location=extracted_location,
+            profile_links={},
+            source="email_inbound",
+            tags=[],
+        )
+        db.add(candidate)
+        await db.flush()
+    else:
+        if extracted_name and (not candidate.name or candidate.name == "Unknown Candidate"):
+            candidate.name = extracted_name
+        if _should_replace_phone(candidate.phone, extracted_phone):
+            candidate.phone = extracted_phone
+        if _should_replace_location(candidate.location, extracted_location):
+            candidate.location = extracted_location
+
+    latest_version_result = await db.execute(
+        select(func.max(CandidateDocument.version)).where(
+            CandidateDocument.org_id == org_inbox.org_id,
+            CandidateDocument.candidate_id == candidate.id,
+            CandidateDocument.field_key == "resume",
+        )
+    )
+    latest_version = latest_version_result.scalar_one_or_none() or 0
+    existing_hash_result = await db.execute(
+        select(InboundEmailAttachment.sha256)
+        .join(
+            CandidateDocument,
+            CandidateDocument.object_key == InboundEmailAttachment.storage_key,
+        )
+        .where(
+            CandidateDocument.org_id == org_inbox.org_id,
+            CandidateDocument.candidate_id == candidate.id,
+            CandidateDocument.field_key == "resume",
+        )
+        .order_by(CandidateDocument.created_at.desc())
+        .limit(1)
+    )
+    latest_resume_hash = existing_hash_result.scalar_one_or_none()
+    if latest_resume_hash != resume_attachment.sha256:
+        resume_url = await storage_service.resolve_url(resume_attachment.storage_key)
+        db.add(
+            CandidateDocument(
+                org_id=org_inbox.org_id,
+                candidate_id=candidate.id,
+                job_id=None,
+                field_key="resume",
+                field_label_snapshot="Resume",
+                doc_type="resume",
+                name=resume_attachment.filename,
+                url=resume_url,
+                object_key=resume_attachment.storage_key,
+                mime_type=resume_attachment.content_type,
+                size_bytes=resume_attachment.size_bytes,
+                uploaded_by_user_id=None,
+                version=int(latest_version) + 1,
+            )
+        )
+    parsed_candidate = candidate
+
+    inbound_email.parsed_candidate_id = parsed_candidate.id
+    inbound_email.parse_status = "processed"
+    inbound_email.parse_error = None
+    await db.commit()
+
+    return {
+        "status": "ok",
+        "message": "Processed",
+        "inbound_email_id": str(inbound_email.id),
+        "candidate_id": str(parsed_candidate.id),
+    }
+
+
+@router.post("/inbound/s3-event")
+@limiter.limit("120/minute")
+async def enqueue_inbound_s3_event(
+    request: Request,
+):
+    if not settings.inbound_async_pipeline_enabled:
+        raise HTTPException(status_code=409, detail="Async inbound pipeline is disabled")
+    raw_body = await request.body()
+    try:
+        payload = json.loads(raw_body.decode("utf-8"))
+    except Exception:
+        raise HTTPException(status_code=422, detail="Invalid event payload")
+
+    entries = _extract_s3_event_entries(payload)
+    if not entries:
+        raise HTTPException(status_code=422, detail="No S3 object entries found")
+
+    task_ids: list[str] = []
+    for bucket, key in entries:
+        task_ids.append(await enqueue_ses_raw_key(bucket, key))
+
+    return {
+        "status": "accepted",
+        "count": len(task_ids),
+        "task_ids": task_ids,
+    }
+
+
+@router.websocket("/inbound/events/ws")
+async def inbound_events_ws(websocket: WebSocket):
+    await websocket.accept()
+    redis_client = redis.Redis.from_url(settings.redis_url, decode_responses=True)
+    pubsub = redis_client.pubsub(ignore_subscribe_messages=True)
+    pubsub.subscribe(settings.inbound_events_channel)
+    try:
+        while True:
+            message = pubsub.get_message(timeout=1.0)
+            if message and message.get("type") == "message":
+                await websocket.send_text(str(message.get("data", "")))
+    except WebSocketDisconnect:
+        pass
+    finally:
+        try:
+            pubsub.close()
+        except Exception:
+            pass

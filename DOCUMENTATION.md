@@ -2724,3 +2724,82 @@ For production deployment, configure DNS records:
 ## Change Log
 
 - 2024-01-20: Public careers site implemented — added jobs subdomain routing, host-based middleware split, public API endpoints, orgSlug parsing, removed auth enforcement for public pages, updated environment variables and documentation
+
+## Careers Inbox Ingestion (MVP)
+
+### Overview
+
+Organizations can configure a careers inbox and ingest inbound candidate emails into ATS talent pool.
+
+### Data Model
+
+- `org_inboxes`
+  - One row per org (`org_id` unique)
+  - `inbox_address` unique
+  - `provider`, `status` (`inactive|pending|active`)
+  - `secret_hash` (inbound signing secret), verification metadata, timestamps
+- `inbound_emails`
+  - Org-scoped inbound audit trail
+  - Sender/subject/message metadata
+  - `has_resume_attachment`, `parse_status` (`ignored|processed|failed`)
+  - `parsed_candidate_id` linkage
+- `inbound_email_attachments`
+  - Per-attachment metadata
+  - `storage_key`, `size_bytes`, `sha256`
+
+### Inbound Webhook
+
+- Endpoint: `POST /public/inbound/email`
+- Security: `X-OneHash-Signature` (`sha256=<hex>`) HMAC over raw body
+- Shared secret from env: `INBOUND_WEBHOOK_SECRET`
+- Rate limited using existing public limiter pattern
+- Idempotency:
+  - unique `(org_id, message_id)` when `message_id` exists
+  - duplicate deliveries return successful no-op response
+
+### Candidate Upsert Rules
+
+- Candidate is created/updated **only if a resume attachment is present**.
+- Supported parse formats in MVP:
+  - PDF (`pdfminer.six`)
+  - DOCX (`python-docx`)
+- Field extraction (best effort): `name`, `email`, `phone`, `location`
+- Dedupe order:
+  - `(org_id, email)` first
+  - fallback `(org_id, normalized phone)` when email missing
+- Talent pool insertion:
+  - `job_id = null`
+  - `stage_id = null`
+  - `source = email_inbound`
+
+### Storage and Traceability
+
+- Inbound attachments are stored via the existing storage service (`storage_key` / `object_key` model).
+- Candidate resume document references the same stored object key (no duplicate binary copy required).
+- Inbound record keeps audit trace even when candidate is not created.
+
+### Failure Handling
+
+- No resume attachment:
+  - inbound email stored
+  - `parse_status=ignored`
+  - no candidate created
+- Parse failure:
+  - inbound email stored
+  - `parse_status=failed` with `parse_error`
+  - no candidate mutation
+
+### Config
+
+Added backend settings:
+- `INBOUND_WEBHOOK_SECRET`
+- `INBOUND_MAX_ATTACHMENT_BYTES`
+
+### Org Management APIs
+
+- `GET /organizations/me/inbox`
+- `POST /organizations/me/inbox`
+- `POST /organizations/me/inbox/rotate-secret`
+- `POST /organizations/me/inbox/activate`
+
+All management routes are authenticated and permission-protected (`org:inbox:manage`).

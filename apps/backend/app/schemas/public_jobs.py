@@ -84,3 +84,23 @@ class PublicJobApplyRequest(BaseModel):
 class PublicJobApplyResponse(BaseModel):
     id: str
     status: str
+
+
+class InboundAttachmentPayload(BaseModel):
+    filename: str
+    content_type: str
+    content_base64: str
+
+
+class InboundEmailPayload(BaseModel):
+    inbox_address: str
+    from_email: str | None = None
+    from_name: str | None = None
+    subject: str | None = None
+    message_id: str | None = None
+    received_at: datetime | None = None
+    raw_storage_key: str | None = None
+    raw_email_base64: str | None = None
+    text_body: str | None = None
+    html_body: str | None = None
+    attachments: list[InboundAttachmentPayload] = Field(default_factory=list)

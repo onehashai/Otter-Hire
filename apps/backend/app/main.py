@@ -1,3 +1,4 @@
+import asyncio
 from uuid import uuid4
 
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -19,6 +20,7 @@ from app.middleware.errors import (
     validation_exception_handler,
 )
 from app.schemas.common import HealthResponse, RequestContextSchema
+from app.services.ses_bridge import run_ses_raw_bridge_loop
 
 setup_logging()
 
@@ -69,6 +71,23 @@ async def rate_limit_handler(request: Request, exc: SlowRateLimitExceeded):
 async def startup_event():
     mode = "production" if settings.is_production else "development"
     logger.info(f"Starting ATS Backend in {mode} mode")
+    app.state.ses_bridge_stop_event = asyncio.Event()
+    app.state.ses_bridge_task = None
+    if settings.ses_raw_bridge_enabled:
+        app.state.ses_bridge_task = asyncio.create_task(
+            run_ses_raw_bridge_loop(app.state.ses_bridge_stop_event)
+        )
+        logger.info("SES raw bridge background task started")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    stop_event = getattr(app.state, "ses_bridge_stop_event", None)
+    task = getattr(app.state, "ses_bridge_task", None)
+    if stop_event is not None:
+        stop_event.set()
+    if task is not None:
+        await task
 
 
 @app.get("/health", response_model=HealthResponse)

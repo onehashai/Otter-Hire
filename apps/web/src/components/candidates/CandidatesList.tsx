@@ -39,6 +39,17 @@ const stageVariant = (stage: string) => {
   return "secondary";
 };
 
+const sourceLabel = (source: string): string => {
+  const normalized = source.trim().toLowerCase();
+  if (normalized === "job_board") return "Job Portal";
+  if (normalized === "manual") return "Manual";
+  if (normalized === "email_inbound") return "Email Automation";
+  return source
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+};
+
 interface CandidatesListProps {
   candidates: Candidate[];
   selected: Set<string>;
@@ -189,9 +200,10 @@ export function CandidatesList({
                     />
                   </TableHead>
                   <TableHead className="text-xs">Candidate</TableHead>
-                  <TableHead className="text-xs">Applied For</TableHead>
-                  <TableHead className="text-xs">Stage</TableHead>
-                  <TableHead className="text-xs text-right">Activity</TableHead>
+                  <TableHead className="text-xs text-center">Applied For</TableHead>
+                  <TableHead className="text-xs text-center">Source</TableHead>
+                  <TableHead className="text-xs text-center">Stage</TableHead>
+                  <TableHead className="text-xs text-center">Activity</TableHead>
                   <TableHead className="w-10" />
                 </TableRow>
               </TableHeader>
@@ -224,13 +236,16 @@ export function CandidatesList({
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{c.role}</TableCell>
-                    <TableCell>
+                    <TableCell className="text-xs text-muted-foreground text-center">{c.role}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground text-center">
+                      {sourceLabel(c.source)}
+                    </TableCell>
+                    <TableCell className="text-center">
                       <Badge variant={stageVariant(c.stage)} className="text-[10px]">
                         {c.stage}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-xs text-muted-foreground text-right">
+                    <TableCell className="text-xs text-muted-foreground text-center">
                       {c.lastActivity}
                     </TableCell>
                     <TableCell onClick={(e) => e.stopPropagation()}>

@@ -2,8 +2,7 @@
 const nextConfig = {
   async rewrites() {
     const apiUrl = process.env.API_INTERNAL_URL || "http://localhost:8000";
-    const temporalUiUrl =
-      process.env.TEMPORAL_UI_INTERNAL_URL || "http://localhost:8080";
+    const temporalUiUrl = process.env.TEMPORAL_UI_INTERNAL_URL || "http://localhost:8080";
     return [
       {
         source: "/api/:path*",

@@ -1,2 +1,1 @@
 """App store integration modules."""
-

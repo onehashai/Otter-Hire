@@ -43,7 +43,8 @@ export default function AutomationsPage() {
       if (
         search &&
         !a.name.toLowerCase().includes(search.toLowerCase()) &&
-        !a.description.toLowerCase().includes(search.toLowerCase())
+        !a.triggerLabel.toLowerCase().includes(search.toLowerCase()) &&
+        !a.actionLabel.toLowerCase().includes(search.toLowerCase())
       )
         return false;
       if (statusFilter.length && !statusFilter.includes(a.status)) return false;

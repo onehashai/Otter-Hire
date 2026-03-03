@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from app.api.v1.endpoints.auth import router as auth_router
 from app.api.v1.endpoints.candidates import router as candidates_router
 from app.api.v1.endpoints.files import router as files_router
+from app.api.v1.endpoints.integrations import router as integrations_router
 from app.api.v1.endpoints.job_categories import router as job_categories_router
 from app.api.v1.endpoints.jobs import router as jobs_router
 from app.api.v1.endpoints.organizations import router as organizations_router
@@ -17,4 +18,5 @@ api_router.include_router(organizations_router)
 api_router.include_router(job_categories_router)
 api_router.include_router(candidates_router)
 api_router.include_router(files_router)
+api_router.include_router(integrations_router)
 api_router.include_router(public_router, prefix="/public", tags=["public"])

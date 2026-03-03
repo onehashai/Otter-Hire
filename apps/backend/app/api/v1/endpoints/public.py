@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import binascii
 import hashlib
@@ -9,10 +10,12 @@ import zipfile
 from datetime import datetime, timezone
 from io import BytesIO
 from typing import Optional
+from urllib.parse import unquote_plus
+from urllib.request import urlopen
 from uuid import UUID
 
 import pycountry
-import redis
+import redis.asyncio as aioredis
 from fastapi import (
     APIRouter,
     Depends,
@@ -31,6 +34,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.security import verify_access_token
 from app.db.session import get_db
+from app.integrations.app_store.email_integration.temporal.queue import enqueue_ses_raw_key
 from app.models.candidate import Candidate
 from app.models.candidate_document import CandidateDocument
 from app.models.email import InboundEmail, InboundEmailAttachment
@@ -46,7 +50,6 @@ from app.schemas.public_jobs import (
     PublicJobDetail,
     PublicJobListItem,
 )
-from app.services.inbound_queue import enqueue_ses_raw_key
 from app.services.storage import storage_service
 
 router = APIRouter()
@@ -65,7 +68,7 @@ def _extract_s3_event_entries(payload: dict) -> list[tuple[str, str]]:
                 continue
             s3_obj = (record.get("s3") or {}) if isinstance(record.get("s3"), dict) else {}
             bucket = ((s3_obj.get("bucket") or {}).get("name") or "").strip()
-            key = ((s3_obj.get("object") or {}).get("key") or "").strip()
+            key = unquote_plus(((s3_obj.get("object") or {}).get("key") or "").strip())
             if bucket and key:
                 entries.append((bucket, key))
         if entries:
@@ -82,7 +85,7 @@ def _extract_s3_event_entries(payload: dict) -> list[tuple[str, str]]:
             return _extract_s3_event_entries(nested)
 
     bucket = str(payload.get("bucket") or "").strip()
-    key = str(payload.get("key") or "").strip()
+    key = unquote_plus(str(payload.get("key") or "").strip())
     if bucket and key:
         entries.append((bucket, key))
     return entries
@@ -558,6 +561,35 @@ def _is_verification_email(from_email: str, subject: str, body_text: str) -> boo
     return any(token in source for token in indicators)
 
 
+def _extract_request_token(request: Request, authorization: Optional[str]) -> Optional[str]:
+    if authorization and authorization.startswith("Bearer "):
+        return authorization.replace("Bearer ", "", 1).strip()
+    cookie_token = request.cookies.get("access_token")
+    if cookie_token:
+        return cookie_token.strip()
+    return None
+
+
+def _topic_allowed(topic_arn: str) -> bool:
+    allowed = [item.strip() for item in settings.inbound_sns_topic_arns.split(",") if item.strip()]
+    if not allowed:
+        return True
+    return topic_arn in allowed
+
+
+def _confirm_sns_subscription(subscribe_url: str) -> bool:
+    value = (subscribe_url or "").strip()
+    if not value:
+        return False
+    if not value.startswith("https://"):
+        return False
+    try:
+        with urlopen(value, timeout=10) as response:
+            return 200 <= int(response.status) < 300
+    except Exception:
+        return False
+
+
 async def get_org_member_id(
     request: Request,
     authorization: Optional[str] = Header(None),
@@ -565,14 +597,7 @@ async def get_org_member_id(
     org_uuid: UUID = None,
 ) -> Optional[UUID]:
     """Check if request is from org member. Returns user_id if org member, None otherwise."""
-    token = None
-
-    # Try Authorization header first
-    if authorization and authorization.startswith("Bearer "):
-        token = authorization.replace("Bearer ", "")
-    # Fallback to cookie
-    elif request.cookies.get("access_token"):
-        token = request.cookies.get("access_token")
+    token = _extract_request_token(request, authorization)
 
     if not token:
         return None
@@ -1017,6 +1042,7 @@ async def ingest_inbound_email(
                 "status": "ok",
                 "message": "Already processed",
                 "inbound_email_id": str(existing.id),
+                "org_id": str(org_inbox.org_id),
             }
 
     has_resume = any(
@@ -1105,6 +1131,7 @@ async def ingest_inbound_email(
             "status": "ok",
             "message": "Verification email detected",
             "inbound_email_id": str(inbound_email.id),
+            "org_id": str(org_inbox.org_id),
         }
 
     if org_inbox.status != "active":
@@ -1115,6 +1142,7 @@ async def ingest_inbound_email(
             "status": "ok",
             "message": "Ignored: inbox pending verification",
             "inbound_email_id": str(inbound_email.id),
+            "org_id": str(org_inbox.org_id),
         }
 
     if not has_resume or resume_attachment is None:
@@ -1125,6 +1153,7 @@ async def ingest_inbound_email(
             "status": "ok",
             "message": "Ignored: no resume attachment",
             "inbound_email_id": str(inbound_email.id),
+            "org_id": str(org_inbox.org_id),
         }
 
     if parse_error:
@@ -1135,6 +1164,7 @@ async def ingest_inbound_email(
             "status": "ok",
             "message": "Stored with parse failure",
             "inbound_email_id": str(inbound_email.id),
+            "org_id": str(org_inbox.org_id),
         }
 
     extracted_email = _extract_email(resume_text) or inbound_email.from_email
@@ -1159,6 +1189,7 @@ async def ingest_inbound_email(
             "status": "ok",
             "message": "Ignored: low resume confidence",
             "inbound_email_id": str(inbound_email.id),
+            "org_id": str(org_inbox.org_id),
         }
 
     candidate_query = None
@@ -1259,6 +1290,7 @@ async def ingest_inbound_email(
         "message": "Processed",
         "inbound_email_id": str(inbound_email.id),
         "candidate_id": str(parsed_candidate.id),
+        "org_id": str(org_inbox.org_id),
     }
 
 
@@ -1275,12 +1307,36 @@ async def enqueue_inbound_s3_event(
     except Exception:
         raise HTTPException(status_code=422, detail="Invalid event payload")
 
+    message_type = str(payload.get("Type") or "").strip()
+    if message_type == "SubscriptionConfirmation":
+        topic_arn = str(payload.get("TopicArn") or "").strip()
+        if topic_arn and not _topic_allowed(topic_arn):
+            raise HTTPException(status_code=403, detail="SNS topic is not allowed")
+        if settings.inbound_sns_auto_confirm:
+            subscribe_url = str(payload.get("SubscribeURL") or "").strip()
+            if not _confirm_sns_subscription(subscribe_url):
+                raise HTTPException(status_code=502, detail="Failed to confirm SNS subscription")
+        return {"status": "accepted", "message": "subscription_confirmation_received"}
+
+    if message_type == "Notification":
+        topic_arn = str(payload.get("TopicArn") or "").strip()
+        if topic_arn and not _topic_allowed(topic_arn):
+            raise HTTPException(status_code=403, detail="SNS topic is not allowed")
+
     entries = _extract_s3_event_entries(payload)
     if not entries:
         raise HTTPException(status_code=422, detail="No S3 object entries found")
 
+    deduped_entries: list[tuple[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for entry in entries:
+        if entry in seen:
+            continue
+        seen.add(entry)
+        deduped_entries.append(entry)
+
     task_ids: list[str] = []
-    for bucket, key in entries:
+    for bucket, key in deduped_entries:
         task_ids.append(await enqueue_ses_raw_key(bucket, key))
 
     return {
@@ -1292,19 +1348,49 @@ async def enqueue_inbound_s3_event(
 
 @router.websocket("/inbound/events/ws")
 async def inbound_events_ws(websocket: WebSocket):
+    token = websocket.query_params.get("token")
+    if not token:
+        token = websocket.cookies.get("access_token")
+    if not token:
+        await websocket.close(code=4401)
+        return
+
+    try:
+        payload = verify_access_token(token)
+    except Exception:
+        await websocket.close(code=4401)
+        return
+    org_id = str(payload.get("org_id") or "").strip()
+    if not org_id:
+        await websocket.close(code=4403)
+        return
+
     await websocket.accept()
-    redis_client = redis.Redis.from_url(settings.redis_url, decode_responses=True)
+    redis_client = aioredis.from_url(settings.redis_url, decode_responses=True)
     pubsub = redis_client.pubsub(ignore_subscribe_messages=True)
-    pubsub.subscribe(settings.inbound_events_channel)
+    await pubsub.subscribe(settings.inbound_events_channel)
     try:
         while True:
-            message = pubsub.get_message(timeout=1.0)
+            message = await pubsub.get_message(timeout=1.0)
             if message and message.get("type") == "message":
-                await websocket.send_text(str(message.get("data", "")))
+                raw_data = message.get("data", "")
+                try:
+                    data = json.loads(str(raw_data))
+                except Exception:
+                    continue
+                event_org_id = str(data.get("org_id") or "").strip()
+                if event_org_id and event_org_id != org_id:
+                    continue
+                await websocket.send_text(json.dumps(data))
+            await asyncio.sleep(0.05)
     except WebSocketDisconnect:
         pass
     finally:
         try:
-            pubsub.close()
+            await pubsub.close()
+        except Exception:
+            pass
+        try:
+            await redis_client.close()
         except Exception:
             pass

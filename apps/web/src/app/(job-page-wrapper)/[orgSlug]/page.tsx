@@ -152,6 +152,7 @@ export default function CareersListPage() {
               <div className="flex flex-col gap-1">
                 <label className="text-xs text-muted-foreground">Category</label>
                 <SelectField
+                  label="Category"
                   value={categoryFilter}
                   onValueChange={setCategoryFilter}
                   options={[
@@ -165,6 +166,7 @@ export default function CareersListPage() {
               <div className="flex flex-col gap-1">
                 <label className="text-xs text-muted-foreground">Location</label>
                 <SelectField
+                  label="Location"
                   value={locationFilter}
                   onValueChange={setLocationFilter}
                   options={[

@@ -296,10 +296,7 @@ export function ProfileSettings({ user }: ProfileSettingsProps) {
             <div className="flex items-center gap-3">
               <Avatar key={`${avatarUrl ?? "none"}-${avatarFallbackMode}`} className="h-16 w-16">
                 {avatarUrl ? <AvatarImage src={avatarUrl} alt={name || "User"} /> : null}
-                <AvatarFallback
-                  forceMount
-                  className="text-lg bg-gray-100 border border-gray-300 text-gray-700"
-                >
+                <AvatarFallback className="text-lg bg-gray-100 border border-gray-300 text-gray-700">
                   {avatarFallbackMode === "initial" ? (
                     getInitials()
                   ) : (

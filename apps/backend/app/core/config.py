@@ -121,6 +121,19 @@ class Settings(BaseSettings):
     inbound_internal_api_base_url: str = Field(
         default="http://localhost:8000", validation_alias="INBOUND_INTERNAL_API_BASE_URL"
     )
+    inbound_sns_topic_arns: str = Field(default="", validation_alias="INBOUND_SNS_TOPIC_ARNS")
+    inbound_sns_auto_confirm: bool = Field(
+        default=True, validation_alias="INBOUND_SNS_AUTO_CONFIRM"
+    )
+    feature_integrations_app_store_ui: bool = Field(
+        default=False, validation_alias="FEATURE_INTEGRATIONS_APP_STORE_UI"
+    )
+    feature_email_integration_module: bool = Field(
+        default=False, validation_alias="FEATURE_EMAIL_INTEGRATION_MODULE"
+    )
+    feature_legacy_org_inbox_route_redirect: bool = Field(
+        default=False, validation_alias="FEATURE_LEGACY_ORG_INBOX_ROUTE_REDIRECT"
+    )
 
     @property
     def cors_origins(self) -> list[str]:

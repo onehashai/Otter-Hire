@@ -7,7 +7,7 @@ import { Icon } from "@onehash/ui/icon";
 import { Skeleton } from "@onehash/ui/skeleton";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useAuthSession } from "@/app/providers";
-import { RolesAndPermissionsTable } from "@/components/settings/team/RolesAndPermissionsTable";
+import { RolesAndPermissionsTable } from "@/components/settings/team/rolesAndPermissionsTable";
 import {
   TeamMember,
   TeamMembersList as TeamMembers,

@@ -1,9 +1,3 @@
-from __future__ import annotations
+"""Compatibility wrapper for migrated email integration Temporal types."""
 
-from dataclasses import dataclass
-
-
-@dataclass
-class InboundWorkflowInput:
-    bucket: str
-    key: str
+from app.integrations.app_store.email_integration.temporal.types import *  # noqa: F403

@@ -4,37 +4,37 @@
 OneHash ATS is a monorepo-based Applicant Tracking System.
 
 It contains:
-- `apps/web`: Next.js 15 App Router frontend
+- `apps/web`: Next.js App Router frontend
 - `apps/backend`: FastAPI backend with async SQLAlchemy + Alembic
 - `packages/ui`: shared UI components
-- `docker-compose.yml`: local orchestration for Postgres + backend + web
+- `docker-compose.yml`: local orchestration for web, backend, worker, Postgres, Redis, Temporal
 
 Architecture:
-- Local: Browser -> Next.js -> FastAPI -> PostgreSQL
+- Local: Browser -> Next.js -> FastAPI -> PostgreSQL (+ Redis + Temporal for inbound async flow)
 - Production (high level): Cloudflare -> ALB -> ECS -> RDS
 
 ## Quick Start (Docker)
 Run everything with Docker:
 
 ```bash
-docker-compose up --build
+docker compose up --build
 ```
 
 Open:
 - `http://localhost:3000`
-- `http://localhost:8000/health`
+- `http://localhost:8000/openapi.json`
 - `http://localhost:3000/debug-api`
 
 Stop:
 
 ```bash
-docker-compose down
+docker compose down
 ```
 
 Reset (remove DB volume too):
 
 ```bash
-docker-compose down -v
+docker compose down -v
 ```
 
 ## Manual Start (Without Docker)
@@ -69,7 +69,7 @@ Open:
 ### Option A: Database with Docker (recommended)
 
 ```bash
-docker-compose up -d postgres
+docker compose up -d postgres
 ```
 
 Postgres connection values used by this project:
@@ -113,15 +113,11 @@ uvicorn app.main:app --reload --port 8000
 Health checks:
 
 ```bash
-curl http://localhost:8000/health
-curl http://localhost:8000/me
+curl http://localhost:8000/openapi.json
+curl http://localhost:8000/auth/me
 ```
 
-Expected `/health`:
-
-```json
-{"status":"ok"}
-```
+Expected `/openapi.json`: HTTP `200 OK`
 
 ## Alembic Commands (All Common Commands)
 
@@ -249,9 +245,29 @@ ATS/
 │   └── backend/
 ├── packages/
 │   └── ui/
-├── infra/
+├── docs/
+├── scripts/
 ├── docker-compose.yml
 └── README.md
+```
+
+## Internal QA Assets (Non-Blocking)
+
+The repository includes internal QA/support assets under:
+
+- `docs/`
+- `scripts/`
+
+These are internal runbooks and smoke/guard scripts for regression safety during MVP stabilization.  
+They are **not release-gating by default** and are **not required for runtime**.
+
+Useful commands:
+
+```bash
+scripts/smoke_platform_baseline.sh
+scripts/smoke_integrations_frontend.sh
+scripts/smoke_integrations_cutover.sh
+scripts/verify_integrations_architecture.sh
 ```
 
 ## Troubleshooting

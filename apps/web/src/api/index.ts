@@ -53,3 +53,6 @@ export * from "./candidates/index";
 
 // Users
 export * from "./users/index";
+
+// Integrations
+export * from "./integrations/index";

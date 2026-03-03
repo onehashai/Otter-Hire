@@ -27,6 +27,7 @@ import {
   type JobListItemResponse,
   type CandidateListItemResponse,
 } from "@/api";
+import { API_BASE_URL } from "@/api/client/client";
 
 const stages = ["Applied", "Screening", "Interview", "Offer", "Hired", "Rejected"];
 const stageOptions = stages.map((s) => ({ value: s, label: s }));
@@ -111,7 +112,7 @@ export default function CandidatesPage() {
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+    const refreshCandidates = async () => {
       try {
         setLoading(true);
         const data = await getCandidatesPaginated({
@@ -132,11 +133,73 @@ export default function CandidatesPage() {
       } finally {
         if (!cancelled) setLoading(false);
       }
-    })();
+    };
+    void refreshCandidates();
     return () => {
       cancelled = true;
     };
   }, [toast, page, search]);
+
+  useEffect(() => {
+    let stopped = false;
+    let socket: WebSocket | null = null;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let syncTimer: ReturnType<typeof setInterval> | null = null;
+
+    const refreshCandidates = async () => {
+      try {
+        const data = await getCandidatesPaginated({
+          limit: pageSize,
+          offset: (page - 1) * pageSize,
+          search: search.trim() || undefined,
+        });
+        if (!stopped) {
+          setItems(data.items);
+          setTotal(data.total);
+        }
+      } catch {
+        // Websocket refresh is best-effort; polling and manual actions still work.
+      }
+    };
+
+    const connect = () => {
+      if (stopped) return;
+      const wsBase = API_BASE_URL.replace(/^http/i, "ws");
+      socket = new WebSocket(`${wsBase}/public/inbound/events/ws`);
+
+      socket.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data) as Record<string, unknown>;
+          if (payload.event === "inbound_processed") {
+            void refreshCandidates();
+          }
+        } catch {
+          // Ignore malformed events to keep the stream alive.
+        }
+      };
+
+      socket.onclose = () => {
+        if (stopped) return;
+        retryTimer = setTimeout(connect, 3000);
+      };
+    };
+
+    connect();
+    syncTimer = setInterval(() => {
+      if (!stopped) {
+        void refreshCandidates();
+      }
+    }, 30000);
+
+    return () => {
+      stopped = true;
+      if (retryTimer) clearTimeout(retryTimer);
+      if (syncTimer) clearInterval(syncTimer);
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.close();
+      }
+    };
+  }, [page, search, pageSize]);
 
   useEffect(() => {
     let cancelled = false;

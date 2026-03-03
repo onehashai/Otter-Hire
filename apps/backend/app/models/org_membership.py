@@ -32,7 +32,10 @@ class OrgMembership(Base):
     __table_args__ = (
         UniqueConstraint("user_id", "org_id", name="uq_org_memberships_user_org"),
         CheckConstraint(
-            "role IN ('owner', 'admin', 'super_admin', 'recruiter', 'hiring_manager', 'interviewer', 'employee')",
+            "role IN ("
+            "'owner', 'admin', 'super_admin', 'recruiter', "
+            "'hiring_manager', 'interviewer', 'employee'"
+            ")",
             name="ck_org_memberships_role",
         ),
         CheckConstraint(

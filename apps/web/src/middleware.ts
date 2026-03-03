@@ -72,7 +72,8 @@ export function middleware(request: NextRequest) {
 
   if (AUTH_ROUTES.has(pathname)) {
     if (hasAccessToken) {
-      return NextResponse.redirect(new URL("/dashboard", request.url));
+      // Dashboard route is intentionally disabled for MVP; use root landing.
+      return NextResponse.redirect(new URL("/", request.url));
     }
     return NextResponse.next();
   }

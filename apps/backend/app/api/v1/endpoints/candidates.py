@@ -72,7 +72,7 @@ async def _log_activity(
 async def create_candidate(
     body: CandidateCreateRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("jobs:update")),
+    current_user: User = Depends(require_permission("candidates:source")),
 ):
     job = None
     if body.job_id is not None:
@@ -162,7 +162,7 @@ async def create_candidate(
 @router.get("", response_model=list[CandidateListItemResponse])
 async def list_candidates(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("jobs:read")),
+    current_user: User = Depends(require_permission("candidates:read")),
     search: str | None = Query(default=None, max_length=200),
     job_id: UUID | None = None,
     stage_id: UUID | None = None,
@@ -243,7 +243,7 @@ async def list_candidates(
 @router.get("/paginated", response_model=CandidateListResponse)
 async def list_candidates_paginated(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("jobs:read")),
+    current_user: User = Depends(require_permission("candidates:read")),
     search: str | None = Query(default=None, max_length=200),
     job_id: UUID | None = None,
     stage_id: UUID | None = None,
@@ -344,7 +344,7 @@ async def list_candidates_paginated(
 async def get_candidate(
     candidate_id: UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("jobs:read")),
+    current_user: User = Depends(require_permission("candidates:read")),
 ):
     result = await db.execute(
         select(Candidate, Job.title, Stage.name)
@@ -381,7 +381,7 @@ async def update_candidate(
     candidate_id: UUID,
     body: CandidateUpdateRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("jobs:update")),
+    current_user: User = Depends(require_permission("candidates:source")),
 ):
     result = await db.execute(
         select(Candidate).where(
@@ -447,7 +447,7 @@ async def update_candidate_stage(
     candidate_id: UUID,
     body: CandidateStageUpdateRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("jobs:update")),
+    current_user: User = Depends(require_permission("candidates:stage_update")),
 ):
     result = await db.execute(
         select(Candidate).where(
@@ -495,7 +495,7 @@ async def update_candidate_status(
     candidate_id: UUID,
     body: CandidateStatusUpdateRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("jobs:update")),
+    current_user: User = Depends(require_permission("candidates:stage_update")),
 ):
     result = await db.execute(
         select(Candidate).where(
@@ -524,7 +524,7 @@ async def update_candidate_status(
 async def bulk_update_candidate_stage(
     body: CandidateBulkStageUpdateRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("jobs:update")),
+    current_user: User = Depends(require_permission("candidates:stage_update")),
 ):
     ids = list(dict.fromkeys(body.candidate_ids))
     result = await db.execute(
@@ -574,7 +574,7 @@ async def bulk_update_candidate_stage(
 async def bulk_update_candidate_status(
     body: CandidateBulkStatusUpdateRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("jobs:update")),
+    current_user: User = Depends(require_permission("candidates:stage_update")),
 ):
     ids = list(dict.fromkeys(body.candidate_ids))
     result = await db.execute(
@@ -602,7 +602,7 @@ async def bulk_update_candidate_status(
 async def get_candidate_overview(
     candidate_id: UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("jobs:read")),
+    current_user: User = Depends(require_permission("candidates:read")),
 ):
     candidate_result = await db.execute(
         select(Candidate.id).where(
@@ -662,7 +662,7 @@ async def create_candidate_note(
     candidate_id: UUID,
     body: CandidateNoteRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("jobs:update")),
+    current_user: User = Depends(require_permission("candidates:feedback")),
 ):
     candidate_result = await db.execute(
         select(Candidate).where(
@@ -704,7 +704,7 @@ async def create_candidate_note(
 async def list_candidate_interviews(
     candidate_id: UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("jobs:read")),
+    current_user: User = Depends(require_permission("candidates:read")),
 ):
     candidate_result = await db.execute(
         select(Candidate).where(
@@ -745,7 +745,7 @@ async def create_candidate_interview(
     candidate_id: UUID,
     body: CandidateInterviewCreateRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("jobs:update")),
+    current_user: User = Depends(require_permission("interviews:schedule")),
 ):
     candidate_result = await db.execute(
         select(Candidate).where(
@@ -804,7 +804,7 @@ async def create_candidate_feedback(
     interview_id: UUID,
     body: CandidateFeedbackCreateRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("jobs:update")),
+    current_user: User = Depends(require_permission("interviews:feedback")),
 ):
     interview_result = await db.execute(
         select(Interview).where(
@@ -852,7 +852,7 @@ async def create_candidate_feedback(
 async def get_candidate_evaluation(
     candidate_id: UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("jobs:read")),
+    current_user: User = Depends(require_permission("candidates:read")),
 ):
     reviewer = aliased(User)
     result = await db.execute(
@@ -898,7 +898,7 @@ async def get_candidate_evaluation(
 async def list_candidate_documents(
     candidate_id: UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("jobs:read")),
+    current_user: User = Depends(require_permission("candidates:read")),
 ):
     candidate_result = await db.execute(
         select(Candidate).where(
@@ -950,7 +950,7 @@ async def upload_candidate_document(
     field_key: str = Form(default="attachment"),
     field_label: str | None = Form(default=None),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("jobs:update")),
+    current_user: User = Depends(require_permission("candidates:source")),
 ):
     candidate_result = await db.execute(
         select(Candidate).where(
@@ -1024,7 +1024,7 @@ async def delete_candidate_document(
     candidate_id: UUID,
     document_id: UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("jobs:update")),
+    current_user: User = Depends(require_permission("candidates:source")),
 ):
     candidate_result = await db.execute(
         select(Candidate).where(

@@ -13,6 +13,7 @@ from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.errors import make_error_payload
 from app.core.logging import logger, setup_logging
+from app.integrations.app_store.email_integration.ses_bridge import run_ses_raw_bridge_loop
 from app.middleware.context import RequestContext, get_request_context
 from app.middleware.errors import (
     generic_exception_handler,
@@ -20,7 +21,6 @@ from app.middleware.errors import (
     validation_exception_handler,
 )
 from app.schemas.common import HealthResponse, RequestContextSchema
-from app.services.ses_bridge import run_ses_raw_bridge_loop
 
 setup_logging()
 

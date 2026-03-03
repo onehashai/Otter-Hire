@@ -258,6 +258,52 @@ The following module-level changes were added after the previous section and are
    - Backend files:
      - `apps/backend/app/services/storage.py`
      - `apps/backend/app/services/media.py`
+
+### Latest Delta (2026-03-03) – Integrations Cutover + Permission Matrix Alignment
+
+The following updates are now implemented and should be treated as the current source of truth for this codebase state:
+
+1. Integrations app-store cutover completed for email/careers inbox:
+   - Integrations APIs are active under:
+     - `GET /integrations/apps`
+     - `GET /integrations/installed`
+     - `GET /integrations/email/config`
+     - `PUT /integrations/email/config`
+     - `POST /integrations/email/rotate-secret`
+     - `POST /integrations/email/activate`
+     - `POST /integrations/email/verify-now`
+     - `POST /integrations/email/verify-complete`
+   - Legacy org inbox management routes are removed from organizations endpoint surface.
+   - Backend files:
+     - `apps/backend/app/api/v1/endpoints/integrations.py`
+     - `apps/backend/app/integrations/app_store/registry.py`
+
+2. Frontend settings migration to integrations module:
+   - Careers inbox configuration is now represented as Email Integration under Settings > Integrations.
+   - Feature module path:
+     - `apps/web/src/features/integrations/app-store/email-integration/`
+   - Integrations page consumes module composition rather than legacy org-settings inbox tab.
+
+3. Authorization model aligned with current role matrix:
+   - New granular permissions are enforced:
+     - `candidates:read`, `candidates:source`, `candidates:stage_update`, `candidates:feedback`
+     - `interviews:schedule`, `interviews:feedback`
+     - `reports:read`, `settings:system`, `billing:manage`
+   - `super_admin` role is present in models, migrations, permission map, and frontend role types.
+   - Key enforcement file:
+     - `apps/backend/app/core/permissions.py`
+   - Candidate/interview endpoint guards updated to use granular candidate/interview permissions:
+     - `apps/backend/app/api/v1/endpoints/candidates.py`
+
+4. Validation assets kept as internal, non-release-gating support:
+   - Runbooks:
+     - `docs/runbooks/regression-checklist-pre-refactor.md`
+     - `docs/runbooks/integrations-cutover-checklist.md`
+   - Scripts:
+     - `scripts/smoke_platform_baseline.sh`
+     - `scripts/smoke_integrations_frontend.sh`
+     - `scripts/smoke_integrations_cutover.sh`
+     - `scripts/verify_integrations_architecture.sh`
      - `apps/backend/app/core/config.py`
    - Environment and infra:
      - `apps/backend/.env.example`
@@ -1554,6 +1600,8 @@ Transitions `open` or `draft` → `closed`.
 
 **Response** (200 OK): Full job object with `status: "closed"` and `closed_at` set.
 
+Note: In current runtime code, this action is exposed as `POST /jobs/{id}/archive` with the same close semantics.
+
 ### 7.7 POST /jobs/{id}/unpublish — Unpublish Job
 
 Transitions `open` → `draft`. Clears `published_at`.
@@ -1676,9 +1724,9 @@ Transitions `open` → `draft`. Clears `published_at`.
 
 ## Notes
 
-- Candidates permissions are not yet implemented (future phase).
-- Billing/account-delete permissions exist conceptually for owner but no endpoints exist yet.
-- Authentication (JWT, cookies, /auth/me, require_active_user) is unchanged.
+- Candidate and interview permissions are implemented and enforced through granular permission keys in `apps/backend/app/core/permissions.py` and endpoint guards in `apps/backend/app/api/v1/endpoints/candidates.py`.
+- Billing permission key exists in permission model (`billing:manage`), but dedicated billing domain endpoints are still limited and should be validated per deployment scope.
+- Authentication (JWT, cookies, /auth/me, require_active_user) remains active and unchanged in architecture.
 
 ---
 
@@ -2795,11 +2843,81 @@ Added backend settings:
 - `INBOUND_WEBHOOK_SECRET`
 - `INBOUND_MAX_ATTACHMENT_BYTES`
 
-### Org Management APIs
+### Integrations Management APIs (Current)
 
-- `GET /organizations/me/inbox`
-- `POST /organizations/me/inbox`
-- `POST /organizations/me/inbox/rotate-secret`
-- `POST /organizations/me/inbox/activate`
+- `GET /integrations/apps`
+- `GET /integrations/installed`
+- `GET /integrations/email/config`
+- `PUT /integrations/email/config`
+- `POST /integrations/email/rotate-secret`
+- `POST /integrations/email/activate`
+- `POST /integrations/email/verify-now`
+- `POST /integrations/email/verify-complete`
 
 All management routes are authenticated and permission-protected (`org:inbox:manage`).
+Legacy `/organizations/me/inbox*` management routes are removed.
+
+---
+
+## Codebase Coverage Addendum (2026-03-03 Full Scan)
+
+This section captures implemented behavior found in code that was previously missing or under-documented in earlier sections.
+
+### Backend API surfaces (additional)
+
+1. Inbound async + live updates:
+- `POST /public/inbound/s3-event`
+- `WS /public/inbound/events/ws`
+- File: `apps/backend/app/api/v1/endpoints/public.py`
+
+2. Local file serving (dev/local storage):
+- `GET /files/local/{object_key:path}`
+- File: `apps/backend/app/api/v1/endpoints/files.py`
+
+3. Organization categories:
+- `GET /organizations/categories`
+- `POST /organizations/categories`
+- `DELETE /organizations/categories/{category_id}`
+- File: `apps/backend/app/api/v1/endpoints/job_categories.py`
+
+4. Candidate documents include delete:
+- `DELETE /candidates/{candidate_id}/documents/{document_id}`
+- File: `apps/backend/app/api/v1/endpoints/candidates.py`
+
+### Role/permission clarifications from code
+
+1. `super_admin` is implemented in:
+- DB/model constraints (`users`, `org_memberships`)
+- permission map (`apps/backend/app/core/permissions.py`)
+- frontend role typing/matrix (`apps/web/src/components/settings/team/lib/permissonMatrix.ts`)
+
+2. API-assignable roles are still restricted to:
+- `admin`, `recruiter`, `hiring_manager`, `interviewer`, `employee`
+- `owner` and `super_admin` are not assignable through invite/role-change payload enums.
+
+3. Jobs close behavior path:
+- effective endpoint is `POST /jobs/{job_id}/archive` (permission key remains `jobs:close`).
+
+### Frontend route coverage (settings)
+
+Active settings routes in code include:
+- `/settings/integrations`
+- `/settings/admin` (super-admin gated UI page)
+- `/settings/categories`
+- `/settings/custom-fields`
+- `/settings/billing`
+- `/settings/team`
+- `/settings/profile`
+- `/settings/organization`
+
+### Internal QA assets (kept in repo, non-release-gating)
+
+Runbooks:
+- `docs/runbooks/regression-checklist-pre-refactor.md`
+- `docs/runbooks/integrations-cutover-checklist.md`
+
+Scripts:
+- `scripts/smoke_platform_baseline.sh`
+- `scripts/smoke_integrations_frontend.sh`
+- `scripts/smoke_integrations_cutover.sh`
+- `scripts/verify_integrations_architecture.sh`

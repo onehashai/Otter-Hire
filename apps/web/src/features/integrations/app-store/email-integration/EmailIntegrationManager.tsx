@@ -10,7 +10,14 @@ import {
   verifyNowEmailIntegration,
 } from "@/api";
 import { Button } from "@onehash/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@onehash/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@onehash/ui/dialog";
 import { InputField } from "@onehash/ui/input";
 import { Separator } from "@onehash/ui/separator";
 import { Loader2 } from "lucide-react";
@@ -215,11 +222,23 @@ export function EmailIntegrationManager({ onChanged }: EmailIntegrationManagerPr
       />
       <div className="flex flex-wrap gap-2">
         {!hasInboxConfig ? (
-          <Button size="sm" type="button" className="text-xs h-8" onClick={handleInboxSave} disabled={!canSaveInbox}>
+          <Button
+            size="sm"
+            type="button"
+            className="text-xs h-8"
+            onClick={handleInboxSave}
+            disabled={!canSaveInbox}
+          >
             {inboxSaving ? "Saving..." : "Save"}
           </Button>
         ) : (
-          <Button size="sm" type="button" variant="outline" className="text-xs h-8" onClick={handleChangeEmail}>
+          <Button
+            size="sm"
+            type="button"
+            variant="outline"
+            className="text-xs h-8"
+            onClick={handleChangeEmail}
+          >
             Change Email
           </Button>
         )}
@@ -235,7 +254,13 @@ export function EmailIntegrationManager({ onChanged }: EmailIntegrationManagerPr
             className="text-sm h-10 md:h-9 font-mono"
           />
           <div className="flex flex-wrap items-center gap-2">
-            <Button size="sm" type="button" variant="outline" className="text-xs h-8" onClick={handleCopyForwardingAddress}>
+            <Button
+              size="sm"
+              type="button"
+              variant="outline"
+              className="text-xs h-8"
+              onClick={handleCopyForwardingAddress}
+            >
               {copiedForwarding ? "Copied" : "Copy"}
             </Button>
             <div className="text-xs text-muted-foreground">
@@ -245,7 +270,9 @@ export function EmailIntegrationManager({ onChanged }: EmailIntegrationManagerPr
           <div className="text-xs text-muted-foreground">
             Status: <span className="font-medium uppercase">{displayedInboxStatus}</span>
           </div>
-          {verificationError ? <div className="text-xs text-red-600">Verification error: {verificationError}</div> : null}
+          {verificationError ? (
+            <div className="text-xs text-red-600">Verification error: {verificationError}</div>
+          ) : null}
           {!isVerificationDone ? (
             <div className="flex flex-wrap items-center gap-2">
               <Button
@@ -315,7 +342,11 @@ export function EmailIntegrationManager({ onChanged }: EmailIntegrationManagerPr
                 {inboxActivating ? "Confirming..." : "I Have Verified"}
               </Button>
             ) : (
-              <Button type="button" className="text-xs h-8" onClick={() => setVerifyDialogOpen(false)}>
+              <Button
+                type="button"
+                className="text-xs h-8"
+                onClick={() => setVerifyDialogOpen(false)}
+              >
                 Close
               </Button>
             )}

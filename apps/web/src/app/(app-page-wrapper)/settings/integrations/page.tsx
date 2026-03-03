@@ -3,7 +3,12 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Image from "next/image";
-import { getInstalledIntegrationApps, getIntegrationApps, type IntegrationAppDescriptor, type IntegrationInstalledApp } from "@/api";
+import {
+  getInstalledIntegrationApps,
+  getIntegrationApps,
+  type IntegrationAppDescriptor,
+  type IntegrationInstalledApp,
+} from "@/api";
 import { EmailIntegrationAppIcon } from "@/features/integrations/app-store/email-integration/EmailIntegrationAppIcon";
 import { EmailIntegrationManager } from "@/features/integrations/app-store/email-integration/EmailIntegrationManager";
 import { Card, CardContent, CardHeader, CardTitle } from "@onehash/ui/card";
@@ -130,9 +135,15 @@ export default function IntegrationsSettingsPage() {
                   <CardContent className="space-y-3">
                     <p className="text-xs text-muted-foreground min-h-10">{app.description}</p>
                     <div className="flex items-center justify-between">
-                      <span className="text-[11px] uppercase text-muted-foreground">{app.category}</span>
+                      <span className="text-[11px] uppercase text-muted-foreground">
+                        {app.category}
+                      </span>
                       {app.slug === "email-integration" ? (
-                        <Button size="sm" className="text-xs h-8" onClick={() => setDialogOpen(true)}>
+                        <Button
+                          size="sm"
+                          className="text-xs h-8"
+                          onClick={() => setDialogOpen(true)}
+                        >
                           {app.installed ? "Manage" : "Configure"}
                         </Button>
                       ) : (

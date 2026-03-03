@@ -237,6 +237,40 @@ def _extract_phone(text: str) -> Optional[str]:
 
 
 def _extract_location(text: str) -> Optional[str]:
+    def _clean_location_candidate(raw: str) -> str:
+        # Resume headers often mix location + phone/email with separators.
+        # Keep only the left-most location-like segment.
+        part = re.split(r"[•|]", raw, maxsplit=1)[0]
+        part = re.sub(r"\s+", " ", part).strip(" ,;-")
+        return part
+
+    def _looks_like_location(value: str) -> bool:
+        if len(value) < 4 or len(value) > 60:
+            return False
+        if any(ch.isdigit() for ch in value):
+            return False
+        # Require comma-separated city + state/region/country style.
+        if "," not in value:
+            return False
+        # Reject job/company-like phrases.
+        job_tokens = {
+            "intern",
+            "engineer",
+            "developer",
+            "manager",
+            "analyst",
+            "research",
+            "limited",
+            "private",
+            "technologies",
+            "solutions",
+            "software",
+        }
+        lowered = value.lower()
+        if any(token in lowered for token in job_tokens):
+            return False
+        return bool(re.fullmatch(r"[A-Za-z .'-]{2,40},\s*[A-Za-z .'-]{2,40}", value))
+
     blocked_tokens = {
         "bachelor",
         "master",
@@ -259,8 +293,6 @@ def _extract_location(text: str) -> Optional[str]:
         if len(line) > 80:
             continue
         lowered = line.lower()
-        if "@" in lowered:
-            continue
         if any(token in lowered for token in blocked_tokens):
             continue
         if re.search(r"\(\s*\(", line):
@@ -269,16 +301,21 @@ def _extract_location(text: str) -> Optional[str]:
         if alpha_count < 4:
             continue
 
+        candidate = _clean_location_candidate(line)
+        if _looks_like_location(candidate):
+            return candidate
+
         # Primary pattern: "City, State/Region [ZIP optional]"
         if re.fullmatch(r"[A-Za-z .'-]{2,40},\s*[A-Za-z .'-]{2,40}(?:\s+\d{4,6})?", line):
             return line
 
-        # Secondary pattern: two clean words separated by comma, no excessive symbols.
+        # Secondary pattern: clean comma phrase without obvious job/company tokens.
         symbol_count = sum(1 for ch in line if not (ch.isalnum() or ch.isspace() or ch in ",.-'"))
         if symbol_count > 2:
             continue
-        if "," in line and any(ch.isalpha() for ch in line):
-            return line
+        relaxed = _clean_location_candidate(line)
+        if _looks_like_location(relaxed):
+            return relaxed
     return None
 
 

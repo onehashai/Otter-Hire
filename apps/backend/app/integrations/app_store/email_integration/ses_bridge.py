@@ -318,18 +318,61 @@ async def run_ses_raw_bridge_loop(stop_event: asyncio.Event) -> None:
     )
     logger.info("SES bridge started bucket=%s prefix=%s", bucket, prefix)
     last_cleanup_epoch = 0.0
+    max_parallel = 10
     while not stop_event.is_set():
         try:
-            response = s3_client.list_objects_v2(
-                Bucket=bucket,
-                Prefix=prefix,
-                MaxKeys=max(1, settings.ses_raw_bridge_max_keys),
+            # Paginate across all available objects so new keys are not skipped when
+            # the prefix grows beyond a single list_objects_v2 page.
+            keys_with_mtime: list[tuple[str, datetime | None]] = []
+            continuation_token: str | None = None
+            while True:
+                request = {
+                    "Bucket": bucket,
+                    "Prefix": prefix,
+                    "MaxKeys": max(1, settings.ses_raw_bridge_max_keys),
+                }
+                if continuation_token:
+                    request["ContinuationToken"] = continuation_token
+                response = s3_client.list_objects_v2(**request)
+                keys_with_mtime.extend(
+                    (obj["Key"], obj.get("LastModified")) for obj in response.get("Contents", [])
+                )
+                if not response.get("IsTruncated"):
+                    break
+                continuation_token = response.get("NextContinuationToken")
+                if not continuation_token:
+                    break
+
+            # Prioritize latest raw emails first for lower end-to-end latency.
+            keys_with_mtime.sort(
+                key=lambda item: item[1] or datetime.fromtimestamp(0, tz=timezone.utc),
+                reverse=True,
             )
-            keys = [obj["Key"] for obj in response.get("Contents", [])]
-            for key in keys:
+
+            if keys_with_mtime:
+                newest_seen = keys_with_mtime[0][1]
+                logger.info(
+                    "SES bridge scan bucket=%s prefix=%s keys=%s newest=%s",
+                    bucket,
+                    prefix,
+                    len(keys_with_mtime),
+                    newest_seen.isoformat() if newest_seen else None,
+                )
+
+            semaphore = asyncio.Semaphore(max_parallel)
+
+            async def _process_with_limit(raw_key: str) -> None:
+                async with semaphore:
+                    await _process_raw_key(s3_client, bucket, raw_key)
+
+            tasks: list[asyncio.Task[None]] = []
+            for key, _ in keys_with_mtime:
                 if stop_event.is_set():
                     break
-                await _process_raw_key(s3_client, bucket, key)
+                tasks.append(asyncio.create_task(_process_with_limit(key)))
+
+            if tasks:
+                await asyncio.gather(*tasks)
 
             now = time.monotonic()
             if now - last_cleanup_epoch >= max(

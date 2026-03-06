@@ -33,6 +33,15 @@ function VerifyEmailContent() {
         sessionStorage.removeItem("invite_token");
         await refreshSession();
         localStorage.setItem("session_updated", Date.now().toString());
+
+        // Verification does not always imply an authenticated cookie in this browser session
+        // (e.g. user opened email link in a different browser/incognito). In that case,
+        // send user to login with a success hint and continue normal post-login routing.
+        if (!user) {
+          router.replace("/login?verified=1");
+          return;
+        }
+
         if (inviteToken) {
           router.replace(`/invite/${encodeURIComponent(inviteToken)}`);
         } else {
@@ -44,7 +53,7 @@ function VerifyEmailContent() {
         setVerifying(false);
       }
     },
-    [refreshSession, router],
+    [refreshSession, router, user],
   );
 
   useEffect(() => {

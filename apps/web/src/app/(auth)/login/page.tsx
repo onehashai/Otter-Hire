@@ -65,6 +65,9 @@ export default function Login() {
         await acceptExistingInvite(inviteToken);
       }
       await refreshSession(true);
+      // Avoid cross-subdomain cookie propagation race between api.* and app.*.
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      window.location.assign("/");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to sign in";
       form.setError("root", { message });

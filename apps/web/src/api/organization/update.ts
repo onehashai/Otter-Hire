@@ -1,4 +1,4 @@
-import { apiFetch } from "../client/client";
+import { apiFetch, normalizeApiUrl } from "../client/client";
 
 export type OrganizationResponse = {
   id: string;
@@ -7,12 +7,13 @@ export type OrganizationResponse = {
   avatar_url?: string | null;
 };
 
-export function updateOrganization(data: {
+export async function updateOrganization(data: {
   name: string;
   website: string | null;
 }): Promise<OrganizationResponse> {
-  return apiFetch<OrganizationResponse>("/organizations/me", {
+  const org = await apiFetch<OrganizationResponse>("/organizations/me", {
     method: "PATCH",
     body: data,
   });
+  return { ...org, avatar_url: normalizeApiUrl(org.avatar_url) };
 }

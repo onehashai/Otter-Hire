@@ -4,6 +4,13 @@ const INTERNAL_API_BASE_URL = process.env.API_INTERNAL_URL ?? PUBLIC_API_BASE_UR
 export const API_BASE_URL =
   typeof window === "undefined" ? INTERNAL_API_BASE_URL : PUBLIC_API_BASE_URL;
 
+export function normalizeApiUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  if (/^https?:\/\//i.test(url)) return url;
+  if (!url.startsWith("/")) return `${API_BASE_URL}/${url}`;
+  return `${API_BASE_URL}${url}`;
+}
+
 export type ApiErrorResponse = {
   code?: string;
   message?: string;

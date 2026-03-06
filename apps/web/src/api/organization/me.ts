@@ -1,8 +1,9 @@
-import { apiFetch } from "../client/client";
+import { apiFetch, normalizeApiUrl } from "../client/client";
 import type { OrganizationResponse } from "./update";
 
-export function getMyOrganization(): Promise<OrganizationResponse> {
-  return apiFetch<OrganizationResponse>("/organizations/me", {
+export async function getMyOrganization(): Promise<OrganizationResponse> {
+  const org = await apiFetch<OrganizationResponse>("/organizations/me", {
     method: "GET",
   });
+  return { ...org, avatar_url: normalizeApiUrl(org.avatar_url) };
 }

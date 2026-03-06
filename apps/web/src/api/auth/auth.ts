@@ -3,6 +3,7 @@ import {
   apiGet,
   apiPost,
   handle429Error,
+  normalizeApiUrl,
   parseErrorResponse,
 } from "../client/client";
 
@@ -73,7 +74,8 @@ export async function getAuthSession(): Promise<AuthSessionResponse | null> {
     throw new Error(`API request failed: ${res.status} ${res.statusText}`);
   }
 
-  return (await res.json()) as AuthSessionResponse;
+  const session = (await res.json()) as AuthSessionResponse;
+  return { ...session, org_avatar_url: normalizeApiUrl(session.org_avatar_url) };
 }
 
 export function getMe(): Promise<MeResponse> {

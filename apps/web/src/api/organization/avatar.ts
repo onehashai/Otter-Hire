@@ -1,4 +1,4 @@
-import { API_BASE_URL, apiFetch } from "../client/client";
+import { API_BASE_URL, apiFetch, normalizeApiUrl } from "../client/client";
 import type { OrganizationResponse } from "./update";
 
 export async function uploadOrganizationAvatar(file: File): Promise<OrganizationResponse> {
@@ -24,11 +24,13 @@ export async function uploadOrganizationAvatar(file: File): Promise<Organization
     } catch {}
     throw new Error(message);
   }
-  return (await res.json()) as OrganizationResponse;
+  const org = (await res.json()) as OrganizationResponse;
+  return { ...org, avatar_url: normalizeApiUrl(org.avatar_url) };
 }
 
-export function deleteOrganizationAvatar(): Promise<OrganizationResponse> {
-  return apiFetch<OrganizationResponse>("/organizations/me/avatar", {
+export async function deleteOrganizationAvatar(): Promise<OrganizationResponse> {
+  const org = await apiFetch<OrganizationResponse>("/organizations/me/avatar", {
     method: "DELETE",
   });
+  return { ...org, avatar_url: normalizeApiUrl(org.avatar_url) };
 }

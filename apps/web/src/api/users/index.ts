@@ -1,4 +1,4 @@
-import { API_BASE_URL, apiFetch } from "../client/client";
+import { API_BASE_URL, apiFetch, normalizeApiUrl } from "../client/client";
 
 export type ProfileResponse = {
   id: string;
@@ -8,14 +8,16 @@ export type ProfileResponse = {
 };
 
 export async function getMyProfile(): Promise<ProfileResponse> {
-  return apiFetch<ProfileResponse>("/users/me/profile", { method: "GET" });
+  const profile = await apiFetch<ProfileResponse>("/users/me/profile", { method: "GET" });
+  return { ...profile, avatar_url: normalizeApiUrl(profile.avatar_url) };
 }
 
 export async function updateMyProfile(name: string): Promise<ProfileResponse> {
-  return apiFetch<ProfileResponse>("/users/me/profile", {
+  const profile = await apiFetch<ProfileResponse>("/users/me/profile", {
     method: "PATCH",
     body: { name },
   });
+  return { ...profile, avatar_url: normalizeApiUrl(profile.avatar_url) };
 }
 
 export async function uploadMyAvatar(file: File): Promise<ProfileResponse> {
@@ -40,9 +42,11 @@ export async function uploadMyAvatar(file: File): Promise<ProfileResponse> {
     } catch {}
     throw new Error(message);
   }
-  return (await res.json()) as ProfileResponse;
+  const profile = (await res.json()) as ProfileResponse;
+  return { ...profile, avatar_url: normalizeApiUrl(profile.avatar_url) };
 }
 
 export async function deleteMyAvatar(): Promise<ProfileResponse> {
-  return apiFetch<ProfileResponse>("/users/me/avatar", { method: "DELETE" });
+  const profile = await apiFetch<ProfileResponse>("/users/me/avatar", { method: "DELETE" });
+  return { ...profile, avatar_url: normalizeApiUrl(profile.avatar_url) };
 }

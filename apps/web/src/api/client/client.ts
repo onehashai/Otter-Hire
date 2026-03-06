@@ -7,8 +7,21 @@ export const API_BASE_URL =
 export function normalizeApiUrl(url: string | null | undefined): string | null {
   if (!url) return null;
   if (/^https?:\/\//i.test(url)) return url;
-  if (!url.startsWith("/")) return `${API_BASE_URL}/${url}`;
-  return `${API_BASE_URL}${url}`;
+  const normalizedPath = url.startsWith("/") ? url : `/${url}`;
+
+  // When API is served on dedicated host (api.*), backend routes are not prefixed with /api.
+  // Stored legacy URLs may still contain /api/files/local/... so normalize to /files/local/...
+  let path = normalizedPath;
+  try {
+    const host = new URL(API_BASE_URL).hostname;
+    if (host.startsWith("api.") && path.startsWith("/api/files/")) {
+      path = path.replace(/^\/api/, "");
+    }
+  } catch {
+    // ignore URL parsing issues and keep original path
+  }
+
+  return `${API_BASE_URL}${path}`;
 }
 
 export type ApiErrorResponse = {

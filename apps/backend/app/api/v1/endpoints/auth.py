@@ -205,7 +205,13 @@ async def me(
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 async def logout(response: Response) -> Response:
-    response.delete_cookie(key="access_token")
+    response.delete_cookie(
+        key="access_token",
+        path="/",
+        domain=settings.cookie_domain or None,
+        secure=settings.is_production,
+        samesite="lax",
+    )
     response.status_code = status.HTTP_204_NO_CONTENT
     return response
 

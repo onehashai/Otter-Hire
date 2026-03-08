@@ -1,4 +1,4 @@
-import { API_BASE_URL, apiFetch } from "../client/client";
+import { API_BASE_URL, apiFetch, normalizeApiUrl } from "../client/client";
 
 export type CandidateListItemResponse = {
   id: string;
@@ -262,7 +262,10 @@ export async function getCandidateEvaluation(id: string): Promise<CandidateEvalu
 }
 
 export async function getCandidateDocuments(id: string): Promise<CandidateDocumentResponse[]> {
-  return apiFetch<CandidateDocumentResponse[]>(`/candidates/${id}/documents`, { method: "GET" });
+  const docs = await apiFetch<CandidateDocumentResponse[]>(`/candidates/${id}/documents`, {
+    method: "GET",
+  });
+  return docs.map((doc) => ({ ...doc, url: normalizeApiUrl(doc.url) ?? doc.url }));
 }
 
 export async function uploadCandidateDocument(
@@ -299,7 +302,8 @@ export async function uploadCandidateDocument(
     throw new Error(message);
   }
 
-  return (await res.json()) as CandidateDocumentResponse;
+  const doc = (await res.json()) as CandidateDocumentResponse;
+  return { ...doc, url: normalizeApiUrl(doc.url) ?? doc.url };
 }
 
 export async function deleteCandidateDocument(

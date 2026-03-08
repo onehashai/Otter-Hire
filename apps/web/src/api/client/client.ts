@@ -9,11 +9,28 @@ export function normalizeApiUrl(url: string | null | undefined): string | null {
   if (/^https?:\/\//i.test(url)) return url;
   const normalizedPath = url.startsWith("/") ? url : `/${url}`;
 
-  // Stored legacy URLs may still contain /api/files/local/... while the backend serves /files/local/...
-  // Normalize to /files/local/... for both localhost and dedicated API hosts.
+  // Stored legacy URLs may still contain /api/files/local/...
+  // Keep /api prefix when frontend talks to a relative API base (e.g. NEXT_PUBLIC_API_URL=/api),
+  // but strip it when talking directly to an absolute backend URL.
   let path = normalizedPath;
   if (path.startsWith("/api/files/")) {
-    path = path.replace(/^\/api/, "");
+    let shouldStripApiPrefix = false;
+    try {
+      const parsed = new URL(API_BASE_URL);
+      const basePath = parsed.pathname.replace(/\/+$/, "");
+      shouldStripApiPrefix = basePath !== "/api";
+    } catch {
+      shouldStripApiPrefix = false;
+    }
+    if (shouldStripApiPrefix) {
+      path = path.replace(/^\/api/, "");
+    }
+  }
+
+  // Avoid double-prefixing when API base is relative (e.g. "/api")
+  // and payload URL already starts with that same prefix.
+  if (API_BASE_URL.startsWith("/") && path.startsWith(`${API_BASE_URL}/`)) {
+    return path;
   }
 
   return `${API_BASE_URL}${path}`;

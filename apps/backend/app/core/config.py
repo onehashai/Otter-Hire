@@ -58,6 +58,7 @@ class Settings(BaseSettings):
     max_upload_bytes: int = Field(default=1024 * 1024, validation_alias="MAX_UPLOAD_BYTES")
     aws_s3_bucket: str | None = Field(default=None, validation_alias="AWS_S3_BUCKET")
     aws_s3_region: str | None = Field(default=None, validation_alias="AWS_S3_REGION")
+    s3_root_prefix_raw: str = Field(default="", validation_alias="S3_ROOT_PREFIX")
     aws_access_key_id: str | None = Field(default=None, validation_alias="AWS_ACCESS_KEY_ID")
     aws_secret_access_key: str | None = Field(
         default=None, validation_alias="AWS_SECRET_ACCESS_KEY"
@@ -162,6 +163,9 @@ class Settings(BaseSettings):
 
     @property
     def s3_root_prefix(self) -> str:
+        value = self.s3_root_prefix_raw.strip().strip("/")
+        if value:
+            return value
         return "ats-production" if self.is_production else "ats-staging"
 
     @property

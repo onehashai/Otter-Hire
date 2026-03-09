@@ -149,10 +149,9 @@ export default function CareersListPage() {
               />
             </div>
             {allCategories.length > 0 && (
-              <div className="flex flex-col gap-1">
-                <label className="text-xs text-muted-foreground">Category</label>
+              <div className="flex flex-col">
                 <SelectField
-                  label="Category"
+                  label={undefined}
                   value={categoryFilter}
                   onValueChange={setCategoryFilter}
                   options={[
@@ -163,10 +162,9 @@ export default function CareersListPage() {
               </div>
             )}
             {allLocations.length > 0 && (
-              <div className="flex flex-col gap-1">
-                <label className="text-xs text-muted-foreground">Location</label>
+              <div className="flex flex-col">
                 <SelectField
-                  label="Location"
+                  label={undefined}
                   value={locationFilter}
                   onValueChange={setLocationFilter}
                   options={[

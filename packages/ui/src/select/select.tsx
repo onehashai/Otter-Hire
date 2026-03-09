@@ -95,7 +95,7 @@ SelectItem.displayName = SelectPrimitive.Item.displayName;
 export type SelectOption = { value: string; label: string };
 
 type SelectFieldProps = {
-  label: string;
+  label?: string;
   hint?: string;
   className?: string;
   children?: React.ReactNode;
@@ -121,7 +121,7 @@ function SelectField({
 
   return (
     <div className={cn("space-y-1.5", className)}>
-      <Label className="text-xs font-medium text-muted-foreground">{label}</Label>
+      {label ? <Label className="text-xs font-medium text-muted-foreground">{label}</Label> : null}
       {useOptions ? (
         <Select value={value} onValueChange={onValueChange} disabled={disabled}>
           <SelectTrigger className="h-9 text-sm">
@@ -144,7 +144,7 @@ function SelectField({
 }
 
 export type SearchableSelectFieldProps = {
-  label: string;
+  label?: string;
   hint?: string;
   className?: string;
   value: string;

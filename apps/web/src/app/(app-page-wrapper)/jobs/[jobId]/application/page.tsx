@@ -145,7 +145,7 @@ function VisibilityDropdown({
   }
   return (
     <SelectField
-      label="Visibility"
+      label={undefined}
       value={value}
       onValueChange={(v) => onChange(v as FieldVisibility)}
       options={[

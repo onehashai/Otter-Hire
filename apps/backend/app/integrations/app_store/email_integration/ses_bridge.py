@@ -26,6 +26,9 @@ from app.models.organization import OrgInbox
 
 logger = logging.getLogger(__name__)
 
+_PROCESS_KEY_TIMEOUT_SECONDS = 30
+_REDIS_SOCKET_TIMEOUT_SECONDS = 2
+
 
 def _extract_recipient(to_values: list[str]) -> str | None:
     joined = ", ".join(to_values or [])
@@ -87,29 +90,44 @@ _ENQUEUED_TTL_SECONDS = 86400  # 24h - avoid re-enqueuing same key while workflo
 def _is_key_enqueued_in_redis(raw_key: str) -> bool:
     """Check if key was recently enqueued (workflow may still be running)."""
     try:
-        r = redis.Redis.from_url(settings.redis_url, decode_responses=True)
+        r = redis.Redis.from_url(
+            settings.redis_url,
+            decode_responses=True,
+            socket_connect_timeout=_REDIS_SOCKET_TIMEOUT_SECONDS,
+            socket_timeout=_REDIS_SOCKET_TIMEOUT_SECONDS,
+        )
         return bool(r.exists(f"inbound:enqueued:{raw_key}"))
     except Exception:
+        logger.exception("SES bridge redis exists failed key=%s", raw_key)
         return False
 
 
 def _mark_key_enqueued_in_redis(raw_key: str) -> None:
     """Mark key as enqueued to avoid SES bridge re-enqueuing every poll cycle."""
     try:
-        r = redis.Redis.from_url(settings.redis_url, decode_responses=True)
+        r = redis.Redis.from_url(
+            settings.redis_url,
+            decode_responses=True,
+            socket_connect_timeout=_REDIS_SOCKET_TIMEOUT_SECONDS,
+            socket_timeout=_REDIS_SOCKET_TIMEOUT_SECONDS,
+        )
         r.setex(f"inbound:enqueued:{raw_key}", _ENQUEUED_TTL_SECONDS, "1")
     except Exception:
-        pass
+        logger.exception("SES bridge redis setex failed key=%s", raw_key)
 
 
 async def _is_key_already_processed(raw_key: str) -> bool:
+    logger.info("SES bridge dedupe check start key=%s", raw_key)
     if _is_key_enqueued_in_redis(raw_key):
+        logger.info("SES bridge dedupe hit redis key=%s", raw_key)
         return True
     async with AsyncSessionLocal() as db:
         result = await db.execute(
             select(InboundEmail.id).where(InboundEmail.raw_storage_key == raw_key).limit(1)
         )
-        return result.scalar_one_or_none() is not None
+        found = result.scalar_one_or_none() is not None
+        logger.info("SES bridge dedupe db key=%s found=%s", raw_key, found)
+        return found
 
 
 async def _find_inbox_secret(inbox_address: str) -> str | None:
@@ -233,9 +251,12 @@ def _enqueue_raw_key_via_http(bucket: str, key: str) -> tuple[int, str]:
 
 
 async def _process_raw_key(s3_client, bucket: str, key: str) -> None:
+    logger.info("SES bridge process start key=%s", key)
     if "AMAZON_SES_SETUP_NOTIFICATION" in key:
+        logger.info("SES bridge skipped key=%s reason=ses_setup_notification", key)
         return
     if await _is_key_already_processed(key):
+        logger.info("SES bridge skipped key=%s reason=already_processed", key)
         return
     if settings.inbound_async_pipeline_enabled and settings.inbound_async_enqueue_via_http:
         status, response_text = await asyncio.to_thread(_enqueue_raw_key_via_http, bucket, key)
@@ -251,8 +272,15 @@ async def _process_raw_key(s3_client, bucket: str, key: str) -> None:
         logger.info("SES bridge enqueued key=%s status=%s", key, status)
         return
 
-    raw_email = s3_client.get_object(Bucket=bucket, Key=key)["Body"].read()
+    logger.info("SES bridge processing key=%s bucket=%s", key, bucket)
+    logger.info("SES bridge s3 fetch start key=%s", key)
+    raw_email = await asyncio.to_thread(
+        lambda: s3_client.get_object(Bucket=bucket, Key=key)["Body"].read()
+    )
+    logger.info("SES bridge s3 fetch done key=%s bytes=%s", key, len(raw_email))
+    logger.info("SES bridge parse start key=%s", key)
     normalized = _extract_text_and_attachments(raw_email)
+    logger.info("SES bridge parse done key=%s inbox=%s", key, normalized.get("inbox_address"))
     inbox_address = normalized.get("inbox_address")
     if not inbox_address:
         logger.warning("SES bridge skipped key=%s reason=missing_recipient", key)
@@ -351,19 +379,39 @@ async def run_ses_raw_bridge_loop(stop_event: asyncio.Event) -> None:
 
             if keys_with_mtime:
                 newest_seen = keys_with_mtime[0][1]
+                keys_with_mtime = keys_with_mtime[: max(1, settings.ses_raw_bridge_max_keys)]
                 logger.info(
-                    "SES bridge scan bucket=%s prefix=%s keys=%s newest=%s",
+                    "SES bridge scan bucket=%s prefix=%s keys=%s newest=%s processing=%s",
                     bucket,
                     prefix,
                     len(keys_with_mtime),
                     newest_seen.isoformat() if newest_seen else None,
+                    len(keys_with_mtime),
                 )
 
             semaphore = asyncio.Semaphore(max_parallel)
 
             async def _process_with_limit(raw_key: str) -> None:
                 async with semaphore:
-                    await _process_raw_key(s3_client, bucket, raw_key)
+                    started = time.monotonic()
+                    try:
+                        await asyncio.wait_for(
+                            _process_raw_key(s3_client, bucket, raw_key),
+                            timeout=_PROCESS_KEY_TIMEOUT_SECONDS,
+                        )
+                        logger.info(
+                            "SES bridge finished key=%s duration_ms=%s",
+                            raw_key,
+                            int((time.monotonic() - started) * 1000),
+                        )
+                    except asyncio.TimeoutError:
+                        logger.error(
+                            "SES bridge timed out key=%s timeout_seconds=%s",
+                            raw_key,
+                            _PROCESS_KEY_TIMEOUT_SECONDS,
+                        )
+                    except Exception:
+                        logger.exception("SES bridge failed key=%s", raw_key)
 
             tasks: list[asyncio.Task[None]] = []
             for key, _ in keys_with_mtime:
@@ -372,7 +420,7 @@ async def run_ses_raw_bridge_loop(stop_event: asyncio.Event) -> None:
                 tasks.append(asyncio.create_task(_process_with_limit(key)))
 
             if tasks:
-                await asyncio.gather(*tasks)
+                await asyncio.gather(*tasks, return_exceptions=True)
 
             now = time.monotonic()
             if now - last_cleanup_epoch >= max(

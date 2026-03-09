@@ -2,18 +2,17 @@
 
 import { useState, useEffect, Suspense, useCallback, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import Link from "next/link";
 import { Button } from "@onehash/ui/button";
 import { Icon } from "@onehash/ui/icon";
 import { useTranslation } from "react-i18next";
-import { verifyEmail, resendVerification } from "@/api/index";
+import { verifyEmail, resendVerification, logout } from "@/api/index";
 import { useAuthSession } from "@/app/providers";
 
 function VerifyEmailContent() {
   const { t } = useTranslation();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user, refreshSession } = useAuthSession();
+  const { user, refreshSession, clearSession } = useAuthSession();
   const [resendDisabled, setResendDisabled] = useState(false);
   const [resendTimer, setResendTimer] = useState(0);
   const [resending, setResending] = useState(false);
@@ -128,6 +127,19 @@ function VerifyEmailContent() {
     }
   };
 
+  const handleBackToLogin = async () => {
+    sessionStorage.removeItem("signup_email");
+    sessionStorage.removeItem("invite_token");
+    try {
+      await logout();
+    } catch {
+      // Best-effort logout; clear local session state regardless.
+    }
+    clearSession();
+    localStorage.setItem("session_updated", Date.now().toString());
+    router.replace("/login");
+  };
+
   if (verifying) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12">
@@ -186,9 +198,13 @@ function VerifyEmailContent() {
           </div>
 
           <p className="text-xs text-muted-foreground mt-6">
-            <Link href="/login" className="hover:text-foreground transition-colors">
+            <button
+              type="button"
+              onClick={handleBackToLogin}
+              className="hover:text-foreground transition-colors"
+            >
               {t("back_to_login")}
-            </Link>
+            </button>
           </p>
         </div>
       </div>

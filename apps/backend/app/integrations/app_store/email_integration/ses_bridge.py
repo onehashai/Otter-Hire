@@ -118,9 +118,6 @@ def _mark_key_enqueued_in_redis(raw_key: str) -> None:
 
 async def _is_key_already_processed(raw_key: str) -> bool:
     logger.info("SES bridge dedupe check start key=%s", raw_key)
-    if _is_key_enqueued_in_redis(raw_key):
-        logger.info("SES bridge dedupe hit redis key=%s", raw_key)
-        return True
     async with AsyncSessionLocal() as db:
         result = await db.execute(
             select(InboundEmail.id).where(InboundEmail.raw_storage_key == raw_key).limit(1)

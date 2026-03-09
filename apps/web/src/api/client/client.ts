@@ -9,6 +9,11 @@ export function normalizeApiUrl(url: string | null | undefined): string | null {
   if (/^https?:\/\//i.test(url)) return url;
   const normalizedPath = url.startsWith("/") ? url : `/${url}`;
 
+  // File URLs should remain same-origin so app host serves /api/files/* in all environments.
+  if (normalizedPath.startsWith("/api/files/")) {
+    return normalizedPath;
+  }
+
   // Stored legacy URLs may still contain /api/files/local/...
   // Keep /api prefix when frontend talks to a relative API base (e.g. NEXT_PUBLIC_API_URL=/api),
   // but strip it when talking directly to an absolute backend URL.

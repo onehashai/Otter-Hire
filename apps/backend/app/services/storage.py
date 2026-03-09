@@ -64,7 +64,7 @@ class StorageService:
             path.unlink()
 
     async def resolve_url(self, object_key: str) -> str:
-        return f"/files/local/{object_key.lstrip('/')}"
+        return f"/api/files/local/{object_key.lstrip('/')}"
 
     async def delete_by_url(self, url: str) -> None:
         clean = (url or "").strip()

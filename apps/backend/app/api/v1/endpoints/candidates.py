@@ -48,6 +48,15 @@ from app.utils.uuid import uuid7
 router = APIRouter(prefix="/candidates", tags=["candidates"])
 
 
+async def _resolve_candidate_document_url(doc: CandidateDocument) -> str:
+    clean_url = (doc.url or "").strip()
+    if clean_url.startswith(("http://", "https://", "/api/files/local/", "/files/local/")):
+        return clean_url
+    if (doc.object_key or "").strip():
+        return await storage_service.resolve_url(doc.object_key)
+    return clean_url
+
+
 async def _log_activity(
     db: AsyncSession,
     *,
@@ -919,23 +928,27 @@ async def list_candidate_documents(
         )
         .order_by(CandidateDocument.created_at.desc())
     )
-    return [
-        CandidateDocumentResponse(
-            id=doc.id,
-            field_key=doc.field_key,
-            name=doc.name,
-            url=doc.url,
-            object_key=doc.object_key,
-            mime_type=doc.mime_type,
-            size_bytes=int(doc.size_bytes or 0),
-            doc_type=doc.doc_type,
-            size_label=f"{round((doc.size_bytes or 0) / 1024, 1)} KB" if doc.size_bytes else None,
-            created_by_user_id=doc.uploaded_by_user_id,
-            created_by_name=author_name,
-            created_at=doc.created_at,
+    items: list[CandidateDocumentResponse] = []
+    for doc, author_name in docs_result.all():
+        items.append(
+            CandidateDocumentResponse(
+                id=doc.id,
+                field_key=doc.field_key,
+                name=doc.name,
+                url=await _resolve_candidate_document_url(doc),
+                object_key=doc.object_key,
+                mime_type=doc.mime_type,
+                size_bytes=int(doc.size_bytes or 0),
+                doc_type=doc.doc_type,
+                size_label=f"{round((doc.size_bytes or 0) / 1024, 1)} KB"
+                if doc.size_bytes
+                else None,
+                created_by_user_id=doc.uploaded_by_user_id,
+                created_by_name=author_name,
+                created_at=doc.created_at,
+            )
         )
-        for doc, author_name in docs_result.all()
-    ]
+    return items
 
 
 @router.post(

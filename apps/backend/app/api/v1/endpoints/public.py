@@ -1202,7 +1202,10 @@ async def ingest_inbound_email(
         action = _extract_verification_action(body_text)
         if provider is None or action.get("type") == "manual":
             logger.info(
-                "Skipping weak verification match inbox=%s from=%s subject=%s provider=%s action_type=%s",
+                (
+                    "Skipping weak verification match "
+                    "inbox=%s from=%s subject=%s provider=%s action_type=%s"
+                ),
                 org_inbox.inbox_address,
                 inbound_from_email,
                 inbound_subject,

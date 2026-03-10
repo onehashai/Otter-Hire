@@ -18,6 +18,7 @@ class Organization(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     inbox = relationship("OrgInbox", back_populates="organization", uselist=False)
+    integrations = relationship("OrgIntegration", back_populates="organization")
 
 
 class OrgInbox(Base):

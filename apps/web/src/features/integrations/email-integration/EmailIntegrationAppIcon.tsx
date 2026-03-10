@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import emailIcon from "./assets/email.svg";
+import emailIcon from "../assets/email.svg";
 
 function resolveAssetSrc(asset: unknown): string {
   if (typeof asset === "string") return asset;

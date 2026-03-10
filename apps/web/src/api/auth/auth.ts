@@ -122,6 +122,17 @@ export async function resendVerification(email: string): Promise<{ ok: boolean }
   return (await res.json()) as { ok: boolean };
 }
 
+export async function getGoogleAuthEnabled(): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/auth/google/enabled`, { cache: "no-store" });
+    if (!res.ok) return false;
+    const data = (await res.json()) as { enabled: boolean };
+    return data.enabled;
+  } catch {
+    return false;
+  }
+}
+
 export async function completeOnboarding(data: {
   full_name: string;
   organization_name: string;

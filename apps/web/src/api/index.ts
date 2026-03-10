@@ -13,6 +13,7 @@ export {
   signup,
   logout,
   getAuthSession,
+  getGoogleAuthEnabled,
   getMe,
   verifyEmail,
   resendVerification,
@@ -56,3 +57,6 @@ export * from "./users/index";
 
 // Integrations
 export * from "./integrations/index";
+
+// Conversations
+export * from "./conversations/index";

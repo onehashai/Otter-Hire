@@ -232,12 +232,20 @@ async def verify_complete(
     return OrgInboxActionResponse(status="active", message="Inbox verified and active")
 
 
+async def disconnect(db: AsyncSession, owner: IntegrationOwnerContext) -> None:
+    inbox = await get_org_inbox(db, owner)
+    if inbox is None:
+        raise HTTPException(status_code=404, detail="No email integration configured")
+    await db.delete(inbox)
+    await db.commit()
+
+
 async def list_apps(
     db: AsyncSession, owner: IntegrationOwnerContext
 ) -> list[IntegrationAppDescriptor]:
     inbox = await get_org_inbox(db, owner)
-    installed = inbox is not None
     status = inbox.status if inbox is not None else "not_installed"
+    installed = inbox is not None and inbox.status == "active"
     return [
         IntegrationAppDescriptor(
             app_id=APP_ID,

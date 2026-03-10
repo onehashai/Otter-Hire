@@ -348,3 +348,5 @@ python3 -m pip install -r apps/backend/requirements.txt
 ### `NEXT_PUBLIC_API_URL` issues
 - For host dev: set in `apps/web/.env.local`.
 - For Docker: verify env in `docker-compose.yml`.
+- Temporary CI/CD test change. #test
+

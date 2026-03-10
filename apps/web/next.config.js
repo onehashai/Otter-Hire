@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  output: process.env.NEXT_BUILD_STANDALONE === "true" ? "standalone" : undefined,
   async rewrites() {
     const apiUrl = process.env.API_INTERNAL_URL || "http://localhost:8000";
     const temporalUiUrl = process.env.TEMPORAL_UI_INTERNAL_URL || "http://localhost:8080";

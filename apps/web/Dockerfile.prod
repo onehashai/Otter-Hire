@@ -1,0 +1,67 @@
+# ── Stage 1: install dependencies ─────────────────────────────────────────────
+FROM node:20-alpine AS deps
+
+WORKDIR /app
+
+COPY packages/ui/package.json packages/ui/package-lock.json* ./packages/ui/
+RUN cd packages/ui && npm ci
+
+COPY apps/web/package.json apps/web/package-lock.json* ./apps/web/
+RUN cd apps/web && npm ci
+
+# ── Stage 2: build ─────────────────────────────────────────────────────────────
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+COPY --from=deps /app/packages/ui/node_modules ./packages/ui/node_modules
+COPY --from=deps /app/apps/web/node_modules ./apps/web/node_modules
+
+COPY packages/ui ./packages/ui
+COPY apps/web ./apps/web
+
+WORKDIR /app/apps/web
+
+# NEXT_PUBLIC_* vars are baked into the client JS bundle at build time.
+# Pass these via --build-arg (CI/CD pipeline or docker-compose build.args).
+# API_INTERNAL_URL / TEMPORAL_UI_INTERNAL_URL are NOT needed here —
+# Next.js re-reads next.config.js at server startup so they stay runtime vars.
+ARG NEXT_PUBLIC_API_URL=/api
+ARG NEXT_PUBLIC_APP_SUBDOMAIN=app
+ARG NEXT_PUBLIC_JOBS_SUBDOMAIN=jobs
+ARG NEXT_PUBLIC_APP_ROOT_HOST
+ARG NEXT_PUBLIC_INBOUND_EMAIL_DOMAIN
+ARG NEXT_PUBLIC_TEMPORAL_UI_URL
+
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_APP_SUBDOMAIN=$NEXT_PUBLIC_APP_SUBDOMAIN
+ENV NEXT_PUBLIC_JOBS_SUBDOMAIN=$NEXT_PUBLIC_JOBS_SUBDOMAIN
+ENV NEXT_PUBLIC_APP_ROOT_HOST=$NEXT_PUBLIC_APP_ROOT_HOST
+ENV NEXT_PUBLIC_INBOUND_EMAIL_DOMAIN=$NEXT_PUBLIC_INBOUND_EMAIL_DOMAIN
+ENV NEXT_PUBLIC_TEMPORAL_UI_URL=$NEXT_PUBLIC_TEMPORAL_UI_URL
+
+# Enables standalone output — only required files are emitted, no full node_modules copy
+ENV NEXT_BUILD_STANDALONE=true
+
+RUN npm run build
+
+# ── Stage 3: runtime (lean — standalone output only) ──────────────────────────
+FROM node:20-alpine AS runner
+
+WORKDIR /app/apps/web
+
+ENV NODE_ENV=production
+
+# standalone/ contains server.js + minimal node_modules (no full install needed)
+COPY --from=builder /app/apps/web/.next/standalone/apps/web ./
+COPY --from=builder /app/apps/web/.next/standalone/packages ./../../packages
+COPY --from=builder /app/apps/web/.next/standalone/node_modules ./../../node_modules
+
+# Static assets must sit next to standalone server
+COPY --from=builder /app/apps/web/.next/static ./.next/static
+COPY --from=builder /app/apps/web/public ./public
+
+EXPOSE 3000
+
+# Standalone emits a self-contained server.js — no npm needed
+CMD ["node", "server.js"]

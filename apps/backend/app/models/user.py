@@ -22,7 +22,9 @@ class User(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid7)
     org_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=True)
     email = Column(String, nullable=False)
-    hashed_password = Column(String, nullable=False)
+    hashed_password = Column(String, nullable=True)
+    google_id = Column(String, nullable=True)
+    auth_provider = Column(String, nullable=False, server_default="local")
     name = Column(String, nullable=False)
     role = Column(String, nullable=False)
     status = Column(String, nullable=False)
@@ -39,6 +41,7 @@ class User(Base):
 
     __table_args__ = (
         UniqueConstraint("email", name="uq_users_email"),
+        UniqueConstraint("google_id", name="uq_users_google_id"),
         CheckConstraint(
             "role IN ("
             "'owner', 'admin', 'super_admin', 'recruiter', "
@@ -47,7 +50,12 @@ class User(Base):
             name="ck_users_role",
         ),
         CheckConstraint("status IN ('invited', 'active', 'disabled')", name="ck_users_status"),
+        CheckConstraint(
+            "auth_provider IN ('local', 'google', 'both')",
+            name="ck_users_auth_provider",
+        ),
         Index("ix_users_email", "email"),
+        Index("ix_users_google_id", "google_id"),
     )
 
     organization = relationship("Organization")

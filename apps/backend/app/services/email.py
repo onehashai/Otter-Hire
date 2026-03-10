@@ -1,8 +1,10 @@
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from uuid import UUID
 
 import httpx
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.logging import logger
@@ -12,8 +14,25 @@ from app.email_templates.verification import build_verification_email
 
 
 async def send_email(
-    to_email: str, content: EmailContent, *, fallback_url: str | None = None
+    to_email: str,
+    content: EmailContent,
+    *,
+    fallback_url: str | None = None,
+    org_id: UUID | None = None,
+    db: AsyncSession | None = None,
 ) -> None:
+    # Route through the org's own SMTP if configured and verified
+    if org_id is not None and db is not None:
+        from app.integrations.app_store.email_integration.smtp_service import (
+            decrypt_password_for_sending,
+            get_verified_smtp_for_org,
+        )
+
+        smtp_cfg = await get_verified_smtp_for_org(db, org_id)
+        if smtp_cfg is not None:
+            await _send_via_org_smtp(to_email, content.subject, content.html, content.text, smtp_cfg)
+            return
+
     if settings.is_production:
         await _send_via_zeptomail(to_email, content.subject, content.html, content.text)
     else:
@@ -106,3 +125,41 @@ async def _send_via_zeptomail(to_email: str, subject: str, html_body: str, text_
         response.raise_for_status()
 
     logger.info(f"Email sent to {to_email} via ZeptoMail: {subject}")
+
+
+async def _send_via_org_smtp(
+    to_email: str,
+    subject: str,
+    html_body: str,
+    text_body: str,
+    smtp_row: "OrgIntegration",  # type: ignore[name-defined]
+) -> None:
+    from app.integrations.app_store.email_integration.smtp_service import decrypt_password_for_sending
+
+    plain_password = decrypt_password_for_sending(smtp_row)
+    cfg = smtp_row.config or {}
+    display_name = cfg.get("from_name") or cfg.get("from_email", "")
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    msg["From"] = f"{display_name} <{cfg.get('from_email', '')}>"
+    msg["To"] = to_email
+    msg.attach(MIMEText(text_body, "plain"))
+    msg.attach(MIMEText(html_body, "html"))
+
+    host, port = cfg.get("host", ""), cfg.get("port", 587)
+    try:
+        if cfg.get("use_ssl"):
+            with smtplib.SMTP_SSL(host, port, timeout=15) as server:
+                server.login(cfg.get("username", ""), plain_password)
+                server.send_message(msg)
+        else:
+            with smtplib.SMTP(host, port, timeout=15) as server:
+                if cfg.get("use_tls"):
+                    server.starttls()
+                server.login(cfg.get("username", ""), plain_password)
+                server.send_message(msg)
+        logger.info(f"Email sent to {to_email} via org SMTP ({host}): {subject}")
+    except Exception as e:
+        logger.error(f"Failed to send email via org SMTP: {e}")
+        raise

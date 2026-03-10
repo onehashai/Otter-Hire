@@ -87,6 +87,12 @@ export function verifyCompleteEmailIntegration(): Promise<IntegrationEmailConfig
     method: "POST",
   });
 }
+
+export function disconnectEmailIntegration(): Promise<{ status: string; message: string }> {
+  return apiFetch<{ status: string; message: string }>("/integrations/email/disconnect", {
+    method: "POST",
+  });
+}
 export type IntegrationOrgInboxResponse = {
   id: string;
   org_id: string;
@@ -108,3 +114,54 @@ export type IntegrationInboxActionResponse = {
   message: string;
   action_url?: string | null;
 };
+
+export type OrgSmtpConfigResponse = {
+  id: string;
+  host: string;
+  port: number;
+  username: string;
+  password: string; // always "••••••••" from server
+  from_email: string;
+  from_name: string | null;
+  use_tls: boolean;
+  use_ssl: boolean;
+  status: "pending" | "verified" | "failed";
+  last_test_at: string | null;
+  last_test_error: string | null;
+};
+
+export type OrgSmtpConfigUpsertRequest = {
+  host: string;
+  port: number;
+  username: string;
+  password?: string | null;
+  from_email: string;
+  from_name?: string | null;
+  use_tls: boolean;
+  use_ssl: boolean;
+};
+
+export function getSmtpConfig(): Promise<OrgSmtpConfigResponse | null> {
+  return apiFetch<OrgSmtpConfigResponse | null>("/integrations/email/smtp/config", {
+    method: "GET",
+  });
+}
+
+export function upsertSmtpConfig(
+  data: OrgSmtpConfigUpsertRequest,
+): Promise<OrgSmtpConfigResponse> {
+  return apiFetch<OrgSmtpConfigResponse>("/integrations/email/smtp/config", {
+    method: "PUT",
+    body: data,
+  });
+}
+
+export function testSmtpConnection(): Promise<OrgSmtpConfigResponse> {
+  return apiFetch<OrgSmtpConfigResponse>("/integrations/email/smtp/test", {
+    method: "POST",
+  });
+}
+
+export function deleteSmtpConfig(): Promise<void> {
+  return apiFetch<void>("/integrations/email/smtp/config", { method: "DELETE" });
+}

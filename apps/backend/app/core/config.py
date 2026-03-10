@@ -27,10 +27,24 @@ class Settings(BaseSettings):
     )
     log_level: str = "INFO"
 
-    # Frontend URL
-    frontend_base_url: str = Field(
-        default="http://localhost:3000", validation_alias="FRONTEND_BASE_URL"
-    )
+    # Domain configuration
+    # APP_DOMAIN     — root domain, e.g. "localhost.com" (dev) or "onehash.ai" (prod)
+    # APP_SUBDOMAIN  — main app subdomain,      e.g. "app"
+    # JOBS_SUBDOMAIN — public job board subdomain, e.g. "jobs"
+    app_domain: str = Field(default="localhost.com", validation_alias="APP_DOMAIN")
+    app_subdomain: str = Field(default="app", validation_alias="APP_SUBDOMAIN")
+    jobs_subdomain: str = Field(default="jobs", validation_alias="JOBS_SUBDOMAIN")
+
+    # Frontend URL — defaults to http://{APP_SUBDOMAIN}.{APP_DOMAIN}:3000 if not set explicitly
+    frontend_base_url: str = Field(default="", validation_alias="FRONTEND_BASE_URL")
+
+    # Google OAuth
+    google_client_id: str | None = Field(default=None, validation_alias="GOOGLE_CLIENT_ID")
+    google_client_secret: str | None = Field(default=None, validation_alias="GOOGLE_CLIENT_SECRET")
+
+    # SMTP credential encryption (Fernet key, base64-encoded 32 bytes)
+    # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    smtp_encryption_key: str | None = Field(default=None, validation_alias="SMTP_ENCRYPTION_KEY")
 
     # Cookie domain (empty for localhost, .domain.com for production)
     cookie_domain: str = Field(default="", validation_alias="COOKIE_DOMAIN")
@@ -135,6 +149,29 @@ class Settings(BaseSettings):
     feature_legacy_org_inbox_route_redirect: bool = Field(
         default=False, validation_alias="FEATURE_LEGACY_ORG_INBOX_ROUTE_REDIRECT"
     )
+
+    @property
+    def _scheme(self) -> str:
+        return "https" if self.is_production else "http"
+
+    @property
+    def effective_frontend_base_url(self) -> str:
+        if self.frontend_base_url:
+            return self.frontend_base_url.rstrip("/")
+        port = "" if self.is_production else ":3000"
+        return f"{self._scheme}://{self.app_subdomain}.{self.app_domain}{port}"
+
+    @property
+    def effective_google_redirect_uri(self) -> str | None:
+        """Returns the explicit override if set, otherwise derives from APP_DOMAIN."""
+        if self.app_domain:
+            port = "" if self.is_production else ":8000"
+            return f"{self._scheme}://{self.app_subdomain}.{self.app_domain}{port}/auth/google/callback"
+        return None
+
+    @property
+    def google_oauth_enabled(self) -> bool:
+        return bool(self.google_client_id and self.google_client_secret)
 
     @property
     def cors_origins(self) -> list[str]:

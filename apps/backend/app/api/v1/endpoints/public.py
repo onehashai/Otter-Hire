@@ -5,6 +5,7 @@ import hashlib
 import hmac
 import html
 import json
+import logging
 import re
 import zipfile
 from datetime import datetime, timezone
@@ -54,6 +55,7 @@ from app.services.storage import storage_service
 
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
+logger = logging.getLogger(__name__)
 
 
 def _extract_s3_event_entries(payload: dict) -> list[tuple[str, str]]:
@@ -565,20 +567,65 @@ def _verify_hmac_signature(signature_header: str, secret: str, raw_body: bytes) 
     return hmac.compare_digest(provided, expected)
 
 
+def _email_domain(value: str) -> str:
+    parts = (value or "").strip().lower().rsplit("@", 1)
+    return parts[1] if len(parts) == 2 else ""
+
+
 def _detect_verification_provider(from_email: str, subject: str, body_text: str) -> str | None:
-    source = " ".join([from_email.lower(), subject.lower(), body_text.lower()])
-    if any(token in source for token in ["google", "gmail.com", "accounts.google.com"]):
-        return "gmail"
-    if any(token in source for token in ["outlook", "microsoft", "office365", "live.com"]):
-        return "outlook"
+    source = " ".join([subject.lower(), body_text.lower()])
+    domain = _email_domain(from_email)
+    gmail_domains = {"google.com", "accounts.google.com", "gmail.com", "googlemail.com"}
+    outlook_domains = {"outlook.com", "office.com", "microsoft.com", "live.com"}
+
+    if domain in gmail_domains or any(domain.endswith(f".{item}") for item in gmail_domains):
+        if any(
+            token in source
+            for token in [
+                "forwarding",
+                "gmail forwarding",
+                "confirm forwarding",
+                "forward mail",
+            ]
+        ):
+            return "gmail"
+
+    if domain in outlook_domains or any(domain.endswith(f".{item}") for item in outlook_domains):
+        if any(
+            token in source
+            for token in [
+                "forwarding",
+                "outlook forwarding",
+                "confirm forwarding",
+                "forward mail",
+            ]
+        ):
+            return "outlook"
     return None
+
+
+def _is_allowed_verification_url(value: str) -> bool:
+    match = re.match(r"^https://([^/\s]+)", (value or "").strip(), re.IGNORECASE)
+    if not match:
+        return False
+    host = match.group(1).lower()
+    allowed_suffixes = (
+        "google.com",
+        "mail.google.com",
+        "support.google.com",
+        "outlook.com",
+        "office.com",
+        "microsoft.com",
+        "live.com",
+    )
+    return any(host == suffix or host.endswith(f".{suffix}") for suffix in allowed_suffixes)
 
 
 def _extract_verification_action(body_text: str) -> dict:
     # Most providers include a confirmation link for forwarding verification.
-    url_match = re.search(r"https://[^\s<>\"]+", body_text)
-    if url_match:
-        return {"type": "link", "url": url_match.group(0)}
+    for candidate in re.findall(r"https://[^\s<>\"]+", body_text):
+        if _is_allowed_verification_url(candidate):
+            return {"type": "link", "url": candidate}
     code_match = re.search(r"\b(\d{6,8})\b", body_text)
     if code_match:
         return {"type": "code", "code": code_match.group(1)}
@@ -586,16 +633,17 @@ def _extract_verification_action(body_text: str) -> dict:
 
 
 def _is_verification_email(from_email: str, subject: str, body_text: str) -> bool:
-    source = " ".join([from_email.lower(), subject.lower(), body_text.lower()])
-    indicators = [
+    provider = _detect_verification_provider(from_email, subject, body_text)
+    if provider is None:
+        return False
+    source = " ".join([subject.lower(), body_text.lower()])
+    forwarding_markers = [
         "forwarding",
-        "verify",
-        "verification",
-        "confirm",
-        "confirmation",
-        "verify your",
+        "confirm forwarding",
+        "forward mail",
+        "forwarded to",
     ]
-    return any(token in source for token in indicators)
+    return any(token in source for token in forwarding_markers)
 
 
 def _extract_request_token(request: Request, authorization: Optional[str]) -> Optional[str]:
@@ -1152,24 +1200,43 @@ async def ingest_inbound_email(
     if _is_verification_email(inbound_from_email, inbound_subject, body_text):
         provider = _detect_verification_provider(inbound_from_email, inbound_subject, body_text)
         action = _extract_verification_action(body_text)
-        inbound_email.email_kind = "verification"
-        inbound_email.parse_status = "ignored"
-        inbound_email.parse_error = "Verification email captured"
-        org_inbox.verification_status = "action_required"
-        org_inbox.verification_provider = provider or "unknown"
-        org_inbox.verification_email_id = inbound_email.id
-        org_inbox.verification_action_type = action.get("type")
-        org_inbox.verification_action_payload = action
-        org_inbox.verification_detected_at = datetime.now(timezone.utc)
-        org_inbox.verification_error = None
-        org_inbox.status = "pending"
-        await db.commit()
-        return {
-            "status": "ok",
-            "message": "Verification email detected",
-            "inbound_email_id": str(inbound_email.id),
-            "org_id": str(org_inbox.org_id),
-        }
+        if provider is None or action.get("type") == "manual":
+            logger.info(
+                (
+                    "Skipping weak verification match "
+                    "inbox=%s from=%s subject=%s provider=%s action_type=%s"
+                ),
+                org_inbox.inbox_address,
+                inbound_from_email,
+                inbound_subject,
+                provider,
+                action.get("type"),
+            )
+        else:
+            inbound_email.email_kind = "verification"
+            inbound_email.parse_status = "ignored"
+            inbound_email.parse_error = "Verification email captured"
+            org_inbox.verification_status = "action_required"
+            org_inbox.verification_provider = provider or "unknown"
+            org_inbox.verification_email_id = inbound_email.id
+            org_inbox.verification_action_type = action.get("type")
+            org_inbox.verification_action_payload = action
+            org_inbox.verification_detected_at = datetime.now(timezone.utc)
+            org_inbox.verification_error = None
+            org_inbox.status = "pending"
+            logger.info(
+                "Verification email detected inbox=%s provider=%s action_type=%s",
+                org_inbox.inbox_address,
+                provider,
+                action.get("type"),
+            )
+            await db.commit()
+            return {
+                "status": "ok",
+                "message": "Verification email detected",
+                "inbound_email_id": str(inbound_email.id),
+                "org_id": str(org_inbox.org_id),
+            }
 
     if org_inbox.status != "active":
         inbound_email.parse_status = "ignored"

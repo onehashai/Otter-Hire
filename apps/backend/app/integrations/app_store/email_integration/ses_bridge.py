@@ -30,6 +30,21 @@ _PROCESS_KEY_TIMEOUT_SECONDS = 30
 _REDIS_SOCKET_TIMEOUT_SECONDS = 2
 
 
+def _parse_references(references_raw: str) -> list[str]:
+    """Parse an email References header into a list of bare message-IDs.
+
+    The header is a whitespace-separated list of angle-bracketed IDs, e.g.
+    ``<abc@host> <def@host>``.  Returns them without the angle brackets,
+    oldest-first (left-to-right as they appear in the header).
+    """
+    ids: list[str] = []
+    for token in re.split(r"\s+", (references_raw or "").strip()):
+        clean = token.strip().strip("<>")
+        if clean:
+            ids.append(clean)
+    return ids
+
+
 def _extract_recipient(to_values: list[str]) -> str | None:
     joined = ", ".join(to_values or [])
     emails = re.findall(r"([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})", joined)
@@ -103,19 +118,27 @@ def _extract_text_and_attachments(raw_email: bytes) -> dict:
     }
 
 
-_ENQUEUED_TTL_SECONDS = 86400  # 24h - avoid re-enqueuing same key while workflow runs
+_ENQUEUED_TTL_SECONDS = 86400       # 24h  – covers workflow execution time
+_IGNORED_TTL_SECONDS = 2592000      # 30d  – covers ignored emails until S3 lifecycle removes them
+
+
+def _redis_client() -> redis.Redis:
+    return redis.Redis.from_url(
+        settings.redis_url,
+        decode_responses=True,
+        socket_connect_timeout=_REDIS_SOCKET_TIMEOUT_SECONDS,
+        socket_timeout=_REDIS_SOCKET_TIMEOUT_SECONDS,
+    )
 
 
 def _is_key_enqueued_in_redis(raw_key: str) -> bool:
-    """Check if key was recently enqueued (workflow may still be running)."""
+    """Return True if the key was recently enqueued OR permanently marked as ignored."""
     try:
-        r = redis.Redis.from_url(
-            settings.redis_url,
-            decode_responses=True,
-            socket_connect_timeout=_REDIS_SOCKET_TIMEOUT_SECONDS,
-            socket_timeout=_REDIS_SOCKET_TIMEOUT_SECONDS,
+        r = _redis_client()
+        return bool(
+            r.exists(f"inbound:enqueued:{raw_key}")
+            or r.exists(f"inbound:ignored:{raw_key}")
         )
-        return bool(r.exists(f"inbound:enqueued:{raw_key}"))
     except Exception:
         logger.exception("SES bridge redis exists failed key=%s", raw_key)
         return False
@@ -124,15 +147,24 @@ def _is_key_enqueued_in_redis(raw_key: str) -> bool:
 def _mark_key_enqueued_in_redis(raw_key: str) -> None:
     """Mark key as enqueued to avoid SES bridge re-enqueuing every poll cycle."""
     try:
-        r = redis.Redis.from_url(
-            settings.redis_url,
-            decode_responses=True,
-            socket_connect_timeout=_REDIS_SOCKET_TIMEOUT_SECONDS,
-            socket_timeout=_REDIS_SOCKET_TIMEOUT_SECONDS,
-        )
+        r = _redis_client()
         r.setex(f"inbound:enqueued:{raw_key}", _ENQUEUED_TTL_SECONDS, "1")
     except Exception:
         logger.exception("SES bridge redis setex failed key=%s", raw_key)
+
+
+def _mark_key_ignored_in_redis(raw_key: str) -> None:
+    """Permanently mark a key as ignored so the polling loop never re-enqueues it.
+
+    Used when a Temporal workflow completes as 'ignored' (unknown inbox, etc.) without
+    creating an InboundEmail DB record.  Without this, every poll cycle after the
+    short-lived 'enqueued' TTL expires would spin up a new workflow indefinitely.
+    """
+    try:
+        r = _redis_client()
+        r.setex(f"inbound:ignored:{raw_key}", _IGNORED_TTL_SECONDS, "1")
+    except Exception:
+        logger.exception("SES bridge redis setex ignored failed key=%s", raw_key)
 
 
 async def _is_key_already_processed(raw_key: str) -> bool:
@@ -270,6 +302,12 @@ async def _process_raw_key(s3_client, bucket: str, key: str) -> None:
     logger.info("SES bridge process start key=%s", key)
     if "AMAZON_SES_SETUP_NOTIFICATION" in key:
         logger.info("SES bridge skipped key=%s reason=ses_setup_notification", key)
+        return
+    # Fast Redis guard: skip keys that are already enqueued (workflow running) or
+    # permanently ignored (workflow completed without a DB record being created).
+    # This check must come before the DB query to avoid hammering the DB every poll.
+    if _is_key_enqueued_in_redis(key):
+        logger.debug("SES bridge skipped key=%s reason=redis_dedup", key)
         return
     if await _is_key_already_processed(key):
         logger.info("SES bridge skipped key=%s reason=already_processed", key)

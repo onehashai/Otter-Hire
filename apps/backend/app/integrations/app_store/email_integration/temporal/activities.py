@@ -19,6 +19,7 @@ from app.core.config import settings
 from app.db.session import AsyncSessionLocal
 from app.integrations.app_store.email_integration.ses_bridge import (
     _extract_text_and_attachments,
+    _mark_key_ignored_in_redis,
     _post_to_inbound_api,
     _resolve_inbox_context,
 )
@@ -135,6 +136,11 @@ async def parse_and_create_candidate_activity(input_data: dict) -> dict:
     data = input_data.get("data") or {}
     key = str(input_data.get("key") or "")
     if data.get("status") != "ready":
+        # Workflow completed without creating an InboundEmail DB record (unknown inbox,
+        # bad format, etc.).  Mark the key as permanently ignored in Redis so the
+        # polling loop never re-enqueues it after the short-lived 'enqueued' TTL expires.
+        if key:
+            _mark_key_ignored_in_redis(key)
         return data
 
     payload = dict(data["payload"])

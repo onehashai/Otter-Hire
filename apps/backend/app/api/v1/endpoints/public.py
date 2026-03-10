@@ -15,6 +15,10 @@ from urllib.parse import unquote_plus
 from urllib.request import urlopen
 from uuid import UUID
 
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric.padding import PKCS1v15
+from cryptography.x509 import load_pem_x509_certificate
+
 import pycountry
 import redis.asyncio as aioredis
 from fastapi import (
@@ -677,6 +681,75 @@ def _confirm_sns_subscription(subscribe_url: str) -> bool:
         return False
 
 
+# ---------------------------------------------------------------------------
+# SNS message signature verification
+# ---------------------------------------------------------------------------
+
+_SNS_CERT_URL_RE = re.compile(r"^https://sns\.[a-z0-9-]+\.amazonaws\.com/")
+_sns_cert_cache: dict[str, bytes] = {}
+
+
+def _fetch_sns_cert(cert_url: str) -> bytes:
+    """Download and cache the PEM certificate SNS uses to sign messages."""
+    if cert_url in _sns_cert_cache:
+        return _sns_cert_cache[cert_url]
+    with urlopen(cert_url, timeout=10) as resp:
+        pem = resp.read()
+    _sns_cert_cache[cert_url] = pem
+    return pem
+
+
+def _build_sns_string_to_sign(payload: dict) -> bytes:
+    """Reconstruct the canonical string SNS signed, per AWS documentation."""
+    msg_type = payload.get("Type", "")
+    if msg_type == "Notification":
+        # Subject is optional — only include it when present in the payload
+        field_order = ["Message", "MessageId", "Subject", "Timestamp", "TopicArn", "Type"]
+    elif msg_type in ("SubscriptionConfirmation", "UnsubscribeConfirmation"):
+        field_order = ["Message", "MessageId", "SubscribeURL", "Timestamp", "Token", "TopicArn", "Type"]
+    else:
+        return b""
+    parts = []
+    for field in field_order:
+        value = payload.get(field)
+        if value is not None:
+            parts.append(f"{field}\n{value}\n")
+    return "".join(parts).encode("utf-8")
+
+
+def _verify_sns_signature(payload: dict) -> bool:
+    """Verify the RSA signature SNS attaches to every notification.
+
+    Supports SignatureVersion 1 (SHA1) and 2 (SHA256).
+    Returns True only when the signature is cryptographically valid.
+    Returns False on missing fields, a non-AWS cert URL, or any error.
+    """
+    cert_url = str(payload.get("SigningCertURL") or "").strip()
+    signature_b64 = str(payload.get("Signature") or "").strip()
+    sig_version = str(payload.get("SignatureVersion") or "1").strip()
+
+    if not cert_url or not signature_b64:
+        logger.warning("SNS verify skipped: missing SigningCertURL or Signature")
+        return False
+
+    if not _SNS_CERT_URL_RE.match(cert_url):
+        logger.warning("SNS verify rejected: cert URL not from sns.*.amazonaws.com: %s", cert_url)
+        return False
+
+    try:
+        pem = _fetch_sns_cert(cert_url)
+        cert = load_pem_x509_certificate(pem)
+        public_key = cert.public_key()
+        string_to_sign = _build_sns_string_to_sign(payload)
+        signature = base64.b64decode(signature_b64)
+        hash_algo: hashes.HashAlgorithm = hashes.SHA256() if sig_version == "2" else hashes.SHA1()
+        public_key.verify(signature, string_to_sign, PKCS1v15(), hash_algo)
+        return True
+    except Exception:
+        logger.exception("SNS signature verification failed")
+        return False
+
+
 async def get_org_member_id(
     request: Request,
     authorization: Optional[str] = Header(None),
@@ -1226,14 +1299,17 @@ async def _route_inbound_to_conversation(
       Promotional, transactional, or off-topic emails are ignored.
 
     Resolution order:
-    1. Match ``In-Reply-To`` to an existing outbound message's ``email_message_id``
-       → always accepted, appended to that conversation.
-    2. (After gate) Match ``from_email`` to an existing candidate → new conversation.
-    3. (After gate) Unknown sender → create a minimal candidate + new conversation.
+    1. Match ``In-Reply-To`` / ``References`` headers to an existing message's
+       ``email_message_id`` → always accepted, appended to that conversation.
+    2. (After gate) Match ``from_email`` to an existing candidate and find their
+       most-recently-active open email conversation → append to it.
+    3. (After gate) Existing candidate with no open conversation → new conversation.
+    4. (After gate) Unknown sender → create a minimal candidate + new conversation.
 
     Returns ``(conversation_id, message_id)`` if a message was created, else None.
     Does **not** commit — callers are responsible for flushing/committing.
     """
+    from app.integrations.app_store.email_integration.ses_bridge import _parse_references
     from app.utils.uuid import uuid7
 
     org_id: UUID = org_inbox.org_id
@@ -1249,13 +1325,25 @@ async def _route_inbound_to_conversation(
     conv: Conversation | None = None
     candidate: Candidate | None = None
 
-    # --- Path 1: thread match via In-Reply-To header ---
+    # --- Path 1: thread match via In-Reply-To / References headers ---
+    # Collect all message-IDs from the threading headers so we can match even
+    # when the direct parent message-ID isn't in our DB (e.g. the candidate
+    # forwarded the email or the MUA set a different In-Reply-To).
+    thread_ids: list[str] = []
     if in_reply_to:
+        thread_ids.append(in_reply_to)
+    references_raw = (getattr(payload, "references", None) or "").strip()
+    if references_raw:
+        thread_ids.extend(_parse_references(references_raw))
+
+    for tid in thread_ids:
+        if not tid:
+            continue
         msg_result = await db.execute(
             select(Message)
             .where(
                 Message.org_id == org_id,
-                Message.email_message_id == in_reply_to,
+                Message.email_message_id == tid,
             )
             .limit(1)
         )
@@ -1270,25 +1358,11 @@ async def _route_inbound_to_conversation(
                     select(Candidate).where(Candidate.id == conv.candidate_id)
                 )
                 candidate = cand_result.scalar_one_or_none()
-
-    # For paths 2 & 3 (new conversations) we require proof of job-application
-    # intent unless there is a resume attachment (handled by the resume pipeline)
-    # or the email is already a reply to a known thread (Path 1 above).
-    is_thread_reply = conv is not None
-    has_resume = any(
-        _is_resume_attachment(att.filename, att.content_type)
-        for att in (payload.attachments or [])
-    )
-    if not is_thread_reply and not has_resume and not _looks_like_job_inquiry(payload):
-        logger.info(
-            "Inbound email skipped (no job-application signal) from=%s org_id=%s subject=%r",
-            from_email,
-            org_id,
-            payload.subject,
-        )
-        return None
+                break
 
     # --- Path 2: existing candidate matched by sender email ---
+    # Do this BEFORE the job-inquiry gate so that messages from known candidates
+    # (e.g. a casual "sup!!" reply) are never silently dropped.
     if candidate is None:
         cand_result = await db.execute(
             select(Candidate).where(
@@ -1297,6 +1371,50 @@ async def _route_inbound_to_conversation(
             )
         )
         candidate = cand_result.scalar_one_or_none()
+
+    # --- Path 2b: reuse the candidate's most-recently-active open conversation ---
+    # This prevents a new conversation from being created every time a known
+    # candidate sends a fresh email that has no In-Reply-To header (e.g. they
+    # compose a new email rather than hitting "Reply" in their mail client).
+    if candidate is not None and conv is None:
+        existing_conv_result = await db.execute(
+            select(Conversation)
+            .where(
+                Conversation.org_id == org_id,
+                Conversation.candidate_id == candidate.id,
+                Conversation.channel == "email",
+                Conversation.status == "open",
+            )
+            .order_by(Conversation.last_message_at.desc().nullslast())
+            .limit(1)
+        )
+        conv = existing_conv_result.scalar_one_or_none()
+        if conv is not None:
+            logger.info(
+                "Inbound email appended to existing open conversation "
+                "conv_id=%s candidate_id=%s from=%s",
+                conv.id,
+                candidate.id,
+                from_email,
+            )
+
+    # Gate: for completely unknown senders (no In-Reply-To match, no existing
+    # candidate record) require clear job-application intent or a resume
+    # attachment to avoid ingesting spam / off-topic cold emails.
+    is_known_sender = conv is not None or candidate is not None
+    has_resume = any(
+        _is_resume_attachment(att.filename, att.content_type)
+        for att in (payload.attachments or [])
+    )
+    if not is_known_sender and not has_resume and not _looks_like_job_inquiry(payload):
+        logger.info(
+            "Inbound email skipped (unknown sender, no job-application signal) "
+            "from=%s org_id=%s subject=%r",
+            from_email,
+            org_id,
+            payload.subject,
+        )
+        return None
 
     # --- Path 3: brand-new sender → create a minimal candidate record ---
     if candidate is None:
@@ -1782,6 +1900,13 @@ async def enqueue_inbound_s3_event(
         raise HTTPException(status_code=422, detail="Invalid event payload")
 
     message_type = str(payload.get("Type") or "").strip()
+
+    if message_type in ("Notification", "SubscriptionConfirmation"):
+        if settings.inbound_sns_verify_signature:
+            verified = await asyncio.to_thread(_verify_sns_signature, payload)
+            if not verified:
+                raise HTTPException(status_code=403, detail="SNS signature verification failed")
+
     if message_type == "SubscriptionConfirmation":
         topic_arn = str(payload.get("TopicArn") or "").strip()
         if topic_arn and not _topic_allowed(topic_arn):

@@ -150,6 +150,9 @@ class Settings(BaseSettings):
     inbound_sns_auto_confirm: bool = Field(
         default=True, validation_alias="INBOUND_SNS_AUTO_CONFIRM"
     )
+    inbound_sns_verify_signature: bool = Field(
+        default=False, validation_alias="INBOUND_SNS_VERIFY_SIGNATURE"
+    )
     feature_integrations_app_store_ui: bool = Field(
         default=False, validation_alias="FEATURE_INTEGRATIONS_APP_STORE_UI"
     )

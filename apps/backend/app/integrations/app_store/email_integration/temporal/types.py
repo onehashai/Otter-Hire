@@ -20,5 +20,4 @@ class OutboundWorkflowInput:
     body: str
     html_body: str | None = None
     from_name: str | None = None
-    in_reply_to: str | None = None       # raw Message-ID (no angle brackets)
-    references: list[str] = field(default_factory=list)
+    reply_to: str | None = None          # e.g. reply+<conversation_id>@inbound.domain — keeps replies in same thread

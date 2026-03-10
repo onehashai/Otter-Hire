@@ -94,6 +94,7 @@ class InboundAttachmentPayload(BaseModel):
 
 class InboundEmailPayload(BaseModel):
     inbox_address: str
+    reply_to_conversation_id: str | None = None  # when To: reply+<conv_id>@...
     from_email: str | None = None
     from_name: str | None = None
     subject: str | None = None

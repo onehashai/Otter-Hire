@@ -16,6 +16,7 @@ from app.integrations.app_store.email_integration.temporal.types import Outbound
 from app.models.candidate import Candidate
 from app.models.conversation import Conversation
 from app.models.message import Message
+from app.models.organization import OrgInbox
 from app.models.user import User
 from app.schemas.conversations import (
     CandidateSnippet,
@@ -36,7 +37,22 @@ router = APIRouter(prefix="/conversations", tags=["conversations"])
 # ---------------------------------------------------------------------------
 
 
+def _reply_to_for_conversation(conv_id: UUID, inbox_address: str | None) -> str | None:
+    """Build Reply-To address so candidate replies land in this conversation (reply+<conv_id>@domain)."""
+    if not inbox_address or "@" not in inbox_address:
+        return None
+    domain = inbox_address.strip().lower().split("@", 1)[1]
+    return f"reply+{conv_id}@{domain}"
+
+
 def _message_to_read(msg: Message, sender_name: str | None = None) -> MessageRead:
+    from app.utils.email_parse import parse_email_body
+
+    body_visible: str | None = None
+    body_quoted: str | None = None
+    if msg.body:
+        body_visible, body_quoted = parse_email_body(msg.body)
+
     return MessageRead(
         id=msg.id,
         conversation_id=msg.conversation_id,
@@ -47,6 +63,8 @@ def _message_to_read(msg: Message, sender_name: str | None = None) -> MessageRea
         from_email=msg.from_email,
         to_email=msg.to_email,
         body=msg.body,
+        body_visible=body_visible,
+        body_quoted=body_quoted,
         html_body=msg.html_body,
         status=msg.status,
         provider_message_id=msg.provider_message_id,
@@ -107,7 +125,14 @@ async def list_conversations(
         rows = await db.execute(
             select(subq.c.conversation_id, subq.c.body).where(subq.c.rn == 1)
         )
-        last_msgs = {row.conversation_id: row.body for row in rows}
+        raw_last_msgs = {row.conversation_id: row.body for row in rows}
+        # Use only visible part (no quoted block) for list preview
+        from app.utils.email_parse import parse_email_body
+
+        last_msgs = {}
+        for cid, body in raw_last_msgs.items():
+            visible, _ = parse_email_body(body or "")
+            last_msgs[cid] = visible or body or ""
 
         count_rows = await db.execute(
             select(Message.conversation_id, func.count().label("cnt"))
@@ -247,6 +272,13 @@ async def create_conversation(
     await db.commit()
     await db.refresh(conv)
 
+    # Reply-To so candidate replies stay in this conversation (reply+<conv_id>@inbound-domain)
+    reply_to = None
+    inbox_result = await db.execute(select(OrgInbox).where(OrgInbox.org_id == current_user.org_id))
+    org_inbox = inbox_result.scalar_one_or_none()
+    if org_inbox and org_inbox.inbox_address:
+        reply_to = _reply_to_for_conversation(conv.id, org_inbox.inbox_address)
+
     # Hand off actual sending to the Temporal worker (async, retriable)
     try:
         await enqueue_outbound_email(
@@ -258,6 +290,7 @@ async def create_conversation(
                 body=body.body,
                 html_body=body.html_body,
                 from_name=current_user.name,
+                reply_to=reply_to,
             )
         )
     except Exception:
@@ -323,18 +356,6 @@ async def send_message(
 
     now = datetime.now(tz=timezone.utc)
 
-    # Collect prior message IDs for email threading (In-Reply-To / References headers)
-    prior_msgs_result = await db.execute(
-        select(Message.email_message_id)
-        .where(
-            Message.conversation_id == conv.id,
-            Message.email_message_id.is_not(None),
-        )
-        .order_by(Message.created_at.asc())
-    )
-    prior_ids = [r[0] for r in prior_msgs_result.all() if r[0]]
-    in_reply_to_id = prior_ids[-1] if prior_ids else None
-
     msg_id = uuid7()
     msg = Message(
         id=msg_id,
@@ -348,7 +369,7 @@ async def send_message(
         body=body.body,
         html_body=body.html_body,
         status="queued",
-        in_reply_to=in_reply_to_id,
+        in_reply_to=None,
         created_at=now,
     )
     db.add(msg)
@@ -361,6 +382,13 @@ async def send_message(
     await db.commit()
     await db.refresh(msg)
 
+    # Reply-To so candidate replies stay in this conversation (reply+<conv_id>@inbound-domain)
+    reply_to = None
+    inbox_result = await db.execute(select(OrgInbox).where(OrgInbox.org_id == current_user.org_id))
+    org_inbox = inbox_result.scalar_one_or_none()
+    if org_inbox and org_inbox.inbox_address:
+        reply_to = _reply_to_for_conversation(conv.id, org_inbox.inbox_address)
+
     # Hand off actual sending to the Temporal worker (async, retriable)
     try:
         await enqueue_outbound_email(
@@ -372,8 +400,7 @@ async def send_message(
                 body=body.body,
                 html_body=body.html_body,
                 from_name=current_user.name,
-                in_reply_to=in_reply_to_id,
-                references=prior_ids,
+                reply_to=reply_to,
             )
         )
     except Exception:

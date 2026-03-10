@@ -19,6 +19,13 @@ class Settings(BaseSettings):
         return url
 
     is_production: bool = Field(default=False, validation_alias="IS_PRODUCTION")
+
+    # SQLAdmin (local development only — ignored in production)
+    sqladmin_username: str = Field(default="admin", validation_alias="SQLADMIN_USERNAME")
+    sqladmin_password: str = Field(default="admin", validation_alias="SQLADMIN_PASSWORD")
+    sqladmin_secret_key: str = Field(
+        default="sqladmin-dev-secret-change-me", validation_alias="SQLADMIN_SECRET_KEY"
+    )
     cors_origins_raw: str = Field(default="", validation_alias="CORS_ORIGINS")
     jwt_secret_key: str = Field(validation_alias="JWT_SECRET_KEY")
     jwt_algorithm: str = Field(default="HS256", validation_alias="JWT_ALGORITHM")
@@ -135,10 +142,6 @@ class Settings(BaseSettings):
     temporal_namespace: str = Field(
         default="default",
         validation_alias="TEMPORAL_NAMESPACE",
-    )
-    temporal_task_queue: str = Field(
-        default="inbound",
-        validation_alias="TEMPORAL_TASK_QUEUE",
     )
     inbound_events_channel: str = Field(
         default="ats:inbound:events", validation_alias="INBOUND_EVENTS_CHANNEL"

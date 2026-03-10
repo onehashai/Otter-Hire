@@ -66,6 +66,8 @@ function mapMessage(msg: MessageRead, subject?: string): Message {
     toEmail: msg.to_email,
     subject: subject,
     content: msg.body,
+    bodyVisible: msg.body_visible ?? undefined,
+    bodyQuoted: msg.body_quoted ?? undefined,
     timestamp: formatTimestamp(msg.created_at),
     status: msg.status,
   };

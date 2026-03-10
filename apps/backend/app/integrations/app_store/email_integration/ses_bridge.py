@@ -11,6 +11,7 @@ import time
 import urllib.error
 import urllib.request
 from datetime import datetime, timedelta, timezone
+from uuid import UUID
 from email import policy
 from email.parser import BytesParser
 from email.utils import parseaddr
@@ -21,6 +22,7 @@ from sqlalchemy import delete, select
 
 from app.core.config import settings
 from app.db.session import AsyncSessionLocal
+from app.models.conversation import Conversation
 from app.models.email import InboundEmail
 from app.models.organization import OrgInbox
 
@@ -200,11 +202,22 @@ def _extract_org_id_from_forwarding_address(inbox_address: str) -> str | None:
     return f"{hex_id[0:8]}-{hex_id[8:12]}-{hex_id[12:16]}-{hex_id[16:20]}-{hex_id[20:32]}"
 
 
-async def _resolve_inbox_context(inbox_address: str) -> tuple[str, str] | None:
+# Matches To address like reply+<conversation_id>@inbound.domain
+_REPLY_CONVERSATION_PATTERN = re.compile(
+    r"^reply\+([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})@",
+    re.IGNORECASE,
+)
+
+
+async def _resolve_inbox_context(
+    inbox_address: str,
+) -> tuple[str, str, str | None] | None:
     """
-    Resolve secret + canonical inbox address.
+    Resolve secret + canonical inbox address + optional reply_to_conversation_id.
     1) Direct match on org_inboxes.inbox_address
     2) Fallback for forwarding alias org-<orgid>@inbound.domain -> lookup by org_id
+    3) Fallback for reply+<conversation_id>@... -> lookup conversation, then org_inbox by org_id
+    Returns (secret, canonical_inbox_address, reply_to_conversation_id_str or None).
     """
     async with AsyncSessionLocal() as db:
         direct_result = await db.execute(
@@ -214,20 +227,44 @@ async def _resolve_inbox_context(inbox_address: str) -> tuple[str, str] | None:
         if direct_inbox is not None:
             secret = direct_inbox.secret_hash or settings.inbound_webhook_secret
             if secret:
-                return secret, direct_inbox.inbox_address
+                reply_conv_id = None
+                m = _REPLY_CONVERSATION_PATTERN.match((inbox_address or "").strip().lower())
+                if m:
+                    reply_conv_id = m.group(1)
+                return secret, direct_inbox.inbox_address, reply_conv_id
 
         org_id = _extract_org_id_from_forwarding_address(inbox_address)
-        if not org_id:
-            return None
+        if org_id:
+            org_result = await db.execute(select(OrgInbox).where(OrgInbox.org_id == org_id))
+            org_inbox = org_result.scalar_one_or_none()
+            if org_inbox is not None:
+                secret = org_inbox.secret_hash or settings.inbound_webhook_secret
+                if secret:
+                    return secret, org_inbox.inbox_address, None
 
-        org_result = await db.execute(select(OrgInbox).where(OrgInbox.org_id == org_id))
+        # reply+<conversation_id>@... -> resolve via conversation
+        m = _REPLY_CONVERSATION_PATTERN.match((inbox_address or "").strip().lower())
+        if not m:
+            return None
+        conv_id_str = m.group(1)
+        try:
+            conv_uuid = UUID(conv_id_str)
+        except (ValueError, TypeError):
+            return None
+        conv_result = await db.execute(
+            select(Conversation).where(Conversation.id == conv_uuid)
+        )
+        conv = conv_result.scalar_one_or_none()
+        if conv is None:
+            return None
+        org_result = await db.execute(select(OrgInbox).where(OrgInbox.org_id == conv.org_id))
         org_inbox = org_result.scalar_one_or_none()
         if org_inbox is None:
             return None
         secret = org_inbox.secret_hash or settings.inbound_webhook_secret
         if not secret:
             return None
-        return secret, org_inbox.inbox_address
+        return secret, org_inbox.inbox_address, conv_id_str
 
 
 async def _cleanup_ignored_inbound_records(s3_client, bucket: str) -> None:
@@ -366,10 +403,11 @@ async def _process_raw_key(s3_client, bucket: str, key: str) -> None:
             inbox_address,
         )
         return
-    secret, canonical_inbox_address = inbox_context
+    secret, canonical_inbox_address, reply_to_conv_id = inbox_context
 
     payload = {
         "inbox_address": canonical_inbox_address,
+        "reply_to_conversation_id": reply_to_conv_id,
         "from_email": normalized.get("from_email"),
         "subject": normalized.get("subject"),
         "message_id": normalized.get("message_id"),

@@ -18,6 +18,8 @@ export interface Message {
   ccEmail?: string;
   subject?: string;
   content: string;
+  bodyVisible?: string;
+  bodyQuoted?: string;
   timestamp: string;
   status?: MessageStatus;
   type?: "email" | "note" | "system";
@@ -48,25 +50,6 @@ function getInitials(name: string) {
     .join("")
     .toUpperCase()
     .slice(0, 2);
-}
-
-function splitEmailBody(body: string): { main: string; quoted: string | null } {
-  const patterns = [
-    /\n\n[-]{3,}\s*Original Message\s*[-]{3,}/i,
-    /\nOn .{10,100} wrote:\n/,
-    /\n>{1,}/m,
-    /\n-{4,}\nFrom:/i,
-  ];
-  for (const pattern of patterns) {
-    const match = body.search(pattern);
-    if (match > 0) {
-      return {
-        main: body.slice(0, match).trim(),
-        quoted: body.slice(match).trim(),
-      };
-    }
-  }
-  return { main: body.trim(), quoted: null };
 }
 
 // ---------------------------------------------------------------------------
@@ -121,7 +104,8 @@ function OutboundStatus({ status }: { status: MessageStatus | undefined }) {
 
 function EmailCard({ msg }: { msg: Message }) {
   const [showQuoted, setShowQuoted] = useState(false);
-  const { main, quoted } = splitEmailBody(msg.content);
+  const main = msg.bodyVisible ?? msg.content;
+  const quoted = msg.bodyQuoted ?? null;
 
   const isOutbound = msg.sender === "team";
   const initials = getInitials(msg.senderName);

@@ -19,6 +19,8 @@ class MessageRead(BaseModel):
     from_email: str
     to_email: str
     body: str
+    body_visible: str | None = None
+    body_quoted: str | None = None
     html_body: str | None = None
     status: str
     provider_message_id: str | None = None

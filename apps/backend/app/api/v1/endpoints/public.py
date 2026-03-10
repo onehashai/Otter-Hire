@@ -1186,7 +1186,7 @@ _NO_REPLY_PATTERNS = frozenset(
     ]
 )
 
-
+# For new conversations only: require content to look like a real candidate / job inquiry
 _JOB_APPLICATION_SUBJECT_KEYWORDS = frozenset(
     [
         "application",
@@ -1209,7 +1209,6 @@ _JOB_APPLICATION_SUBJECT_KEYWORDS = frozenset(
         "cover letter",
     ]
 )
-
 _JOB_APPLICATION_BODY_KEYWORDS = frozenset(
     [
         "i am applying",
@@ -1238,29 +1237,17 @@ _JOB_APPLICATION_BODY_KEYWORDS = frozenset(
 
 
 def _looks_like_job_inquiry(payload: "InboundEmailPayload") -> bool:
-    """Return True if the email content suggests a genuine job inquiry.
-
-    Used as a gate for cold inbound emails that have no resume attachment
-    and are not replies to an existing thread.  A resume attachment already
-    counts as strong proof and bypasses this check in the caller.
-    """
+    """True if subject/body suggest a real candidate or job inquiry. Used to gate new conversations only."""
     subject = (payload.subject or "").lower()
     body = (payload.text_body or "").lower()
 
-    # Strong signal: subject line contains an application keyword
     if any(kw in subject for kw in _JOB_APPLICATION_SUBJECT_KEYWORDS):
         return True
-
-    # Strong signal: body contains a job-application phrase
     if any(kw in body for kw in _JOB_APPLICATION_BODY_KEYWORDS):
         return True
-
-    # Weak signal: subject + body together hit 2+ distinct keywords
     combined = subject + " " + body
-    hits = sum(1 for kw in _JOB_APPLICATION_SUBJECT_KEYWORDS if kw in combined)
-    if hits >= 2:
+    if sum(1 for kw in _JOB_APPLICATION_SUBJECT_KEYWORDS if kw in combined) >= 2:
         return True
-
     return False
 
 
@@ -1287,34 +1274,67 @@ def _is_automated_email(payload: "InboundEmailPayload") -> str | None:
     return None
 
 
+# Matches To/Reply-To addresses like reply+<conversation_id>@inbound.domain
+_REPLY_CONVERSATION_PATTERN = re.compile(
+    r"^reply\+([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})@",
+    re.IGNORECASE,
+)
+
+
+def _parse_reply_conversation_id(inbox_address: str) -> UUID | None:
+    """If inbox_address is reply+<conversation_id>@..., return that UUID else None."""
+    if not inbox_address:
+        return None
+    addr = inbox_address.strip().lower()
+    m = _REPLY_CONVERSATION_PATTERN.match(addr)
+    if not m:
+        return None
+    try:
+        return UUID(m.group(1))
+    except (ValueError, TypeError):
+        return None
+
+
+async def _resolve_org_inbox_for_reply_address(
+    db: "AsyncSession", inbox_address: str
+) -> tuple["OrgInbox", UUID] | None:
+    """When inbox_address is reply+<conv_id>@..., resolve OrgInbox via conversation lookup."""
+    conv_id = _parse_reply_conversation_id(inbox_address)
+    if conv_id is None:
+        return None
+    conv_result = await db.execute(
+        select(Conversation).where(Conversation.id == conv_id)
+    )
+    conv = conv_result.scalar_one_or_none()
+    if conv is None:
+        return None
+    inbox_result = await db.execute(
+        select(OrgInbox).where(OrgInbox.org_id == conv.org_id)
+    )
+    org_inbox = inbox_result.scalar_one_or_none()
+    if org_inbox is None:
+        return None
+    return org_inbox, conv_id
+
+
 async def _route_inbound_to_conversation(
     db: "AsyncSession",
     org_inbox: "OrgInbox",
     payload: "InboundEmailPayload",
+    reply_to_conversation_id: UUID | None = None,
 ) -> tuple[str, str] | None:
     """Attach the inbound email to an existing or new conversation.
 
-    Gate (for cold emails only — skipped for thread replies and resume attachments):
-      The email subject or body must contain clear job-application intent signals.
-      Promotional, transactional, or off-topic emails are ignored.
-
-    Resolution order:
-    1. Match ``In-Reply-To`` / ``References`` headers to an existing message's
-       ``email_message_id`` → always accepted, appended to that conversation.
-    2. (After gate) Match ``from_email`` to an existing candidate and find their
-       most-recently-active open email conversation → append to it.
-    3. (After gate) Existing candidate with no open conversation → new conversation.
-    4. (After gate) Unknown sender → create a minimal candidate + new conversation.
+    - If reply_to_conversation_id is set (from To: reply+<conv_id>@... or payload): append to that conversation.
+    - Otherwise: create a new conversation (and candidate if new sender).
 
     Returns ``(conversation_id, message_id)`` if a message was created, else None.
     Does **not** commit — callers are responsible for flushing/committing.
     """
-    from app.integrations.app_store.email_integration.ses_bridge import _parse_references
     from app.utils.uuid import uuid7
 
     org_id: UUID = org_inbox.org_id
     from_email = (payload.from_email or "").strip().lower()
-    in_reply_to = (payload.in_reply_to or "").strip().strip("<>") or None
     body_text = (payload.text_body or "").strip() or (payload.html_body or "").strip()
     subject = (payload.subject or "").strip() or "(no subject)"
     inbox_address = org_inbox.inbox_address
@@ -1325,45 +1345,43 @@ async def _route_inbound_to_conversation(
     conv: Conversation | None = None
     candidate: Candidate | None = None
 
-    # --- Path 1: thread match via In-Reply-To / References headers ---
-    # Collect all message-IDs from the threading headers so we can match even
-    # when the direct parent message-ID isn't in our DB (e.g. the candidate
-    # forwarded the email or the MUA set a different In-Reply-To).
-    thread_ids: list[str] = []
-    if in_reply_to:
-        thread_ids.append(in_reply_to)
-    references_raw = (getattr(payload, "references", None) or "").strip()
-    if references_raw:
-        thread_ids.extend(_parse_references(references_raw))
-
-    for tid in thread_ids:
-        if not tid:
-            continue
-        msg_result = await db.execute(
-            select(Message)
-            .where(
-                Message.org_id == org_id,
-                Message.email_message_id == tid,
+    if reply_to_conversation_id is not None:
+        conv_result = await db.execute(
+            select(Conversation).where(
+                Conversation.id == reply_to_conversation_id,
+                Conversation.org_id == org_id,
             )
-            .limit(1)
         )
-        replied_msg = msg_result.scalar_one_or_none()
-        if replied_msg is not None:
-            conv_result = await db.execute(
-                select(Conversation).where(Conversation.id == replied_msg.conversation_id)
+        conv = conv_result.scalar_one_or_none()
+        if conv is not None:
+            cand_result = await db.execute(
+                select(Candidate).where(Candidate.id == conv.candidate_id)
             )
-            conv = conv_result.scalar_one_or_none()
-            if conv is not None:
-                cand_result = await db.execute(
-                    select(Candidate).where(Candidate.id == conv.candidate_id)
+            candidate = cand_result.scalar_one_or_none()
+            if candidate is not None:
+                logger.info(
+                    "Inbound email appended via reply_to_conversation_id=%s from=%s",
+                    conv.id,
+                    from_email,
                 )
-                candidate = cand_result.scalar_one_or_none()
-                break
+            else:
+                conv = None
 
-    # --- Path 2: existing candidate matched by sender email ---
-    # Do this BEFORE the job-inquiry gate so that messages from known candidates
-    # (e.g. a casual "sup!!" reply) are never silently dropped.
-    if candidate is None:
+    # New conversation path: only accept if content looks like a real candidate (ATS gate)
+    if conv is None:
+        has_resume = any(
+            _is_resume_attachment(att.filename, att.content_type)
+            for att in (payload.attachments or [])
+        )
+        if not has_resume and not _looks_like_job_inquiry(payload):
+            logger.info(
+                "Inbound email skipped (new conversation gate: not candidate/job content) from=%s org_id=%s subject=%r",
+                from_email,
+                org_id,
+                payload.subject,
+            )
+            return None
+
         cand_result = await db.execute(
             select(Candidate).where(
                 Candidate.org_id == org_id,
@@ -1371,80 +1389,31 @@ async def _route_inbound_to_conversation(
             )
         )
         candidate = cand_result.scalar_one_or_none()
-
-    # --- Path 2b: reuse the candidate's most-recently-active open conversation ---
-    # This prevents a new conversation from being created every time a known
-    # candidate sends a fresh email that has no In-Reply-To header (e.g. they
-    # compose a new email rather than hitting "Reply" in their mail client).
-    if candidate is not None and conv is None:
-        existing_conv_result = await db.execute(
-            select(Conversation)
-            .where(
-                Conversation.org_id == org_id,
-                Conversation.candidate_id == candidate.id,
-                Conversation.channel == "email",
-                Conversation.status == "open",
+        if candidate is None:
+            display_name = (payload.from_name or "").strip()
+            if not display_name:
+                display_name = from_email.split("@")[0].replace(".", " ").replace("_", " ").title()
+            candidate = Candidate(
+                org_id=org_id,
+                job_id=None,
+                stage_id=None,
+                status="active",
+                name=display_name,
+                email=from_email,
+                phone=None,
+                location=None,
+                profile_links={},
+                source="email_inbound",
+                tags=[],
             )
-            .order_by(Conversation.last_message_at.desc().nullslast())
-            .limit(1)
-        )
-        conv = existing_conv_result.scalar_one_or_none()
-        if conv is not None:
+            db.add(candidate)
+            await db.flush()
             logger.info(
-                "Inbound email appended to existing open conversation "
-                "conv_id=%s candidate_id=%s from=%s",
-                conv.id,
+                "Inbound email created new candidate candidate_id=%s email=%s org_id=%s",
                 candidate.id,
                 from_email,
+                org_id,
             )
-
-    # Gate: for completely unknown senders (no In-Reply-To match, no existing
-    # candidate record) require clear job-application intent or a resume
-    # attachment to avoid ingesting spam / off-topic cold emails.
-    is_known_sender = conv is not None or candidate is not None
-    has_resume = any(
-        _is_resume_attachment(att.filename, att.content_type)
-        for att in (payload.attachments or [])
-    )
-    if not is_known_sender and not has_resume and not _looks_like_job_inquiry(payload):
-        logger.info(
-            "Inbound email skipped (unknown sender, no job-application signal) "
-            "from=%s org_id=%s subject=%r",
-            from_email,
-            org_id,
-            payload.subject,
-        )
-        return None
-
-    # --- Path 3: brand-new sender → create a minimal candidate record ---
-    if candidate is None:
-        display_name = (payload.from_name or "").strip()
-        if not display_name:
-            display_name = from_email.split("@")[0].replace(".", " ").replace("_", " ").title()
-        candidate = Candidate(
-            org_id=org_id,
-            job_id=None,
-            stage_id=None,
-            status="active",
-            name=display_name,
-            email=from_email,
-            phone=None,
-            location=None,
-            profile_links={},
-            source="email_inbound",
-            tags=[],
-        )
-        db.add(candidate)
-        await db.flush()
-        logger.info(
-            "Inbound email created new candidate candidate_id=%s email=%s org_id=%s",
-            candidate.id,
-            from_email,
-            org_id,
-        )
-
-    # --- Create a new conversation if we don't already have one from Path 1 ---
-    if conv is None:
         now = datetime.now(tz=timezone.utc)
         conv = Conversation(
             id=uuid7(),
@@ -1458,9 +1427,12 @@ async def _route_inbound_to_conversation(
         )
         db.add(conv)
         await db.flush()
-
-    # Reopen closed conversations when the candidate replies
-    if conv.status == "closed":
+        logger.info(
+            "Inbound email created new conversation conversation_id=%s from=%s",
+            conv.id,
+            from_email,
+        )
+    elif conv.status == "closed":
         conv.status = "open"
 
     now = datetime.now(tz=timezone.utc)
@@ -1477,7 +1449,7 @@ async def _route_inbound_to_conversation(
         html_body=payload.html_body or None,
         status="received",
         email_message_id=(payload.message_id or "").strip().strip("<>") or None,
-        in_reply_to=in_reply_to,
+        in_reply_to=None,
         created_at=now,
     )
     db.add(inbound_msg)
@@ -1533,8 +1505,23 @@ async def ingest_inbound_email(
     inbox_address = payload.inbox_address.strip().lower()
     inbox_result = await db.execute(select(OrgInbox).where(OrgInbox.inbox_address == inbox_address))
     org_inbox = inbox_result.scalar_one_or_none()
+    reply_to_conv_id: UUID | None = None
+
     if org_inbox is None:
-        raise HTTPException(status_code=404, detail="Inbox configuration not found")
+        # To: reply+<conversation_id>@... → resolve org_inbox via conversation lookup
+        resolved = await _resolve_org_inbox_for_reply_address(db, inbox_address)
+        if resolved is not None:
+            org_inbox, reply_to_conv_id = resolved
+        else:
+            raise HTTPException(status_code=404, detail="Inbox configuration not found")
+    else:
+        # Exact match: still use reply+ conversation id from address or payload
+        reply_to_conv_id = _parse_reply_conversation_id(inbox_address)
+        if reply_to_conv_id is None and getattr(payload, "reply_to_conversation_id", None):
+            try:
+                reply_to_conv_id = UUID(payload.reply_to_conversation_id)
+            except (ValueError, TypeError):
+                pass
 
     secret = org_inbox.secret_hash or settings.inbound_webhook_secret
     if not secret:
@@ -1690,7 +1677,9 @@ async def ingest_inbound_email(
         }
 
     # --- Conversation routing (runs for ALL non-automated emails) ---
-    conversation_result = await _route_inbound_to_conversation(db, org_inbox, payload)
+    conversation_result = await _route_inbound_to_conversation(
+        db, org_inbox, payload, reply_to_conversation_id=reply_to_conv_id
+    )
 
     if not has_resume or resume_attachment is None:
         # No resume — conversation routing (if any) is committed here

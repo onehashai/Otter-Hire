@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import temporalio.exceptions
 
-from app.core.config import settings
 from app.integrations.app_store.email_integration.ses_bridge import _mark_key_enqueued_in_redis
 from app.integrations.app_store.email_integration.temporal.types import (
     InboundWorkflowInput,
@@ -23,7 +22,7 @@ async def enqueue_ses_raw_key(bucket: str, key: str) -> str:
             InboundEmailWorkflow.run,
             InboundWorkflowInput(bucket=bucket, key=key),
             id=workflow_id,
-            task_queue=settings.temporal_task_queue,
+            task_queue="email-inbound",
         )
         _mark_key_enqueued_in_redis(key)
         return str(handle.id)
@@ -45,7 +44,7 @@ async def enqueue_outbound_email(input_data: OutboundWorkflowInput) -> str:
             OutboundEmailWorkflow.run,
             input_data,
             id=workflow_id,
-            task_queue=settings.temporal_task_queue,
+            task_queue="email-outbound",
         )
         return str(handle.id)
     except temporalio.exceptions.WorkflowAlreadyStartedError:

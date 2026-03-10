@@ -64,9 +64,10 @@ async def extract_resume_activity(raw_email_b64: str) -> dict:
     if not inbox_context:
         return {"status": "ignored", "reason": "inbox_or_secret_not_found", "inbox": inbox_address}
 
-    secret, canonical_inbox_address = inbox_context
+    secret, canonical_inbox_address, reply_to_conv_id = inbox_context
     payload = {
         "inbox_address": canonical_inbox_address,
+        "reply_to_conversation_id": reply_to_conv_id,
         "from_email": normalized.get("from_email"),
         "subject": normalized.get("subject"),
         "message_id": normalized.get("message_id"),
@@ -106,9 +107,10 @@ async def download_and_extract_resume_activity(input_data: InboundWorkflowInput)
     if not inbox_context:
         return {"status": "ignored", "reason": "inbox_or_secret_not_found", "inbox": inbox_address}
 
-    secret, canonical_inbox_address = inbox_context
+    secret, canonical_inbox_address, reply_to_conv_id = inbox_context
     payload = {
         "inbox_address": canonical_inbox_address,
+        "reply_to_conversation_id": reply_to_conv_id,
         "from_email": normalized.get("from_email"),
         "subject": normalized.get("subject"),
         "message_id": normalized.get("message_id"),
@@ -242,10 +244,8 @@ async def send_outbound_email_activity(input_data: OutboundWorkflowInput) -> dic
         mime_msg["Subject"] = input_data.subject
         mime_msg["From"] = f"{display_name} <{from_email_addr}>"
         mime_msg["To"] = input_data.to_email
-        if input_data.in_reply_to:
-            mime_msg["In-Reply-To"] = f"<{input_data.in_reply_to}>"
-        if input_data.references:
-            mime_msg["References"] = " ".join(f"<{r}>" for r in input_data.references)
+        if input_data.reply_to:
+            mime_msg["Reply-To"] = input_data.reply_to
         # X-SES-Configuration-Set enables Delivery/Open/Bounce event publishing via SNS
         if settings.ses_configuration_set:
             mime_msg["X-SES-Configuration-Set"] = settings.ses_configuration_set

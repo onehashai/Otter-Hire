@@ -258,6 +258,56 @@ The repository includes internal QA/support assets under:
 - `docs/`
 - `scripts/`
 
+## CI/CD
+
+Deployment flow:
+
+1. Create a feature branch.
+2. Open a PR into `develop`.
+3. `CI` workflow must pass before merge.
+4. Merge PR into `develop`.
+5. `Deploy Staging` runs automatically and deploys changed services only.
+6. After staging validation, open a PR from `develop` to `main`.
+7. Owner/admin merges PR into `main`.
+8. `Deploy Production` runs automatically.
+
+Branch protection should be configured in GitHub:
+- block direct pushes to `develop`
+- block direct pushes to `main`
+- require PRs for both branches
+- require `CI` status checks before merge
+- restrict `main` merges to owner/admin
+
+### GitHub environments
+
+Create these GitHub Environments:
+- `staging`
+- `production`
+
+Add environment variables/secrets.
+
+Required `staging` variables:
+- `AWS_REGION`
+- `ECR_REGISTRY`
+- `ECR_REPOSITORY`
+- `ECS_CLUSTER`
+- `ECS_BACKEND_SERVICE`
+- `ECS_WORKER_SERVICE`
+- `ECS_WEB_SERVICE`
+- `ECS_BACKEND_TASKDEF`
+- `ECS_WORKER_TASKDEF`
+- `ECS_WEB_TASKDEF`
+- `API_HEALTHCHECK_URL`
+- `WEB_HEALTHCHECK_URL`
+
+Required `staging` secrets:
+- `AWS_ACCESS_KEY_ID`
+- `AWS_SECRET_ACCESS_KEY`
+
+The workflows retain only the latest 3 GitHub Actions-managed image tags for:
+- `backend-*`
+- `web-*`
+
 These are internal runbooks and smoke/guard scripts for regression safety during MVP stabilization.  
 They are **not release-gating by default** and are **not required for runtime**.
 

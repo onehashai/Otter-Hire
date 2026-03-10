@@ -64,7 +64,7 @@ class OrgSmtpConfigResponse(BaseModel):
     use_tls: bool
     use_ssl: bool
     status: str
-    last_test_at: str | None = None
+    last_tested_at: str | None = None
     last_test_error: str | None = None
 
 

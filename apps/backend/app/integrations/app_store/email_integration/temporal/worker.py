@@ -10,11 +10,16 @@ from app.integrations.app_store.email_integration.temporal.activities import (
     download_and_extract_resume_activity,
     download_email_activity,
     extract_resume_activity,
+    mark_message_failed_activity,
     parse_and_create_candidate_activity,
     process_s3_inbound_email_activity,
     publish_update_activity,
+    send_outbound_email_activity,
 )
-from app.integrations.app_store.email_integration.temporal.workflow import InboundEmailWorkflow
+from app.integrations.app_store.email_integration.temporal.workflow import (
+    InboundEmailWorkflow,
+    OutboundEmailWorkflow,
+)
 from app.services.temporal_client import get_temporal_client
 
 logger = logging.getLogger(__name__)
@@ -25,19 +30,23 @@ async def run_worker() -> None:
     worker = Worker(
         client,
         task_queue=settings.temporal_task_queue,
-        workflows=[InboundEmailWorkflow],
+        workflows=[InboundEmailWorkflow, OutboundEmailWorkflow],
         activities=[
+            # Inbound
             download_and_extract_resume_activity,
             download_email_activity,
             extract_resume_activity,
             parse_and_create_candidate_activity,
             process_s3_inbound_email_activity,
             publish_update_activity,
+            # Outbound
+            send_outbound_email_activity,
+            mark_message_failed_activity,
         ],
         max_concurrent_activities=50,
         max_concurrent_workflow_tasks=20,
     )
-    logger.info("Temporal inbound worker started task_queue=%s", settings.temporal_task_queue)
+    logger.info("Temporal email worker started task_queue=%s", settings.temporal_task_queue)
     await worker.run()
 
 

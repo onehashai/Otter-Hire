@@ -22,6 +22,8 @@ class MessageRead(BaseModel):
     html_body: str | None = None
     status: str
     provider_message_id: str | None = None
+    email_message_id: str | None = None
+    in_reply_to: str | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

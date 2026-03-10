@@ -73,11 +73,30 @@ def _extract_text_and_attachments(raw_email: bytes) -> dict:
     if not message_id:
         message_id = hashlib.sha256(raw_email).hexdigest()[:32]
 
+    # Threading headers — used to match inbound replies to existing conversations
+    in_reply_to = (msg.get("In-Reply-To") or "").strip().strip("<>") or None
+    references_raw = (msg.get("References") or "").strip()
+    # References is a space-separated list of message-ids; keep the raw string
+    references = references_raw or None
+
+    # Noise-filter headers — passed through so the API can reject automated mail
+    auto_submitted = (msg.get("Auto-Submitted") or "").strip().lower() or None
+    list_unsubscribe = bool(msg.get("List-Unsubscribe"))
+    precedence = (msg.get("Precedence") or "").strip().lower() or None
+    # Outlook / Exchange header that suppresses auto-replies
+    x_auto_response_suppress = (msg.get("X-Auto-Response-Suppress") or "").strip() or None
+
     return {
         "inbox_address": _extract_recipient(to_values),
         "from_email": (from_email or "").strip().lower() or None,
         "subject": (msg.get("Subject") or "").strip() or None,
         "message_id": message_id,
+        "in_reply_to": in_reply_to,
+        "references": references,
+        "auto_submitted": auto_submitted,
+        "list_unsubscribe": list_unsubscribe,
+        "precedence": precedence,
+        "x_auto_response_suppress": x_auto_response_suppress,
         "text_body": text_body,
         "html_body": html_body,
         "attachments": attachments,
@@ -255,18 +274,36 @@ async def _process_raw_key(s3_client, bucket: str, key: str) -> None:
     if await _is_key_already_processed(key):
         logger.info("SES bridge skipped key=%s reason=already_processed", key)
         return
-    if settings.inbound_async_pipeline_enabled and settings.inbound_async_enqueue_via_http:
-        status, response_text = await asyncio.to_thread(_enqueue_raw_key_via_http, bucket, key)
-        if status >= 400:
-            logger.error(
-                "SES bridge enqueue failed key=%s status=%s body=%s",
-                key,
-                status,
-                response_text,
+    if settings.inbound_async_pipeline_enabled:
+        if settings.inbound_async_enqueue_via_http:
+            # Legacy path: POST to the HTTP API, which then enqueues to Temporal.
+            # Avoid this when the bridge and API share the same process — the HTTP
+            # endpoint is rate-limited and a burst of keys can trigger 429s.
+            status, response_text = await asyncio.to_thread(_enqueue_raw_key_via_http, bucket, key)
+            if status == 429:
+                # Propagate so the caller can handle/retry rather than silently drop.
+                raise RuntimeError(
+                    f"SES bridge HTTP enqueue rate-limited key={key} — "
+                    "set INBOUND_ASYNC_ENQUEUE_VIA_HTTP=false to use direct Temporal enqueue"
+                )
+            if status >= 400:
+                logger.error(
+                    "SES bridge enqueue failed key=%s status=%s body=%s",
+                    key,
+                    status,
+                    response_text,
+                )
+                return
+            _mark_key_enqueued_in_redis(key)
+            logger.info("SES bridge enqueued key=%s status=%s", key, status)
+        else:
+            # Preferred path: enqueue directly to Temporal, no HTTP hop, no rate-limit exposure.
+            # Lazy import breaks the circular dependency (temporal/queue.py imports ses_bridge).
+            from app.integrations.app_store.email_integration.temporal.queue import (  # noqa: PLC0415
+                enqueue_ses_raw_key,
             )
-            return
-        _mark_key_enqueued_in_redis(key)
-        logger.info("SES bridge enqueued key=%s status=%s", key, status)
+            await enqueue_ses_raw_key(bucket, key)
+            logger.info("SES bridge enqueued key=%s via Temporal directly", key)
         return
 
     logger.info("SES bridge processing key=%s bucket=%s", key, bucket)
@@ -298,6 +335,12 @@ async def _process_raw_key(s3_client, bucket: str, key: str) -> None:
         "from_email": normalized.get("from_email"),
         "subject": normalized.get("subject"),
         "message_id": normalized.get("message_id"),
+        "in_reply_to": normalized.get("in_reply_to"),
+        "references": normalized.get("references"),
+        "auto_submitted": normalized.get("auto_submitted"),
+        "list_unsubscribe": normalized.get("list_unsubscribe") or False,
+        "precedence": normalized.get("precedence"),
+        "x_auto_response_suppress": normalized.get("x_auto_response_suppress"),
         "received_at": datetime.now(timezone.utc).isoformat(),
         "raw_storage_key": key,
         "text_body": normalized.get("text_body") or None,

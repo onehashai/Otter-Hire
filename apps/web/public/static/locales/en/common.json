@@ -163,5 +163,7 @@
   "edit_automation_subtitle": "Manage automation details, conditions, and actions.",
   "templates": "Templates",
   "reports_title": "Reports",
-  "reports_subtitle": "View your reports and analytics."
+  "reports_subtitle": "View your reports and analytics.",
+  "conversations_title": "Conversations",
+  "conversations_subtitle": "Manage your conversations."
 }

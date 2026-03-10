@@ -34,6 +34,8 @@ class Message(Base):
     html_body = Column(Text, nullable=True)
     status = Column(String(32), nullable=False, server_default="queued")
     provider_message_id = Column(String(500), nullable=True)
+    email_message_id = Column(String(998), nullable=True)
+    in_reply_to = Column(String(998), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     __table_args__ = (
@@ -46,11 +48,12 @@ class Message(Base):
             name="ck_messages_sender_type",
         ),
         CheckConstraint(
-            "status IN ('queued', 'sent', 'failed', 'received')",
+            "status IN ('queued', 'sent', 'delivered', 'read', 'failed', 'received')",
             name="ck_messages_status",
         ),
         Index("ix_messages_conversation_created", "conversation_id", "created_at"),
         Index("ix_messages_org_id", "org_id"),
+        Index("ix_messages_email_message_id", "email_message_id"),
     )
 
     conversation = relationship("Conversation", back_populates="messages")

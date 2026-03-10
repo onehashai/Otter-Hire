@@ -30,8 +30,8 @@ import { toast } from "sonner";
 
 const PASSWORD_MASK = "••••••••";
 
-function SmtpStatusBadge({ status }: { status: "pending" | "verified" | "failed" }) {
-  if (status === "verified") {
+function SmtpStatusBadge({ status }: { status: "pending" | "active" | "failed" }) {
+  if (status === "active") {
     return (
       <span className="inline-flex items-center gap-1 text-xs text-green-600 font-medium">
         <CheckCircle2 className="h-3.5 w-3.5" />
@@ -337,7 +337,7 @@ export function EmailIntegrationManager({ onChanged }: EmailIntegrationManagerPr
     try {
       const updated = await testSmtpConnection();
       setSmtpConfig(updated);
-      if (updated.status === "verified") {
+      if (updated.status === "active") {
         toast.success("SMTP connection verified successfully");
       } else {
         toast.error(`Connection failed: ${updated.last_test_error ?? "Unknown error"}`);

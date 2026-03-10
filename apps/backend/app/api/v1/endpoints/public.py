@@ -38,9 +38,11 @@ from app.db.session import get_db
 from app.integrations.app_store.email_integration.temporal.queue import enqueue_ses_raw_key
 from app.models.candidate import Candidate
 from app.models.candidate_document import CandidateDocument
+from app.models.conversation import Conversation
 from app.models.email import InboundEmail, InboundEmailAttachment
 from app.models.job import Job
 from app.models.job_application import JobApplication
+from app.models.message import Message
 from app.models.org_membership import OrgMembership
 from app.models.organization import Organization, OrgInbox
 from app.models.stage import Stage
@@ -1090,6 +1092,313 @@ async def apply_public_job(
     )
 
 
+# ---------------------------------------------------------------------------
+# Inbound email helpers
+# ---------------------------------------------------------------------------
+
+# Sender address substrings that indicate non-human / automated senders
+_NO_REPLY_PATTERNS = frozenset(
+    [
+        "noreply",
+        "no-reply",
+        "no_reply",
+        "donotreply",
+        "do-not-reply",
+        "mailer-daemon",
+        "postmaster",
+        "bounce",
+        "notifications",
+        "alerts",
+        "daemon",
+    ]
+)
+
+
+_JOB_APPLICATION_SUBJECT_KEYWORDS = frozenset(
+    [
+        "application",
+        "applying",
+        "apply",
+        "job",
+        "position",
+        "role",
+        "vacancy",
+        "opening",
+        "opportunity",
+        "resume",
+        "cv",
+        "curriculum vitae",
+        "candidacy",
+        "candidate",
+        "hiring",
+        "interest in",
+        "interested in",
+        "cover letter",
+    ]
+)
+
+_JOB_APPLICATION_BODY_KEYWORDS = frozenset(
+    [
+        "i am applying",
+        "i am interested",
+        "i would like to apply",
+        "please find my",
+        "please find attached",
+        "my resume",
+        "my cv",
+        "my application",
+        "years of experience",
+        "work experience",
+        "i have experience",
+        "i am a",
+        "currently working",
+        "looking for",
+        "job application",
+        "open position",
+        "open role",
+        "cover letter",
+        "dear hiring",
+        "dear recruiter",
+        "to whom it may concern",
+    ]
+)
+
+
+def _looks_like_job_inquiry(payload: "InboundEmailPayload") -> bool:
+    """Return True if the email content suggests a genuine job inquiry.
+
+    Used as a gate for cold inbound emails that have no resume attachment
+    and are not replies to an existing thread.  A resume attachment already
+    counts as strong proof and bypasses this check in the caller.
+    """
+    subject = (payload.subject or "").lower()
+    body = (payload.text_body or "").lower()
+
+    # Strong signal: subject line contains an application keyword
+    if any(kw in subject for kw in _JOB_APPLICATION_SUBJECT_KEYWORDS):
+        return True
+
+    # Strong signal: body contains a job-application phrase
+    if any(kw in body for kw in _JOB_APPLICATION_BODY_KEYWORDS):
+        return True
+
+    # Weak signal: subject + body together hit 2+ distinct keywords
+    combined = subject + " " + body
+    hits = sum(1 for kw in _JOB_APPLICATION_SUBJECT_KEYWORDS if kw in combined)
+    if hits >= 2:
+        return True
+
+    return False
+
+
+def _is_automated_email(payload: "InboundEmailPayload") -> str | None:
+    """Return a reason string if the email should be discarded, else None."""
+    auto_submitted = (payload.auto_submitted or "no").lower()
+    if auto_submitted not in ("no", ""):
+        return f"Auto-Submitted: {payload.auto_submitted}"
+
+    if payload.list_unsubscribe:
+        return "Bulk / mailing-list email (List-Unsubscribe present)"
+
+    if (payload.precedence or "").lower() in ("bulk", "junk", "list"):
+        return f"Bulk mail (Precedence: {payload.precedence})"
+
+    suppress = (payload.x_auto_response_suppress or "").lower()
+    if suppress and suppress != "none":
+        return f"X-Auto-Response-Suppress: {payload.x_auto_response_suppress}"
+
+    from_addr = (payload.from_email or "").lower()
+    if any(p in from_addr for p in _NO_REPLY_PATTERNS):
+        return f"No-reply sender address: {payload.from_email}"
+
+    return None
+
+
+async def _route_inbound_to_conversation(
+    db: "AsyncSession",
+    org_inbox: "OrgInbox",
+    payload: "InboundEmailPayload",
+) -> tuple[str, str] | None:
+    """Attach the inbound email to an existing or new conversation.
+
+    Gate (for cold emails only — skipped for thread replies and resume attachments):
+      The email subject or body must contain clear job-application intent signals.
+      Promotional, transactional, or off-topic emails are ignored.
+
+    Resolution order:
+    1. Match ``In-Reply-To`` to an existing outbound message's ``email_message_id``
+       → always accepted, appended to that conversation.
+    2. (After gate) Match ``from_email`` to an existing candidate → new conversation.
+    3. (After gate) Unknown sender → create a minimal candidate + new conversation.
+
+    Returns ``(conversation_id, message_id)`` if a message was created, else None.
+    Does **not** commit — callers are responsible for flushing/committing.
+    """
+    from app.utils.uuid import uuid7
+
+    org_id: UUID = org_inbox.org_id
+    from_email = (payload.from_email or "").strip().lower()
+    in_reply_to = (payload.in_reply_to or "").strip().strip("<>") or None
+    body_text = (payload.text_body or "").strip() or (payload.html_body or "").strip()
+    subject = (payload.subject or "").strip() or "(no subject)"
+    inbox_address = org_inbox.inbox_address
+
+    if not from_email:
+        return None
+
+    conv: Conversation | None = None
+    candidate: Candidate | None = None
+
+    # --- Path 1: thread match via In-Reply-To header ---
+    if in_reply_to:
+        msg_result = await db.execute(
+            select(Message)
+            .where(
+                Message.org_id == org_id,
+                Message.email_message_id == in_reply_to,
+            )
+            .limit(1)
+        )
+        replied_msg = msg_result.scalar_one_or_none()
+        if replied_msg is not None:
+            conv_result = await db.execute(
+                select(Conversation).where(Conversation.id == replied_msg.conversation_id)
+            )
+            conv = conv_result.scalar_one_or_none()
+            if conv is not None:
+                cand_result = await db.execute(
+                    select(Candidate).where(Candidate.id == conv.candidate_id)
+                )
+                candidate = cand_result.scalar_one_or_none()
+
+    # For paths 2 & 3 (new conversations) we require proof of job-application
+    # intent unless there is a resume attachment (handled by the resume pipeline)
+    # or the email is already a reply to a known thread (Path 1 above).
+    is_thread_reply = conv is not None
+    has_resume = any(
+        _is_resume_attachment(att.filename, att.content_type)
+        for att in (payload.attachments or [])
+    )
+    if not is_thread_reply and not has_resume and not _looks_like_job_inquiry(payload):
+        logger.info(
+            "Inbound email skipped (no job-application signal) from=%s org_id=%s subject=%r",
+            from_email,
+            org_id,
+            payload.subject,
+        )
+        return None
+
+    # --- Path 2: existing candidate matched by sender email ---
+    if candidate is None:
+        cand_result = await db.execute(
+            select(Candidate).where(
+                Candidate.org_id == org_id,
+                func.lower(Candidate.email) == from_email,
+            )
+        )
+        candidate = cand_result.scalar_one_or_none()
+
+    # --- Path 3: brand-new sender → create a minimal candidate record ---
+    if candidate is None:
+        display_name = (payload.from_name or "").strip()
+        if not display_name:
+            display_name = from_email.split("@")[0].replace(".", " ").replace("_", " ").title()
+        candidate = Candidate(
+            org_id=org_id,
+            job_id=None,
+            stage_id=None,
+            status="active",
+            name=display_name,
+            email=from_email,
+            phone=None,
+            location=None,
+            profile_links={},
+            source="email_inbound",
+            tags=[],
+        )
+        db.add(candidate)
+        await db.flush()
+        logger.info(
+            "Inbound email created new candidate candidate_id=%s email=%s org_id=%s",
+            candidate.id,
+            from_email,
+            org_id,
+        )
+
+    # --- Create a new conversation if we don't already have one from Path 1 ---
+    if conv is None:
+        now = datetime.now(tz=timezone.utc)
+        conv = Conversation(
+            id=uuid7(),
+            org_id=org_id,
+            candidate_id=candidate.id,
+            job_id=None,
+            subject=subject,
+            channel="email",
+            status="open",
+            last_message_at=now,
+        )
+        db.add(conv)
+        await db.flush()
+
+    # Reopen closed conversations when the candidate replies
+    if conv.status == "closed":
+        conv.status = "open"
+
+    now = datetime.now(tz=timezone.utc)
+    inbound_msg = Message(
+        id=uuid7(),
+        org_id=org_id,
+        conversation_id=conv.id,
+        direction="inbound",
+        sender_type="candidate",
+        sender_user_id=None,
+        from_email=from_email or candidate.email,
+        to_email=inbox_address,
+        body=body_text or "(empty)",
+        html_body=payload.html_body or None,
+        status="received",
+        email_message_id=(payload.message_id or "").strip().strip("<>") or None,
+        in_reply_to=in_reply_to,
+        created_at=now,
+    )
+    db.add(inbound_msg)
+
+    conv.last_message_at = now
+    await db.flush()
+
+    # Publish a lightweight event so connected WebSocket clients can refresh
+    try:
+        import redis as _sync_redis
+
+        _r = _sync_redis.Redis.from_url(
+            settings.redis_url, decode_responses=True, socket_timeout=1
+        )
+        _r.publish(
+            settings.inbound_events_channel,
+            json.dumps(
+                {
+                    "event_version": 1,
+                    "event": "inbound_message",
+                    "org_id": str(org_id),
+                    "conversation_id": str(conv.id),
+                    "message_id": str(inbound_msg.id),
+                }
+            ),
+        )
+    except Exception:
+        pass  # Non-critical; frontend will refresh on next poll
+
+    logger.info(
+        "Inbound email routed conversation_id=%s message_id=%s org_id=%s from=%s",
+        conv.id,
+        inbound_msg.id,
+        org_id,
+        from_email,
+    )
+    return str(conv.id), str(inbound_msg.id)
+
+
 @router.post("/inbound/email")
 @limiter.limit("30/minute")
 async def ingest_inbound_email(
@@ -1249,10 +1558,37 @@ async def ingest_inbound_email(
             "org_id": str(org_inbox.org_id),
         }
 
-    if not has_resume or resume_attachment is None:
+    # --- Spam / noise filter ---
+    automated_reason = _is_automated_email(payload)
+    if automated_reason:
         inbound_email.parse_status = "ignored"
-        inbound_email.parse_error = "No resume attachment found"
+        inbound_email.parse_error = f"Automated email skipped: {automated_reason}"
         await db.commit()
+        return {
+            "status": "ok",
+            "message": "Ignored: automated email",
+            "inbound_email_id": str(inbound_email.id),
+            "org_id": str(org_inbox.org_id),
+        }
+
+    # --- Conversation routing (runs for ALL non-automated emails) ---
+    conversation_result = await _route_inbound_to_conversation(db, org_inbox, payload)
+
+    if not has_resume or resume_attachment is None:
+        # No resume — conversation routing (if any) is committed here
+        inbound_email.parse_status = "processed" if conversation_result else "ignored"
+        inbound_email.parse_error = None if conversation_result else "No resume attachment found"
+        await db.commit()
+        if conversation_result:
+            conv_id, msg_id = conversation_result
+            return {
+                "status": "ok",
+                "message": "Routed to conversation",
+                "inbound_email_id": str(inbound_email.id),
+                "conversation_id": conv_id,
+                "message_id": msg_id,
+                "org_id": str(org_inbox.org_id),
+            }
         return {
             "status": "ok",
             "message": "Ignored: no resume attachment",
@@ -1384,22 +1720,56 @@ async def ingest_inbound_email(
         )
     parsed_candidate = candidate
 
+    # ------------------------------------------------------------------
+    # Reconcile conversation ownership
+    #
+    # The conversation was routed earlier using the email *sender*
+    # (from_email).  If the resume belongs to a *different* person
+    # (e.g. a recruiter forwarded someone else's CV), we re-link the
+    # conversation to the actual candidate identified in the resume.
+    # This is safe because nothing has been committed yet — both the
+    # conversation write and the resume-candidate write are still in the
+    # same open transaction.
+    # ------------------------------------------------------------------
+    sender_email = (inbound_email.from_email or "").strip().lower()
+    resume_email = (extracted_email or "").strip().lower()
+    is_forwarded_resume = bool(resume_email and resume_email != sender_email)
+
+    if is_forwarded_resume and conversation_result is not None:
+        conv_id_str, _ = conversation_result
+        forwarded_conv = await db.get(Conversation, UUID(conv_id_str))
+        if forwarded_conv is not None:
+            forwarded_conv.candidate_id = parsed_candidate.id
+            logger.info(
+                "Inbound email re-linked conversation to resume candidate "
+                "conv_id=%s sender=%s resume_email=%s candidate_id=%s",
+                conv_id_str,
+                sender_email,
+                resume_email,
+                parsed_candidate.id,
+            )
+
     inbound_email.parsed_candidate_id = parsed_candidate.id
     inbound_email.parse_status = "processed"
     inbound_email.parse_error = None
     await db.commit()
 
-    return {
+    response: dict = {
         "status": "ok",
         "message": "Processed",
         "inbound_email_id": str(inbound_email.id),
         "candidate_id": str(parsed_candidate.id),
         "org_id": str(org_inbox.org_id),
     }
+    if conversation_result:
+        conv_id, msg_id = conversation_result
+        response["conversation_id"] = conv_id
+        response["message_id"] = msg_id
+    return response
 
 
 @router.post("/inbound/s3-event")
-@limiter.limit("120/minute")
+@limiter.limit("600/minute")
 async def enqueue_inbound_s3_event(
     request: Request,
 ):

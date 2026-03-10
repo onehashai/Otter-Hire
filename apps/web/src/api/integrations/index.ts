@@ -125,8 +125,8 @@ export type OrgSmtpConfigResponse = {
   from_name: string | null;
   use_tls: boolean;
   use_ssl: boolean;
-  status: "pending" | "verified" | "failed";
-  last_test_at: string | null;
+  status: "pending" | "active" | "failed";
+  last_tested_at: string | null;
   last_test_error: string | null;
 };
 

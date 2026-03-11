@@ -73,6 +73,10 @@ function mapMessage(msg: MessageRead, subject?: string): Message {
   };
 }
 
+function isPendingOutboundStatus(status: MessageRead["status"]): boolean {
+  return status === "queued" || status === "sent" || status === "delivered";
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -101,7 +105,7 @@ export function ConversationsView({ initialId }: ConversationsViewProps) {
   // Track whether this is the first load so we can auto-select if no initialId
   const didAutoSelect = useRef(false);
 
-  // Short-lived polling to resolve queued message statuses after sending
+  // Short-lived polling to resolve outbound status transitions after sending
   const pendingMessageIds = useRef<Set<string>>(new Set());
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollStartRef = useRef<number>(0);
@@ -150,10 +154,10 @@ export function ConversationsView({ initialId }: ConversationsViewProps) {
             });
             return { ...prev, messages: updatedMessages };
           });
-          // Remove IDs that have resolved
+          // Remove IDs once they reach a terminal status.
           for (const id of pendingMessageIds.current) {
             const fm = conv.messages.find((m) => m.id === id);
-            if (fm && fm.status !== "queued") {
+            if (fm && !isPendingOutboundStatus(fm.status)) {
               pendingMessageIds.current.delete(id);
             }
           }
@@ -228,9 +232,11 @@ export function ConversationsView({ initialId }: ConversationsViewProps) {
     if (!selectedId || !activeConversation) return;
     const msg = await sendMessage(selectedId, { body: content });
     setActiveConversation((prev) => (prev ? { ...prev, messages: [...prev.messages, msg] } : prev));
-    // Track this queued message and start polling until it resolves
-    pendingMessageIds.current.add(msg.id);
-    startPolling(selectedId);
+    // Track this outbound message until it reaches a terminal status like read or failed.
+    if (isPendingOutboundStatus(msg.status)) {
+      pendingMessageIds.current.add(msg.id);
+      startPolling(selectedId);
+    }
     void refreshList();
   };
 

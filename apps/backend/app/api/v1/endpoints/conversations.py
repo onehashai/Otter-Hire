@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -43,6 +44,14 @@ def _reply_to_for_conversation(conv_id: UUID, inbox_address: str | None) -> str 
         return None
     domain = inbox_address.strip().lower().split("@", 1)[1]
     return f"reply+{conv_id}@{domain}"
+
+
+def _ensure_html_body(body: str, html_body: str | None) -> str | None:
+    """Always provide an HTML alternative so tracking pixels can be injected."""
+    if html_body and html_body.strip():
+        return html_body
+    escaped = html.escape(body).replace("\n", "<br>")
+    return f"<html><body><div>{escaped}</div></body></html>"
 
 
 def _message_to_read(msg: Message, sender_name: str | None = None) -> MessageRead:
@@ -252,6 +261,7 @@ async def create_conversation(
         from_email = ""
 
     msg_id = uuid7()
+    html_body = _ensure_html_body(body.body, body.html_body)
     first_msg = Message(
         id=msg_id,
         org_id=current_user.org_id,
@@ -262,7 +272,7 @@ async def create_conversation(
         from_email=from_email,
         to_email=candidate.email,
         body=body.body,
-        html_body=body.html_body,
+        html_body=html_body,
         status="queued",
         created_at=now,
     )
@@ -286,7 +296,7 @@ async def create_conversation(
                 to_email=candidate.email,
                 subject=body.subject,
                 body=body.body,
-                html_body=body.html_body,
+                html_body=html_body,
                 from_name=current_user.name,
                 reply_to=reply_to,
             )
@@ -355,6 +365,7 @@ async def send_message(
     now = datetime.now(tz=timezone.utc)
 
     msg_id = uuid7()
+    html_body = _ensure_html_body(body.body, body.html_body)
     msg = Message(
         id=msg_id,
         org_id=current_user.org_id,
@@ -365,7 +376,7 @@ async def send_message(
         from_email=from_email,
         to_email=conv.candidate.email,
         body=body.body,
-        html_body=body.html_body,
+        html_body=html_body,
         status="queued",
         in_reply_to=None,
         created_at=now,
@@ -396,7 +407,7 @@ async def send_message(
                 to_email=conv.candidate.email,
                 subject=f"Re: {conv.subject}",
                 body=body.body,
-                html_body=body.html_body,
+                html_body=html_body,
                 from_name=current_user.name,
                 reply_to=reply_to,
             )

@@ -16,9 +16,7 @@ class DefaultTemplate:
 DEFAULT_EMAIL_TEMPLATES: list[DefaultTemplate] = [
     DefaultTemplate(
         name="Application Received",
-        subject=(
-            "We received your application for {{job_title}}"
-        ),
+        subject=("We received your application for {{job_title}}"),
         body=(
             "<p>Hi {{candidate_name}},</p>"
             "<p>Thank you for applying for <strong>{{job_title}}</strong> at {{company_name}}. "
@@ -72,9 +70,7 @@ DEFAULT_EMAIL_TEMPLATES: list[DefaultTemplate] = [
     ),
     DefaultTemplate(
         name="Send Offer Letter",
-        subject=(
-            "Offer of Employment — {{job_title}} at {{company_name}}"
-        ),
+        subject=("Offer of Employment — {{job_title}} at {{company_name}}"),
         body=(
             "<p>Hi {{candidate_name}},</p>"
             "<p>We are pleased to extend an offer of employment for the position of <strong>{{job_title}}</strong> "
@@ -86,9 +82,7 @@ DEFAULT_EMAIL_TEMPLATES: list[DefaultTemplate] = [
     ),
     DefaultTemplate(
         name="Interview Feedback Request",
-        subject=(
-            "Quick feedback — your interview for {{job_title}}"
-        ),
+        subject=("Quick feedback — your interview for {{job_title}}"),
         body=(
             "<p>Hi {{candidate_name}},</p>"
             "<p>Thank you for interviewing with us for the <strong>{{job_title}}</strong> position. "

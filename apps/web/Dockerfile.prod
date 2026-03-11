@@ -53,9 +53,7 @@ WORKDIR /app/apps/web
 ENV NODE_ENV=production
 
 # standalone/ contains server.js + minimal node_modules (no full install needed)
-COPY --from=builder /app/apps/web/.next/standalone/apps/web ./
-COPY --from=builder /app/apps/web/.next/standalone/packages ./../../packages
-COPY --from=builder /app/apps/web/.next/standalone/node_modules ./../../node_modules
+COPY --from=builder /app/apps/web/.next/standalone ./
 
 # Static assets must sit next to standalone server
 COPY --from=builder /app/apps/web/.next/static ./.next/static

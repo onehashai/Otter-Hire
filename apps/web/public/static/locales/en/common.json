@@ -165,5 +165,7 @@
   "reports_title": "Reports",
   "reports_subtitle": "View your reports and analytics.",
   "conversations_title": "Conversations",
-  "conversations_subtitle": "Manage your conversations."
+  "conversations_subtitle": "Manage your conversations.",
+  "templates_title": "Templates",
+  "templates_subtitle": "Create and manage reusable templates for candidate communication and workflows."
 }

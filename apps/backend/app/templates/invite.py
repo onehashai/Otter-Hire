@@ -1,4 +1,4 @@
-from app.email_templates import EmailContent
+from app.templates import EmailContent
 
 
 def build_invite_email(

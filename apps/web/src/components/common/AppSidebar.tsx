@@ -6,6 +6,7 @@ import {
   Briefcase,
   Users,
   MessageSquare,
+  FileText,
   // TODO(mvp-nav): Re-enable Reports/Automations/AI Assistant icons after MVP launch.
   // BarChart3,
   // Zap,
@@ -31,6 +32,7 @@ const navItems = [
   { title: "Jobs", url: "/jobs", icon: Briefcase },
   { title: "Candidates", url: "/candidates", icon: Users },
   { title: "Conversations", url: "/conversations", icon: MessageSquare },
+  { title: "Templates", url: "/templates", icon: FileText },
   // TODO(mvp-nav): Re-enable Interviews in sidebar post-messaging launch.
   // { title: "Interviews", url: "/interviews", icon: Calendar },
   // TODO(mvp-nav): Re-enable Reports in sidebar after MVP launch.

@@ -2,31 +2,28 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Search, FileText, MoreHorizontal, Eye, Copy, Trash2, Pencil, Upload } from "lucide-react";
+import {
+  Plus,
+  Search,
+  FileText,
+  MoreHorizontal,
+  Eye,
+  Copy,
+  Trash2,
+  Pencil,
+  Upload,
+} from "lucide-react";
 import { Button } from "@onehash/ui/button";
 import { InputField } from "@onehash/ui/input";
 import { Badge } from "@onehash/ui/badge";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@onehash/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@onehash/ui/table";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@onehash/ui/dropdown-menu";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@onehash/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@onehash/ui/select";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -167,7 +164,9 @@ export default function TemplatesList() {
               <div className="flex items-start justify-between">
                 <div>
                   <p className="text-sm font-medium text-foreground">{t.name}</p>
-                  <Badge variant="secondary" className="mt-1 text-[10px]">{t.category}</Badge>
+                  <Badge variant="secondary" className="mt-1 text-[10px]">
+                    {t.category}
+                  </Badge>
                 </div>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -185,7 +184,10 @@ export default function TemplatesList() {
                     <DropdownMenuItem onClick={() => handleDuplicate(t)}>
                       <Copy className="h-3.5 w-3.5 mr-2" /> Duplicate
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setDeleteTemplate(t)} className="text-destructive">
+                    <DropdownMenuItem
+                      onClick={() => setDeleteTemplate(t)}
+                      className="text-destructive"
+                    >
                       <Trash2 className="h-3.5 w-3.5 mr-2" /> Delete
                     </DropdownMenuItem>
                   </DropdownMenuContent>
@@ -220,7 +222,9 @@ export default function TemplatesList() {
                 >
                   <TableCell className="font-medium">{t.name}</TableCell>
                   <TableCell>
-                    <Badge variant="secondary" className="text-[10px]">{t.category}</Badge>
+                    <Badge variant="secondary" className="text-[10px]">
+                      {t.category}
+                    </Badge>
                   </TableCell>
                   <TableCell className="text-muted-foreground">{t.updatedAt}</TableCell>
                   <TableCell className="text-muted-foreground">{t.createdBy}</TableCell>
@@ -242,7 +246,10 @@ export default function TemplatesList() {
                         <DropdownMenuItem onClick={() => handleDuplicate(t)}>
                           <Copy className="h-3.5 w-3.5 mr-2" /> Duplicate
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setDeleteTemplate(t)} className="text-destructive">
+                        <DropdownMenuItem
+                          onClick={() => setDeleteTemplate(t)}
+                          className="text-destructive"
+                        >
                           <Trash2 className="h-3.5 w-3.5 mr-2" /> Delete
                         </DropdownMenuItem>
                       </DropdownMenuContent>

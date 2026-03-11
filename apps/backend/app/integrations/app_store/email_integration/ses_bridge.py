@@ -391,7 +391,13 @@ async def _process_raw_key(s3_client, bucket: str, key: str) -> None:
                 enqueue_ses_raw_key,
             )
 
-            await enqueue_ses_raw_key(bucket, key)
+            logger.info("SES bridge temporal enqueue start key=%s", key)
+            try:
+                await enqueue_ses_raw_key(bucket, key)
+            except Exception:
+                logger.exception("SES bridge temporal enqueue failed key=%s", key)
+                raise
+            _mark_key_enqueued_in_redis(key)
             logger.info("SES bridge enqueued key=%s via Temporal directly", key)
         return
 

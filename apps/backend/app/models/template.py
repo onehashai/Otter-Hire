@@ -7,7 +7,7 @@ from app.db.base import Base
 from app.utils.uuid import uuid7
 
 
-class EmailTemplate(Base):
+class Template(Base):
     __tablename__ = "templates"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid7)

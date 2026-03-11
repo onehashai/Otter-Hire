@@ -111,11 +111,11 @@ def create_default_templates_for_org(session, org_id):
     Add the 8 default email templates for an organization.
     Call this after creating a new org (signup, create_organization, OAuth).
     """
-    from app.models.email_template import EmailTemplate
+    from app.models.template import Template
 
     for t in DEFAULT_EMAIL_TEMPLATES:
         session.add(
-            EmailTemplate(
+            Template(
                 org_id=org_id,
                 name=t.name,
                 category="Email",

@@ -32,7 +32,7 @@ def setup_admin(app: FastAPI) -> Admin:
         CandidateDocumentAdmin,
         ConversationAdmin,
         EmailAdmin,
-        EmailTemplateAdmin,
+        TemplateAdmin,
         FeedbackAdmin,
         InboundEmailAdmin,
         InboundEmailAttachmentAdmin,
@@ -76,7 +76,7 @@ def setup_admin(app: FastAPI) -> Admin:
     admin.add_view(EmailAdmin)
     admin.add_view(InboundEmailAdmin)
     admin.add_view(InboundEmailAttachmentAdmin)
-    admin.add_view(EmailTemplateAdmin)
+    admin.add_view(TemplateAdmin)
     admin.add_view(InterviewAdmin)
     admin.add_view(FeedbackAdmin)
     admin.add_view(NoteAdmin)

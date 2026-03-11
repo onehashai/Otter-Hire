@@ -7,7 +7,6 @@ from app.models.candidate import Candidate
 from app.models.candidate_document import CandidateDocument
 from app.models.conversation import Conversation
 from app.models.email import Email, InboundEmail, InboundEmailAttachment
-from app.models.template import Template
 from app.models.feedback import Feedback
 from app.models.integration import OrgIntegration
 from app.models.interview import Interview
@@ -20,6 +19,7 @@ from app.models.note import Note
 from app.models.org_membership import OrgMembership
 from app.models.organization import Organization, OrgInbox
 from app.models.stage import Stage
+from app.models.template import Template
 from app.models.user import User
 
 
@@ -434,7 +434,13 @@ class TemplateAdmin(ModelView, model=Template):
     icon = "fa-solid fa-file-lines"
     category = "Messaging"
 
-    column_list = [Template.id, Template.org_id, Template.name, Template.subject, Template.created_at]
+    column_list = [
+        Template.id,
+        Template.org_id,
+        Template.name,
+        Template.subject,
+        Template.created_at,
+    ]
     column_searchable_list = [Template.name, Template.subject]
     column_sortable_list = [Template.name, Template.subject, Template.created_at]
     column_default_sort = [(Template.created_at, True)]

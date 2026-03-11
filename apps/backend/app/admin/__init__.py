@@ -32,7 +32,6 @@ def setup_admin(app: FastAPI) -> Admin:
         CandidateDocumentAdmin,
         ConversationAdmin,
         EmailAdmin,
-        TemplateAdmin,
         FeedbackAdmin,
         InboundEmailAdmin,
         InboundEmailAttachmentAdmin,
@@ -48,6 +47,7 @@ def setup_admin(app: FastAPI) -> Admin:
         OrgIntegrationAdmin,
         OrgMembershipAdmin,
         StageAdmin,
+        TemplateAdmin,
         UserAdmin,
     )
 

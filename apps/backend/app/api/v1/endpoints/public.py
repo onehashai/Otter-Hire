@@ -1928,7 +1928,9 @@ async def enqueue_inbound_s3_event(
 
     task_ids: list[str] = []
     for bucket, key in deduped_entries:
+        logger.info("Inbound SNS enqueue start bucket=%s key=%s", bucket, key)
         task_ids.append(await enqueue_ses_raw_key(bucket, key))
+        logger.info("Inbound SNS enqueue accepted bucket=%s key=%s", bucket, key)
 
     return {
         "status": "accepted",

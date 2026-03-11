@@ -72,7 +72,7 @@ def _serialize(row: OrgIntegration) -> dict:
         "use_tls": cfg.get("use_tls", True),
         "use_ssl": cfg.get("use_ssl", False),
         "status": row.status,
-        "last_tested_at": row.last_tested_at.isoformat() if row.last_tested_at else None,
+        "last_test_at": row.last_tested_at.isoformat() if row.last_tested_at else None,
         "last_test_error": row.last_test_error,
     }
 

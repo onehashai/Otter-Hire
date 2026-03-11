@@ -142,9 +142,7 @@ export default function TemplateEditor() {
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
-            <h1 className="text-lg font-semibold text-foreground">
-              {name}
-            </h1>
+            <h1 className="text-lg font-semibold text-foreground">{name}</h1>
           </div>
         </div>
         <div className="flex items-center gap-2">

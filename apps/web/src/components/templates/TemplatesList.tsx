@@ -36,7 +36,6 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { getTemplates, createTemplate, deleteTemplate as deleteTemplateApi } from "@/api/templates";
 import { TemplatePreviewModal } from "./components/TemplatePreviewModal";
-import { cn } from "@/lib/utils";
 
 export interface Template {
   id: string;
@@ -354,6 +353,7 @@ export default function TemplatesList({ searchValue, onSearchChange }: Templates
             </TableBody>
           </Table>
         </div>
+      )}
 
       {previewTemplate && (
         <TemplatePreviewModal

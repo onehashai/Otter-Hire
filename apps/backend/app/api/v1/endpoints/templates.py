@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.permissions import require_permission
 from app.db.session import get_db
-from app.models.email_template import EmailTemplate
+from app.models.template import Template
 from app.models.user import User
 from app.schemas.templates import (
     TemplateCreateRequest,
@@ -23,9 +23,9 @@ async def list_templates(
     current_user: User = Depends(require_permission("templates:read")),
 ):
     result = await db.execute(
-        select(EmailTemplate)
-        .where(EmailTemplate.org_id == current_user.org_id)
-        .order_by(EmailTemplate.updated_at.desc())
+        select(Template)
+        .where(Template.org_id == current_user.org_id)
+        .order_by(Template.updated_at.desc())
     )
     templates = result.scalars().all()
     return [
@@ -49,9 +49,9 @@ async def get_template(
     current_user: User = Depends(require_permission("templates:read")),
 ):
     result = await db.execute(
-        select(EmailTemplate).where(
-            EmailTemplate.id == template_id,
-            EmailTemplate.org_id == current_user.org_id,
+        select(Template).where(
+            Template.id == template_id,
+            Template.org_id == current_user.org_id,
         )
     )
     template = result.scalar_one_or_none()
@@ -74,7 +74,7 @@ async def create_template(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("templates:create")),
 ):
-    template = EmailTemplate(
+    template = Template(
         org_id=current_user.org_id,
         name=body.name.strip(),
         category=body.category.strip() or "Email",
@@ -103,9 +103,9 @@ async def update_template(
     current_user: User = Depends(require_permission("templates:update")),
 ):
     result = await db.execute(
-        select(EmailTemplate).where(
-            EmailTemplate.id == template_id,
-            EmailTemplate.org_id == current_user.org_id,
+        select(Template).where(
+            Template.id == template_id,
+            Template.org_id == current_user.org_id,
         )
     )
     template = result.scalar_one_or_none()
@@ -139,9 +139,9 @@ async def delete_template(
     current_user: User = Depends(require_permission("templates:delete")),
 ):
     result = await db.execute(
-        select(EmailTemplate).where(
-            EmailTemplate.id == template_id,
-            EmailTemplate.org_id == current_user.org_id,
+        select(Template).where(
+            Template.id == template_id,
+            Template.org_id == current_user.org_id,
         )
     )
     template = result.scalar_one_or_none()

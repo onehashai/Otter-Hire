@@ -14,7 +14,6 @@ import {
   Upload,
 } from "lucide-react";
 import { Button } from "@onehash/ui/button";
-import { InputField } from "@onehash/ui/input";
 import { Badge } from "@onehash/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@onehash/ui/table";
 import {
@@ -35,9 +34,9 @@ import {
   AlertDialogTitle,
 } from "@onehash/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { useIsMobile } from "@/hooks/use-mobile";
 import { getTemplates, createTemplate, deleteTemplate as deleteTemplateApi } from "@/api/templates";
 import { TemplatePreviewModal } from "./components/TemplatePreviewModal";
+import { cn } from "@/lib/utils";
 
 export interface Template {
   id: string;
@@ -70,16 +69,37 @@ function mapApiToTemplate(r: {
   };
 }
 
-export default function TemplatesList() {
+const formatTimeAgo = (dateStr: string) => {
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  if (diffMins < 1) return "just now";
+  if (diffMins < 60) return `${diffMins}m ago`;
+  const diffHrs = Math.floor(diffMins / 60);
+  if (diffHrs < 24) return `${diffHrs}h ago`;
+  const diffDays = Math.floor(diffHrs / 24);
+  return `${diffDays}d ago`;
+};
+
+export interface TemplatesListProps {
+  searchValue?: string;
+  onSearchChange?: (value: string) => void;
+}
+
+export default function TemplatesList({ searchValue, onSearchChange }: TemplatesListProps) {
   const router = useRouter();
   const { toast } = useToast();
-  const isMobile = useIsMobile();
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
+  const [internalSearch, setInternalSearch] = useState("");
+  const [isMobile, setIsMobile] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [previewTemplate, setPreviewTemplate] = useState<Template | null>(null);
   const [deleteTemplate, setDeleteTemplate] = useState<Template | null>(null);
+
+  const search = typeof searchValue === "string" ? searchValue : internalSearch;
+  const setSearch = typeof onSearchChange === "function" ? onSearchChange : setInternalSearch;
 
   useEffect(() => {
     let cancelled = false;
@@ -99,6 +119,13 @@ export default function TemplatesList() {
       cancelled = true;
     };
   }, [toast]);
+
+  useEffect(() => {
+    const update = () => setIsMobile(window.innerWidth < 768);
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
 
   const filtered = templates.filter((t) => {
     const matchSearch = t.name.toLowerCase().includes(search.toLowerCase());
@@ -141,23 +168,88 @@ export default function TemplatesList() {
     );
   }
 
-  return (
-    <div className="space-y-6">
-      {filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 text-center">
-          <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-4">
+  if (filtered.length === 0) {
+    return (
+      <>
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <div className="mb-4 rounded-full bg-muted p-3">
             <FileText className="h-6 w-6 text-muted-foreground" />
           </div>
-          <h3 className="text-sm font-medium text-foreground mb-1">No templates yet</h3>
-          <p className="text-sm text-muted-foreground mb-4 max-w-sm">
+          <h3 className="mb-1 text-lg font-semibold text-foreground">No templates yet</h3>
+          <p className="mb-6 max-w-md text-sm text-muted-foreground">
             Create your first template to streamline candidate communication.
           </p>
-          <Button size="sm" onClick={() => router.push("/templates/new")}>
+          <Button onClick={() => router.push("/templates/new")}>
             <Plus className="h-4 w-4 mr-1.5" />
             Create Template
           </Button>
         </div>
-      ) : isMobile ? (
+        {previewTemplate && (
+          <TemplatePreviewModal
+            open={!!previewTemplate}
+            onOpenChange={(open) => !open && setPreviewTemplate(null)}
+            subject={previewTemplate.subject}
+            body={previewTemplate.body}
+          />
+        )}
+        <AlertDialog open={!!deleteTemplate} onOpenChange={() => setDeleteTemplate(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete template?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will permanently delete &quot;{deleteTemplate?.name}&quot;. This action cannot be
+                undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={handleDelete}
+              >
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="relative w-full sm:max-w-sm">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search templates..."
+            className="h-10 w-full rounded-md border border-input bg-background pl-9 pr-3 text-sm outline-none ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+            <SelectTrigger className="w-[160px]">
+              <SelectValue placeholder="Category" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Categories</SelectItem>
+              <SelectItem value="Email">Email</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button variant="outline" onClick={() => router.push("/templates/import")}>
+            <Upload className="mr-1.5 h-4 w-4" />
+            Import
+          </Button>
+          <Button onClick={() => router.push("/templates/new")}>
+            <Plus className="mr-1.5 h-4 w-4" />
+            Create
+          </Button>
+        </div>
+      </div>
+
+      {isMobile ? (
         <div className="space-y-3">
           {filtered.map((t) => (
             <div key={t.id} className="border border-border rounded-lg p-4 space-y-2">
@@ -200,6 +292,8 @@ export default function TemplatesList() {
             </div>
           ))}
         </div>
+      ) : filtered.length === 0 ? (
+        <div className="py-12 text-center text-sm text-muted-foreground">No templates match your filters.</div>
       ) : (
         <div className="border border-border rounded-lg overflow-hidden">
           <Table>
@@ -260,7 +354,6 @@ export default function TemplatesList() {
             </TableBody>
           </Table>
         </div>
-      )}
 
       {previewTemplate && (
         <TemplatePreviewModal
@@ -291,6 +384,6 @@ export default function TemplatesList() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </>
   );
 }

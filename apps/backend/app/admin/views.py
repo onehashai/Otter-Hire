@@ -7,7 +7,7 @@ from app.models.candidate import Candidate
 from app.models.candidate_document import CandidateDocument
 from app.models.conversation import Conversation
 from app.models.email import Email, InboundEmail, InboundEmailAttachment
-from app.models.email_template import EmailTemplate
+from app.models.template import Template
 from app.models.feedback import Feedback
 from app.models.integration import OrgIntegration
 from app.models.interview import Interview
@@ -428,22 +428,16 @@ class InboundEmailAttachmentAdmin(ModelView, model=InboundEmailAttachment):
     form_excluded_columns = [InboundEmailAttachment.storage_key, InboundEmailAttachment.sha256]
 
 
-class EmailTemplateAdmin(ModelView, model=EmailTemplate):
-    name = "Email Template"
-    name_plural = "Email Templates"
+class TemplateAdmin(ModelView, model=Template):
+    name = "Template"
+    name_plural = "Templates"
     icon = "fa-solid fa-file-lines"
     category = "Messaging"
 
-    column_list = [
-        EmailTemplate.id,
-        EmailTemplate.org_id,
-        EmailTemplate.name,
-        EmailTemplate.subject,
-        EmailTemplate.created_at,
-    ]
-    column_searchable_list = [EmailTemplate.name, EmailTemplate.subject]
-    column_sortable_list = [EmailTemplate.name, EmailTemplate.subject, EmailTemplate.created_at]
-    column_default_sort = [(EmailTemplate.created_at, True)]
+    column_list = [Template.id, Template.org_id, Template.name, Template.subject, Template.created_at]
+    column_searchable_list = [Template.name, Template.subject]
+    column_sortable_list = [Template.name, Template.subject, Template.created_at]
+    column_default_sort = [(Template.created_at, True)]
 
 
 class InterviewAdmin(ModelView, model=Interview):

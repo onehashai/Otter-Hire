@@ -3,7 +3,7 @@ from app.models.candidate import Candidate
 from app.models.candidate_document import CandidateDocument
 from app.models.conversation import Conversation
 from app.models.email import Email, InboundEmail, InboundEmailAttachment
-from app.models.email_template import EmailTemplate
+from app.models.template import Template
 from app.models.feedback import Feedback
 from app.models.integration import OrgIntegration
 from app.models.interview import Interview
@@ -26,7 +26,7 @@ __all__ = [
     "JobTeamMember",
     "Candidate",
     "Note",
-    "EmailTemplate",
+    "Template",
     "Email",
     "Interview",
     "Feedback",

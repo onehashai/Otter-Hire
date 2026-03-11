@@ -23,6 +23,7 @@ from app.services.temporal_client import get_temporal_client
 
 logger = logging.getLogger(__name__)
 
+
 async def run_worker() -> None:
     client = await get_temporal_client()
     worker_inbound = Worker(

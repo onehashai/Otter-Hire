@@ -215,7 +215,9 @@ async def send_outbound_email_activity(input_data: OutboundWorkflowInput) -> dic
         cfg = smtp_row.config or {}
         host: str = cfg.get("host", "")
         port: int = cfg.get("port", 587)
-        display_name: str = input_data.from_name or cfg.get("from_name") or cfg.get("from_email", "")
+        display_name: str = (
+            input_data.from_name or cfg.get("from_name") or cfg.get("from_email", "")
+        )
         from_email_addr: str = cfg.get("from_email", "")
         plain_password: str = decrypt_password_for_sending(smtp_row)
 
@@ -225,6 +227,7 @@ async def send_outbound_email_activity(input_data: OutboundWorkflowInput) -> dic
         tracking_base = f"{settings.effective_frontend_base_url}/api"
         if html_body and tracking_secret:
             from app.api.v1.endpoints.track import make_tracking_token
+
             token = make_tracking_token(input_data.message_id, tracking_secret)
             pixel_url = f"{tracking_base}/public/track/open/{input_data.message_id}/{token}"
             pixel_html = (

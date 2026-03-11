@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass
@@ -13,11 +13,12 @@ class InboundWorkflowInput:
 class OutboundWorkflowInput:
     """All data needed to send one outbound email and update its DB record."""
 
-    org_id: str          # UUID as str
-    message_id: str      # UUID as str — the Message row to update on success/failure
+    org_id: str  # UUID as str
+    message_id: str  # UUID as str — the Message row to update on success/failure
     to_email: str
     subject: str
     body: str
     html_body: str | None = None
     from_name: str | None = None
-    reply_to: str | None = None          # e.g. reply+<conversation_id>@inbound.domain — keeps replies in same thread
+    # e.g. reply+<conversation_id>@inbound.domain; keeps replies in same thread.
+    reply_to: str | None = None

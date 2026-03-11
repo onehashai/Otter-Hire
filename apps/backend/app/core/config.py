@@ -50,18 +50,30 @@ class Settings(BaseSettings):
     google_client_secret: str | None = Field(default=None, validation_alias="GOOGLE_CLIENT_SECRET")
 
     # SMTP credential encryption (Fernet key, base64-encoded 32 bytes)
-    # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-    smtp_encryption_key: str | None = Field(default=None, validation_alias="SMTP_ENCRYPTION_KEY")
+    # Generate with Python and Fernet.generate_key().decode().
+    smtp_encryption_key: str | None = Field(
+        default=None,
+        validation_alias="SMTP_ENCRYPTION_KEY",
+    )
 
-    # SES outbound configuration set name — when set, X-SES-Configuration-Set is added to every
-    # outbound email so SES publishes Delivery/Open/Bounce events to the SNS topic below.
-    ses_configuration_set: str | None = Field(default=None, validation_alias="SES_CONFIGURATION_SET")
+    # SES outbound configuration set name — when set, X-SES-Configuration-Set is
+    # added to every outbound email so SES publishes Delivery/Open/Bounce events.
+    ses_configuration_set: str | None = Field(
+        default=None,
+        validation_alias="SES_CONFIGURATION_SET",
+    )
     # Comma-separated SNS topic ARN(s) allowed to post SES event notifications.
-    ses_events_sns_topic_arns: str = Field(default="", validation_alias="SES_EVENTS_SNS_TOPIC_ARNS")
+    ses_events_sns_topic_arns: str = Field(
+        default="",
+        validation_alias="SES_EVENTS_SNS_TOPIC_ARNS",
+    )
 
     # Self-hosted open-tracking pixel (works with any SMTP provider).
-    # EMAIL_TRACKING_SECRET — random secret used to sign per-message tokens (HMAC-SHA256).
-    email_tracking_secret: str | None = Field(default=None, validation_alias="EMAIL_TRACKING_SECRET")
+    # EMAIL_TRACKING_SECRET — random secret used to sign per-message tokens.
+    email_tracking_secret: str | None = Field(
+        default=None,
+        validation_alias="EMAIL_TRACKING_SECRET",
+    )
 
     # Cookie domain (empty for localhost, .domain.com for production)
     cookie_domain: str = Field(default="", validation_alias="COOKIE_DOMAIN")

@@ -1,6 +1,7 @@
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 import httpx
@@ -11,6 +12,9 @@ from app.core.logging import logger
 from app.email_templates import EmailContent
 from app.email_templates.invite import build_invite_email
 from app.email_templates.verification import build_verification_email
+
+if TYPE_CHECKING:
+    from app.models.integration import OrgIntegration
 
 
 async def send_email(
@@ -24,13 +28,18 @@ async def send_email(
     # Route through the org's own SMTP if configured and verified
     if org_id is not None and db is not None:
         from app.integrations.app_store.email_integration.smtp_service import (
-            decrypt_password_for_sending,
             get_verified_smtp_for_org,
         )
 
         smtp_cfg = await get_verified_smtp_for_org(db, org_id)
         if smtp_cfg is not None:
-            await _send_via_org_smtp(to_email, content.subject, content.html, content.text, smtp_cfg)
+            await _send_via_org_smtp(
+                to_email,
+                content.subject,
+                content.html,
+                content.text,
+                smtp_cfg,
+            )
             return
 
     if settings.is_production:
@@ -64,7 +73,12 @@ async def send_invite_email(
 
 
 async def _send_via_mailtrap(
-    to_email: str, subject: str, html_body: str, text_body: str, *, fallback_url: str | None = None
+    to_email: str,
+    subject: str,
+    html_body: str,
+    text_body: str,
+    *,
+    fallback_url: str | None = None,
 ) -> None:
     if not all(
         [
@@ -100,7 +114,12 @@ async def _send_via_mailtrap(
             logger.warning(f"Action URL: {fallback_url}")
 
 
-async def _send_via_zeptomail(to_email: str, subject: str, html_body: str, text_body: str) -> None:
+async def _send_via_zeptomail(
+    to_email: str,
+    subject: str,
+    html_body: str,
+    text_body: str,
+) -> None:
     if not settings.zeptomail_api_key or not settings.zeptomail_from_email:
         raise ValueError("ZeptoMail configuration missing in production")
 
@@ -132,9 +151,11 @@ async def _send_via_org_smtp(
     subject: str,
     html_body: str,
     text_body: str,
-    smtp_row: "OrgIntegration",  # type: ignore[name-defined]
+    smtp_row: "OrgIntegration",
 ) -> None:
-    from app.integrations.app_store.email_integration.smtp_service import decrypt_password_for_sending
+    from app.integrations.app_store.email_integration.smtp_service import (
+        decrypt_password_for_sending,
+    )
 
     plain_password = decrypt_password_for_sending(smtp_row)
     cfg = smtp_row.config or {}

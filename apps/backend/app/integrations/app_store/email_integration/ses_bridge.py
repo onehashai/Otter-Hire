@@ -11,10 +11,10 @@ import time
 import urllib.error
 import urllib.request
 from datetime import datetime, timedelta, timezone
-from uuid import UUID
 from email import policy
 from email.parser import BytesParser
 from email.utils import parseaddr
+from uuid import UUID
 
 import boto3
 import redis
@@ -120,8 +120,8 @@ def _extract_text_and_attachments(raw_email: bytes) -> dict:
     }
 
 
-_ENQUEUED_TTL_SECONDS = 86400       # 24h  – covers workflow execution time
-_IGNORED_TTL_SECONDS = 2592000      # 30d  – covers ignored emails until S3 lifecycle removes them
+_ENQUEUED_TTL_SECONDS = 86400  # 24h  – covers workflow execution time
+_IGNORED_TTL_SECONDS = 2592000  # 30d  – covers ignored emails until S3 lifecycle removes them
 
 
 def _redis_client() -> redis.Redis:
@@ -138,8 +138,7 @@ def _is_key_enqueued_in_redis(raw_key: str) -> bool:
     try:
         r = _redis_client()
         return bool(
-            r.exists(f"inbound:enqueued:{raw_key}")
-            or r.exists(f"inbound:ignored:{raw_key}")
+            r.exists(f"inbound:enqueued:{raw_key}") or r.exists(f"inbound:ignored:{raw_key}")
         )
     except Exception:
         logger.exception("SES bridge redis exists failed key=%s", raw_key)
@@ -251,9 +250,7 @@ async def _resolve_inbox_context(
             conv_uuid = UUID(conv_id_str)
         except (ValueError, TypeError):
             return None
-        conv_result = await db.execute(
-            select(Conversation).where(Conversation.id == conv_uuid)
-        )
+        conv_result = await db.execute(select(Conversation).where(Conversation.id == conv_uuid))
         conv = conv_result.scalar_one_or_none()
         if conv is None:
             return None
@@ -377,6 +374,7 @@ async def _process_raw_key(s3_client, bucket: str, key: str) -> None:
             from app.integrations.app_store.email_integration.temporal.queue import (  # noqa: PLC0415
                 enqueue_ses_raw_key,
             )
+
             await enqueue_ses_raw_key(bucket, key)
             logger.info("SES bridge enqueued key=%s via Temporal directly", key)
         return

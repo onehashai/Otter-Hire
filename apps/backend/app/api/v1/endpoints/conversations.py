@@ -38,7 +38,7 @@ router = APIRouter(prefix="/conversations", tags=["conversations"])
 
 
 def _reply_to_for_conversation(conv_id: UUID, inbox_address: str | None) -> str | None:
-    """Build Reply-To address so candidate replies land in this conversation (reply+<conv_id>@domain)."""
+    """Build a Reply-To address so candidate replies stay in the same conversation."""
     if not inbox_address or "@" not in inbox_address:
         return None
     domain = inbox_address.strip().lower().split("@", 1)[1]
@@ -122,9 +122,7 @@ async def list_conversations(
             .where(Message.conversation_id.in_(conv_ids))
             .subquery()
         )
-        rows = await db.execute(
-            select(subq.c.conversation_id, subq.c.body).where(subq.c.rn == 1)
-        )
+        rows = await db.execute(select(subq.c.conversation_id, subq.c.body).where(subq.c.rn == 1))
         raw_last_msgs = {row.conversation_id: row.body for row in rows}
         # Use only visible part (no quoted block) for list preview
         from app.utils.email_parse import parse_email_body

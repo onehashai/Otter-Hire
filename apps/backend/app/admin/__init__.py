@@ -43,10 +43,10 @@ def setup_admin(app: FastAPI) -> Admin:
         JobTeamMemberAdmin,
         MessageAdmin,
         NoteAdmin,
+        OrganizationAdmin,
         OrgInboxAdmin,
         OrgIntegrationAdmin,
         OrgMembershipAdmin,
-        OrganizationAdmin,
         StageAdmin,
         UserAdmin,
     )

@@ -23,6 +23,7 @@ PASSWORD_MASK = "••••••••"
 # Encryption helpers
 # ---------------------------------------------------------------------------
 
+
 def _get_fernet() -> Fernet:
     key = settings.smtp_encryption_key
     if not key:
@@ -41,12 +42,16 @@ def _decrypt(token: str) -> dict:
     try:
         return json.loads(_get_fernet().decrypt(token.encode()).decode())
     except (InvalidToken, json.JSONDecodeError) as e:
-        raise HTTPException(status_code=500, detail="Failed to decrypt integration credentials") from e
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to decrypt integration credentials",
+        ) from e
 
 
 # ---------------------------------------------------------------------------
 # DB helpers
 # ---------------------------------------------------------------------------
+
 
 async def _get_row(db: AsyncSession, org_id: UUID) -> OrgIntegration | None:
     result = await db.execute(
@@ -80,6 +85,7 @@ def _serialize(row: OrgIntegration) -> dict:
 # ---------------------------------------------------------------------------
 # Public service functions
 # ---------------------------------------------------------------------------
+
 
 async def get_smtp_config(db: AsyncSession, owner: IntegrationOwnerContext) -> dict | None:
     row = await _get_row(db, owner.org_id)
@@ -160,7 +166,8 @@ async def test_smtp_connection(db: AsyncSession, owner: IntegrationOwnerContext)
         logger.info(f"SMTP test succeeded for org={owner.org_id} host={cfg.get('host')}")
     except smtplib.SMTPAuthenticationError as e:
         raw = e.smtp_error
-        error = f"Authentication failed: {raw.decode(errors='replace') if isinstance(raw, bytes) else str(e)}"
+        message = raw.decode(errors="replace") if isinstance(raw, bytes) else str(e)
+        error = f"Authentication failed: {message}"
     except smtplib.SMTPConnectError as e:
         error = f"Could not connect to {cfg.get('host')}:{cfg.get('port')} — {e}"
     except TimeoutError:

@@ -158,7 +158,10 @@ async def login(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={
                 "code": "AUTH_GOOGLE_ACCOUNT",
-                "message": "This account was created with Google Sign-In. Please use the 'Continue with Google' button.",
+                "message": (
+                    "This account was created with Google Sign-In. "
+                    "Please use the 'Continue with Google' button."
+                ),
             },
         )
     if not verify_password(payload.password, user.hashed_password):
@@ -653,7 +656,13 @@ async def google_oauth_callback(
             await db.flush()
 
             for cat_name in [
-                "Engineering", "Design", "Marketing", "Sales", "Data", "Operations", "HR"
+                "Engineering",
+                "Design",
+                "Marketing",
+                "Sales",
+                "Data",
+                "Operations",
+                "HR",
             ]:
                 db.add(JobCategory(org_id=organization.id, name=cat_name, is_system_default=True))
 

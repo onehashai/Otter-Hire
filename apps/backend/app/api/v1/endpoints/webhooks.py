@@ -26,16 +26,16 @@ from __future__ import annotations
 import json
 import urllib.request
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import PlainTextResponse
-from sqlalchemy import select, update as sa_update
+from sqlalchemy import select
+from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.logging import logger
 from app.db.session import get_db
 from app.models.message import Message
-from fastapi import Depends
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 
@@ -129,15 +129,11 @@ async def ses_events(
 
     try:
         result = await db.execute(
-            select(Message.id, Message.status).where(
-                Message.email_message_id == email_message_id
-            )
+            select(Message.id, Message.status).where(Message.email_message_id == email_message_id)
         )
         row = result.first()
         if row is None:
-            logger.debug(
-                "SES events webhook: no message found for Message-ID %s", email_message_id
-            )
+            logger.debug("SES events webhook: no message found for Message-ID %s", email_message_id)
             return "ok"
 
         current_rank = _STATUS_RANK.get(row.status, 0)
@@ -145,14 +141,10 @@ async def ses_events(
 
         if new_rank > current_rank:
             await db.execute(
-                sa_update(Message)
-                .where(Message.id == row.id)
-                .values(status=new_status)
+                sa_update(Message).where(Message.id == row.id).values(status=new_status)
             )
             await db.commit()
-            logger.info(
-                "SES events: message %s → %s (was %s)", row.id, new_status, row.status
-            )
+            logger.info("SES events: message %s → %s (was %s)", row.id, new_status, row.status)
     except Exception:
         logger.exception(
             "SES events webhook: failed to update message for Message-ID %s", email_message_id

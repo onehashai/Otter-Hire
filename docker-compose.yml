@@ -121,9 +121,9 @@ services:
         condition: service_healthy
     volumes:
       - ./apps/backend:/app
-    command: sh -lc "python -m app.workers.inbound_temporal_worker"
+    command: sh -lc "python -m app.workers.worker"
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -f inbound_temporal_worker || exit 1"]
+      test: ["CMD-SHELL", "pgrep -f worker || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 3

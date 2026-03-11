@@ -52,7 +52,7 @@ function mapApiToTemplate(r: {
     category: r.category,
     subject: r.subject,
     body: r.body,
-    updatedAt: r.updated_at.slice(0, 10),
+    updatedAt: r.updated_at,
     createdBy: "—",
     usageCount: 0,
   };
@@ -211,9 +211,6 @@ export default function TemplatesList({ searchValue, onSearchChange }: Templates
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-0.5">
                     <h3 className="text-sm font-medium truncate">{t.name}</h3>
-                    <Badge variant="secondary" className="text-[10px] shrink-0">
-                      {t.category}
-                    </Badge>
                   </div>
                   <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                     <span>{t.category}</span>
@@ -222,21 +219,6 @@ export default function TemplatesList({ searchValue, onSearchChange }: Templates
                   </div>
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
-                  <Button
-                    variant="default"
-                    size="sm"
-                    className="h-8 text-xs text-primary-foreground"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      router.push(`/templates/${t.id}`);
-                    }}
-                  >
-                    Edit
-                  </Button>
-                  <div className="text-right">
-                    <div className="text-sm font-medium">{t.usageCount}</div>
-                    <div className="text-[10px] text-muted-foreground">Used</div>
-                  </div>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button
@@ -266,7 +248,6 @@ export default function TemplatesList({ searchValue, onSearchChange }: Templates
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
-                  <ChevronRight className={cn("h-4 w-4 text-muted-foreground")} />
                 </div>
               </div>
             </CardContent>

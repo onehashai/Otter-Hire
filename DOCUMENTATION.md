@@ -1864,7 +1864,7 @@ All team management operations call real backend endpoints:
 
 **Function**: `send_invite_email(to_email, invite_url, org_name, inviter_name)`
 
-**Template**: `apps/backend/app/email_templates/invite.html`
+**Template**: `apps/backend/app/templates/invite.html`
 
 **Content**:
 - Personalized greeting with inviter name

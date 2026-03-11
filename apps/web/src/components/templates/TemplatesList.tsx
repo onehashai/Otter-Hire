@@ -62,7 +62,7 @@ function mapApiToTemplate(r: {
     category: r.category,
     subject: r.subject,
     body: r.body,
-    updatedAt: r.updated_at.slice(0, 10),
+    updatedAt: r.updated_at,
     createdBy: "—",
     usageCount: 0,
   };

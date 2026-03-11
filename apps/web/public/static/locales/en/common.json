@@ -157,7 +157,7 @@
   "invite": "Invite",
   "automations_title": "Automations",
   "automations_subtitle": "Automate repetitive tasks in your hiring workflow",
-  "automation_overview_title": "Automation Overview",
+  "automation_overview_title": "Automation Ove,rview",
   "automation_overview_subtitle": "View automation details, conditions, and actions.",
   "edit_automation_title": "Edit Automation",
   "edit_automation_subtitle": "Manage automation details, conditions, and actions.",
@@ -167,5 +167,10 @@
   "conversations_title": "Conversations",
   "conversations_subtitle": "Manage your conversations.",
   "templates_title": "Templates",
-  "templates_subtitle": "Create and manage reusable templates for candidate communication and workflows."
+  "templates_subtitle": "Create and manage reusable templates for candidate communication and workflows.",
+  "edit_template_title": "Edit Template",
+  "edit_template_subtitle": "Manage template details, subject, and body.",
+  "create_template": "Create Template",
+  "create_template_description": "Enter a name for your new template.",
+  "template_name": "Template Name"
 }

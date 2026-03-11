@@ -11,6 +11,7 @@ import time
 import urllib.error
 import urllib.request
 from datetime import datetime, timedelta, timezone
+from uuid import UUID
 from email import policy
 from email.parser import BytesParser
 from email.utils import parseaddr
@@ -21,6 +22,7 @@ from sqlalchemy import delete, select
 
 from app.core.config import settings
 from app.db.session import AsyncSessionLocal
+from app.models.conversation import Conversation
 from app.models.email import InboundEmail
 from app.models.organization import OrgInbox
 
@@ -28,6 +30,21 @@ logger = logging.getLogger(__name__)
 
 _PROCESS_KEY_TIMEOUT_SECONDS = 30
 _REDIS_SOCKET_TIMEOUT_SECONDS = 2
+
+
+def _parse_references(references_raw: str) -> list[str]:
+    """Parse an email References header into a list of bare message-IDs.
+
+    The header is a whitespace-separated list of angle-bracketed IDs, e.g.
+    ``<abc@host> <def@host>``.  Returns them without the angle brackets,
+    oldest-first (left-to-right as they appear in the header).
+    """
+    ids: list[str] = []
+    for token in re.split(r"\s+", (references_raw or "").strip()):
+        clean = token.strip().strip("<>")
+        if clean:
+            ids.append(clean)
+    return ids
 
 
 def _extract_recipient(to_values: list[str]) -> str | None:
@@ -73,30 +90,57 @@ def _extract_text_and_attachments(raw_email: bytes) -> dict:
     if not message_id:
         message_id = hashlib.sha256(raw_email).hexdigest()[:32]
 
+    # Threading headers — used to match inbound replies to existing conversations
+    in_reply_to = (msg.get("In-Reply-To") or "").strip().strip("<>") or None
+    references_raw = (msg.get("References") or "").strip()
+    # References is a space-separated list of message-ids; keep the raw string
+    references = references_raw or None
+
+    # Noise-filter headers — passed through so the API can reject automated mail
+    auto_submitted = (msg.get("Auto-Submitted") or "").strip().lower() or None
+    list_unsubscribe = bool(msg.get("List-Unsubscribe"))
+    precedence = (msg.get("Precedence") or "").strip().lower() or None
+    # Outlook / Exchange header that suppresses auto-replies
+    x_auto_response_suppress = (msg.get("X-Auto-Response-Suppress") or "").strip() or None
+
     return {
         "inbox_address": _extract_recipient(to_values),
         "from_email": (from_email or "").strip().lower() or None,
         "subject": (msg.get("Subject") or "").strip() or None,
         "message_id": message_id,
+        "in_reply_to": in_reply_to,
+        "references": references,
+        "auto_submitted": auto_submitted,
+        "list_unsubscribe": list_unsubscribe,
+        "precedence": precedence,
+        "x_auto_response_suppress": x_auto_response_suppress,
         "text_body": text_body,
         "html_body": html_body,
         "attachments": attachments,
     }
 
 
-_ENQUEUED_TTL_SECONDS = 86400  # 24h - avoid re-enqueuing same key while workflow runs
+_ENQUEUED_TTL_SECONDS = 86400       # 24h  – covers workflow execution time
+_IGNORED_TTL_SECONDS = 2592000      # 30d  – covers ignored emails until S3 lifecycle removes them
+
+
+def _redis_client() -> redis.Redis:
+    return redis.Redis.from_url(
+        settings.redis_url,
+        decode_responses=True,
+        socket_connect_timeout=_REDIS_SOCKET_TIMEOUT_SECONDS,
+        socket_timeout=_REDIS_SOCKET_TIMEOUT_SECONDS,
+    )
 
 
 def _is_key_enqueued_in_redis(raw_key: str) -> bool:
-    """Check if key was recently enqueued (workflow may still be running)."""
+    """Return True if the key was recently enqueued OR permanently marked as ignored."""
     try:
-        r = redis.Redis.from_url(
-            settings.redis_url,
-            decode_responses=True,
-            socket_connect_timeout=_REDIS_SOCKET_TIMEOUT_SECONDS,
-            socket_timeout=_REDIS_SOCKET_TIMEOUT_SECONDS,
+        r = _redis_client()
+        return bool(
+            r.exists(f"inbound:enqueued:{raw_key}")
+            or r.exists(f"inbound:ignored:{raw_key}")
         )
-        return bool(r.exists(f"inbound:enqueued:{raw_key}"))
     except Exception:
         logger.exception("SES bridge redis exists failed key=%s", raw_key)
         return False
@@ -105,15 +149,24 @@ def _is_key_enqueued_in_redis(raw_key: str) -> bool:
 def _mark_key_enqueued_in_redis(raw_key: str) -> None:
     """Mark key as enqueued to avoid SES bridge re-enqueuing every poll cycle."""
     try:
-        r = redis.Redis.from_url(
-            settings.redis_url,
-            decode_responses=True,
-            socket_connect_timeout=_REDIS_SOCKET_TIMEOUT_SECONDS,
-            socket_timeout=_REDIS_SOCKET_TIMEOUT_SECONDS,
-        )
+        r = _redis_client()
         r.setex(f"inbound:enqueued:{raw_key}", _ENQUEUED_TTL_SECONDS, "1")
     except Exception:
         logger.exception("SES bridge redis setex failed key=%s", raw_key)
+
+
+def _mark_key_ignored_in_redis(raw_key: str) -> None:
+    """Permanently mark a key as ignored so the polling loop never re-enqueues it.
+
+    Used when a Temporal workflow completes as 'ignored' (unknown inbox, etc.) without
+    creating an InboundEmail DB record.  Without this, every poll cycle after the
+    short-lived 'enqueued' TTL expires would spin up a new workflow indefinitely.
+    """
+    try:
+        r = _redis_client()
+        r.setex(f"inbound:ignored:{raw_key}", _IGNORED_TTL_SECONDS, "1")
+    except Exception:
+        logger.exception("SES bridge redis setex ignored failed key=%s", raw_key)
 
 
 async def _is_key_already_processed(raw_key: str) -> bool:
@@ -149,11 +202,22 @@ def _extract_org_id_from_forwarding_address(inbox_address: str) -> str | None:
     return f"{hex_id[0:8]}-{hex_id[8:12]}-{hex_id[12:16]}-{hex_id[16:20]}-{hex_id[20:32]}"
 
 
-async def _resolve_inbox_context(inbox_address: str) -> tuple[str, str] | None:
+# Matches To address like reply+<conversation_id>@inbound.domain
+_REPLY_CONVERSATION_PATTERN = re.compile(
+    r"^reply\+([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})@",
+    re.IGNORECASE,
+)
+
+
+async def _resolve_inbox_context(
+    inbox_address: str,
+) -> tuple[str, str, str | None] | None:
     """
-    Resolve secret + canonical inbox address.
+    Resolve secret + canonical inbox address + optional reply_to_conversation_id.
     1) Direct match on org_inboxes.inbox_address
     2) Fallback for forwarding alias org-<orgid>@inbound.domain -> lookup by org_id
+    3) Fallback for reply+<conversation_id>@... -> lookup conversation, then org_inbox by org_id
+    Returns (secret, canonical_inbox_address, reply_to_conversation_id_str or None).
     """
     async with AsyncSessionLocal() as db:
         direct_result = await db.execute(
@@ -163,20 +227,44 @@ async def _resolve_inbox_context(inbox_address: str) -> tuple[str, str] | None:
         if direct_inbox is not None:
             secret = direct_inbox.secret_hash or settings.inbound_webhook_secret
             if secret:
-                return secret, direct_inbox.inbox_address
+                reply_conv_id = None
+                m = _REPLY_CONVERSATION_PATTERN.match((inbox_address or "").strip().lower())
+                if m:
+                    reply_conv_id = m.group(1)
+                return secret, direct_inbox.inbox_address, reply_conv_id
 
         org_id = _extract_org_id_from_forwarding_address(inbox_address)
-        if not org_id:
-            return None
+        if org_id:
+            org_result = await db.execute(select(OrgInbox).where(OrgInbox.org_id == org_id))
+            org_inbox = org_result.scalar_one_or_none()
+            if org_inbox is not None:
+                secret = org_inbox.secret_hash or settings.inbound_webhook_secret
+                if secret:
+                    return secret, org_inbox.inbox_address, None
 
-        org_result = await db.execute(select(OrgInbox).where(OrgInbox.org_id == org_id))
+        # reply+<conversation_id>@... -> resolve via conversation
+        m = _REPLY_CONVERSATION_PATTERN.match((inbox_address or "").strip().lower())
+        if not m:
+            return None
+        conv_id_str = m.group(1)
+        try:
+            conv_uuid = UUID(conv_id_str)
+        except (ValueError, TypeError):
+            return None
+        conv_result = await db.execute(
+            select(Conversation).where(Conversation.id == conv_uuid)
+        )
+        conv = conv_result.scalar_one_or_none()
+        if conv is None:
+            return None
+        org_result = await db.execute(select(OrgInbox).where(OrgInbox.org_id == conv.org_id))
         org_inbox = org_result.scalar_one_or_none()
         if org_inbox is None:
             return None
         secret = org_inbox.secret_hash or settings.inbound_webhook_secret
         if not secret:
             return None
-        return secret, org_inbox.inbox_address
+        return secret, org_inbox.inbox_address, conv_id_str
 
 
 async def _cleanup_ignored_inbound_records(s3_client, bucket: str) -> None:
@@ -252,21 +340,45 @@ async def _process_raw_key(s3_client, bucket: str, key: str) -> None:
     if "AMAZON_SES_SETUP_NOTIFICATION" in key:
         logger.info("SES bridge skipped key=%s reason=ses_setup_notification", key)
         return
+    # Fast Redis guard: skip keys that are already enqueued (workflow running) or
+    # permanently ignored (workflow completed without a DB record being created).
+    # This check must come before the DB query to avoid hammering the DB every poll.
+    if _is_key_enqueued_in_redis(key):
+        logger.debug("SES bridge skipped key=%s reason=redis_dedup", key)
+        return
     if await _is_key_already_processed(key):
         logger.info("SES bridge skipped key=%s reason=already_processed", key)
         return
-    if settings.inbound_async_pipeline_enabled and settings.inbound_async_enqueue_via_http:
-        status, response_text = await asyncio.to_thread(_enqueue_raw_key_via_http, bucket, key)
-        if status >= 400:
-            logger.error(
-                "SES bridge enqueue failed key=%s status=%s body=%s",
-                key,
-                status,
-                response_text,
+    if settings.inbound_async_pipeline_enabled:
+        if settings.inbound_async_enqueue_via_http:
+            # Legacy path: POST to the HTTP API, which then enqueues to Temporal.
+            # Avoid this when the bridge and API share the same process — the HTTP
+            # endpoint is rate-limited and a burst of keys can trigger 429s.
+            status, response_text = await asyncio.to_thread(_enqueue_raw_key_via_http, bucket, key)
+            if status == 429:
+                # Propagate so the caller can handle/retry rather than silently drop.
+                raise RuntimeError(
+                    f"SES bridge HTTP enqueue rate-limited key={key} — "
+                    "set INBOUND_ASYNC_ENQUEUE_VIA_HTTP=false to use direct Temporal enqueue"
+                )
+            if status >= 400:
+                logger.error(
+                    "SES bridge enqueue failed key=%s status=%s body=%s",
+                    key,
+                    status,
+                    response_text,
+                )
+                return
+            _mark_key_enqueued_in_redis(key)
+            logger.info("SES bridge enqueued key=%s status=%s", key, status)
+        else:
+            # Preferred path: enqueue directly to Temporal, no HTTP hop, no rate-limit exposure.
+            # Lazy import breaks the circular dependency (temporal/queue.py imports ses_bridge).
+            from app.integrations.app_store.email_integration.temporal.queue import (  # noqa: PLC0415
+                enqueue_ses_raw_key,
             )
-            return
-        _mark_key_enqueued_in_redis(key)
-        logger.info("SES bridge enqueued key=%s status=%s", key, status)
+            await enqueue_ses_raw_key(bucket, key)
+            logger.info("SES bridge enqueued key=%s via Temporal directly", key)
         return
 
     logger.info("SES bridge processing key=%s bucket=%s", key, bucket)
@@ -291,13 +403,20 @@ async def _process_raw_key(s3_client, bucket: str, key: str) -> None:
             inbox_address,
         )
         return
-    secret, canonical_inbox_address = inbox_context
+    secret, canonical_inbox_address, reply_to_conv_id = inbox_context
 
     payload = {
         "inbox_address": canonical_inbox_address,
+        "reply_to_conversation_id": reply_to_conv_id,
         "from_email": normalized.get("from_email"),
         "subject": normalized.get("subject"),
         "message_id": normalized.get("message_id"),
+        "in_reply_to": normalized.get("in_reply_to"),
+        "references": normalized.get("references"),
+        "auto_submitted": normalized.get("auto_submitted"),
+        "list_unsubscribe": normalized.get("list_unsubscribe") or False,
+        "precedence": normalized.get("precedence"),
+        "x_auto_response_suppress": normalized.get("x_auto_response_suppress"),
         "received_at": datetime.now(timezone.utc).isoformat(),
         "raw_storage_key": key,
         "text_body": normalized.get("text_body") or None,

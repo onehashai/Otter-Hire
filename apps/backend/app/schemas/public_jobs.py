@@ -94,10 +94,17 @@ class InboundAttachmentPayload(BaseModel):
 
 class InboundEmailPayload(BaseModel):
     inbox_address: str
+    reply_to_conversation_id: str | None = None  # when To: reply+<conv_id>@...
     from_email: str | None = None
     from_name: str | None = None
     subject: str | None = None
     message_id: str | None = None
+    in_reply_to: str | None = None
+    references: str | None = None
+    auto_submitted: str | None = None
+    list_unsubscribe: bool = False
+    precedence: str | None = None
+    x_auto_response_suppress: str | None = None
     received_at: datetime | None = None
     raw_storage_key: str | None = None
     raw_email_base64: str | None = None

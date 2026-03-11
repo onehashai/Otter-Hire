@@ -2904,7 +2904,6 @@ Active settings routes in code include:
 - `/settings/integrations`
 - `/settings/admin` (super-admin gated UI page)
 - `/settings/categories`
-- `/settings/custom-fields`
 - `/settings/billing`
 - `/settings/team`
 - `/settings/profile`

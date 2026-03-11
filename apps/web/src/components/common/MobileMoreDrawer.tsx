@@ -9,7 +9,7 @@ import { Separator } from "@onehash/ui/separator";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@onehash/ui/drawer";
 
 const moreItems = [
-  { title: "Messages", url: "/messages", icon: MessageSquare },
+  { title: "Conversations", url: "/conversations", icon: MessageSquare },
   // TODO(mvp-nav): Re-enable Interviews in mobile drawer post-messaging launch.
   // { title: "Interviews", url: "/interviews", icon: Calendar },
   // TODO(mvp-nav): Re-enable Reports in mobile drawer after MVP launch.

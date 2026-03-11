@@ -32,7 +32,7 @@ export type ConversationListResponse = {
 };
 
 export type MessageDirection = "inbound" | "outbound";
-export type MessageStatus = "queued" | "sent" | "failed" | "received";
+export type MessageStatus = "queued" | "sent" | "delivered" | "read" | "failed" | "received";
 
 export type MessageRead = {
   id: string;
@@ -44,6 +44,8 @@ export type MessageRead = {
   from_email: string;
   to_email: string;
   body: string;
+  body_visible: string | null;
+  body_quoted: string | null;
   html_body: string | null;
   status: MessageStatus;
   provider_message_id: string | null;

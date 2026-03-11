@@ -15,8 +15,6 @@ const baseTabRoutes: { label: string; path: string }[] = [
   { label: "Team", path: "/settings/team" },
   { label: "Job Categories", path: "/settings/categories" },
   { label: "Integrations", path: "/settings/integrations" },
-  { label: "Custom Fields", path: "/settings/custom-fields" },
-  { label: "Billing", path: "/settings/billing" },
 ];
 
 const adminTabRoute = { label: "Admin", path: "/settings/admin" };

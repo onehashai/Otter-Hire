@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-import smtplib
 from datetime import datetime, timezone
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -14,9 +11,12 @@ from sqlalchemy.orm import selectinload
 from app.core.logging import logger
 from app.core.permissions import require_permission
 from app.db.session import get_db
+from app.integrations.app_store.email_integration.temporal.queue import enqueue_outbound_email
+from app.integrations.app_store.email_integration.temporal.types import OutboundWorkflowInput
 from app.models.candidate import Candidate
 from app.models.conversation import Conversation
 from app.models.message import Message
+from app.models.organization import OrgInbox
 from app.models.user import User
 from app.schemas.conversations import (
     CandidateSnippet,
@@ -37,7 +37,22 @@ router = APIRouter(prefix="/conversations", tags=["conversations"])
 # ---------------------------------------------------------------------------
 
 
+def _reply_to_for_conversation(conv_id: UUID, inbox_address: str | None) -> str | None:
+    """Build Reply-To address so candidate replies land in this conversation (reply+<conv_id>@domain)."""
+    if not inbox_address or "@" not in inbox_address:
+        return None
+    domain = inbox_address.strip().lower().split("@", 1)[1]
+    return f"reply+{conv_id}@{domain}"
+
+
 def _message_to_read(msg: Message, sender_name: str | None = None) -> MessageRead:
+    from app.utils.email_parse import parse_email_body
+
+    body_visible: str | None = None
+    body_quoted: str | None = None
+    if msg.body:
+        body_visible, body_quoted = parse_email_body(msg.body)
+
     return MessageRead(
         id=msg.id,
         conversation_id=msg.conversation_id,
@@ -48,62 +63,15 @@ def _message_to_read(msg: Message, sender_name: str | None = None) -> MessageRea
         from_email=msg.from_email,
         to_email=msg.to_email,
         body=msg.body,
+        body_visible=body_visible,
+        body_quoted=body_quoted,
         html_body=msg.html_body,
         status=msg.status,
         provider_message_id=msg.provider_message_id,
+        email_message_id=msg.email_message_id,
+        in_reply_to=msg.in_reply_to,
         created_at=msg.created_at,
     )
-
-
-async def _send_via_smtp(
-    *,
-    db: AsyncSession,
-    org_id: UUID,
-    to_email: str,
-    subject: str,
-    body: str,
-    html_body: str | None,
-    from_name: str | None = None,
-) -> str | None:
-    """Attempt to send via org SMTP. Returns provider_message_id or None."""
-    from app.integrations.app_store.email_integration.smtp_service import (
-        decrypt_password_for_sending,
-        get_verified_smtp_for_org,
-    )
-
-    smtp_row = await get_verified_smtp_for_org(db, org_id)
-    if smtp_row is None:
-        return None
-
-    cfg = smtp_row.config or {}
-    display_name = from_name or cfg.get("from_name") or cfg.get("from_email", "")
-    plain_password = decrypt_password_for_sending(smtp_row)
-
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = subject
-    msg["From"] = f"{display_name} <{cfg.get('from_email', '')}>"
-    msg["To"] = to_email
-    msg.attach(MIMEText(body, "plain"))
-    if html_body:
-        msg.attach(MIMEText(html_body, "html"))
-
-    host, port = cfg.get("host", ""), cfg.get("port", 587)
-    try:
-        if cfg.get("use_ssl"):
-            with smtplib.SMTP_SSL(host, port, timeout=15) as server:
-                server.login(cfg.get("username", ""), plain_password)
-                server.send_message(msg)
-        else:
-            with smtplib.SMTP(host, port, timeout=15) as server:
-                if cfg.get("use_tls"):
-                    server.starttls()
-                server.login(cfg.get("username", ""), plain_password)
-                server.send_message(msg)
-        logger.info(f"Conversation email sent to {to_email} via org SMTP ({host}): {subject}")
-        return f"smtp:{host}:{msg['Message-ID'] or ''}"
-    except Exception as e:
-        logger.error(f"Failed to send conversation email via SMTP: {e}")
-        raise
 
 
 # ---------------------------------------------------------------------------
@@ -157,7 +125,14 @@ async def list_conversations(
         rows = await db.execute(
             select(subq.c.conversation_id, subq.c.body).where(subq.c.rn == 1)
         )
-        last_msgs = {row.conversation_id: row.body for row in rows}
+        raw_last_msgs = {row.conversation_id: row.body for row in rows}
+        # Use only visible part (no quoted block) for list preview
+        from app.utils.email_parse import parse_email_body
+
+        last_msgs = {}
+        for cid, body in raw_last_msgs.items():
+            visible, _ = parse_email_body(body or "")
+            last_msgs[cid] = visible or body or ""
 
         count_rows = await db.execute(
             select(Message.conversation_id, func.count().label("cnt"))
@@ -267,9 +242,7 @@ async def create_conversation(
     db.add(conv)
     await db.flush()
 
-    # Attempt SMTP send; store status accordingly
-    msg_status = "queued"
-    provider_message_id = None
+    # Resolve from_email from SMTP config (lightweight DB lookup, no sending)
     try:
         from app.integrations.app_store.email_integration.smtp_service import (
             get_verified_smtp_for_org,
@@ -278,26 +251,11 @@ async def create_conversation(
         smtp_row = await get_verified_smtp_for_org(db, current_user.org_id)
         from_email = (smtp_row.config or {}).get("from_email", "") if smtp_row else ""
     except Exception:
-        smtp_row = None
         from_email = ""
 
-    if smtp_row is not None:
-        try:
-            provider_message_id = await _send_via_smtp(
-                db=db,
-                org_id=current_user.org_id,
-                to_email=candidate.email,
-                subject=body.subject,
-                body=body.body,
-                html_body=body.html_body,
-                from_name=current_user.name,
-            )
-            msg_status = "sent"
-        except Exception:
-            msg_status = "failed"
-
+    msg_id = uuid7()
     first_msg = Message(
-        id=uuid7(),
+        id=msg_id,
         org_id=current_user.org_id,
         conversation_id=conv.id,
         direction="outbound",
@@ -307,13 +265,36 @@ async def create_conversation(
         to_email=candidate.email,
         body=body.body,
         html_body=body.html_body,
-        status=msg_status,
-        provider_message_id=provider_message_id,
+        status="queued",
         created_at=now,
     )
     db.add(first_msg)
     await db.commit()
     await db.refresh(conv)
+
+    # Reply-To so candidate replies stay in this conversation (reply+<conv_id>@inbound-domain)
+    reply_to = None
+    inbox_result = await db.execute(select(OrgInbox).where(OrgInbox.org_id == current_user.org_id))
+    org_inbox = inbox_result.scalar_one_or_none()
+    if org_inbox and org_inbox.inbox_address:
+        reply_to = _reply_to_for_conversation(conv.id, org_inbox.inbox_address)
+
+    # Hand off actual sending to the Temporal worker (async, retriable)
+    try:
+        await enqueue_outbound_email(
+            OutboundWorkflowInput(
+                org_id=str(current_user.org_id),
+                message_id=str(msg_id),
+                to_email=candidate.email,
+                subject=body.subject,
+                body=body.body,
+                html_body=body.html_body,
+                from_name=current_user.name,
+                reply_to=reply_to,
+            )
+        )
+    except Exception:
+        logger.exception("Failed to enqueue outbound email workflow for message %s", msg_id)
 
     return ConversationDetail(
         id=conv.id,
@@ -362,6 +343,7 @@ async def send_message(
             detail="Cannot send messages to an archived conversation",
         )
 
+    # Resolve from_email from SMTP config (lightweight DB lookup, no sending)
     try:
         from app.integrations.app_store.email_integration.smtp_service import (
             get_verified_smtp_for_org,
@@ -370,30 +352,13 @@ async def send_message(
         smtp_row = await get_verified_smtp_for_org(db, current_user.org_id)
         from_email = (smtp_row.config or {}).get("from_email", "") if smtp_row else ""
     except Exception:
-        smtp_row = None
         from_email = ""
 
     now = datetime.now(tz=timezone.utc)
-    msg_status = "queued"
-    provider_message_id = None
 
-    if smtp_row is not None:
-        try:
-            provider_message_id = await _send_via_smtp(
-                db=db,
-                org_id=current_user.org_id,
-                to_email=conv.candidate.email,
-                subject=f"Re: {conv.subject}",
-                body=body.body,
-                html_body=body.html_body,
-                from_name=current_user.name,
-            )
-            msg_status = "sent"
-        except Exception:
-            msg_status = "failed"
-
+    msg_id = uuid7()
     msg = Message(
-        id=uuid7(),
+        id=msg_id,
         org_id=current_user.org_id,
         conversation_id=conv.id,
         direction="outbound",
@@ -403,8 +368,8 @@ async def send_message(
         to_email=conv.candidate.email,
         body=body.body,
         html_body=body.html_body,
-        status=msg_status,
-        provider_message_id=provider_message_id,
+        status="queued",
+        in_reply_to=None,
         created_at=now,
     )
     db.add(msg)
@@ -416,6 +381,30 @@ async def send_message(
 
     await db.commit()
     await db.refresh(msg)
+
+    # Reply-To so candidate replies stay in this conversation (reply+<conv_id>@inbound-domain)
+    reply_to = None
+    inbox_result = await db.execute(select(OrgInbox).where(OrgInbox.org_id == current_user.org_id))
+    org_inbox = inbox_result.scalar_one_or_none()
+    if org_inbox and org_inbox.inbox_address:
+        reply_to = _reply_to_for_conversation(conv.id, org_inbox.inbox_address)
+
+    # Hand off actual sending to the Temporal worker (async, retriable)
+    try:
+        await enqueue_outbound_email(
+            OutboundWorkflowInput(
+                org_id=str(current_user.org_id),
+                message_id=str(msg_id),
+                to_email=conv.candidate.email,
+                subject=f"Re: {conv.subject}",
+                body=body.body,
+                html_body=body.html_body,
+                from_name=current_user.name,
+                reply_to=reply_to,
+            )
+        )
+    except Exception:
+        logger.exception("Failed to enqueue outbound email workflow for message %s", msg_id)
 
     return _message_to_read(msg, sender_name=current_user.name)
 

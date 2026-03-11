@@ -19,9 +19,13 @@ class MessageRead(BaseModel):
     from_email: str
     to_email: str
     body: str
+    body_visible: str | None = None
+    body_quoted: str | None = None
     html_body: str | None = None
     status: str
     provider_message_id: str | None = None
+    email_message_id: str | None = None
+    in_reply_to: str | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

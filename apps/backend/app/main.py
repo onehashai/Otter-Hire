@@ -9,6 +9,7 @@ from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded as SlowRateLimitExceeded
 from slowapi.util import get_remote_address
 
+from app.admin import setup_admin
 from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.errors import make_error_payload
@@ -28,6 +29,9 @@ limiter = Limiter(key_func=get_remote_address)
 
 app = FastAPI(title="ATS Backend", version="1.0.0")
 app.state.limiter = limiter
+
+if not settings.is_production:
+    setup_admin(app)
 
 app.add_exception_handler(HTTPException, http_exception_handler)
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
@@ -69,8 +73,6 @@ async def rate_limit_handler(request: Request, exc: SlowRateLimitExceeded):
 
 @app.on_event("startup")
 async def startup_event():
-    mode = "production" if settings.is_production else "development"
-    logger.info(f"Starting ATS Backend in {mode} mode")
     app.state.ses_bridge_stop_event = asyncio.Event()
     app.state.ses_bridge_task = None
     if settings.ses_raw_bridge_enabled:

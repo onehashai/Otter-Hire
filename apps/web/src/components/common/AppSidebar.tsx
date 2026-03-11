@@ -30,7 +30,7 @@ const navItems = [
   // { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Jobs", url: "/jobs", icon: Briefcase },
   { title: "Candidates", url: "/candidates", icon: Users },
-  { title: "Messages", url: "/messages", icon: MessageSquare },
+  { title: "Conversations", url: "/conversations", icon: MessageSquare },
   // TODO(mvp-nav): Re-enable Interviews in sidebar post-messaging launch.
   // { title: "Interviews", url: "/interviews", icon: Calendar },
   // TODO(mvp-nav): Re-enable Reports in sidebar after MVP launch.

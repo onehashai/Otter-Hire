@@ -20,12 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@onehash/ui/dialog";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@onehash/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@onehash/ui/tooltip";
 import { CheckCircle2, Settings, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -203,7 +198,11 @@ export default function IntegrationsSettingsPage() {
           <EmailIntegrationManager onChanged={loadCatalog} />
 
           <DialogFooter>
-            <Button type="button" className="text-xs h-8" onClick={() => setManageDialogOpen(false)}>
+            <Button
+              type="button"
+              className="text-xs h-8"
+              onClick={() => setManageDialogOpen(false)}
+            >
               Close
             </Button>
           </DialogFooter>

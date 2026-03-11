@@ -271,7 +271,9 @@ export function EmailIntegrationManager({ onChanged }: EmailIntegrationManagerPr
         if (!cancelled) setSmtpLoading(false);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const populateSmtpForm = (cfg: OrgSmtpConfigResponse) => {
@@ -453,147 +455,170 @@ export function EmailIntegrationManager({ onChanged }: EmailIntegrationManagerPr
 
       {/* ── SMTP Outbound — only visible once inbound is verified & active ─ */}
       {isVerificationDone && (
-      <>
-      <Separator />
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-sm font-semibold">Outbound Email (SMTP)</h3>
-          <p className="text-xs text-muted-foreground">
-            Send emails to candidates from your own address via SMTP.
-          </p>
-        </div>
-        {!smtpLoading && smtpConfig && !smtpEditing && (
-          <SmtpStatusBadge status={smtpConfig.status} />
-        )}
-      </div>
-
-      {smtpLoading ? (
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          Loading…
-        </div>
-      ) : smtpEditing ? (
-        <div className="space-y-3">
-          <div className="grid grid-cols-[1fr_100px] gap-2">
-            <InputField
-              label="SMTP Host"
-              value={smtpHost}
-              onChange={(e) => setSmtpHost(e.target.value)}
-              placeholder="smtp.gmail.com"
-              className="text-sm h-9"
-            />
-            <InputField
-              label="Port"
-              value={smtpPort}
-              onChange={(e) => setSmtpPort(e.target.value)}
-              placeholder="587"
-              className="text-sm h-9"
-            />
-          </div>
-          <InputField
-            label="Username"
-            value={smtpUsername}
-            onChange={(e) => setSmtpUsername(e.target.value)}
-            placeholder="careers@yourcompany.com"
-            className="text-sm h-9"
-          />
-          <PasswordField
-            label="Password"
-            value={smtpPassword}
-            onChange={(e) => setSmtpPassword(e.target.value)}
-            placeholder={smtpConfig ? "Leave unchanged" : "App password or SMTP password"}
-            className="text-sm h-9"
-          />
-          <div className="grid grid-cols-2 gap-2">
-            <InputField
-              label="From Email"
-              value={smtpFromEmail}
-              onChange={(e) => setSmtpFromEmail(e.target.value)}
-              placeholder="careers@yourcompany.com"
-              className="text-sm h-9"
-            />
-            <InputField
-              label="From Name"
-              value={smtpFromName}
-              onChange={(e) => setSmtpFromName(e.target.value)}
-              placeholder="Careers Team"
-              className="text-sm h-9"
-            />
-          </div>
-          <div className="flex items-center gap-4 text-xs">
-            <label className="flex items-center gap-1.5 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={smtpUseTls}
-                onChange={(e) => setSmtpUseTls(e.target.checked)}
-                className="h-3.5 w-3.5"
-              />
-              STARTTLS
-            </label>
-            <label className="flex items-center gap-1.5 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={smtpUseSsl}
-                onChange={(e) => setSmtpUseSsl(e.target.checked)}
-                className="h-3.5 w-3.5"
-              />
-              SSL/TLS (port 465)
-            </label>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              size="sm"
-              type="button"
-              className="text-xs h-8"
-              onClick={handleSmtpSave}
-              disabled={smtpSaving}
-            >
-              {smtpSaving ? "Saving…" : "Save"}
-            </Button>
-            <Button
-              size="sm"
-              type="button"
-              variant="outline"
-              className="text-xs h-8"
-              onClick={() => setSmtpEditing(false)}
-              disabled={smtpSaving}
-            >
-              Cancel
-            </Button>
-          </div>
-        </div>
-      ) : smtpConfig ? (
-        <div className="space-y-2">
-          <div className="text-xs text-muted-foreground space-y-0.5">
+        <>
+          <Separator />
+          <div className="flex items-center justify-between">
             <div>
-              <span className="font-medium">Host:</span> {smtpConfig.host}:{smtpConfig.port}
+              <h3 className="text-sm font-semibold">Outbound Email (SMTP)</h3>
+              <p className="text-xs text-muted-foreground">
+                Send emails to candidates from your own address via SMTP.
+              </p>
             </div>
-            <div>
-              <span className="font-medium">From:</span>{" "}
-              {smtpConfig.from_name ? `${smtpConfig.from_name} <${smtpConfig.from_email}>` : smtpConfig.from_email}
-            </div>
-            {smtpConfig.status === "failed" && smtpConfig.last_test_error && (
-              <div className="text-red-600 mt-1">{smtpConfig.last_test_error}</div>
+            {!smtpLoading && smtpConfig && !smtpEditing && (
+              <SmtpStatusBadge status={smtpConfig.status} />
             )}
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              size="sm"
-              type="button"
-              variant="outline"
-              className="text-xs h-8"
-              onClick={handleSmtpTest}
-              disabled={smtpTesting}
-            >
-              {smtpTesting ? (
-                <>
-                  <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
-                  Testing…
-                </>
-              ) : (
-                "Test Connection"
-              )}
-            </Button>
+
+          {smtpLoading ? (
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Loading…
+            </div>
+          ) : smtpEditing ? (
+            <div className="space-y-3">
+              <div className="grid grid-cols-[1fr_100px] gap-2">
+                <InputField
+                  label="SMTP Host"
+                  value={smtpHost}
+                  onChange={(e) => setSmtpHost(e.target.value)}
+                  placeholder="smtp.gmail.com"
+                  className="text-sm h-9"
+                />
+                <InputField
+                  label="Port"
+                  value={smtpPort}
+                  onChange={(e) => setSmtpPort(e.target.value)}
+                  placeholder="587"
+                  className="text-sm h-9"
+                />
+              </div>
+              <InputField
+                label="Username"
+                value={smtpUsername}
+                onChange={(e) => setSmtpUsername(e.target.value)}
+                placeholder="careers@yourcompany.com"
+                className="text-sm h-9"
+              />
+              <PasswordField
+                label="Password"
+                value={smtpPassword}
+                onChange={(e) => setSmtpPassword(e.target.value)}
+                placeholder={smtpConfig ? "Leave unchanged" : "App password or SMTP password"}
+                className="text-sm h-9"
+              />
+              <div className="grid grid-cols-2 gap-2">
+                <InputField
+                  label="From Email"
+                  value={smtpFromEmail}
+                  onChange={(e) => setSmtpFromEmail(e.target.value)}
+                  placeholder="careers@yourcompany.com"
+                  className="text-sm h-9"
+                />
+                <InputField
+                  label="From Name"
+                  value={smtpFromName}
+                  onChange={(e) => setSmtpFromName(e.target.value)}
+                  placeholder="Careers Team"
+                  className="text-sm h-9"
+                />
+              </div>
+              <div className="flex items-center gap-4 text-xs">
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={smtpUseTls}
+                    onChange={(e) => setSmtpUseTls(e.target.checked)}
+                    className="h-3.5 w-3.5"
+                  />
+                  STARTTLS
+                </label>
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={smtpUseSsl}
+                    onChange={(e) => setSmtpUseSsl(e.target.checked)}
+                    className="h-3.5 w-3.5"
+                  />
+                  SSL/TLS (port 465)
+                </label>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  size="sm"
+                  type="button"
+                  className="text-xs h-8"
+                  onClick={handleSmtpSave}
+                  disabled={smtpSaving}
+                >
+                  {smtpSaving ? "Saving…" : "Save"}
+                </Button>
+                <Button
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                  className="text-xs h-8"
+                  onClick={() => setSmtpEditing(false)}
+                  disabled={smtpSaving}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          ) : smtpConfig ? (
+            <div className="space-y-2">
+              <div className="text-xs text-muted-foreground space-y-0.5">
+                <div>
+                  <span className="font-medium">Host:</span> {smtpConfig.host}:{smtpConfig.port}
+                </div>
+                <div>
+                  <span className="font-medium">From:</span>{" "}
+                  {smtpConfig.from_name
+                    ? `${smtpConfig.from_name} <${smtpConfig.from_email}>`
+                    : smtpConfig.from_email}
+                </div>
+                {smtpConfig.status === "failed" && smtpConfig.last_test_error && (
+                  <div className="text-red-600 mt-1">{smtpConfig.last_test_error}</div>
+                )}
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                  className="text-xs h-8"
+                  onClick={handleSmtpTest}
+                  disabled={smtpTesting}
+                >
+                  {smtpTesting ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
+                      Testing…
+                    </>
+                  ) : (
+                    "Test Connection"
+                  )}
+                </Button>
+                <Button
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                  className="text-xs h-8"
+                  onClick={handleSmtpEdit}
+                >
+                  Edit
+                </Button>
+                <Button
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                  className="text-xs h-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                  onClick={handleSmtpDelete}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+          ) : (
             <Button
               size="sm"
               type="button"
@@ -601,31 +626,10 @@ export function EmailIntegrationManager({ onChanged }: EmailIntegrationManagerPr
               className="text-xs h-8"
               onClick={handleSmtpEdit}
             >
-              Edit
+              Configure SMTP
             </Button>
-            <Button
-              size="sm"
-              type="button"
-              variant="outline"
-              className="text-xs h-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-              onClick={handleSmtpDelete}
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </Button>
-          </div>
-        </div>
-      ) : (
-        <Button
-          size="sm"
-          type="button"
-          variant="outline"
-          className="text-xs h-8"
-          onClick={handleSmtpEdit}
-        >
-          Configure SMTP
-        </Button>
-      )}
-      </>
+          )}
+        </>
       )}
 
       <Dialog open={verifyDialogOpen} onOpenChange={setVerifyDialogOpen}>

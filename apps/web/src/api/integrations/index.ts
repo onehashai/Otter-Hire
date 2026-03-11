@@ -147,9 +147,7 @@ export function getSmtpConfig(): Promise<OrgSmtpConfigResponse | null> {
   });
 }
 
-export function upsertSmtpConfig(
-  data: OrgSmtpConfigUpsertRequest,
-): Promise<OrgSmtpConfigResponse> {
+export function upsertSmtpConfig(data: OrgSmtpConfigUpsertRequest): Promise<OrgSmtpConfigResponse> {
   return apiFetch<OrgSmtpConfigResponse>("/integrations/email/smtp/config", {
     method: "PUT",
     body: data,

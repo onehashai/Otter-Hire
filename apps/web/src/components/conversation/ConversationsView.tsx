@@ -94,9 +94,7 @@ export function ConversationsView({ initialId }: ConversationsViewProps) {
   const [threadLoading, setThreadLoading] = useState(false);
 
   // Mobile: track which panel is visible ("list" | "thread")
-  const [mobileView, setMobileView] = useState<"list" | "thread">(
-    initialId ? "thread" : "list",
-  );
+  const [mobileView, setMobileView] = useState<"list" | "thread">(initialId ? "thread" : "list");
 
   const [composeOpen, setComposeOpen] = useState(false);
 
@@ -229,9 +227,7 @@ export function ConversationsView({ initialId }: ConversationsViewProps) {
   const handleSend = async (content: string) => {
     if (!selectedId || !activeConversation) return;
     const msg = await sendMessage(selectedId, { body: content });
-    setActiveConversation((prev) =>
-      prev ? { ...prev, messages: [...prev.messages, msg] } : prev,
-    );
+    setActiveConversation((prev) => (prev ? { ...prev, messages: [...prev.messages, msg] } : prev));
     // Track this queued message and start polling until it resolves
     pendingMessageIds.current.add(msg.id);
     startPolling(selectedId);

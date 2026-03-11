@@ -1,24 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@onehash/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@onehash/ui/dialog";
 import { Button } from "@onehash/ui/button";
 import { InputField } from "@onehash/ui/input";
 import { Textarea } from "@onehash/ui/textarea";
 import { Label } from "@onehash/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@onehash/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@onehash/ui/select";
 import {
   DropdownMenu,
   DropdownMenuContent,

@@ -173,12 +173,7 @@ export function ComposeMessageBox({
             </DropdownMenu>
           </div>
           <div className="flex items-center gap-1.5">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 text-xs"
-              disabled={!body.trim()}
-            >
+            <Button variant="outline" size="sm" className="h-7 text-xs" disabled={!body.trim()}>
               Save Draft
             </Button>
             <Button

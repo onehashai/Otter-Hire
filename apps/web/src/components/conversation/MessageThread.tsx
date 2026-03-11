@@ -3,7 +3,16 @@
 import { useState } from "react";
 import { Avatar, AvatarFallback } from "@onehash/ui/avatar";
 import { Button } from "@onehash/ui/button";
-import { ChevronLeft, ChevronDown, ChevronUp, Clock, Check, CheckCheck, Eye, AlertCircle } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronDown,
+  ChevronUp,
+  Clock,
+  Check,
+  CheckCheck,
+  Eye,
+  AlertCircle,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ComposeMessageBox } from "./components/ComposeMessageBox";
 
@@ -132,9 +141,7 @@ function EmailCard({ msg }: { msg: Message }) {
           <div
             className={cn(
               "px-4 py-3 space-y-1.5 border-b",
-              isOutbound
-                ? "bg-primary/5 border-primary/15"
-                : "bg-muted/20 border-border/60",
+              isOutbound ? "bg-primary/5 border-primary/15" : "bg-muted/20 border-border/60",
             )}
           >
             <div className="flex items-start gap-2.5">

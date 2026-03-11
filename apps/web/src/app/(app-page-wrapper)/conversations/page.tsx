@@ -2,7 +2,7 @@
 
 import { useTranslation } from "react-i18next";
 import { useSetPageMetadata } from "@/hooks/useSetPageMetadata";
-import { ConversationsView } from "@/components/conversation/ConversationsView";
+import { ConversationsView } from "@/components/conversations/ConversationsView";
 
 export default function ConversationsPage() {
   const { t } = useTranslation();

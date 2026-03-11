@@ -10,6 +10,7 @@ from app.db.session import get_db
 from app.deps.auth import get_current_user, require_active_user
 from app.models.job_category import JobCategory
 from app.models.org_membership import OrgMembership
+from app.templates.defaults import create_default_templates_for_org
 from app.models.organization import Organization
 from app.models.user import User
 from app.schemas.organization import (
@@ -222,6 +223,8 @@ async def create_organization(
 
     for cat_name in ["Engineering", "Design", "Marketing", "Sales", "Data", "Operations", "HR"]:
         db.add(JobCategory(org_id=organization.id, name=cat_name, is_system_default=True))
+
+    create_default_templates_for_org(db, organization.id)
 
     membership = OrgMembership(
         id=uuid7(),

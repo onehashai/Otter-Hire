@@ -8,9 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.logging import logger
-from app.email_templates import EmailContent
-from app.email_templates.invite import build_invite_email
-from app.email_templates.verification import build_verification_email
+from app.templates import EmailContent
+from app.templates.invite import build_invite_email
+from app.templates.verification import build_verification_email
 
 
 async def send_email(

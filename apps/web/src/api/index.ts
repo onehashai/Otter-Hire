@@ -60,3 +60,6 @@ export * from "./integrations/index";
 
 // Conversations
 export * from "./conversations/index";
+
+// Templates
+export * from "./templates/index";

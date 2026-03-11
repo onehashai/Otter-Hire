@@ -1,4 +1,4 @@
-from app.email_templates import EmailContent
+from app.templates import EmailContent
 
 
 def build_verification_email(verify_url: str, expiry_hours: int) -> EmailContent:

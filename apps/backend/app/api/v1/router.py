@@ -9,6 +9,7 @@ from app.api.v1.endpoints.job_categories import router as job_categories_router
 from app.api.v1.endpoints.jobs import router as jobs_router
 from app.api.v1.endpoints.organizations import router as organizations_router
 from app.api.v1.endpoints.public import router as public_router
+from app.api.v1.endpoints.templates import router as templates_router
 from app.api.v1.endpoints.track import router as track_router
 from app.api.v1.endpoints.users import router as users_router
 from app.api.v1.endpoints.webhooks import router as webhooks_router
@@ -18,6 +19,7 @@ api_router.include_router(auth_router)
 api_router.include_router(jobs_router)
 api_router.include_router(users_router)
 api_router.include_router(organizations_router)
+api_router.include_router(templates_router)
 api_router.include_router(job_categories_router)
 api_router.include_router(candidates_router)
 api_router.include_router(conversations_router)

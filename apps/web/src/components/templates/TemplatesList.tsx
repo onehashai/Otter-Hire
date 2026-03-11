@@ -196,8 +196,8 @@ export default function TemplatesList({ searchValue, onSearchChange }: Templates
             <AlertDialogHeader>
               <AlertDialogTitle>Delete template?</AlertDialogTitle>
               <AlertDialogDescription>
-                This will permanently delete &quot;{deleteTemplate?.name}&quot;. This action cannot be
-                undone.
+                This will permanently delete &quot;{deleteTemplate?.name}&quot;. This action cannot
+                be undone.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -292,7 +292,9 @@ export default function TemplatesList({ searchValue, onSearchChange }: Templates
           ))}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="py-12 text-center text-sm text-muted-foreground">No templates match your filters.</div>
+        <div className="py-12 text-center text-sm text-muted-foreground">
+          No templates match your filters.
+        </div>
       ) : (
         <div className="border border-border rounded-lg overflow-hidden">
           <Table>

@@ -9,14 +9,13 @@ import logging
 import re
 import time
 from datetime import datetime, timedelta, timezone
-
-import httpx
 from email import policy
 from email.parser import BytesParser
 from email.utils import parseaddr
 from uuid import UUID
 
 import boto3
+import httpx
 import redis
 from sqlalchemy import delete, select
 

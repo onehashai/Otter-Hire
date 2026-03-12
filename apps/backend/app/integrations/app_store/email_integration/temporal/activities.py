@@ -176,9 +176,12 @@ async def process_s3_inbound_email_activity(input_data: InboundWorkflowInput) ->
             extracted.get("canonical_inbox_address") or extracted.get("inbox"),
             extracted.get("reason"),
         )
-        result = await parse_and_create_candidate_activity({"data": extracted, "key": input_data.key})
+        result = await parse_and_create_candidate_activity(
+            {"data": extracted, "key": input_data.key}
+        )
         logger.info(
-            "Inbound activity parse completed key=%s status=%s http_status=%s inbound_email_id=%s candidate_id=%s",
+            "Inbound activity parse completed "
+            "key=%s status=%s http_status=%s inbound_email_id=%s candidate_id=%s",
             input_data.key,
             result.get("status"),
             result.get("http_status"),

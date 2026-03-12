@@ -8,9 +8,9 @@ import json
 import logging
 import re
 import time
-import urllib.error
-import urllib.request
 from datetime import datetime, timedelta, timezone
+
+import httpx
 from email import policy
 from email.parser import BytesParser
 from email.utils import parseaddr
@@ -317,35 +317,41 @@ async def _cleanup_ignored_inbound_records(s3_client, bucket: str) -> None:
 
 
 def _post_to_inbound_api(payload: dict, secret: str) -> tuple[int, str]:
+    """Post to inbound API using httpx (fixes SSL issues with urllib)."""
     body = json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
     signature = "sha256=" + hmac.new(secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
 
-    req = urllib.request.Request(
-        f"{settings.inbound_internal_api_base_url.rstrip('/')}/public/inbound/email",
-        data=body,
-        headers={"Content-Type": "application/json", "X-OneHash-Signature": signature},
-        method="POST",
-    )
+    url = f"{settings.inbound_internal_api_base_url.rstrip('/')}/public/inbound/email"
+    headers = {"Content-Type": "application/json", "X-OneHash-Signature": signature}
+
     try:
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            return resp.status, resp.read().decode("utf-8", errors="ignore")
-    except urllib.error.HTTPError as exc:
-        return exc.code, exc.read().decode("utf-8", errors="ignore")
+        with httpx.Client(timeout=60.0, verify=True) as client:
+            resp = client.post(url, content=body, headers=headers)
+            resp.raise_for_status()
+            return resp.status_code, resp.text
+    except httpx.HTTPStatusError as exc:
+        return exc.response.status_code, exc.response.text
+    except Exception as exc:
+        logger.error("Inbound API call failed: %s", exc)
+        return 500, str(exc)
 
 
 def _enqueue_raw_key_via_http(bucket: str, key: str) -> tuple[int, str]:
+    """Enqueue via HTTP using httpx (fixes SSL issues with urllib)."""
     body = json.dumps({"bucket": bucket, "key": key}, separators=(",", ":")).encode("utf-8")
-    req = urllib.request.Request(
-        f"{settings.inbound_internal_api_base_url.rstrip('/')}/public/inbound/s3-event",
-        data=body,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
+    url = f"{settings.inbound_internal_api_base_url.rstrip('/')}/public/inbound/s3-event"
+    headers = {"Content-Type": "application/json"}
+
     try:
-        with urllib.request.urlopen(req, timeout=20) as resp:
-            return resp.status, resp.read().decode("utf-8", errors="ignore")
-    except urllib.error.HTTPError as exc:
-        return exc.code, exc.read().decode("utf-8", errors="ignore")
+        with httpx.Client(timeout=20.0, verify=True) as client:
+            resp = client.post(url, content=body, headers=headers)
+            resp.raise_for_status()
+            return resp.status_code, resp.text
+    except httpx.HTTPStatusError as exc:
+        return exc.response.status_code, exc.response.text
+    except Exception as exc:
+        logger.error("S3 event enqueue failed: %s", exc)
+        return 500, str(exc)
 
 
 async def _process_raw_key(s3_client, bucket: str, key: str) -> None:

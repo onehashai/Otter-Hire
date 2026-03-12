@@ -129,8 +129,18 @@ async def download_and_extract_resume_activity(input_data: InboundWorkflowInput)
 
 @activity.defn
 async def process_s3_inbound_email_activity(input_data: InboundWorkflowInput) -> dict:
-    extracted = await download_and_extract_resume_activity(input_data)
-    return await parse_and_create_candidate_activity({"data": extracted, "key": input_data.key})
+    import logging
+    logger = logging.getLogger(__name__)
+    try:
+        logger.info(f"Processing S3 inbound email: bucket={input_data.bucket} key={input_data.key}")
+        extracted = await download_and_extract_resume_activity(input_data)
+        logger.info(f"Extracted data: status={extracted.get('status')}")
+        result = await parse_and_create_candidate_activity({"data": extracted, "key": input_data.key})
+        logger.info(f"Parse result: status={result.get('status')} http_status={result.get('http_status')}")
+        return result
+    except Exception as e:
+        logger.error(f"Activity failed for key={input_data.key}: {type(e).__name__}: {e}", exc_info=True)
+        raise
 
 
 @activity.defn

@@ -26,12 +26,13 @@ logger = logging.getLogger(__name__)
 
 async def run_worker() -> None:
     import logging
+
     logger = logging.getLogger(__name__)
     try:
         logger.info("Attempting to connect to Temporal...")
         client = await get_temporal_client()
         logger.info(f"Connected to Temporal successfully: {client}")
-        
+
         worker_inbound = Worker(
             client,
             task_queue="email-inbound",

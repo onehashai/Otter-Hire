@@ -160,6 +160,7 @@ async def download_and_extract_resume_activity(input_data: InboundWorkflowInput)
 @activity.defn
 async def process_s3_inbound_email_activity(input_data: InboundWorkflowInput) -> dict:
     import logging
+
     logger = logging.getLogger(__name__)
     try:
         logger.info(

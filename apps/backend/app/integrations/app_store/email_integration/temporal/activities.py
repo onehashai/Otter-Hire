@@ -86,7 +86,17 @@ async def extract_resume_activity(raw_email_b64: str) -> dict:
 
 @activity.defn
 async def download_and_extract_resume_activity(input_data: InboundWorkflowInput) -> dict:
+    activity.logger.info(
+        "Inbound extract start bucket=%s key=%s",
+        input_data.bucket,
+        input_data.key,
+    )
     if "AMAZON_SES_SETUP_NOTIFICATION" in input_data.key:
+        activity.logger.info(
+            "Inbound extract ignored key=%s reason=%s",
+            input_data.key,
+            "setup_notification",
+        )
         return {"status": "ignored", "reason": "setup_notification"}
 
     s3_client = boto3.client(
@@ -101,10 +111,21 @@ async def download_and_extract_resume_activity(input_data: InboundWorkflowInput)
     normalized = _extract_text_and_attachments(raw_email)
     inbox_address = normalized.get("inbox_address")
     if not inbox_address:
+        activity.logger.info(
+            "Inbound extract ignored key=%s reason=%s",
+            input_data.key,
+            "missing_recipient",
+        )
         return {"status": "ignored", "reason": "missing_recipient"}
 
     inbox_context = await _resolve_inbox_context(inbox_address)
     if not inbox_context:
+        activity.logger.info(
+            "Inbound extract ignored key=%s reason=%s inbox=%s",
+            input_data.key,
+            "inbox_or_secret_not_found",
+            inbox_address,
+        )
         return {"status": "ignored", "reason": "inbox_or_secret_not_found", "inbox": inbox_address}
 
     secret, canonical_inbox_address, reply_to_conv_id = inbox_context
@@ -119,12 +140,21 @@ async def download_and_extract_resume_activity(input_data: InboundWorkflowInput)
         "html_body": normalized.get("html_body") or None,
         "attachments": normalized.get("attachments") or [],
     }
-    return {
+    result = {
         "status": "ready",
         "secret": secret,
         "canonical_inbox_address": canonical_inbox_address,
         "payload": payload,
     }
+    activity.logger.info(
+        "Inbound extract ready key=%s inbox=%s from_email=%s subject=%s attachments=%s",
+        input_data.key,
+        canonical_inbox_address,
+        payload.get("from_email"),
+        payload.get("subject"),
+        len(payload.get("attachments") or []),
+    )
+    return result
 
 
 @activity.defn
@@ -175,6 +205,13 @@ async def parse_and_create_candidate_activity(input_data: dict) -> dict:
         # Workflow completed without creating an InboundEmail DB record (unknown inbox,
         # bad format, etc.).  Mark the key as permanently ignored in Redis so the
         # polling loop never re-enqueues it after the short-lived 'enqueued' TTL expires.
+        activity.logger.info(
+            "Inbound activity short-circuit key=%s status=%s reason=%s inbox=%s",
+            key,
+            data.get("status"),
+            data.get("reason"),
+            data.get("canonical_inbox_address") or data.get("inbox"),
+        )
         if key:
             _mark_key_ignored_in_redis(key)
         return data

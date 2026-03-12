@@ -125,12 +125,6 @@ class Settings(BaseSettings):
     inbound_ignored_cleanup_interval_seconds: int = Field(
         default=3600, validation_alias="INBOUND_IGNORED_CLEANUP_INTERVAL_SECONDS"
     )
-    inbound_async_pipeline_enabled: bool = Field(
-        default=False, validation_alias="INBOUND_ASYNC_PIPELINE_ENABLED"
-    )
-    inbound_async_enqueue_via_http: bool = Field(
-        default=False, validation_alias="INBOUND_ASYNC_ENQUEUE_VIA_HTTP"
-    )
     redis_url: str = Field(
         default="redis://redis:6379/0",
         validation_alias="REDIS_URL",

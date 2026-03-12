@@ -1,69 +1,50 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useLayoutEffect } from "react";
+import { createPortal } from "react-dom";
 import { Button } from "@onehash/ui/button";
 import { InputField } from "@onehash/ui/input";
 import { Textarea } from "@onehash/ui/textarea";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@onehash/ui/dropdown-menu";
-import { Send, FileText, Paperclip } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@onehash/ui/popover";
+import { Send, Paperclip, Smile } from "lucide-react";
+import EmojiPicker from "emoji-picker-react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
+import { getTemplates, type TemplateResponse } from "@/api/templates";
+import { convert as htmlToText } from "html-to-text";
 
-// ---------------------------------------------------------------------------
-// Templates
-// ---------------------------------------------------------------------------
+// Convert HTML template body to readable plain text using html-to-text.
+export function htmlToPlainText(html: string): string {
+  if (!html || typeof html !== "string") return "";
+  return htmlToText(html, {
+    wordwrap: false,
+    preserveNewlines: true,
+    selectors: [{ selector: "a", options: { ignoreHref: false } }],
+  }).trim();
+}
 
-export const emailTemplates = [
-  {
-    id: "received",
-    label: "Application Received",
-    subject: "Application Received",
-    content:
-      "Thank you for applying. We have received your application and our team will review it shortly.",
-  },
-  {
-    id: "interview",
-    label: "Interview Invitation",
-    subject: "Interview Invitation",
-    content:
-      "We'd like to invite you for an interview. Please let us know your availability for the coming week.",
-  },
-  {
-    id: "feedback",
-    label: "Interview Feedback Request",
-    subject: "Interview Feedback",
-    content:
-      "Thank you for taking the time to interview with us. We'd appreciate your feedback on the interview experience.",
-  },
-  {
-    id: "offer",
-    label: "Offer Communication",
-    subject: "Offer for {jobTitle}",
-    content:
-      "We're pleased to inform you that we'd like to extend an offer for the {jobTitle} position. Please find the details below.",
-  },
-  {
-    id: "rejection",
-    label: "Rejection Email",
-    subject: "Update on Your Application",
-    content:
-      "Thank you for your interest. After careful consideration, we've decided to move forward with other candidates.",
-  },
-];
+// Substitute template variables. Only replaces when value is present; otherwise leaves placeholder.
+export function substituteTemplateVariables(
+  text: string,
+  opts: { candidateName?: string; jobTitle?: string; organizationName?: string }
+): string {
+  const candidateName = opts.candidateName ?? "";
+  const jobTitle = (opts.jobTitle ?? "").trim();
+  const organizationName = (opts.organizationName ?? "").trim();
 
-// ---------------------------------------------------------------------------
-// ComposeMessageBox
-// ---------------------------------------------------------------------------
+  return text
+    .replace(/\{\{candidate_name\}\}/gi, candidateName)
+    .replace(/\{\{job_title\}\}/gi, jobTitle || "{{job_title}}")
+    .replace(/\{jobTitle\}/g, jobTitle || "{jobTitle}")
+    .replace(/\{\{company_name\}\}/gi, organizationName || "{{company_name}}");
+}
 
 interface ComposeMessageBoxProps {
   /** Pre-filled reply-to address (candidate email). Editable by the user. */
   toEmail: string;
   jobTitle?: string;
   candidateName?: string;
+  organizationName?: string;
   onSend: (body: string) => Promise<void>;
 }
 
@@ -71,6 +52,7 @@ export function ComposeMessageBox({
   toEmail,
   jobTitle = "",
   candidateName,
+  organizationName,
   onSend,
 }: ComposeMessageBoxProps) {
   const [to, setTo] = useState(toEmail);
@@ -78,11 +60,72 @@ export function ComposeMessageBox({
   const [bcc, setBcc] = useState("");
   const [body, setBody] = useState("");
   const [sending, setSending] = useState(false);
+  const [templates, setTemplates] = useState<TemplateResponse[]>([]);
+  const [templatesLoading, setTemplatesLoading] = useState(true);
+  const [templatePickerIndex, setTemplatePickerIndex] = useState(0);
+  const [pickerRect, setPickerRect] = useState<DOMRect | null>(null);
+  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const showTemplatePicker = body.endsWith("/");
+
+  const insertEmoji = (emoji: string) => {
+    const ta = textareaRef.current;
+    if (ta) {
+      const start = ta.selectionStart ?? body.length;
+      const end = ta.selectionEnd ?? body.length;
+      const newBody = body.slice(0, start) + emoji + body.slice(end);
+      setBody(newBody);
+      setEmojiPickerOpen(false);
+      requestAnimationFrame(() => {
+        ta.focus();
+        const pos = start + emoji.length;
+        ta.setSelectionRange(pos, pos);
+      });
+    } else {
+      setBody((prev) => prev + emoji);
+      setEmojiPickerOpen(false);
+    }
+  };
+
+  // Load real email templates from API
+  useEffect(() => {
+    let cancelled = false;
+    setTemplatesLoading(true);
+    getTemplates()
+      .then((list) => {
+        if (!cancelled) setTemplates(list);
+      })
+      .catch(() => {
+        if (!cancelled) toast.error("Failed to load templates");
+      })
+      .finally(() => {
+        if (!cancelled) setTemplatesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Keep "to" in sync when the parent switches to a different conversation
   useEffect(() => {
     setTo(toEmail);
   }, [toEmail]);
+
+  // Reset template picker index when picker opens
+  useEffect(() => {
+    if (showTemplatePicker) setTemplatePickerIndex(0);
+  }, [showTemplatePicker]);
+
+  // Position picker below textarea (for portal) when "/" is typed
+  useLayoutEffect(() => {
+    if (!showTemplatePicker || !textareaRef.current) {
+      setPickerRect(null);
+      return;
+    }
+    const rect = textareaRef.current.getBoundingClientRect();
+    setPickerRect(rect);
+  }, [showTemplatePicker, body]);
 
   const handleSend = async () => {
     if (!body.trim() || sending) return;
@@ -100,8 +143,48 @@ export function ComposeMessageBox({
     }
   };
 
-  const insertTemplate = (t: (typeof emailTemplates)[0]) => {
-    setBody(t.content.replace(/\{jobTitle\}/g, jobTitle));
+  const insertTemplate = (t: TemplateResponse) => {
+    const withVariables = substituteTemplateVariables(t.body, {
+      candidateName: candidateName ?? "",
+      jobTitle,
+      organizationName,
+    });
+    const content = htmlToPlainText(withVariables);
+    if (showTemplatePicker) {
+      setBody(body.slice(0, -1) + content);
+    } else {
+      setBody(content);
+    }
+  };
+
+  const handleBodyChange = (value: string) => {
+    setBody(value);
+  };
+
+  const handleBodyKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+      void handleSend();
+      return;
+    }
+    if (!showTemplatePicker) return;
+    if (e.key === "Escape") {
+      setBody((b) => b.slice(0, -1));
+      return;
+    }
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setTemplatePickerIndex((i) => Math.min(i + 1, templates.length - 1));
+      return;
+    }
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setTemplatePickerIndex((i) => Math.max(i - 1, 0));
+      return;
+    }
+    if (e.key === "Enter" && templates[templatePickerIndex]) {
+      e.preventDefault();
+      insertTemplate(templates[templatePickerIndex]);
+    }
   };
 
   return (
@@ -138,39 +221,83 @@ export function ComposeMessageBox({
       </div>
 
       {/* Body + toolbar */}
-      <div className="p-3 space-y-2">
+      <div className="p-3 space-y-2 relative">
         <Textarea
-          placeholder="Type your message..."
+          ref={textareaRef}
+          placeholder="Type your message or Start with / to choose a Template"
           value={body}
-          onChange={(e) => setBody(e.target.value)}
+          onChange={(e) => handleBodyChange(e.target.value)}
           className="min-h-[80px] resize-none text-xs"
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void handleSend();
-          }}
+          onKeyDown={handleBodyKeyDown}
         />
+        {showTemplatePicker &&
+          pickerRect &&
+          typeof document !== "undefined" &&
+          createPortal(
+            <div
+              className="fixed z-[9999] rounded-md border border-border bg-popover text-popover-foreground shadow-md overflow-hidden min-w-[200px]"
+              role="listbox"
+              style={{
+                left: pickerRect.left,
+                bottom: window.innerHeight - pickerRect.top + 4,
+                width: Math.max(pickerRect.width, 200),
+              }}
+            >
+              <div className="py-1 max-h-[200px] overflow-y-auto">
+                {templatesLoading ? (
+                  <div className="px-3 py-2 text-xs text-muted-foreground">
+                    Loading templates…
+                  </div>
+                ) : templates.length === 0 ? (
+                  <div className="px-3 py-2 text-xs text-muted-foreground">
+                    No templates. Create them in Settings → Templates.
+                  </div>
+                ) : (
+                  templates.map((t, i) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      role="option"
+                      aria-selected={i === templatePickerIndex}
+                      className={cn(
+                        "w-full px-3 py-2 text-left text-xs hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground outline-none",
+                        i === templatePickerIndex && "bg-accent text-accent-foreground"
+                      )}
+                      onClick={() => insertTemplate(t)}
+                    >
+                      {t.name}
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>,
+            document.body
+          )}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1">
+            <Popover open={emojiPickerOpen} onOpenChange={setEmojiPickerOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  title="Insert emoji"
+                >
+                  <Smile className="h-3.5 w-3.5" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="start" className="w-auto p-0 border-0 bg-transparent shadow-none">
+                <EmojiPicker
+                  onEmojiClick={(data: { emoji: string }) => insertEmoji(data.emoji)}
+                  width={320}
+                  height={360}
+                />
+              </PopoverContent>
+            </Popover>
             <Button variant="ghost" size="icon" className="h-7 w-7" title="Attach file">
               <Paperclip className="h-3.5 w-3.5" />
             </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-7 w-7" title="Insert template">
-                  <FileText className="h-3.5 w-3.5" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-56">
-                {emailTemplates.map((t) => (
-                  <DropdownMenuItem
-                    key={t.id}
-                    onClick={() => insertTemplate(t)}
-                    className="text-xs"
-                  >
-                    {t.label}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
           </div>
           <div className="flex items-center gap-1.5">
             <Button

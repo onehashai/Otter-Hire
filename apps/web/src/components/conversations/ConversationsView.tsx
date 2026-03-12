@@ -19,6 +19,8 @@ import {
   type MessageRead,
 } from "@/api/conversations";
 import { getCandidateById, type CandidateDetailResponse } from "@/api/candidates";
+import { getMyOrganization } from "@/api/organization/me";
+import type { OrganizationResponse } from "@/api/organization/update";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -91,6 +93,7 @@ export function ConversationsView({ initialId }: ConversationsViewProps) {
   const [selectedId, setSelectedId] = useState<string | null>(initialId ?? null);
   const [activeConversation, setActiveConversation] = useState<ConversationDetail | null>(null);
   const [candidateDetail, setCandidateDetail] = useState<CandidateDetailResponse | null>(null);
+  const [org, setOrg] = useState<OrganizationResponse | null>(null);
   const [threadLoading, setThreadLoading] = useState(false);
 
   // Mobile: track which panel is visible ("list" | "thread")
@@ -172,6 +175,13 @@ export function ConversationsView({ initialId }: ConversationsViewProps) {
   useEffect(() => {
     return () => stopPolling();
   }, [selectedId, stopPolling]);
+
+  // Load current org (for company name in templates)
+  useEffect(() => {
+    getMyOrganization()
+      .then(setOrg)
+      .catch(() => {});
+  }, []);
 
   // Initial list load
   useEffect(() => {
@@ -317,7 +327,8 @@ export function ConversationsView({ initialId }: ConversationsViewProps) {
           <MessageThread
             candidateName={activeConversation.candidate.name}
             candidateEmail={activeConversation.candidate.email}
-            jobTitle={activeConversation.subject}
+            jobTitle={candidateDetail?.job_title ?? ""}
+            organizationName={org?.name ?? ""}
             stage={activeConversation.status}
             messages={messages}
             onSend={handleSend}
@@ -357,6 +368,7 @@ export function ConversationsView({ initialId }: ConversationsViewProps) {
         open={composeOpen}
         onOpenChange={setComposeOpen}
         onCreated={handleConversationCreated}
+        organizationName={org?.name ?? ""}
       />
     </div>
   );

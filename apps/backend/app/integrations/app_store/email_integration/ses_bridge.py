@@ -320,21 +320,6 @@ def _post_to_inbound_api(payload: dict, secret: str) -> tuple[int, str]:
         return exc.code, exc.read().decode("utf-8", errors="ignore")
 
 
-def _enqueue_raw_key_via_http(bucket: str, key: str) -> tuple[int, str]:
-    body = json.dumps({"bucket": bucket, "key": key}, separators=(",", ":")).encode("utf-8")
-    req = urllib.request.Request(
-        f"{settings.inbound_internal_api_base_url.rstrip('/')}/public/inbound/s3-event",
-        data=body,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=20) as resp:
-            return resp.status, resp.read().decode("utf-8", errors="ignore")
-    except urllib.error.HTTPError as exc:
-        return exc.code, exc.read().decode("utf-8", errors="ignore")
-
-
 async def _process_raw_key(s3_client, bucket: str, key: str) -> None:
     logger.info("SES bridge process start key=%s", key)
     if "AMAZON_SES_SETUP_NOTIFICATION" in key:
@@ -348,37 +333,6 @@ async def _process_raw_key(s3_client, bucket: str, key: str) -> None:
         return
     if await _is_key_already_processed(key):
         logger.info("SES bridge skipped key=%s reason=already_processed", key)
-        return
-    if settings.inbound_async_pipeline_enabled:
-        if settings.inbound_async_enqueue_via_http:
-            # Legacy path: POST to the HTTP API, which then enqueues to Temporal.
-            # Avoid this when the bridge and API share the same process — the HTTP
-            # endpoint is rate-limited and a burst of keys can trigger 429s.
-            status, response_text = await asyncio.to_thread(_enqueue_raw_key_via_http, bucket, key)
-            if status == 429:
-                # Propagate so the caller can handle/retry rather than silently drop.
-                raise RuntimeError(
-                    f"SES bridge HTTP enqueue rate-limited key={key} — "
-                    "set INBOUND_ASYNC_ENQUEUE_VIA_HTTP=false to use direct Temporal enqueue"
-                )
-            if status >= 400:
-                logger.error(
-                    "SES bridge enqueue failed key=%s status=%s body=%s",
-                    key,
-                    status,
-                    response_text,
-                )
-                return
-            _mark_key_enqueued_in_redis(key)
-            logger.info("SES bridge enqueued key=%s status=%s", key, status)
-        else:
-            # Preferred path: enqueue directly to Temporal, no HTTP hop, no rate-limit exposure.
-            # Lazy import breaks the circular dependency (temporal/queue.py imports ses_bridge).
-            from app.integrations.app_store.email_integration.temporal.queue import (  # noqa: PLC0415
-                enqueue_ses_raw_key,
-            )
-            await enqueue_ses_raw_key(bucket, key)
-            logger.info("SES bridge enqueued key=%s via Temporal directly", key)
         return
 
     logger.info("SES bridge processing key=%s bucket=%s", key, bucket)

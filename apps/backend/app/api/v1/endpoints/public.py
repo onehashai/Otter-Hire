@@ -11,7 +11,6 @@ import zipfile
 from datetime import datetime, timezone
 from io import BytesIO
 from typing import Optional
-from urllib.parse import unquote_plus
 from urllib.request import urlopen
 from uuid import UUID
 
@@ -39,7 +38,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.security import verify_access_token
 from app.db.session import get_db
-from app.integrations.app_store.email_integration.temporal.queue import enqueue_ses_raw_key
 from app.models.candidate import Candidate
 from app.models.candidate_document import CandidateDocument
 from app.models.conversation import Conversation
@@ -62,41 +60,6 @@ from app.services.storage import storage_service
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
 logger = logging.getLogger(__name__)
-
-
-def _extract_s3_event_entries(payload: dict) -> list[tuple[str, str]]:
-    entries: list[tuple[str, str]] = []
-    if not isinstance(payload, dict):
-        return entries
-
-    records = payload.get("Records")
-    if isinstance(records, list):
-        for record in records:
-            if not isinstance(record, dict):
-                continue
-            s3_obj = (record.get("s3") or {}) if isinstance(record.get("s3"), dict) else {}
-            bucket = ((s3_obj.get("bucket") or {}).get("name") or "").strip()
-            key = unquote_plus(((s3_obj.get("object") or {}).get("key") or "").strip())
-            if bucket and key:
-                entries.append((bucket, key))
-        if entries:
-            return entries
-
-    # SNS wrapper payload: {"Type":"Notification","Message":"{...s3 event...}"}
-    message_raw = payload.get("Message")
-    if isinstance(message_raw, str) and message_raw.strip():
-        try:
-            nested = json.loads(message_raw)
-        except Exception:
-            nested = None
-        if isinstance(nested, dict):
-            return _extract_s3_event_entries(nested)
-
-    bucket = str(payload.get("bucket") or "").strip()
-    key = unquote_plus(str(payload.get("key") or "").strip())
-    if bucket and key:
-        entries.append((bucket, key))
-    return entries
 
 
 def get_country_name(iso_code: str) -> str:
@@ -1502,6 +1465,13 @@ async def ingest_inbound_email(
     except Exception:
         raise HTTPException(status_code=422, detail="Invalid inbound payload")
 
+    logger.info(
+        "Inbound email received: subject=%r from=%s inbox=%s",
+        (payload.subject or "")[:80],
+        (payload.from_email or "").strip() or "(none)",
+        (payload.inbox_address or "").strip() or "(none)",
+    )
+
     inbox_address = payload.inbox_address.strip().lower()
     inbox_result = await db.execute(select(OrgInbox).where(OrgInbox.inbox_address == inbox_address))
     org_inbox = inbox_result.scalar_one_or_none()
@@ -1688,6 +1658,10 @@ async def ingest_inbound_email(
         await db.commit()
         if conversation_result:
             conv_id, msg_id = conversation_result
+            logger.info(
+                "Inbound email created/updated conversation: conversation_id=%s message_id=%s from=%s subject=%r",
+                conv_id, msg_id, inbound_email.from_email, (inbound_email.subject or "")[:60],
+            )
             return {
                 "status": "ok",
                 "message": "Routed to conversation",
@@ -1696,6 +1670,10 @@ async def ingest_inbound_email(
                 "message_id": msg_id,
                 "org_id": str(org_inbox.org_id),
             }
+        logger.info(
+            "Inbound email did not create conversation (no resume; job-inquiry gate may have failed): from=%s subject=%r",
+            inbound_email.from_email, (inbound_email.subject or "")[:60],
+        )
         return {
             "status": "ok",
             "message": "Ignored: no resume attachment",
@@ -1873,65 +1851,6 @@ async def ingest_inbound_email(
         response["conversation_id"] = conv_id
         response["message_id"] = msg_id
     return response
-
-
-@router.post("/inbound/s3-event")
-@limiter.limit("600/minute")
-async def enqueue_inbound_s3_event(
-    request: Request,
-):
-    if not settings.inbound_async_pipeline_enabled:
-        raise HTTPException(status_code=409, detail="Async inbound pipeline is disabled")
-    raw_body = await request.body()
-    try:
-        payload = json.loads(raw_body.decode("utf-8"))
-    except Exception:
-        raise HTTPException(status_code=422, detail="Invalid event payload")
-
-    message_type = str(payload.get("Type") or "").strip()
-
-    if message_type in ("Notification", "SubscriptionConfirmation"):
-        if settings.inbound_sns_verify_signature:
-            verified = await asyncio.to_thread(_verify_sns_signature, payload)
-            if not verified:
-                raise HTTPException(status_code=403, detail="SNS signature verification failed")
-
-    if message_type == "SubscriptionConfirmation":
-        topic_arn = str(payload.get("TopicArn") or "").strip()
-        if topic_arn and not _topic_allowed(topic_arn):
-            raise HTTPException(status_code=403, detail="SNS topic is not allowed")
-        if settings.inbound_sns_auto_confirm:
-            subscribe_url = str(payload.get("SubscribeURL") or "").strip()
-            if not _confirm_sns_subscription(subscribe_url):
-                raise HTTPException(status_code=502, detail="Failed to confirm SNS subscription")
-        return {"status": "accepted", "message": "subscription_confirmation_received"}
-
-    if message_type == "Notification":
-        topic_arn = str(payload.get("TopicArn") or "").strip()
-        if topic_arn and not _topic_allowed(topic_arn):
-            raise HTTPException(status_code=403, detail="SNS topic is not allowed")
-
-    entries = _extract_s3_event_entries(payload)
-    if not entries:
-        raise HTTPException(status_code=422, detail="No S3 object entries found")
-
-    deduped_entries: list[tuple[str, str]] = []
-    seen: set[tuple[str, str]] = set()
-    for entry in entries:
-        if entry in seen:
-            continue
-        seen.add(entry)
-        deduped_entries.append(entry)
-
-    task_ids: list[str] = []
-    for bucket, key in deduped_entries:
-        task_ids.append(await enqueue_ses_raw_key(bucket, key))
-
-    return {
-        "status": "accepted",
-        "count": len(task_ids),
-        "task_ids": task_ids,
-    }
 
 
 @router.websocket("/inbound/events/ws")

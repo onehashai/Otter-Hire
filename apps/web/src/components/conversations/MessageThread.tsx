@@ -29,19 +29,15 @@ interface MessageThreadProps {
   candidateName: string;
   candidateEmail: string;
   jobTitle: string;
+  organizationName?: string;
   stage: string;
   messages: Message[];
   onSend: (content: string) => Promise<void>;
   onViewProfile: () => void;
   onScheduleInterview: () => void;
   onMoveStage: () => void;
-  /** Called when the back button is pressed (mobile only) */
   onBack?: () => void;
 }
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 function getInitials(name: string) {
   return name
@@ -51,10 +47,6 @@ function getInitials(name: string) {
     .toUpperCase()
     .slice(0, 2);
 }
-
-// ---------------------------------------------------------------------------
-// Status indicator (outbound only)
-// ---------------------------------------------------------------------------
 
 function OutboundStatus({ status }: { status: MessageStatus | undefined }) {
   if (!status || status === "received") return null;
@@ -98,10 +90,6 @@ function OutboundStatus({ status }: { status: MessageStatus | undefined }) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// EmailCard
-// ---------------------------------------------------------------------------
-
 function EmailCard({ msg }: { msg: Message }) {
   const [showQuoted, setShowQuoted] = useState(false);
   const main = msg.bodyVisible ?? msg.content;
@@ -128,7 +116,6 @@ function EmailCard({ msg }: { msg: Message }) {
                 : "border-border",
           )}
         >
-          {/* Email header */}
           <div
             className={cn(
               "px-4 py-3 space-y-1.5 border-b",
@@ -162,7 +149,6 @@ function EmailCard({ msg }: { msg: Message }) {
             </div>
           </div>
 
-          {/* Email body */}
           <div className="px-4 py-3">
             <pre className="whitespace-pre-wrap font-sans text-xs leading-relaxed text-foreground">
               {main}
@@ -190,21 +176,17 @@ function EmailCard({ msg }: { msg: Message }) {
           </div>
         </div>
 
-        {/* Status indicator — outbound only, sits just below the card */}
         {isOutbound && <OutboundStatus status={msg.status} />}
       </div>
     </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// MessageThread
-// ---------------------------------------------------------------------------
-
 export function MessageThread({
   candidateName,
   candidateEmail,
   jobTitle,
+  organizationName,
   stage,
   messages,
   onSend,
@@ -217,7 +199,6 @@ export function MessageThread({
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
         <div className="flex items-center gap-2.5 min-w-0">
           {onBack && (
@@ -242,18 +223,17 @@ export function MessageThread({
         </div>
       </div>
 
-      {/* Thread */}
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
         {messages.map((msg) => (
           <EmailCard key={msg.id} msg={msg} />
         ))}
       </div>
 
-      {/* Compose area — lives in ComposeModal.tsx */}
       <ComposeMessageBox
         toEmail={candidateEmail}
         jobTitle={jobTitle}
         candidateName={candidateName}
+        organizationName={organizationName}
         onSend={onSend}
       />
     </div>

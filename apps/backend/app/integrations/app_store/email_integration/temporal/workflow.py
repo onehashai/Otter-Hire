@@ -24,12 +24,32 @@ class InboundEmailWorkflow:
     @workflow.run
     async def run(self, input_data: InboundWorkflowInput) -> dict:
         retry = RetryPolicy(initial_interval=timedelta(seconds=2), maximum_attempts=3)
+        workflow.logger.info(
+            "Inbound workflow started workflow_id=%s run_id=%s bucket=%s key=%s",
+            workflow.info().workflow_id,
+            workflow.info().run_id,
+            input_data.bucket,
+            input_data.key,
+        )
 
+        workflow.logger.info(
+            "Inbound workflow executing activity workflow_id=%s key=%s activity=%s",
+            workflow.info().workflow_id,
+            input_data.key,
+            "process_s3_inbound_email_activity",
+        )
         result = await workflow.execute_activity(
             process_s3_inbound_email_activity,
             input_data,
             start_to_close_timeout=timedelta(minutes=5),
             retry_policy=retry,
+        )
+        workflow.logger.info(
+            "Inbound workflow activity completed workflow_id=%s key=%s status=%s http_status=%s",
+            workflow.info().workflow_id,
+            input_data.key,
+            result.get("status"),
+            result.get("http_status"),
         )
 
         await workflow.execute_activity(
@@ -49,6 +69,11 @@ class InboundEmailWorkflow:
                 "occurred_at": workflow.now().isoformat(),
             },
             start_to_close_timeout=timedelta(seconds=30),
+        )
+        workflow.logger.info(
+            "Inbound workflow publish completed workflow_id=%s key=%s",
+            workflow.info().workflow_id,
+            input_data.key,
         )
         return result
 

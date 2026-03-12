@@ -132,14 +132,38 @@ async def process_s3_inbound_email_activity(input_data: InboundWorkflowInput) ->
     import logging
     logger = logging.getLogger(__name__)
     try:
-        logger.info(f"Processing S3 inbound email: bucket={input_data.bucket} key={input_data.key}")
+        logger.info(
+            "Inbound activity start bucket=%s key=%s activity=%s",
+            input_data.bucket,
+            input_data.key,
+            "process_s3_inbound_email_activity",
+        )
         extracted = await download_and_extract_resume_activity(input_data)
-        logger.info(f"Extracted data: status={extracted.get('status')}")
+        logger.info(
+            "Inbound activity extracted key=%s status=%s inbox=%s reason=%s",
+            input_data.key,
+            extracted.get("status"),
+            extracted.get("canonical_inbox_address") or extracted.get("inbox"),
+            extracted.get("reason"),
+        )
         result = await parse_and_create_candidate_activity({"data": extracted, "key": input_data.key})
-        logger.info(f"Parse result: status={result.get('status')} http_status={result.get('http_status')}")
+        logger.info(
+            "Inbound activity parse completed key=%s status=%s http_status=%s inbound_email_id=%s candidate_id=%s",
+            input_data.key,
+            result.get("status"),
+            result.get("http_status"),
+            result.get("inbound_email_id"),
+            result.get("candidate_id"),
+        )
         return result
     except Exception as e:
-        logger.error(f"Activity failed for key={input_data.key}: {type(e).__name__}: {e}", exc_info=True)
+        logger.error(
+            "Inbound activity failed key=%s error_type=%s error=%s",
+            input_data.key,
+            type(e).__name__,
+            e,
+            exc_info=True,
+        )
         raise
 
 
@@ -157,6 +181,13 @@ async def parse_and_create_candidate_activity(input_data: dict) -> dict:
 
     payload = dict(data["payload"])
     payload["raw_storage_key"] = key
+    activity.logger.info(
+        "Inbound activity posting to API key=%s inbox=%s from_email=%s subject=%s",
+        key,
+        payload.get("inbox_address"),
+        payload.get("from_email"),
+        payload.get("subject"),
+    )
     status, response_text = await asyncio.to_thread(_post_to_inbound_api, payload, data["secret"])
 
     parsed_response: dict = {}
@@ -177,6 +208,13 @@ async def parse_and_create_candidate_activity(input_data: dict) -> dict:
         "inbound_email_id": parsed_response.get("inbound_email_id"),
         "org_id": parsed_response.get("org_id"),
     }
+    activity.logger.info(
+        "Inbound activity API response key=%s http_status=%s inbound_email_id=%s candidate_id=%s",
+        key,
+        status,
+        result.get("inbound_email_id"),
+        result.get("candidate_id"),
+    )
     if status >= 400:
         raise URLError(f"Inbound API failed status={status} body={response_text}")
     return result

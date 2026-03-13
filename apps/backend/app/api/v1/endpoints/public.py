@@ -1286,13 +1286,15 @@ async def _route_inbound_to_conversation(
     org_inbox: "OrgInbox",
     payload: "InboundEmailPayload",
     reply_to_conversation_id: UUID | None = None,
-) -> tuple[str, str] | None:
+    candidate_override: Optional["Candidate"] = None,
+) -> tuple[str, str, UUID | None, bool] | None:
     """Attach the inbound email to an existing or new conversation.
 
     - If reply_to_conversation_id is set (from To: reply+<conv_id>@... or payload): append to that conversation.
     - Otherwise: create a new conversation (and candidate if new sender).
 
-    Returns ``(conversation_id, message_id)`` if a message was created, else None.
+    Returns ``(conversation_id, message_id, candidate_id, candidate_created)`` if a
+    message was created, else None.
     Does **not** commit — callers are responsible for flushing/committing.
     """
     from app.utils.uuid import uuid7
@@ -1308,6 +1310,7 @@ async def _route_inbound_to_conversation(
 
     conv: Conversation | None = None
     candidate: Candidate | None = None
+    candidate_created = False
 
     if reply_to_conversation_id is not None:
         conv_result = await db.execute(
@@ -1346,38 +1349,41 @@ async def _route_inbound_to_conversation(
             )
             return None
 
-        cand_result = await db.execute(
-            select(Candidate).where(
-                Candidate.org_id == org_id,
-                func.lower(Candidate.email) == from_email,
-            )
-        )
-        candidate = cand_result.scalar_one_or_none()
+        candidate = candidate_override
         if candidate is None:
-            display_name = (payload.from_name or "").strip()
-            if not display_name:
-                display_name = from_email.split("@")[0].replace(".", " ").replace("_", " ").title()
-            candidate = Candidate(
-                org_id=org_id,
-                job_id=None,
-                stage_id=None,
-                status="active",
-                name=display_name,
-                email=from_email,
-                phone=None,
-                location=None,
-                profile_links={},
-                source="email_inbound",
-                tags=[],
+            cand_result = await db.execute(
+                select(Candidate).where(
+                    Candidate.org_id == org_id,
+                    func.lower(Candidate.email) == from_email,
+                )
             )
-            db.add(candidate)
-            await db.flush()
-            logger.info(
-                "Inbound email created new candidate candidate_id=%s email=%s org_id=%s",
-                candidate.id,
-                from_email,
-                org_id,
-            )
+            candidate = cand_result.scalar_one_or_none()
+            if candidate is None:
+                display_name = (payload.from_name or "").strip()
+                if not display_name:
+                    display_name = from_email.split("@")[0].replace(".", " ").replace("_", " ").title()
+                candidate = Candidate(
+                    org_id=org_id,
+                    job_id=None,
+                    stage_id=None,
+                    status="active",
+                    name=display_name,
+                    email=from_email,
+                    phone=None,
+                    location=None,
+                    profile_links={},
+                    source="email_inbound",
+                    tags=[],
+                )
+                db.add(candidate)
+                await db.flush()
+                candidate_created = True
+                logger.info(
+                    "Inbound email created new candidate candidate_id=%s email=%s org_id=%s",
+                    candidate.id,
+                    from_email,
+                    org_id,
+                )
         now = datetime.now(tz=timezone.utc)
         conv = Conversation(
             id=uuid7(),
@@ -1450,7 +1456,12 @@ async def _route_inbound_to_conversation(
         org_id,
         from_email,
     )
-    return str(conv.id), str(inbound_msg.id)
+    return (
+        str(conv.id),
+        str(inbound_msg.id),
+        candidate.id if candidate is not None else None,
+        candidate_created,
+    )
 
 
 @router.post("/inbound/s3-event", status_code=200)
@@ -1706,18 +1717,29 @@ async def ingest_inbound_email(
             "org_id": str(org_inbox.org_id),
         }
 
-    # --- Conversation routing (runs for ALL non-automated emails) ---
-    conversation_result = await _route_inbound_to_conversation(
-        db, org_inbox, payload, reply_to_conversation_id=reply_to_conv_id
-    )
+    conversation_ids: tuple[str, str] | None = None
+    if reply_to_conv_id is not None:
+        conversation_result = await _route_inbound_to_conversation(
+            db, org_inbox, payload, reply_to_conversation_id=reply_to_conv_id
+        )
+        if conversation_result is not None:
+            conv_id, msg_id, _, _ = conversation_result
+            conversation_ids = (conv_id, msg_id)
 
     if not has_resume or resume_attachment is None:
+        if conversation_ids is None:
+            conversation_result = await _route_inbound_to_conversation(
+                db, org_inbox, payload, reply_to_conversation_id=reply_to_conv_id
+            )
+            if conversation_result is not None:
+                conv_id, msg_id, _, _ = conversation_result
+                conversation_ids = (conv_id, msg_id)
         # No resume — conversation routing (if any) is committed here
-        inbound_email.parse_status = "processed" if conversation_result else "ignored"
-        inbound_email.parse_error = None if conversation_result else "No resume attachment found"
+        inbound_email.parse_status = "processed" if conversation_ids else "ignored"
+        inbound_email.parse_error = None if conversation_ids else "No resume attachment found"
         await db.commit()
-        if conversation_result:
-            conv_id, msg_id = conversation_result
+        if conversation_ids:
+            conv_id, msg_id = conversation_ids
             logger.info(
                 "Inbound email created/updated conversation: conversation_id=%s message_id=%s from=%s subject=%r",
                 conv_id, msg_id, inbound_email.from_email, (inbound_email.subject or "")[:60],
@@ -1865,6 +1887,18 @@ async def ingest_inbound_email(
         )
     parsed_candidate = candidate
 
+    if conversation_ids is None:
+        conversation_result = await _route_inbound_to_conversation(
+            db,
+            org_inbox,
+            payload,
+            reply_to_conversation_id=reply_to_conv_id,
+            candidate_override=parsed_candidate,
+        )
+        if conversation_result is not None:
+            conv_id, msg_id, _, _ = conversation_result
+            conversation_ids = (conv_id, msg_id)
+
     # ------------------------------------------------------------------
     # Reconcile conversation ownership
     #
@@ -1880,8 +1914,8 @@ async def ingest_inbound_email(
     resume_email = (extracted_email or "").strip().lower()
     is_forwarded_resume = bool(resume_email and resume_email != sender_email)
 
-    if is_forwarded_resume and conversation_result is not None:
-        conv_id_str, _ = conversation_result
+    if is_forwarded_resume and conversation_ids is not None:
+        conv_id_str, _ = conversation_ids
         forwarded_conv = await db.get(Conversation, UUID(conv_id_str))
         if forwarded_conv is not None:
             forwarded_conv.candidate_id = parsed_candidate.id
@@ -1906,8 +1940,8 @@ async def ingest_inbound_email(
         "candidate_id": str(parsed_candidate.id),
         "org_id": str(org_inbox.org_id),
     }
-    if conversation_result:
-        conv_id, msg_id = conversation_result
+    if conversation_ids:
+        conv_id, msg_id = conversation_ids
         response["conversation_id"] = conv_id
         response["message_id"] = msg_id
     return response

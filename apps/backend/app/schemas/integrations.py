@@ -53,27 +53,15 @@ class IntegrationOwnerContext(BaseModel):
     role: str
 
 
-class OrgSmtpConfigResponse(BaseModel):
+class OutboundConfigResponse(BaseModel):
     id: str
-    host: str
-    port: int
-    username: str
-    password: str  # always masked as ••••••••
+    sending_domain: str | None = None
     from_email: str
     from_name: str | None = None
-    use_tls: bool
-    use_ssl: bool
     status: str
-    last_tested_at: str | None = None
-    last_test_error: str | None = None
 
 
-class OrgSmtpConfigUpsertRequest(BaseModel):
-    host: str
-    port: int = Field(default=587, ge=1, le=65535)
-    username: str
-    password: str | None = None
+class OutboundConfigUpsertRequest(BaseModel):
+    sending_domain: str
     from_email: str
     from_name: str | None = None
-    use_tls: bool = True
-    use_ssl: bool = False

@@ -5,7 +5,7 @@ from app.core.permissions import require_permission
 from app.db.session import get_db
 from app.integrations.app_store.registry import all_integrations, get_integration_by_slug
 from app.models.user import User
-from app.integrations.app_store.email_integration import smtp_service
+from app.integrations.app_store.email_integration import outbound_service
 from app.schemas.integrations import (
     IntegrationAppsResponse,
     IntegrationEmailConfigActionResponse,
@@ -13,8 +13,8 @@ from app.schemas.integrations import (
     IntegrationEmailConfigUpsertRequest,
     IntegrationInstalledAppsResponse,
     IntegrationOwnerContext,
-    OrgSmtpConfigResponse,
-    OrgSmtpConfigUpsertRequest,
+    OutboundConfigResponse,
+    OutboundConfigUpsertRequest,
 )
 
 router = APIRouter(prefix="/integrations", tags=["integrations"])
@@ -125,49 +125,36 @@ async def disconnect_email_integration(
 
 
 # ---------------------------------------------------------------------------
-# SMTP outbound config
+# Outbound email (domain-only, SES)
 # ---------------------------------------------------------------------------
 
 
-@router.get("/email/smtp/config", response_model=OrgSmtpConfigResponse | None)
-async def get_smtp_config(
+@router.get("/email/outbound/config", response_model=OutboundConfigResponse | None)
+async def get_outbound_config(
     current_user: User = Depends(require_permission("org:inbox:manage")),
     db: AsyncSession = Depends(get_db),
 ):
-    return await smtp_service.get_smtp_config(db, _owner_ctx(current_user))
+    return await outbound_service.get_outbound_config(db, _owner_ctx(current_user))
 
 
-@router.put("/email/smtp/config", response_model=OrgSmtpConfigResponse)
-async def upsert_smtp_config(
-    body: OrgSmtpConfigUpsertRequest,
+@router.put("/email/outbound/config", response_model=OutboundConfigResponse)
+async def upsert_outbound_config(
+    body: OutboundConfigUpsertRequest,
     current_user: User = Depends(require_permission("org:inbox:manage")),
     db: AsyncSession = Depends(get_db),
 ):
-    return await smtp_service.upsert_smtp_config(
+    return await outbound_service.upsert_outbound_config(
         db,
         _owner_ctx(current_user),
-        host=body.host,
-        port=body.port,
-        username=body.username,
-        password=body.password,
+        sending_domain=body.sending_domain,
         from_email=body.from_email,
         from_name=body.from_name,
-        use_tls=body.use_tls,
-        use_ssl=body.use_ssl,
     )
 
 
-@router.post("/email/smtp/test", response_model=OrgSmtpConfigResponse)
-async def test_smtp_connection(
+@router.delete("/email/outbound/config", status_code=204)
+async def delete_outbound_config(
     current_user: User = Depends(require_permission("org:inbox:manage")),
     db: AsyncSession = Depends(get_db),
 ):
-    return await smtp_service.test_smtp_connection(db, _owner_ctx(current_user))
-
-
-@router.delete("/email/smtp/config", status_code=204)
-async def delete_smtp_config(
-    current_user: User = Depends(require_permission("org:inbox:manage")),
-    db: AsyncSession = Depends(get_db),
-):
-    await smtp_service.delete_smtp_config(db, _owner_ctx(current_user))
+    await outbound_service.delete_outbound_config(db, _owner_ctx(current_user))

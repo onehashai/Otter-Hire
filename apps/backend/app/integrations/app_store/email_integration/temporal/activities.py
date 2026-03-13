@@ -3,10 +3,6 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
-import smtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-from email.utils import make_msgid
 from urllib.error import URLError
 from uuid import UUID
 
@@ -27,6 +23,7 @@ from app.integrations.app_store.email_integration.temporal.types import (
     InboundWorkflowInput,
     OutboundWorkflowInput,
 )
+from app.core.logging import logger
 from app.models.message import Message
 
 
@@ -181,109 +178,73 @@ async def publish_update_activity(event_payload: dict) -> None:
     redis_client = redis.Redis.from_url(settings.redis_url, decode_responses=True)
     redis_client.publish(settings.inbound_events_channel, json.dumps(event_payload))
 
-
-# ---------------------------------------------------------------------------
-# Outbound email activities
-# ---------------------------------------------------------------------------
-
-
 @activity.defn
 async def send_outbound_email_activity(input_data: OutboundWorkflowInput) -> dict:
-    """Send one outbound email via the org's SMTP config and mark it as 'sent' in the DB.
+    """Send one outbound email via SES (org-level identity; from address from config or env).
 
-    Raises on any SMTP error so Temporal will retry according to the workflow's
-    RetryPolicy.  The message row stays ``queued`` until success.
+    Raises on send error so Temporal will retry. Message row stays ``queued`` until success.
     """
-    from app.integrations.app_store.email_integration.smtp_service import (
-        decrypt_password_for_sending,
-        get_verified_smtp_for_org,
+    from app.integrations.app_store.email_integration.outbound_service import (
+        get_verified_outbound_for_org,
     )
+    from app.services.ses_outbound import send_email_via_ses
 
     org_id = UUID(input_data.org_id)
     message_id = UUID(input_data.message_id)
 
     async with AsyncSessionLocal() as db:
-        smtp_row = await get_verified_smtp_for_org(db, org_id)
-        if smtp_row is None:
-            # No active SMTP — permanently fail without retrying.
-            await db.execute(
-                sa_update(Message).where(Message.id == message_id).values(status="failed")
-            )
-            await db.commit()
-            return {"status": "failed", "reason": "no_smtp_configured"}
+        # Prefer reply+conv@inbound.domain as From so replies land in the same conversation
+        reply_as_from = (input_data.reply_to or "").strip()
+        if reply_as_from and "@" in reply_as_from:
+            from_email_addr = reply_as_from
+            if input_data.org_name:
+                display_name = f"{input_data.from_name or 'Recruiter'} from {input_data.org_name}"
+            else:
+                # Never use the reply+ address as display name; use name or "Recruiter"
+                display_name = (input_data.from_name or "Recruiter").strip() or "Recruiter"
+        else:
+            outbound_row = await get_verified_outbound_for_org(db, org_id)
+            if outbound_row is not None:
+                cfg = outbound_row.config or {}
+                from_email_addr = (cfg.get("from_email") or "").strip()
+                from_name_val = cfg.get("from_name")
+            else:
+                from_email_addr = (settings.ses_outbound_from_email or "").strip()
+                from_name_val = (settings.ses_outbound_from_name or "").strip() or None
 
-        cfg = smtp_row.config or {}
-        host: str = cfg.get("host", "")
-        port: int = cfg.get("port", 587)
-        display_name: str = input_data.from_name or cfg.get("from_name") or cfg.get("from_email", "")
-        from_email_addr: str = cfg.get("from_email", "")
-        plain_password: str = decrypt_password_for_sending(smtp_row)
+            if not from_email_addr or "@" not in from_email_addr:
+                await db.execute(
+                    sa_update(Message).where(Message.id == message_id).values(status="failed")
+                )
+                await db.commit()
+                return {"status": "failed", "reason": "no_outbound_configured"}
 
-        # Optionally inject a self-hosted open-tracking pixel into the HTML body.
+            display_name = input_data.from_name or from_name_val or from_email_addr
+
         html_body = input_data.html_body
-        tracking_secret = settings.email_tracking_secret
-        tracking_base = f"{settings.effective_frontend_base_url}/api"
-        if html_body and tracking_secret:
-            from app.api.v1.endpoints.track import make_tracking_token
-            token = make_tracking_token(input_data.message_id, tracking_secret)
-            pixel_url = f"{tracking_base}/public/track/open/{input_data.message_id}/{token}"
-            pixel_html = (
-                f'<img src="{pixel_url}" width="1" height="1" '
-                f'style="display:none;border:0" alt="">'
-            )
-            close_tag = "</body>"
-            idx = html_body.lower().rfind(close_tag)
-            if idx != -1:
-                html_body = html_body[:idx] + pixel_html + html_body[idx:]
-            else:
-                html_body = html_body + pixel_html
 
-        # Build the MIME message before entering the thread
-        mime_msg = MIMEMultipart("alternative")
-        mime_msg["Message-ID"] = make_msgid(domain=host or "localhost")
-        mime_msg["Subject"] = input_data.subject
-        mime_msg["From"] = f"{display_name} <{from_email_addr}>"
-        mime_msg["To"] = input_data.to_email
-        if input_data.reply_to:
-            mime_msg["Reply-To"] = input_data.reply_to
-        # X-SES-Configuration-Set enables Delivery/Open/Bounce event publishing via SNS
-        if settings.ses_configuration_set:
-            mime_msg["X-SES-Configuration-Set"] = settings.ses_configuration_set
-        mime_msg.attach(MIMEText(input_data.body, "plain"))
-        if html_body:
-            mime_msg.attach(MIMEText(html_body, "html"))
+        ses_message_id = send_email_via_ses(
+            from_email=from_email_addr,
+            from_name=display_name,
+            to_email=input_data.to_email,
+            subject=input_data.subject,
+            text_body=input_data.body,
+            html_body=html_body,
+            reply_to=None,
+            in_reply_to=input_data.in_reply_to,
+            references=input_data.references,
+            message_id_tag=input_data.message_id,
+            org_id_tag=input_data.org_id,
+        )
+        provider_message_id = f"ses:{ses_message_id}"
 
-        raw_message_id: str = (mime_msg["Message-ID"] or "").strip().strip("<>")
-        provider_message_id = f"smtp:{host}:{raw_message_id}"
-
-        # smtplib is blocking — run in a thread so the event loop stays free
-        use_ssl: bool = bool(cfg.get("use_ssl"))
-        use_tls: bool = bool(cfg.get("use_tls"))
-        username: str = cfg.get("username", "")
-
-        def _do_send() -> None:
-            if use_ssl:
-                with smtplib.SMTP_SSL(host, port, timeout=30) as server:
-                    server.login(username, plain_password)
-                    server.send_message(mime_msg)
-            else:
-                with smtplib.SMTP(host, port, timeout=30) as server:
-                    if use_tls:
-                        server.starttls()
-                    server.login(username, plain_password)
-                    server.send_message(mime_msg)
-
-        # Raises on any SMTP error → Temporal will retry
-        await asyncio.to_thread(_do_send)
-
-        # Success — persist the confirmed IDs and flip status
         await db.execute(
             sa_update(Message)
             .where(Message.id == message_id)
             .values(
                 status="sent",
                 provider_message_id=provider_message_id,
-                email_message_id=raw_message_id,
+                email_message_id=ses_message_id,
             )
         )
         await db.commit()

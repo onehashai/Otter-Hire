@@ -59,10 +59,6 @@ class Settings(BaseSettings):
     # Comma-separated SNS topic ARN(s) allowed to post SES event notifications.
     ses_events_sns_topic_arns: str = Field(default="", validation_alias="SES_EVENTS_SNS_TOPIC_ARNS")
 
-    # Self-hosted open-tracking pixel (works with any SMTP provider).
-    # EMAIL_TRACKING_SECRET — random secret used to sign per-message tokens (HMAC-SHA256).
-    email_tracking_secret: str | None = Field(default=None, validation_alias="EMAIL_TRACKING_SECRET")
-
     # Cookie domain (empty for localhost, .domain.com for production)
     cookie_domain: str = Field(default="", validation_alias="COOKIE_DOMAIN")
 
@@ -100,6 +96,9 @@ class Settings(BaseSettings):
     )
     inbound_webhook_secret: str | None = Field(
         default=None, validation_alias="INBOUND_WEBHOOK_SECRET"
+    )
+    inbound_email_domain: str | None = Field(
+        default=None, validation_alias="INBOUND_EMAIL_DOMAIN"
     )
     inbound_max_attachment_bytes: int = Field(
         default=10 * 1024 * 1024, validation_alias="INBOUND_MAX_ATTACHMENT_BYTES"

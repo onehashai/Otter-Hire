@@ -48,6 +48,7 @@ from app.models.message import Message
 from app.models.org_membership import OrgMembership
 from app.models.organization import Organization, OrgInbox
 from app.models.stage import Stage
+from app.integrations.app_store.email_integration.temporal.queue import enqueue_ses_raw_key
 from app.schemas.public_jobs import (
     InboundEmailPayload,
     PublicJobApplyRequest,
@@ -1450,6 +1451,65 @@ async def _route_inbound_to_conversation(
         from_email,
     )
     return str(conv.id), str(inbound_msg.id)
+
+
+@router.post("/inbound/s3-event", status_code=200)
+async def inbound_s3_event(request: Request) -> str:
+    """Accept SNS notifications for S3 bucket events (inbound email raw objects).
+
+    When SNS is subscribed to the SES-inbound S3 bucket, AWS POSTs here.
+    - SubscriptionConfirmation: confirm by GETting SubscribeURL.
+    - Notification: Message body is S3 event JSON; enqueue each object to the inbound workflow.
+    Set INBOUND_SNS_TOPIC_ARNS to restrict which topic ARNs are accepted (comma-separated).
+    """
+    try:
+        body = await request.body()
+        payload = json.loads(body)
+    except (json.JSONDecodeError, TypeError):
+        return "ok"
+
+    msg_type = payload.get("Type", "")
+    topic_arn = (payload.get("TopicArn") or "").strip()
+
+    if settings.inbound_sns_topic_arns and not _topic_allowed(topic_arn):
+        logger.warning(
+            "Inbound S3 event webhook: rejected message from unknown topic %s", topic_arn
+        )
+        return "ok"
+
+    if settings.inbound_sns_verify_signature and not _verify_sns_signature(payload):
+        logger.warning("Inbound S3 event webhook: SNS signature verification failed")
+        return "ok"
+
+    if msg_type == "SubscriptionConfirmation":
+        subscribe_url = payload.get("SubscribeURL")
+        if subscribe_url and _confirm_sns_subscription(subscribe_url):
+            logger.info("Inbound S3 event: confirmed SNS subscription")
+        return "ok"
+
+    if msg_type != "Notification":
+        return "ok"
+
+    try:
+        message = json.loads(payload.get("Message") or "{}")
+    except json.JSONDecodeError:
+        return "ok"
+
+    records = message.get("Records") or []
+    for record in records:
+        s3 = (record.get("s3") or {}) if isinstance(record, dict) else {}
+        b = s3.get("bucket")
+        bucket = b.get("name") if isinstance(b, dict) else (b if isinstance(b, str) else None)
+        obj = s3.get("object")
+        key = obj.get("key") if isinstance(obj, dict) else None
+        if not bucket or not key:
+            continue
+        try:
+            await enqueue_ses_raw_key(bucket, key)
+        except Exception:
+            logger.exception("Inbound S3 event: failed to enqueue bucket=%s key=%s", bucket, key)
+
+    return "ok"
 
 
 @router.post("/inbound/email")

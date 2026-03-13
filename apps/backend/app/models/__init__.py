@@ -13,7 +13,7 @@ from app.models.job_team_member import JobTeamMember
 from app.models.message import Message
 from app.models.note import Note
 from app.models.org_membership import OrgMembership
-from app.models.integration import OrgIntegration
+from app.models.integration_credential import IntegrationCredential
 from app.models.organization import Organization, OrgInbox
 from app.models.stage import Stage
 from app.models.user import User
@@ -36,7 +36,7 @@ __all__ = [
     "JobApplication",
     "CandidateDocument",
     "OrgInbox",
-    "OrgIntegration",
+    "IntegrationCredential",
     "InboundEmail",
     "InboundEmailAttachment",
     "Conversation",

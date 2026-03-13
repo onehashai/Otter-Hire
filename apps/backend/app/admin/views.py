@@ -15,7 +15,7 @@ from app.models.job_team_member import JobTeamMember
 from app.models.message import Message
 from app.models.note import Note
 from app.models.org_membership import OrgMembership
-from app.models.integration import OrgIntegration
+from app.models.integration_credential import IntegrationCredential
 from app.models.organization import Organization, OrgInbox
 from app.models.stage import Stage
 from app.models.user import User
@@ -83,19 +83,18 @@ class OrgMembershipAdmin(ModelView, model=OrgMembership):
     column_details_exclude_list = [OrgMembership.invite_token_hash]
 
 
-class OrgIntegrationAdmin(ModelView, model=OrgIntegration):
+class IntegrationCredentialAdmin(ModelView, model=IntegrationCredential):
     name = "Integration"
     name_plural = "Integrations"
     icon = "fa-solid fa-plug"
     category = "People"
 
-    column_list = [OrgIntegration.id, OrgIntegration.org_id, OrgIntegration.integration_type, OrgIntegration.status, OrgIntegration.last_tested_at, OrgIntegration.created_at]
-    column_searchable_list = [OrgIntegration.integration_type]
-    column_sortable_list = [OrgIntegration.integration_type, OrgIntegration.status, OrgIntegration.created_at]
-    column_default_sort = [(OrgIntegration.created_at, True)]
-
-    form_excluded_columns = [OrgIntegration.encrypted_credentials]
-    column_details_exclude_list = [OrgIntegration.encrypted_credentials]
+    column_list = [IntegrationCredential.id, IntegrationCredential.org_id, IntegrationCredential.integration_type, IntegrationCredential.status, IntegrationCredential.last_tested_at, IntegrationCredential.created_at]
+    column_searchable_list = [IntegrationCredential.integration_type]
+    column_sortable_list = [IntegrationCredential.integration_type, IntegrationCredential.status, IntegrationCredential.created_at]
+    column_default_sort = [(IntegrationCredential.created_at, True)]
+    form_excluded_columns = [IntegrationCredential.encrypted_credentials]
+    column_details_exclude_list = [IntegrationCredential.encrypted_credentials]
 
 
 class JobAdmin(ModelView, model=Job):

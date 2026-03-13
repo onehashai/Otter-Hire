@@ -43,8 +43,8 @@ def setup_admin(app: FastAPI) -> Admin:
         JobTeamMemberAdmin,
         MessageAdmin,
         NoteAdmin,
+        IntegrationCredentialAdmin,
         OrgInboxAdmin,
-        OrgIntegrationAdmin,
         OrgMembershipAdmin,
         OrganizationAdmin,
         StageAdmin,
@@ -63,7 +63,7 @@ def setup_admin(app: FastAPI) -> Admin:
     admin.add_view(OrganizationAdmin)
     admin.add_view(OrgInboxAdmin)
     admin.add_view(OrgMembershipAdmin)
-    admin.add_view(OrgIntegrationAdmin)
+    admin.add_view(IntegrationCredentialAdmin)
     admin.add_view(JobAdmin)
     admin.add_view(JobCategoryAdmin)
     admin.add_view(JobTeamMemberAdmin)

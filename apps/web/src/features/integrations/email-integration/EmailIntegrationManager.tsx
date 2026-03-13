@@ -3,16 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuthSession } from "@/app/providers";
 import {
-  deleteSmtpConfig,
   getEmailIntegrationConfig,
-  getSmtpConfig,
   rotateEmailIntegrationSecret,
-  testSmtpConnection,
   upsertEmailIntegrationConfig,
-  upsertSmtpConfig,
   verifyCompleteEmailIntegration,
   verifyNowEmailIntegration,
-  type OrgSmtpConfigResponse,
 } from "@/api";
 import { Button } from "@onehash/ui/button";
 import {
@@ -23,36 +18,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@onehash/ui/dialog";
-import { InputField, PasswordField } from "@onehash/ui/input";
+import { InputField } from "@onehash/ui/input";
 import { Separator } from "@onehash/ui/separator";
-import { Check, CheckCircle2, Copy, Loader2, Trash2, XCircle } from "lucide-react";
+import { Check, Copy, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
-const PASSWORD_MASK = "••••••••";
-
-function SmtpStatusBadge({ status }: { status: "pending" | "active" | "failed" }) {
-  if (status === "active") {
-    return (
-      <span className="inline-flex items-center gap-1 text-xs text-green-600 font-medium">
-        <CheckCircle2 className="h-3.5 w-3.5" />
-        Connected
-      </span>
-    );
-  }
-  if (status === "failed") {
-    return (
-      <span className="inline-flex items-center gap-1 text-xs text-red-600 font-medium">
-        <XCircle className="h-3.5 w-3.5" />
-        Failed
-      </span>
-    );
-  }
-  return (
-    <span className="text-xs px-2 py-0.5 rounded border bg-muted text-muted-foreground">
-      Not tested
-    </span>
-  );
-}
+import { copyToClipboard } from "@/lib/clipboard";
 
 type EmailIntegrationManagerProps = {
   onChanged?: () => Promise<void> | void;
@@ -224,12 +195,12 @@ export function EmailIntegrationManager({ onChanged }: EmailIntegrationManagerPr
   };
 
   const handleCopyForwardingAddress = async () => {
-    try {
-      await navigator.clipboard.writeText(forwardingAddress);
+    const ok = await copyToClipboard(forwardingAddress);
+    if (ok) {
       setCopiedForwarding(true);
       setTimeout(() => setCopiedForwarding(false), 1500);
       toast.success("Forwarding address copied");
-    } catch {
+    } else {
       toast.error("Failed to copy forwarding address");
     }
   };
@@ -241,123 +212,6 @@ export function EmailIntegrationManager({ onChanged }: EmailIntegrationManagerPr
     setVerificationError(null);
     setVerificationActionUrl(null);
     setVerifyDialogOpen(false);
-  };
-
-  // ── SMTP outbound state ────────────────────────────────────────────────────
-  const [smtpConfig, setSmtpConfig] = useState<OrgSmtpConfigResponse | null>(null);
-  const [smtpLoading, setSmtpLoading] = useState(true);
-  const [smtpEditing, setSmtpEditing] = useState(false);
-  const [smtpSaving, setSmtpSaving] = useState(false);
-  const [smtpTesting, setSmtpTesting] = useState(false);
-
-  const [smtpHost, setSmtpHost] = useState("");
-  const [smtpPort, setSmtpPort] = useState("587");
-  const [smtpUsername, setSmtpUsername] = useState("");
-  const [smtpPassword, setSmtpPassword] = useState("");
-  const [smtpFromEmail, setSmtpFromEmail] = useState("");
-  const [smtpFromName, setSmtpFromName] = useState("");
-  const [smtpUseTls, setSmtpUseTls] = useState(true);
-  const [smtpUseSsl, setSmtpUseSsl] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const cfg = await getSmtpConfig();
-        if (!cancelled) setSmtpConfig(cfg);
-      } catch {
-        // keep usable
-      } finally {
-        if (!cancelled) setSmtpLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
-
-  const populateSmtpForm = (cfg: OrgSmtpConfigResponse) => {
-    setSmtpHost(cfg.host);
-    setSmtpPort(String(cfg.port));
-    setSmtpUsername(cfg.username);
-    setSmtpPassword(PASSWORD_MASK);
-    setSmtpFromEmail(cfg.from_email);
-    setSmtpFromName(cfg.from_name ?? "");
-    setSmtpUseTls(cfg.use_tls);
-    setSmtpUseSsl(cfg.use_ssl);
-  };
-
-  const handleSmtpEdit = () => {
-    if (smtpConfig) populateSmtpForm(smtpConfig);
-    else {
-      setSmtpHost("");
-      setSmtpPort("587");
-      setSmtpUsername("");
-      setSmtpPassword("");
-      setSmtpFromEmail("");
-      setSmtpFromName("");
-      setSmtpUseTls(true);
-      setSmtpUseSsl(false);
-    }
-    setSmtpEditing(true);
-  };
-
-  const handleSmtpSave = async () => {
-    if (!smtpHost.trim() || !smtpUsername.trim() || !smtpFromEmail.trim()) {
-      toast.error("Host, username and from email are required");
-      return;
-    }
-    const portNum = parseInt(smtpPort, 10);
-    if (isNaN(portNum) || portNum < 1 || portNum > 65535) {
-      toast.error("Port must be between 1 and 65535");
-      return;
-    }
-    setSmtpSaving(true);
-    try {
-      const updated = await upsertSmtpConfig({
-        host: smtpHost.trim(),
-        port: portNum,
-        username: smtpUsername.trim(),
-        password: smtpPassword === PASSWORD_MASK ? null : smtpPassword || null,
-        from_email: smtpFromEmail.trim(),
-        from_name: smtpFromName.trim() || null,
-        use_tls: smtpUseTls,
-        use_ssl: smtpUseSsl,
-      });
-      setSmtpConfig(updated);
-      setSmtpEditing(false);
-      toast.success("SMTP config saved");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to save SMTP config");
-    } finally {
-      setSmtpSaving(false);
-    }
-  };
-
-  const handleSmtpTest = async () => {
-    setSmtpTesting(true);
-    try {
-      const updated = await testSmtpConnection();
-      setSmtpConfig(updated);
-      if (updated.status === "active") {
-        toast.success("SMTP connection verified successfully");
-      } else {
-        toast.error(`Connection failed: ${updated.last_test_error ?? "Unknown error"}`);
-      }
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "SMTP test failed");
-    } finally {
-      setSmtpTesting(false);
-    }
-  };
-
-  const handleSmtpDelete = async () => {
-    try {
-      await deleteSmtpConfig();
-      setSmtpConfig(null);
-      setSmtpEditing(false);
-      toast.success("SMTP config removed");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to remove SMTP config");
-    }
   };
 
   return (
@@ -405,12 +259,16 @@ export function EmailIntegrationManager({ onChanged }: EmailIntegrationManagerPr
               <input
                 readOnly
                 value={forwardingAddress}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 pr-10 text-sm font-mono text-base placeholder:text-muted-foreground focus-visible:outline-none focus-visible:border-muted-foreground disabled:cursor-not-allowed disabled:opacity-50 transition-colors md:text-sm"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 pr-11 text-sm font-mono text-base placeholder:text-muted-foreground focus-visible:outline-none focus-visible:border-muted-foreground disabled:cursor-not-allowed disabled:opacity-50 transition-colors md:text-sm"
               />
               <button
                 type="button"
-                onClick={handleCopyForwardingAddress}
-                className="absolute inset-y-0 right-3 my-auto inline-flex h-4 w-4 items-center justify-center p-0 text-muted-foreground hover:text-foreground transition-colors"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleCopyForwardingAddress();
+                }}
+                className="absolute inset-y-0 right-2 my-auto flex h-7 w-7 shrink-0 items-center justify-center rounded border-0 bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
                 aria-label="Copy forwarding address"
               >
                 {copiedForwarding ? (
@@ -450,183 +308,6 @@ export function EmailIntegrationManager({ onChanged }: EmailIntegrationManagerPr
           )}
         </>
       ) : null}
-
-      {/* ── SMTP Outbound — only visible once inbound is verified & active ─ */}
-      {isVerificationDone && (
-      <>
-      <Separator />
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-sm font-semibold">Outbound Email (SMTP)</h3>
-          <p className="text-xs text-muted-foreground">
-            Send emails to candidates from your own address via SMTP.
-          </p>
-        </div>
-        {!smtpLoading && smtpConfig && !smtpEditing && (
-          <SmtpStatusBadge status={smtpConfig.status} />
-        )}
-      </div>
-
-      {smtpLoading ? (
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          Loading…
-        </div>
-      ) : smtpEditing ? (
-        <div className="space-y-3">
-          <div className="grid grid-cols-[1fr_100px] gap-2">
-            <InputField
-              label="SMTP Host"
-              value={smtpHost}
-              onChange={(e) => setSmtpHost(e.target.value)}
-              placeholder="smtp.gmail.com"
-              className="text-sm h-9"
-            />
-            <InputField
-              label="Port"
-              value={smtpPort}
-              onChange={(e) => setSmtpPort(e.target.value)}
-              placeholder="587"
-              className="text-sm h-9"
-            />
-          </div>
-          <InputField
-            label="Username"
-            value={smtpUsername}
-            onChange={(e) => setSmtpUsername(e.target.value)}
-            placeholder="careers@yourcompany.com"
-            className="text-sm h-9"
-          />
-          <PasswordField
-            label="Password"
-            value={smtpPassword}
-            onChange={(e) => setSmtpPassword(e.target.value)}
-            placeholder={smtpConfig ? "Leave unchanged" : "App password or SMTP password"}
-            className="text-sm h-9"
-          />
-          <div className="grid grid-cols-2 gap-2">
-            <InputField
-              label="From Email"
-              value={smtpFromEmail}
-              onChange={(e) => setSmtpFromEmail(e.target.value)}
-              placeholder="careers@yourcompany.com"
-              className="text-sm h-9"
-            />
-            <InputField
-              label="From Name"
-              value={smtpFromName}
-              onChange={(e) => setSmtpFromName(e.target.value)}
-              placeholder="Careers Team"
-              className="text-sm h-9"
-            />
-          </div>
-          <div className="flex items-center gap-4 text-xs">
-            <label className="flex items-center gap-1.5 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={smtpUseTls}
-                onChange={(e) => setSmtpUseTls(e.target.checked)}
-                className="h-3.5 w-3.5"
-              />
-              STARTTLS
-            </label>
-            <label className="flex items-center gap-1.5 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={smtpUseSsl}
-                onChange={(e) => setSmtpUseSsl(e.target.checked)}
-                className="h-3.5 w-3.5"
-              />
-              SSL/TLS (port 465)
-            </label>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              size="sm"
-              type="button"
-              className="text-xs h-8"
-              onClick={handleSmtpSave}
-              disabled={smtpSaving}
-            >
-              {smtpSaving ? "Saving…" : "Save"}
-            </Button>
-            <Button
-              size="sm"
-              type="button"
-              variant="outline"
-              className="text-xs h-8"
-              onClick={() => setSmtpEditing(false)}
-              disabled={smtpSaving}
-            >
-              Cancel
-            </Button>
-          </div>
-        </div>
-      ) : smtpConfig ? (
-        <div className="space-y-2">
-          <div className="text-xs text-muted-foreground space-y-0.5">
-            <div>
-              <span className="font-medium">Host:</span> {smtpConfig.host}:{smtpConfig.port}
-            </div>
-            <div>
-              <span className="font-medium">From:</span>{" "}
-              {smtpConfig.from_name ? `${smtpConfig.from_name} <${smtpConfig.from_email}>` : smtpConfig.from_email}
-            </div>
-            {smtpConfig.status === "failed" && smtpConfig.last_test_error && (
-              <div className="text-red-600 mt-1">{smtpConfig.last_test_error}</div>
-            )}
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              size="sm"
-              type="button"
-              variant="outline"
-              className="text-xs h-8"
-              onClick={handleSmtpTest}
-              disabled={smtpTesting}
-            >
-              {smtpTesting ? (
-                <>
-                  <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
-                  Testing…
-                </>
-              ) : (
-                "Test Connection"
-              )}
-            </Button>
-            <Button
-              size="sm"
-              type="button"
-              variant="outline"
-              className="text-xs h-8"
-              onClick={handleSmtpEdit}
-            >
-              Edit
-            </Button>
-            <Button
-              size="sm"
-              type="button"
-              variant="outline"
-              className="text-xs h-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-              onClick={handleSmtpDelete}
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </Button>
-          </div>
-        </div>
-      ) : (
-        <Button
-          size="sm"
-          type="button"
-          variant="outline"
-          className="text-xs h-8"
-          onClick={handleSmtpEdit}
-        >
-          Configure SMTP
-        </Button>
-      )}
-      </>
-      )}
 
       <Dialog open={verifyDialogOpen} onOpenChange={setVerifyDialogOpen}>
         <DialogContent className="sm:max-w-md">

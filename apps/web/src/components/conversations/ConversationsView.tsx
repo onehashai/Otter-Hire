@@ -10,6 +10,7 @@ import { ConversationList, type Conversation } from "./ConversationList";
 import { MessageThread, type Message } from "./MessageThread";
 import { CandidateContext } from "./CandidateContext";
 import { ComposeModal } from "./components/ComposeMessageModal";
+import { API_BASE_URL } from "@/api/client/client";
 import {
   listConversations,
   getConversation,
@@ -75,10 +76,6 @@ function mapMessage(msg: MessageRead, subject?: string): Message {
   };
 }
 
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
-
 interface ConversationsViewProps {
   initialId?: string;
 }
@@ -112,6 +109,37 @@ export function ConversationsView({ initialId }: ConversationsViewProps) {
   const pollStartRef = useRef<number>(0);
   const POLL_INTERVAL_MS = 2500;
   const POLL_MAX_MS = 30_000;
+
+  // Live push: WebSocket for message status updates (delivered, read, failed)
+  useEffect(() => {
+    const wsBase = API_BASE_URL.replace(/^http/i, "ws");
+    const socket = new WebSocket(`${wsBase}/public/inbound/events/ws`);
+    socket.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data) as {
+          event?: string;
+          conversation_id?: string;
+          message_id?: string;
+          status?: string;
+        };
+        if (data.event !== "message_status_updated" || !data.conversation_id || !data.message_id || !data.status) return;
+        setActiveConversation((prev) => {
+          if (!prev || prev.id !== data.conversation_id) return prev;
+          return {
+            ...prev,
+            messages: prev.messages.map((m) =>
+              m.id === data.message_id ? { ...m, status: data.status as MessageRead["status"] } : m
+            ),
+          };
+        });
+      } catch {
+        // ignore malformed messages
+      }
+    };
+    return () => {
+      if (socket.readyState === WebSocket.OPEN) socket.close();
+    };
+  }, []);
 
   // Sync selectedId when initialId changes (e.g. URL param changed)
   useEffect(() => {

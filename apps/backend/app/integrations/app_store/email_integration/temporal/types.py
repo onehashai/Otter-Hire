@@ -13,11 +13,14 @@ class InboundWorkflowInput:
 class OutboundWorkflowInput:
     """All data needed to send one outbound email and update its DB record."""
 
-    org_id: str          # UUID as str
-    message_id: str      # UUID as str — the Message row to update on success/failure
+    org_id: str
+    message_id: str
     to_email: str
     subject: str
     body: str
     html_body: str | None = None
     from_name: str | None = None
-    reply_to: str | None = None          # e.g. reply+<conversation_id>@inbound.domain — keeps replies in same thread
+    org_name: str | None = None
+    reply_to: str | None = None
+    in_reply_to: str | None = None  # Message-ID of the email we're replying to (for threading)
+    references: str | None = None  # Space-separated Message-IDs for thread (References header)          

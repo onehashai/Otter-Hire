@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass
@@ -23,4 +23,4 @@ class OutboundWorkflowInput:
     org_name: str | None = None
     reply_to: str | None = None
     in_reply_to: str | None = None  # Message-ID of the email we're replying to (for threading)
-    references: str | None = None  # Space-separated Message-IDs for thread (References header)          
+    references: str | None = None  # Space-separated Message-IDs for thread (References header)

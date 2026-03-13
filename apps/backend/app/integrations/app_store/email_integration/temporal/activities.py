@@ -23,7 +23,6 @@ from app.integrations.app_store.email_integration.temporal.types import (
     InboundWorkflowInput,
     OutboundWorkflowInput,
 )
-from app.core.logging import logger
 from app.models.message import Message
 
 
@@ -177,6 +176,7 @@ async def publish_update_activity(event_payload: dict) -> None:
     }
     redis_client = redis.Redis.from_url(settings.redis_url, decode_responses=True)
     redis_client.publish(settings.inbound_events_channel, json.dumps(event_payload))
+
 
 @activity.defn
 async def send_outbound_email_activity(input_data: OutboundWorkflowInput) -> dict:

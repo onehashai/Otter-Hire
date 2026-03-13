@@ -16,8 +16,6 @@ from app.core.config import settings
 from app.core.security import create_access_token, hash_password, verify_password
 from app.db.session import get_db
 from app.deps.auth import get_current_user
-from app.templates.email.defaults import create_default_templates_for_org
-from app.services.default_categories import create_default_job_categories_for_org
 from app.models.org_membership import OrgMembership
 from app.models.organization import Organization
 from app.models.user import User
@@ -32,7 +30,9 @@ from app.schemas.auth import (
     VerifyEmailRequest,
     VerifyEmailResponse,
 )
+from app.services.default_categories import create_default_job_categories_for_org
 from app.services.email import send_verification_email
+from app.templates.email.defaults import create_default_templates_for_org
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 limiter = Limiter(key_func=get_remote_address)

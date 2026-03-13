@@ -121,8 +121,8 @@ def _extract_text_and_attachments(raw_email: bytes) -> dict:
     }
 
 
-_ENQUEUED_TTL_SECONDS = 86400       # 24h  – covers workflow execution time
-_IGNORED_TTL_SECONDS = 2592000      # 30d  – covers ignored emails until S3 lifecycle removes them
+_ENQUEUED_TTL_SECONDS = 86400  # 24h  – covers workflow execution time
+_IGNORED_TTL_SECONDS = 2592000  # 30d  – covers ignored emails until S3 lifecycle removes them
 
 
 def _redis_client() -> redis.Redis:
@@ -139,8 +139,7 @@ def _is_key_enqueued_in_redis(raw_key: str) -> bool:
     try:
         r = _redis_client()
         return bool(
-            r.exists(f"inbound:enqueued:{raw_key}")
-            or r.exists(f"inbound:ignored:{raw_key}")
+            r.exists(f"inbound:enqueued:{raw_key}") or r.exists(f"inbound:ignored:{raw_key}")
         )
     except Exception:
         logger.exception("SES bridge redis exists failed key=%s", raw_key)
@@ -211,9 +210,7 @@ def _list_latest_raw_keys(
 
     for page in page_iterator:
         pages_scanned += 1
-        page_objects = [
-            (obj["Key"], obj.get("LastModified")) for obj in page.get("Contents", [])
-        ]
+        page_objects = [(obj["Key"], obj.get("LastModified")) for obj in page.get("Contents", [])]
         if not page_objects:
             continue
 
@@ -317,9 +314,7 @@ async def _resolve_inbox_context(
             conv_uuid = UUID(conv_id_str)
         except (ValueError, TypeError):
             return None
-        conv_result = await db.execute(
-            select(Conversation).where(Conversation.id == conv_uuid)
-        )
+        conv_result = await db.execute(select(Conversation).where(Conversation.id == conv_uuid))
         conv = conv_result.scalar_one_or_none()
         if conv is None:
             return None

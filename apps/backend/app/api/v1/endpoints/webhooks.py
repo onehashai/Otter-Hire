@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import json
 import urllib.request
-
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import PlainTextResponse
-from sqlalchemy import func, select, update as sa_update
+from sqlalchemy import func, select
+from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -77,9 +77,7 @@ def _publish_message_status_updated(
     try:
         import redis as _sync_redis
 
-        _r = _sync_redis.Redis.from_url(
-            settings.redis_url, decode_responses=True, socket_timeout=1
-        )
+        _r = _sync_redis.Redis.from_url(settings.redis_url, decode_responses=True, socket_timeout=1)
         _r.publish(
             settings.inbound_events_channel,
             json.dumps(
@@ -283,14 +281,10 @@ async def ses_events(
 
         if new_rank > current_rank:
             await db.execute(
-                sa_update(Message)
-                .where(Message.id == row.id)
-                .values(status=new_status)
+                sa_update(Message).where(Message.id == row.id).values(status=new_status)
             )
             await db.commit()
-            logger.info(
-                "SES events: message %s → %s (was %s)", row.id, new_status, row.status
-            )
+            logger.info("SES events: message %s → %s (was %s)", row.id, new_status, row.status)
             _publish_message_status_updated(
                 row.org_id,
                 row.conversation_id,

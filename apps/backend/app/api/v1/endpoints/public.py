@@ -14,12 +14,11 @@ from typing import Optional
 from urllib.request import urlopen
 from uuid import UUID
 
+import pycountry
+import redis.asyncio as aioredis
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric.padding import PKCS1v15
 from cryptography.x509 import load_pem_x509_certificate
-
-import pycountry
-import redis.asyncio as aioredis
 from fastapi import (
     APIRouter,
     Depends,
@@ -38,6 +37,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.security import verify_access_token
 from app.db.session import get_db
+from app.integrations.app_store.email_integration.temporal.queue import enqueue_ses_raw_key
 from app.models.candidate import Candidate
 from app.models.candidate_document import CandidateDocument
 from app.models.conversation import Conversation
@@ -48,7 +48,6 @@ from app.models.message import Message
 from app.models.org_membership import OrgMembership
 from app.models.organization import Organization, OrgInbox
 from app.models.stage import Stage
-from app.integrations.app_store.email_integration.temporal.queue import enqueue_ses_raw_key
 from app.schemas.public_jobs import (
     InboundEmailPayload,
     PublicJobApplyRequest,
@@ -670,7 +669,15 @@ def _build_sns_string_to_sign(payload: dict) -> bytes:
         # Subject is optional — only include it when present in the payload
         field_order = ["Message", "MessageId", "Subject", "Timestamp", "TopicArn", "Type"]
     elif msg_type in ("SubscriptionConfirmation", "UnsubscribeConfirmation"):
-        field_order = ["Message", "MessageId", "SubscribeURL", "Timestamp", "Token", "TopicArn", "Type"]
+        field_order = [
+            "Message",
+            "MessageId",
+            "SubscribeURL",
+            "Timestamp",
+            "Token",
+            "TopicArn",
+            "Type",
+        ]
     else:
         return b""
     parts = []
@@ -1266,15 +1273,11 @@ async def _resolve_org_inbox_for_reply_address(
     conv_id = _parse_reply_conversation_id(inbox_address)
     if conv_id is None:
         return None
-    conv_result = await db.execute(
-        select(Conversation).where(Conversation.id == conv_id)
-    )
+    conv_result = await db.execute(select(Conversation).where(Conversation.id == conv_id))
     conv = conv_result.scalar_one_or_none()
     if conv is None:
         return None
-    inbox_result = await db.execute(
-        select(OrgInbox).where(OrgInbox.org_id == conv.org_id)
-    )
+    inbox_result = await db.execute(select(OrgInbox).where(OrgInbox.org_id == conv.org_id))
     org_inbox = inbox_result.scalar_one_or_none()
     if org_inbox is None:
         return None
@@ -1361,7 +1364,9 @@ async def _route_inbound_to_conversation(
             if candidate is None:
                 display_name = (payload.from_name or "").strip()
                 if not display_name:
-                    display_name = from_email.split("@")[0].replace(".", " ").replace("_", " ").title()
+                    display_name = (
+                        from_email.split("@")[0].replace(".", " ").replace("_", " ").title()
+                    )
                 candidate = Candidate(
                     org_id=org_id,
                     job_id=None,
@@ -1431,9 +1436,7 @@ async def _route_inbound_to_conversation(
     try:
         import redis as _sync_redis
 
-        _r = _sync_redis.Redis.from_url(
-            settings.redis_url, decode_responses=True, socket_timeout=1
-        )
+        _r = _sync_redis.Redis.from_url(settings.redis_url, decode_responses=True, socket_timeout=1)
         _r.publish(
             settings.inbound_events_channel,
             json.dumps(
@@ -1742,7 +1745,10 @@ async def ingest_inbound_email(
             conv_id, msg_id = conversation_ids
             logger.info(
                 "Inbound email created/updated conversation: conversation_id=%s message_id=%s from=%s subject=%r",
-                conv_id, msg_id, inbound_email.from_email, (inbound_email.subject or "")[:60],
+                conv_id,
+                msg_id,
+                inbound_email.from_email,
+                (inbound_email.subject or "")[:60],
             )
             return {
                 "status": "ok",
@@ -1754,7 +1760,8 @@ async def ingest_inbound_email(
             }
         logger.info(
             "Inbound email did not create conversation (no resume; job-inquiry gate may have failed): from=%s subject=%r",
-            inbound_email.from_email, (inbound_email.subject or "")[:60],
+            inbound_email.from_email,
+            (inbound_email.subject or "")[:60],
         )
         return {
             "status": "ok",

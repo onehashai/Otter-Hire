@@ -5,7 +5,8 @@ from typing import Any
 from uuid import UUID
 
 import boto3
-from sqlalchemy import select, update as sa_update
+from sqlalchemy import select
+from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -76,7 +77,9 @@ def send_email_via_ses(
             )
         if references:
             # References is space-separated list of message-ids; normalize each to angle-bracket form
-            refs = " ".join(_ensure_message_id_format(r.strip()) for r in references.split() if r.strip())
+            refs = " ".join(
+                _ensure_message_id_format(r.strip()) for r in references.split() if r.strip()
+            )
             if refs:
                 content["Simple"]["Headers"].append({"Name": "References", "Value": refs})
 
@@ -185,4 +188,3 @@ async def record_ses_event(
         .values(config=cfg, status=new_status, updated_at=datetime.now(timezone.utc))
     )
     await db.commit()
-

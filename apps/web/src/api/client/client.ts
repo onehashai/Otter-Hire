@@ -99,7 +99,9 @@ function mapErrorCodeToMessage(status: number, code?: string, fallback?: string)
     return "Too many attempts. Please try again later.";
   }
   if (code === "VALIDATION_ERROR" || status === 422) {
-    return fallback && fallback !== "Validation failed" ? fallback : "Please check the form and try again.";
+    return fallback && fallback !== "Validation failed"
+      ? fallback
+      : "Please check the form and try again.";
   }
   if (status === 403) {
     return "You don't have permission to perform this action.";

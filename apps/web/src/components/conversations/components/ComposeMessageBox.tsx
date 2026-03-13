@@ -26,7 +26,7 @@ export function htmlToPlainText(html: string): string {
 // Substitute template variables. Only replaces when value is present; otherwise leaves placeholder.
 export function substituteTemplateVariables(
   text: string,
-  opts: { candidateName?: string; jobTitle?: string; organizationName?: string }
+  opts: { candidateName?: string; jobTitle?: string; organizationName?: string },
 ): string {
   const candidateName = opts.candidateName ?? "";
   const jobTitle = (opts.jobTitle ?? "").trim();
@@ -245,9 +245,7 @@ export function ComposeMessageBox({
             >
               <div className="py-1 max-h-[200px] overflow-y-auto">
                 {templatesLoading ? (
-                  <div className="px-3 py-2 text-xs text-muted-foreground">
-                    Loading templates…
-                  </div>
+                  <div className="px-3 py-2 text-xs text-muted-foreground">Loading templates…</div>
                 ) : templates.length === 0 ? (
                   <div className="px-3 py-2 text-xs text-muted-foreground">
                     No templates. Create them in Settings → Templates.
@@ -261,7 +259,7 @@ export function ComposeMessageBox({
                       aria-selected={i === templatePickerIndex}
                       className={cn(
                         "w-full px-3 py-2 text-left text-xs hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground outline-none",
-                        i === templatePickerIndex && "bg-accent text-accent-foreground"
+                        i === templatePickerIndex && "bg-accent text-accent-foreground",
                       )}
                       onClick={() => insertTemplate(t)}
                     >
@@ -271,7 +269,7 @@ export function ComposeMessageBox({
                 )}
               </div>
             </div>,
-            document.body
+            document.body,
           )}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1">
@@ -287,7 +285,10 @@ export function ComposeMessageBox({
                   <Smile className="h-3.5 w-3.5" />
                 </Button>
               </PopoverTrigger>
-              <PopoverContent align="start" className="w-auto p-0 border-0 bg-transparent shadow-none">
+              <PopoverContent
+                align="start"
+                className="w-auto p-0 border-0 bg-transparent shadow-none"
+              >
                 <EmojiPicker
                   onEmojiClick={(data: { emoji: string }) => insertEmoji(data.emoji)}
                   width={320}

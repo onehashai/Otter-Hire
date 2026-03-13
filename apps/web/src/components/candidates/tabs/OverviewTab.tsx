@@ -59,14 +59,18 @@ export function OverviewTab({
 }: OverviewTabProps) {
   const [noteText, setNoteText] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [selectedMentions, setSelectedMentions] = useState<Array<{
-    userId: string;
-    label: string;
-    email: string;
-  }>>([]);
-  const [mentionState, setMentionState] = useState<{ query: string; start: number; end: number } | null>(
-    null,
-  );
+  const [selectedMentions, setSelectedMentions] = useState<
+    Array<{
+      userId: string;
+      label: string;
+      email: string;
+    }>
+  >([]);
+  const [mentionState, setMentionState] = useState<{
+    query: string;
+    start: number;
+    end: number;
+  } | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const labelByUserId = useMemo(() => {
@@ -154,8 +158,7 @@ export function OverviewTab({
   const handleSelectMention = (user: MentionableUser) => {
     if (!mentionState) return;
     const label = labelByUserId.get(user.id) || user.email;
-    const nextText =
-      `${noteText.slice(0, mentionState.start)}@${label} ${noteText.slice(mentionState.end)}`;
+    const nextText = `${noteText.slice(0, mentionState.start)}@${label} ${noteText.slice(mentionState.end)}`;
     setNoteText(nextText);
     setSelectedMentions((current) => {
       if (current.some((mention) => mention.userId === user.id)) {

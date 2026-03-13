@@ -2,34 +2,19 @@
 
 import { useState, useEffect, useRef, useLayoutEffect } from "react";
 import { createPortal } from "react-dom";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@onehash/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@onehash/ui/dialog";
 import { Button } from "@onehash/ui/button";
 import { InputField } from "@onehash/ui/input";
 import { Textarea } from "@onehash/ui/textarea";
 import { Label } from "@onehash/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@onehash/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@onehash/ui/select";
 import { Send, Paperclip } from "lucide-react";
 import { toast } from "sonner";
 import { getCandidates, type CandidateListItemResponse } from "@/api/candidates";
 import { createConversation } from "@/api/conversations";
 import { getTemplates, type TemplateResponse } from "@/api/templates";
 import { cn } from "@/lib/utils";
-import {
-  htmlToPlainText,
-  substituteTemplateVariables,
-} from "./ComposeMessageBox";
+import { htmlToPlainText, substituteTemplateVariables } from "./ComposeMessageBox";
 
 interface ComposeModalProps {
   open: boolean;
@@ -38,7 +23,12 @@ interface ComposeModalProps {
   organizationName?: string;
 }
 
-export function ComposeModal({ open, onOpenChange, onCreated, organizationName = "" }: ComposeModalProps) {
+export function ComposeModal({
+  open,
+  onOpenChange,
+  onCreated,
+  organizationName = "",
+}: ComposeModalProps) {
   const [candidates, setCandidates] = useState<CandidateListItemResponse[]>([]);
   const [candidatesLoading, setCandidatesLoading] = useState(false);
 
@@ -262,7 +252,7 @@ export function ComposeModal({ open, onOpenChange, onCreated, organizationName =
                           aria-selected={i === templatePickerIndex}
                           className={cn(
                             "w-full px-3 py-2 text-left text-xs hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground outline-none",
-                            i === templatePickerIndex && "bg-accent text-accent-foreground"
+                            i === templatePickerIndex && "bg-accent text-accent-foreground",
                           )}
                           onClick={() => insertTemplate(t)}
                         >
@@ -272,7 +262,7 @@ export function ComposeModal({ open, onOpenChange, onCreated, organizationName =
                     )}
                   </div>
                 </div>,
-                document.body
+                document.body,
               )}
           </div>
         </div>

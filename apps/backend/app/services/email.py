@@ -1,7 +1,6 @@
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from typing import TYPE_CHECKING
 from uuid import UUID
 
 import httpx
@@ -10,11 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.logging import logger
 from app.templates import EmailContent
-from app.templates.invite import build_invite_email
-from app.templates.verification import build_verification_email
-
-if TYPE_CHECKING:
-    from app.models.integration import OrgIntegration
+from app.templates.email.invite import build_invite_email
+from app.templates.email.verification import build_verification_email
 
 
 async def send_email(
@@ -25,21 +21,37 @@ async def send_email(
     org_id: UUID | None = None,
     db: AsyncSession | None = None,
 ) -> None:
-    # Route through the org's own SMTP if configured and verified
+    # Route through SES (org-level identity) when configured
     if org_id is not None and db is not None:
-        from app.integrations.app_store.email_integration.smtp_service import (
-            get_verified_smtp_for_org,
+        from app.integrations.app_store.email_integration.outbound_service import (
+            get_verified_outbound_for_org,
         )
+        from app.services.ses_outbound import send_email_via_ses
 
-        smtp_cfg = await get_verified_smtp_for_org(db, org_id)
-        if smtp_cfg is not None:
-            await _send_via_org_smtp(
-                to_email,
-                content.subject,
-                content.html,
-                content.text,
-                smtp_cfg,
+        outbound_row = await get_verified_outbound_for_org(db, org_id)
+        from_email: str
+        from_name: str | None
+        if outbound_row is not None:
+            cfg = outbound_row.config or {}
+            from_email = cfg.get("from_email", "")
+            from_name = cfg.get("from_name")
+        elif settings.ses_outbound_from_email and settings.aws_access_key_id and settings.aws_secret_access_key:
+            from_email = (settings.ses_outbound_from_email or "").strip()
+            from_name = (settings.ses_outbound_from_name or "").strip() or None
+        else:
+            from_email = ""
+            from_name = None
+
+        if from_email and "@" in from_email:
+            send_email_via_ses(
+                from_email=from_email,
+                from_name=from_name,
+                to_email=to_email,
+                subject=content.subject,
+                text_body=content.text,
+                html_body=content.html,
             )
+            logger.info("Email sent to %s via SES: %s", to_email, content.subject)
             return
 
     if settings.is_production:
@@ -73,12 +85,7 @@ async def send_invite_email(
 
 
 async def _send_via_mailtrap(
-    to_email: str,
-    subject: str,
-    html_body: str,
-    text_body: str,
-    *,
-    fallback_url: str | None = None,
+    to_email: str, subject: str, html_body: str, text_body: str, *, fallback_url: str | None = None
 ) -> None:
     if not all(
         [
@@ -114,12 +121,7 @@ async def _send_via_mailtrap(
             logger.warning(f"Action URL: {fallback_url}")
 
 
-async def _send_via_zeptomail(
-    to_email: str,
-    subject: str,
-    html_body: str,
-    text_body: str,
-) -> None:
+async def _send_via_zeptomail(to_email: str, subject: str, html_body: str, text_body: str) -> None:
     if not settings.zeptomail_api_key or not settings.zeptomail_from_email:
         raise ValueError("ZeptoMail configuration missing in production")
 
@@ -146,41 +148,3 @@ async def _send_via_zeptomail(
     logger.info(f"Email sent to {to_email} via ZeptoMail: {subject}")
 
 
-async def _send_via_org_smtp(
-    to_email: str,
-    subject: str,
-    html_body: str,
-    text_body: str,
-    smtp_row: "OrgIntegration",
-) -> None:
-    from app.integrations.app_store.email_integration.smtp_service import (
-        decrypt_password_for_sending,
-    )
-
-    plain_password = decrypt_password_for_sending(smtp_row)
-    cfg = smtp_row.config or {}
-    display_name = cfg.get("from_name") or cfg.get("from_email", "")
-
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = subject
-    msg["From"] = f"{display_name} <{cfg.get('from_email', '')}>"
-    msg["To"] = to_email
-    msg.attach(MIMEText(text_body, "plain"))
-    msg.attach(MIMEText(html_body, "html"))
-
-    host, port = cfg.get("host", ""), cfg.get("port", 587)
-    try:
-        if cfg.get("use_ssl"):
-            with smtplib.SMTP_SSL(host, port, timeout=15) as server:
-                server.login(cfg.get("username", ""), plain_password)
-                server.send_message(msg)
-        else:
-            with smtplib.SMTP(host, port, timeout=15) as server:
-                if cfg.get("use_tls"):
-                    server.starttls()
-                server.login(cfg.get("username", ""), plain_password)
-                server.send_message(msg)
-        logger.info(f"Email sent to {to_email} via org SMTP ({host}): {subject}")
-    except Exception as e:
-        logger.error(f"Failed to send email via org SMTP: {e}")
-        raise

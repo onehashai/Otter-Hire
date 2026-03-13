@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import html
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -9,6 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.config import settings
 from app.core.logging import logger
 from app.core.permissions import require_permission
 from app.db.session import get_db
@@ -17,7 +17,7 @@ from app.integrations.app_store.email_integration.temporal.types import Outbound
 from app.models.candidate import Candidate
 from app.models.conversation import Conversation
 from app.models.message import Message
-from app.models.organization import OrgInbox
+from app.models.organization import Organization, OrgInbox
 from app.models.user import User
 from app.schemas.conversations import (
     CandidateSnippet,
@@ -32,26 +32,21 @@ from app.utils.uuid import uuid7
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _reply_to_for_conversation(conv_id: UUID, inbox_address: str | None) -> str | None:
-    """Build a Reply-To address so candidate replies stay in the same conversation."""
-    if not inbox_address or "@" not in inbox_address:
+def _reply_address_for_conversation(
+    conv_id: UUID,
+    *,
+    fixed_domain: str | None = None,
+    inbox_address: str | None = None,
+) -> str | None:
+    """Build reply+conv_id@domain so candidate replies land in this conversation."""
+    domain: str | None = None
+    if fixed_domain and fixed_domain.strip():
+        domain = fixed_domain.strip().lower()
+    if not domain and inbox_address and "@" in inbox_address:
+        domain = inbox_address.strip().lower().split("@", 1)[1]
+    if not domain:
         return None
-    domain = inbox_address.strip().lower().split("@", 1)[1]
     return f"reply+{conv_id}@{domain}"
-
-
-def _ensure_html_body(body: str, html_body: str | None) -> str | None:
-    """Always provide an HTML alternative so tracking pixels can be injected."""
-    if html_body and html_body.strip():
-        return html_body
-    escaped = html.escape(body).replace("\n", "<br>")
-    return f"<html><body><div>{escaped}</div></body></html>"
 
 
 def _message_to_read(msg: Message, sender_name: str | None = None) -> MessageRead:
@@ -131,7 +126,9 @@ async def list_conversations(
             .where(Message.conversation_id.in_(conv_ids))
             .subquery()
         )
-        rows = await db.execute(select(subq.c.conversation_id, subq.c.body).where(subq.c.rn == 1))
+        rows = await db.execute(
+            select(subq.c.conversation_id, subq.c.body).where(subq.c.rn == 1)
+        )
         raw_last_msgs = {row.conversation_id: row.body for row in rows}
         # Use only visible part (no quoted block) for list preview
         from app.utils.email_parse import parse_email_body
@@ -249,19 +246,22 @@ async def create_conversation(
     db.add(conv)
     await db.flush()
 
-    # Resolve from_email from SMTP config (lightweight DB lookup, no sending)
-    try:
-        from app.integrations.app_store.email_integration.smtp_service import (
-            get_verified_smtp_for_org,
-        )
+    # Reply address: reply+conv_id@inbound.domain so replies land in this conversation
+    org_name: str | None = None
+    inbox_result = await db.execute(select(OrgInbox).where(OrgInbox.org_id == current_user.org_id))
+    org_inbox = inbox_result.scalar_one_or_none()
+    reply_to = _reply_address_for_conversation(
+        conv.id,
+        fixed_domain=settings.inbound_email_domain,
+        inbox_address=org_inbox.inbox_address if org_inbox else None,
+    )
+    org_result = await db.execute(select(Organization).where(Organization.id == current_user.org_id))
+    org = org_result.scalar_one_or_none()
+    if org:
+        org_name = org.name
 
-        smtp_row = await get_verified_smtp_for_org(db, current_user.org_id)
-        from_email = (smtp_row.config or {}).get("from_email", "") if smtp_row else ""
-    except Exception:
-        from_email = ""
-
+    from_email = reply_to or ""
     msg_id = uuid7()
-    html_body = _ensure_html_body(body.body, body.html_body)
     first_msg = Message(
         id=msg_id,
         org_id=current_user.org_id,
@@ -272,20 +272,13 @@ async def create_conversation(
         from_email=from_email,
         to_email=candidate.email,
         body=body.body,
-        html_body=html_body,
+        html_body=body.html_body,
         status="queued",
         created_at=now,
     )
     db.add(first_msg)
     await db.commit()
     await db.refresh(conv)
-
-    # Reply-To so candidate replies stay in this conversation (reply+<conv_id>@inbound-domain)
-    reply_to = None
-    inbox_result = await db.execute(select(OrgInbox).where(OrgInbox.org_id == current_user.org_id))
-    org_inbox = inbox_result.scalar_one_or_none()
-    if org_inbox and org_inbox.inbox_address:
-        reply_to = _reply_to_for_conversation(conv.id, org_inbox.inbox_address)
 
     # Hand off actual sending to the Temporal worker (async, retriable)
     try:
@@ -296,8 +289,9 @@ async def create_conversation(
                 to_email=candidate.email,
                 subject=body.subject,
                 body=body.body,
-                html_body=html_body,
+                html_body=body.html_body,
                 from_name=current_user.name,
+                org_name=org_name,
                 reply_to=reply_to,
             )
         )
@@ -351,21 +345,41 @@ async def send_message(
             detail="Cannot send messages to an archived conversation",
         )
 
-    # Resolve from_email from SMTP config (lightweight DB lookup, no sending)
-    try:
-        from app.integrations.app_store.email_integration.smtp_service import (
-            get_verified_smtp_for_org,
+    org_name: str | None = None
+    inbox_result = await db.execute(select(OrgInbox).where(OrgInbox.org_id == current_user.org_id))
+    org_inbox = inbox_result.scalar_one_or_none()
+    reply_to = _reply_address_for_conversation(
+        conv.id,
+        fixed_domain=settings.inbound_email_domain,
+        inbox_address=org_inbox.inbox_address if org_inbox else None,
+    )
+    org_result = await db.execute(select(Organization).where(Organization.id == current_user.org_id))
+    org = org_result.scalar_one_or_none()
+    if org:
+        org_name = org.name
+
+    # Threading: get the last message in the thread that has a Message-ID so we can set In-Reply-To/References
+    last_with_id_result = await db.execute(
+        select(Message)
+        .where(
+            Message.conversation_id == conv.id,
+            Message.email_message_id.isnot(None),
         )
+        .order_by(Message.created_at.desc())
+        .limit(1)
+    )
+    last_with_id = last_with_id_result.scalar_one_or_none()
+    in_reply_to_msg_id: str | None = (
+        (last_with_id.email_message_id or "").strip().strip("<>") or None
+        if last_with_id and last_with_id.email_message_id
+        else None
+    )
+    references_val: str | None = in_reply_to_msg_id if in_reply_to_msg_id else None  # same as In-Reply-To for direct reply
 
-        smtp_row = await get_verified_smtp_for_org(db, current_user.org_id)
-        from_email = (smtp_row.config or {}).get("from_email", "") if smtp_row else ""
-    except Exception:
-        from_email = ""
-
+    from_email = reply_to or ""
     now = datetime.now(tz=timezone.utc)
 
     msg_id = uuid7()
-    html_body = _ensure_html_body(body.body, body.html_body)
     msg = Message(
         id=msg_id,
         org_id=current_user.org_id,
@@ -376,9 +390,9 @@ async def send_message(
         from_email=from_email,
         to_email=conv.candidate.email,
         body=body.body,
-        html_body=html_body,
+        html_body=body.html_body,
         status="queued",
-        in_reply_to=None,
+        in_reply_to=in_reply_to_msg_id,
         created_at=now,
     )
     db.add(msg)
@@ -391,13 +405,6 @@ async def send_message(
     await db.commit()
     await db.refresh(msg)
 
-    # Reply-To so candidate replies stay in this conversation (reply+<conv_id>@inbound-domain)
-    reply_to = None
-    inbox_result = await db.execute(select(OrgInbox).where(OrgInbox.org_id == current_user.org_id))
-    org_inbox = inbox_result.scalar_one_or_none()
-    if org_inbox and org_inbox.inbox_address:
-        reply_to = _reply_to_for_conversation(conv.id, org_inbox.inbox_address)
-
     # Hand off actual sending to the Temporal worker (async, retriable)
     try:
         await enqueue_outbound_email(
@@ -407,9 +414,12 @@ async def send_message(
                 to_email=conv.candidate.email,
                 subject=f"Re: {conv.subject}",
                 body=body.body,
-                html_body=html_body,
+                html_body=body.html_body,
                 from_name=current_user.name,
+                org_name=org_name,
                 reply_to=reply_to,
+                in_reply_to=in_reply_to_msg_id,
+                references=references_val,
             )
         )
     except Exception:

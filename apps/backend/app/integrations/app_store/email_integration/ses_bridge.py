@@ -8,14 +8,15 @@ import json
 import logging
 import re
 import time
+import urllib.error
+import urllib.request
 from datetime import datetime, timedelta, timezone
+from uuid import UUID
 from email import policy
 from email.parser import BytesParser
 from email.utils import parseaddr
-from uuid import UUID
 
 import boto3
-import httpx
 import redis
 from sqlalchemy import delete, select
 
@@ -119,16 +120,8 @@ def _extract_text_and_attachments(raw_email: bytes) -> dict:
     }
 
 
-_ENQUEUED_TTL_SECONDS = 86400  # 24h  – covers workflow execution time
-_IGNORED_TTL_SECONDS = 2592000  # 30d  – covers ignored emails until S3 lifecycle removes them
-_LOCAL_REDIS_FALLBACK: dict[str, float] = {}
-
-
-def _prune_local_redis_fallback() -> None:
-    now = time.time()
-    expired = [key for key, expires_at in _LOCAL_REDIS_FALLBACK.items() if expires_at <= now]
-    for key in expired:
-        _LOCAL_REDIS_FALLBACK.pop(key, None)
+_ENQUEUED_TTL_SECONDS = 86400       # 24h  – covers workflow execution time
+_IGNORED_TTL_SECONDS = 2592000      # 30d  – covers ignored emails until S3 lifecycle removes them
 
 
 def _redis_client() -> redis.Redis:
@@ -142,16 +135,11 @@ def _redis_client() -> redis.Redis:
 
 def _is_key_enqueued_in_redis(raw_key: str) -> bool:
     """Return True if the key was recently enqueued OR permanently marked as ignored."""
-    _prune_local_redis_fallback()
-    now = time.time()
-    if _LOCAL_REDIS_FALLBACK.get(f"inbound:enqueued:{raw_key}", 0) > now:
-        return True
-    if _LOCAL_REDIS_FALLBACK.get(f"inbound:ignored:{raw_key}", 0) > now:
-        return True
     try:
         r = _redis_client()
         return bool(
-            r.exists(f"inbound:enqueued:{raw_key}") or r.exists(f"inbound:ignored:{raw_key}")
+            r.exists(f"inbound:enqueued:{raw_key}")
+            or r.exists(f"inbound:ignored:{raw_key}")
         )
     except Exception:
         logger.exception("SES bridge redis exists failed key=%s", raw_key)
@@ -160,7 +148,6 @@ def _is_key_enqueued_in_redis(raw_key: str) -> bool:
 
 def _mark_key_enqueued_in_redis(raw_key: str) -> None:
     """Mark key as enqueued to avoid SES bridge re-enqueuing every poll cycle."""
-    _LOCAL_REDIS_FALLBACK[f"inbound:enqueued:{raw_key}"] = time.time() + _ENQUEUED_TTL_SECONDS
     try:
         r = _redis_client()
         r.setex(f"inbound:enqueued:{raw_key}", _ENQUEUED_TTL_SECONDS, "1")
@@ -175,7 +162,6 @@ def _mark_key_ignored_in_redis(raw_key: str) -> None:
     creating an InboundEmail DB record.  Without this, every poll cycle after the
     short-lived 'enqueued' TTL expires would spin up a new workflow indefinitely.
     """
-    _LOCAL_REDIS_FALLBACK[f"inbound:ignored:{raw_key}"] = time.time() + _IGNORED_TTL_SECONDS
     try:
         r = _redis_client()
         r.setex(f"inbound:ignored:{raw_key}", _IGNORED_TTL_SECONDS, "1")
@@ -265,7 +251,9 @@ async def _resolve_inbox_context(
             conv_uuid = UUID(conv_id_str)
         except (ValueError, TypeError):
             return None
-        conv_result = await db.execute(select(Conversation).where(Conversation.id == conv_uuid))
+        conv_result = await db.execute(
+            select(Conversation).where(Conversation.id == conv_uuid)
+        )
         conv = conv_result.scalar_one_or_none()
         if conv is None:
             return None
@@ -316,41 +304,20 @@ async def _cleanup_ignored_inbound_records(s3_client, bucket: str) -> None:
 
 
 def _post_to_inbound_api(payload: dict, secret: str) -> tuple[int, str]:
-    """Post to inbound API using httpx (fixes SSL issues with urllib)."""
     body = json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
     signature = "sha256=" + hmac.new(secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
 
-    url = f"{settings.inbound_internal_api_base_url.rstrip('/')}/public/inbound/email"
-    headers = {"Content-Type": "application/json", "X-OneHash-Signature": signature}
-
+    req = urllib.request.Request(
+        f"{settings.inbound_internal_api_base_url.rstrip('/')}/public/inbound/email",
+        data=body,
+        headers={"Content-Type": "application/json", "X-OneHash-Signature": signature},
+        method="POST",
+    )
     try:
-        with httpx.Client(timeout=60.0, verify=True) as client:
-            resp = client.post(url, content=body, headers=headers)
-            resp.raise_for_status()
-            return resp.status_code, resp.text
-    except httpx.HTTPStatusError as exc:
-        return exc.response.status_code, exc.response.text
-    except Exception as exc:
-        logger.error("Inbound API call failed: %s", exc)
-        return 500, str(exc)
-
-
-def _enqueue_raw_key_via_http(bucket: str, key: str) -> tuple[int, str]:
-    """Enqueue via HTTP using httpx (fixes SSL issues with urllib)."""
-    body = json.dumps({"bucket": bucket, "key": key}, separators=(",", ":")).encode("utf-8")
-    url = f"{settings.inbound_internal_api_base_url.rstrip('/')}/public/inbound/s3-event"
-    headers = {"Content-Type": "application/json"}
-
-    try:
-        with httpx.Client(timeout=20.0, verify=True) as client:
-            resp = client.post(url, content=body, headers=headers)
-            resp.raise_for_status()
-            return resp.status_code, resp.text
-    except httpx.HTTPStatusError as exc:
-        return exc.response.status_code, exc.response.text
-    except Exception as exc:
-        logger.error("S3 event enqueue failed: %s", exc)
-        return 500, str(exc)
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            return resp.status, resp.read().decode("utf-8", errors="ignore")
+    except urllib.error.HTTPError as exc:
+        return exc.code, exc.read().decode("utf-8", errors="ignore")
 
 
 async def _process_raw_key(s3_client, bucket: str, key: str) -> None:
@@ -366,44 +333,6 @@ async def _process_raw_key(s3_client, bucket: str, key: str) -> None:
         return
     if await _is_key_already_processed(key):
         logger.info("SES bridge skipped key=%s reason=already_processed", key)
-        return
-    if settings.inbound_async_pipeline_enabled:
-        if settings.inbound_async_enqueue_via_http:
-            # Legacy path: POST to the HTTP API, which then enqueues to Temporal.
-            # Avoid this when the bridge and API share the same process — the HTTP
-            # endpoint is rate-limited and a burst of keys can trigger 429s.
-            status, response_text = await asyncio.to_thread(_enqueue_raw_key_via_http, bucket, key)
-            if status == 429:
-                # Propagate so the caller can handle/retry rather than silently drop.
-                raise RuntimeError(
-                    f"SES bridge HTTP enqueue rate-limited key={key} — "
-                    "set INBOUND_ASYNC_ENQUEUE_VIA_HTTP=false to use direct Temporal enqueue"
-                )
-            if status >= 400:
-                logger.error(
-                    "SES bridge enqueue failed key=%s status=%s body=%s",
-                    key,
-                    status,
-                    response_text,
-                )
-                return
-            _mark_key_enqueued_in_redis(key)
-            logger.info("SES bridge enqueued key=%s status=%s", key, status)
-        else:
-            # Preferred path: enqueue directly to Temporal, no HTTP hop, no rate-limit exposure.
-            # Lazy import breaks the circular dependency (temporal/queue.py imports ses_bridge).
-            from app.integrations.app_store.email_integration.temporal.queue import (  # noqa: PLC0415
-                enqueue_ses_raw_key,
-            )
-
-            logger.info("SES bridge temporal enqueue start key=%s", key)
-            try:
-                await enqueue_ses_raw_key(bucket, key)
-            except Exception:
-                logger.exception("SES bridge temporal enqueue failed key=%s", key)
-                raise
-            _mark_key_enqueued_in_redis(key)
-            logger.info("SES bridge enqueued key=%s via Temporal directly", key)
         return
 
     logger.info("SES bridge processing key=%s bucket=%s", key, bucket)

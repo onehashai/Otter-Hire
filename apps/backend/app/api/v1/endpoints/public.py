@@ -1,5 +1,3 @@
-# ruff: noqa: E501
-
 import asyncio
 import base64
 import binascii
@@ -13,15 +11,15 @@ import zipfile
 from datetime import datetime, timezone
 from io import BytesIO
 from typing import Optional
-from urllib.parse import unquote_plus
 from urllib.request import urlopen
 from uuid import UUID
 
-import pycountry
-import redis.asyncio as aioredis
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric.padding import PKCS1v15
 from cryptography.x509 import load_pem_x509_certificate
+
+import pycountry
+import redis.asyncio as aioredis
 from fastapi import (
     APIRouter,
     Depends,
@@ -40,7 +38,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.security import verify_access_token
 from app.db.session import get_db
-from app.integrations.app_store.email_integration.temporal.queue import enqueue_ses_raw_key
 from app.models.candidate import Candidate
 from app.models.candidate_document import CandidateDocument
 from app.models.conversation import Conversation
@@ -51,6 +48,7 @@ from app.models.message import Message
 from app.models.org_membership import OrgMembership
 from app.models.organization import Organization, OrgInbox
 from app.models.stage import Stage
+from app.integrations.app_store.email_integration.temporal.queue import enqueue_ses_raw_key
 from app.schemas.public_jobs import (
     InboundEmailPayload,
     PublicJobApplyRequest,
@@ -63,41 +61,6 @@ from app.services.storage import storage_service
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
 logger = logging.getLogger(__name__)
-
-
-def _extract_s3_event_entries(payload: dict) -> list[tuple[str, str]]:
-    entries: list[tuple[str, str]] = []
-    if not isinstance(payload, dict):
-        return entries
-
-    records = payload.get("Records")
-    if isinstance(records, list):
-        for record in records:
-            if not isinstance(record, dict):
-                continue
-            s3_obj = (record.get("s3") or {}) if isinstance(record.get("s3"), dict) else {}
-            bucket = ((s3_obj.get("bucket") or {}).get("name") or "").strip()
-            key = unquote_plus(((s3_obj.get("object") or {}).get("key") or "").strip())
-            if bucket and key:
-                entries.append((bucket, key))
-        if entries:
-            return entries
-
-    # SNS wrapper payload: {"Type":"Notification","Message":"{...s3 event...}"}
-    message_raw = payload.get("Message")
-    if isinstance(message_raw, str) and message_raw.strip():
-        try:
-            nested = json.loads(message_raw)
-        except Exception:
-            nested = None
-        if isinstance(nested, dict):
-            return _extract_s3_event_entries(nested)
-
-    bucket = str(payload.get("bucket") or "").strip()
-    key = unquote_plus(str(payload.get("key") or "").strip())
-    if bucket and key:
-        entries.append((bucket, key))
-    return entries
 
 
 def get_country_name(iso_code: str) -> str:
@@ -707,15 +670,7 @@ def _build_sns_string_to_sign(payload: dict) -> bytes:
         # Subject is optional — only include it when present in the payload
         field_order = ["Message", "MessageId", "Subject", "Timestamp", "TopicArn", "Type"]
     elif msg_type in ("SubscriptionConfirmation", "UnsubscribeConfirmation"):
-        field_order = [
-            "Message",
-            "MessageId",
-            "SubscribeURL",
-            "Timestamp",
-            "Token",
-            "TopicArn",
-            "Type",
-        ]
+        field_order = ["Message", "MessageId", "SubscribeURL", "Timestamp", "Token", "TopicArn", "Type"]
     else:
         return b""
     parts = []
@@ -1311,11 +1266,15 @@ async def _resolve_org_inbox_for_reply_address(
     conv_id = _parse_reply_conversation_id(inbox_address)
     if conv_id is None:
         return None
-    conv_result = await db.execute(select(Conversation).where(Conversation.id == conv_id))
+    conv_result = await db.execute(
+        select(Conversation).where(Conversation.id == conv_id)
+    )
     conv = conv_result.scalar_one_or_none()
     if conv is None:
         return None
-    inbox_result = await db.execute(select(OrgInbox).where(OrgInbox.org_id == conv.org_id))
+    inbox_result = await db.execute(
+        select(OrgInbox).where(OrgInbox.org_id == conv.org_id)
+    )
     org_inbox = inbox_result.scalar_one_or_none()
     if org_inbox is None:
         return None
@@ -1466,7 +1425,9 @@ async def _route_inbound_to_conversation(
     try:
         import redis as _sync_redis
 
-        _r = _sync_redis.Redis.from_url(settings.redis_url, decode_responses=True, socket_timeout=1)
+        _r = _sync_redis.Redis.from_url(
+            settings.redis_url, decode_responses=True, socket_timeout=1
+        )
         _r.publish(
             settings.inbound_events_channel,
             json.dumps(
@@ -1492,6 +1453,65 @@ async def _route_inbound_to_conversation(
     return str(conv.id), str(inbound_msg.id)
 
 
+@router.post("/inbound/s3-event", status_code=200)
+async def inbound_s3_event(request: Request) -> str:
+    """Accept SNS notifications for S3 bucket events (inbound email raw objects).
+
+    When SNS is subscribed to the SES-inbound S3 bucket, AWS POSTs here.
+    - SubscriptionConfirmation: confirm by GETting SubscribeURL.
+    - Notification: Message body is S3 event JSON; enqueue each object to the inbound workflow.
+    Set INBOUND_SNS_TOPIC_ARNS to restrict which topic ARNs are accepted (comma-separated).
+    """
+    try:
+        body = await request.body()
+        payload = json.loads(body)
+    except (json.JSONDecodeError, TypeError):
+        return "ok"
+
+    msg_type = payload.get("Type", "")
+    topic_arn = (payload.get("TopicArn") or "").strip()
+
+    if settings.inbound_sns_topic_arns and not _topic_allowed(topic_arn):
+        logger.warning(
+            "Inbound S3 event webhook: rejected message from unknown topic %s", topic_arn
+        )
+        return "ok"
+
+    if settings.inbound_sns_verify_signature and not _verify_sns_signature(payload):
+        logger.warning("Inbound S3 event webhook: SNS signature verification failed")
+        return "ok"
+
+    if msg_type == "SubscriptionConfirmation":
+        subscribe_url = payload.get("SubscribeURL")
+        if subscribe_url and _confirm_sns_subscription(subscribe_url):
+            logger.info("Inbound S3 event: confirmed SNS subscription")
+        return "ok"
+
+    if msg_type != "Notification":
+        return "ok"
+
+    try:
+        message = json.loads(payload.get("Message") or "{}")
+    except json.JSONDecodeError:
+        return "ok"
+
+    records = message.get("Records") or []
+    for record in records:
+        s3 = (record.get("s3") or {}) if isinstance(record, dict) else {}
+        b = s3.get("bucket")
+        bucket = b.get("name") if isinstance(b, dict) else (b if isinstance(b, str) else None)
+        obj = s3.get("object")
+        key = obj.get("key") if isinstance(obj, dict) else None
+        if not bucket or not key:
+            continue
+        try:
+            await enqueue_ses_raw_key(bucket, key)
+        except Exception:
+            logger.exception("Inbound S3 event: failed to enqueue bucket=%s key=%s", bucket, key)
+
+    return "ok"
+
+
 @router.post("/inbound/email")
 @limiter.limit("30/minute")
 async def ingest_inbound_email(
@@ -1504,6 +1524,13 @@ async def ingest_inbound_email(
         payload = InboundEmailPayload.model_validate_json(raw_body)
     except Exception:
         raise HTTPException(status_code=422, detail="Invalid inbound payload")
+
+    logger.info(
+        "Inbound email received: subject=%r from=%s inbox=%s",
+        (payload.subject or "")[:80],
+        (payload.from_email or "").strip() or "(none)",
+        (payload.inbox_address or "").strip() or "(none)",
+    )
 
     inbox_address = payload.inbox_address.strip().lower()
     inbox_result = await db.execute(select(OrgInbox).where(OrgInbox.inbox_address == inbox_address))
@@ -1691,6 +1718,10 @@ async def ingest_inbound_email(
         await db.commit()
         if conversation_result:
             conv_id, msg_id = conversation_result
+            logger.info(
+                "Inbound email created/updated conversation: conversation_id=%s message_id=%s from=%s subject=%r",
+                conv_id, msg_id, inbound_email.from_email, (inbound_email.subject or "")[:60],
+            )
             return {
                 "status": "ok",
                 "message": "Routed to conversation",
@@ -1699,6 +1730,10 @@ async def ingest_inbound_email(
                 "message_id": msg_id,
                 "org_id": str(org_inbox.org_id),
             }
+        logger.info(
+            "Inbound email did not create conversation (no resume; job-inquiry gate may have failed): from=%s subject=%r",
+            inbound_email.from_email, (inbound_email.subject or "")[:60],
+        )
         return {
             "status": "ok",
             "message": "Ignored: no resume attachment",
@@ -1876,76 +1911,6 @@ async def ingest_inbound_email(
         response["conversation_id"] = conv_id
         response["message_id"] = msg_id
     return response
-
-
-@router.post("/inbound/s3-event")
-@limiter.limit("600/minute")
-async def enqueue_inbound_s3_event(
-    request: Request,
-):
-    if not settings.inbound_async_pipeline_enabled:
-        raise HTTPException(status_code=409, detail="Async inbound pipeline is disabled")
-    raw_body = await request.body()
-    try:
-        payload = json.loads(raw_body.decode("utf-8"))
-    except Exception:
-        raise HTTPException(status_code=422, detail="Invalid event payload")
-
-    message_type = str(payload.get("Type") or "").strip()
-
-    if message_type in ("Notification", "SubscriptionConfirmation"):
-        if settings.inbound_sns_verify_signature:
-            verified = await asyncio.to_thread(_verify_sns_signature, payload)
-            if not verified:
-                raise HTTPException(status_code=403, detail="SNS signature verification failed")
-
-    if message_type == "SubscriptionConfirmation":
-        topic_arn = str(payload.get("TopicArn") or "").strip()
-        if topic_arn and not _topic_allowed(topic_arn):
-            raise HTTPException(status_code=403, detail="SNS topic is not allowed")
-        if settings.inbound_sns_auto_confirm:
-            subscribe_url = str(payload.get("SubscribeURL") or "").strip()
-            if not _confirm_sns_subscription(subscribe_url):
-                raise HTTPException(status_code=502, detail="Failed to confirm SNS subscription")
-        return {"status": "accepted", "message": "subscription_confirmation_received"}
-
-    if message_type == "Notification":
-        topic_arn = str(payload.get("TopicArn") or "").strip()
-        if topic_arn and not _topic_allowed(topic_arn):
-            raise HTTPException(status_code=403, detail="SNS topic is not allowed")
-
-    entries = _extract_s3_event_entries(payload)
-    if not entries:
-        raise HTTPException(status_code=422, detail="No S3 object entries found")
-
-    deduped_entries: list[tuple[str, str]] = []
-    seen: set[tuple[str, str]] = set()
-    for entry in entries:
-        if entry in seen:
-            continue
-        seen.add(entry)
-        deduped_entries.append(entry)
-
-    task_ids: list[str] = []
-    for bucket, key in deduped_entries:
-        logger.info("Inbound SNS enqueue start bucket=%s key=%s", bucket, key)
-        enqueue_result = await enqueue_ses_raw_key(bucket, key)
-        workflow_id = str(enqueue_result["workflow_id"])
-        started = bool(enqueue_result["started"])
-        task_ids.append(workflow_id)
-        logger.info(
-            "Inbound SNS enqueue accepted bucket=%s key=%s workflow_id=%s started=%s",
-            bucket,
-            key,
-            workflow_id,
-            started,
-        )
-
-    return {
-        "status": "accepted",
-        "count": len(task_ids),
-        "task_ids": task_ids,
-    }
 
 
 @router.websocket("/inbound/events/ws")

@@ -10,6 +10,7 @@ import { ConversationList, type Conversation } from "./ConversationList";
 import { MessageThread, type Message } from "./MessageThread";
 import { CandidateContext } from "./CandidateContext";
 import { ComposeModal } from "./components/ComposeMessageModal";
+import { API_BASE_URL } from "@/api/client/client";
 import {
   listConversations,
   getConversation,
@@ -19,6 +20,8 @@ import {
   type MessageRead,
 } from "@/api/conversations";
 import { getCandidateById, type CandidateDetailResponse } from "@/api/candidates";
+import { getMyOrganization } from "@/api/organization/me";
+import type { OrganizationResponse } from "@/api/organization/update";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -73,14 +76,6 @@ function mapMessage(msg: MessageRead, subject?: string): Message {
   };
 }
 
-function isPendingOutboundStatus(status: MessageRead["status"]): boolean {
-  return status === "queued" || status === "sent" || status === "delivered";
-}
-
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
-
 interface ConversationsViewProps {
   initialId?: string;
 }
@@ -95,22 +90,56 @@ export function ConversationsView({ initialId }: ConversationsViewProps) {
   const [selectedId, setSelectedId] = useState<string | null>(initialId ?? null);
   const [activeConversation, setActiveConversation] = useState<ConversationDetail | null>(null);
   const [candidateDetail, setCandidateDetail] = useState<CandidateDetailResponse | null>(null);
+  const [org, setOrg] = useState<OrganizationResponse | null>(null);
   const [threadLoading, setThreadLoading] = useState(false);
 
   // Mobile: track which panel is visible ("list" | "thread")
-  const [mobileView, setMobileView] = useState<"list" | "thread">(initialId ? "thread" : "list");
+  const [mobileView, setMobileView] = useState<"list" | "thread">(
+    initialId ? "thread" : "list",
+  );
 
   const [composeOpen, setComposeOpen] = useState(false);
 
   // Track whether this is the first load so we can auto-select if no initialId
   const didAutoSelect = useRef(false);
 
-  // Short-lived polling to resolve outbound status transitions after sending
+  // Short-lived polling to resolve queued message statuses after sending
   const pendingMessageIds = useRef<Set<string>>(new Set());
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollStartRef = useRef<number>(0);
   const POLL_INTERVAL_MS = 2500;
   const POLL_MAX_MS = 30_000;
+
+  // Live push: WebSocket for message status updates (delivered, read, failed)
+  useEffect(() => {
+    const wsBase = API_BASE_URL.replace(/^http/i, "ws");
+    const socket = new WebSocket(`${wsBase}/public/inbound/events/ws`);
+    socket.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data) as {
+          event?: string;
+          conversation_id?: string;
+          message_id?: string;
+          status?: string;
+        };
+        if (data.event !== "message_status_updated" || !data.conversation_id || !data.message_id || !data.status) return;
+        setActiveConversation((prev) => {
+          if (!prev || prev.id !== data.conversation_id) return prev;
+          return {
+            ...prev,
+            messages: prev.messages.map((m) =>
+              m.id === data.message_id ? { ...m, status: data.status as MessageRead["status"] } : m
+            ),
+          };
+        });
+      } catch {
+        // ignore malformed messages
+      }
+    };
+    return () => {
+      if (socket.readyState === WebSocket.OPEN) socket.close();
+    };
+  }, []);
 
   // Sync selectedId when initialId changes (e.g. URL param changed)
   useEffect(() => {
@@ -154,10 +183,10 @@ export function ConversationsView({ initialId }: ConversationsViewProps) {
             });
             return { ...prev, messages: updatedMessages };
           });
-          // Remove IDs once they reach a terminal status.
+          // Remove IDs that have resolved
           for (const id of pendingMessageIds.current) {
             const fm = conv.messages.find((m) => m.id === id);
-            if (fm && !isPendingOutboundStatus(fm.status)) {
+            if (fm && fm.status !== "queued") {
               pendingMessageIds.current.delete(id);
             }
           }
@@ -174,6 +203,13 @@ export function ConversationsView({ initialId }: ConversationsViewProps) {
   useEffect(() => {
     return () => stopPolling();
   }, [selectedId, stopPolling]);
+
+  // Load current org (for company name in templates)
+  useEffect(() => {
+    getMyOrganization()
+      .then(setOrg)
+      .catch(() => {});
+  }, []);
 
   // Initial list load
   useEffect(() => {
@@ -231,12 +267,12 @@ export function ConversationsView({ initialId }: ConversationsViewProps) {
   const handleSend = async (content: string) => {
     if (!selectedId || !activeConversation) return;
     const msg = await sendMessage(selectedId, { body: content });
-    setActiveConversation((prev) => (prev ? { ...prev, messages: [...prev.messages, msg] } : prev));
-    // Track this outbound message until it reaches a terminal status like read or failed.
-    if (isPendingOutboundStatus(msg.status)) {
-      pendingMessageIds.current.add(msg.id);
-      startPolling(selectedId);
-    }
+    setActiveConversation((prev) =>
+      prev ? { ...prev, messages: [...prev.messages, msg] } : prev,
+    );
+    // Track this queued message and start polling until it resolves
+    pendingMessageIds.current.add(msg.id);
+    startPolling(selectedId);
     void refreshList();
   };
 
@@ -319,7 +355,8 @@ export function ConversationsView({ initialId }: ConversationsViewProps) {
           <MessageThread
             candidateName={activeConversation.candidate.name}
             candidateEmail={activeConversation.candidate.email}
-            jobTitle={activeConversation.subject}
+            jobTitle={candidateDetail?.job_title ?? ""}
+            organizationName={org?.name ?? ""}
             stage={activeConversation.status}
             messages={messages}
             onSend={handleSend}
@@ -359,6 +396,7 @@ export function ConversationsView({ initialId }: ConversationsViewProps) {
         open={composeOpen}
         onOpenChange={setComposeOpen}
         onCreated={handleConversationCreated}
+        organizationName={org?.name ?? ""}
       />
     </div>
   );

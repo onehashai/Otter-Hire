@@ -17,7 +17,7 @@ down_revision: Union[str, None] = "f2b3c4d5e6f7"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
-# Default templates (name, subject, body) — keep in sync with app.templates.defaults
+# Default templates (name, subject, body) — keep in sync with app.templates.email.defaults
 DEFAULT_TEMPLATES = [
     (
         "Application Received",

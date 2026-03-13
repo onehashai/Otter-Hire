@@ -50,30 +50,14 @@ class Settings(BaseSettings):
     google_client_secret: str | None = Field(default=None, validation_alias="GOOGLE_CLIENT_SECRET")
 
     # SMTP credential encryption (Fernet key, base64-encoded 32 bytes)
-    # Generate with Python and Fernet.generate_key().decode().
-    smtp_encryption_key: str | None = Field(
-        default=None,
-        validation_alias="SMTP_ENCRYPTION_KEY",
-    )
+    # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    smtp_encryption_key: str | None = Field(default=None, validation_alias="SMTP_ENCRYPTION_KEY")
 
-    # SES outbound configuration set name — when set, X-SES-Configuration-Set is
-    # added to every outbound email so SES publishes Delivery/Open/Bounce events.
-    ses_configuration_set: str | None = Field(
-        default=None,
-        validation_alias="SES_CONFIGURATION_SET",
-    )
+    # SES outbound configuration set name — when set, X-SES-Configuration-Set is added to every
+    # outbound email so SES publishes Delivery/Open/Bounce events to the SNS topic below.
+    ses_configuration_set: str | None = Field(default=None, validation_alias="SES_CONFIGURATION_SET")
     # Comma-separated SNS topic ARN(s) allowed to post SES event notifications.
-    ses_events_sns_topic_arns: str = Field(
-        default="",
-        validation_alias="SES_EVENTS_SNS_TOPIC_ARNS",
-    )
-
-    # Self-hosted open-tracking pixel (works with any SMTP provider).
-    # EMAIL_TRACKING_SECRET — random secret used to sign per-message tokens.
-    email_tracking_secret: str | None = Field(
-        default=None,
-        validation_alias="EMAIL_TRACKING_SECRET",
-    )
+    ses_events_sns_topic_arns: str = Field(default="", validation_alias="SES_EVENTS_SNS_TOPIC_ARNS")
 
     # Cookie domain (empty for localhost, .domain.com for production)
     cookie_domain: str = Field(default="", validation_alias="COOKIE_DOMAIN")
@@ -113,6 +97,9 @@ class Settings(BaseSettings):
     inbound_webhook_secret: str | None = Field(
         default=None, validation_alias="INBOUND_WEBHOOK_SECRET"
     )
+    inbound_email_domain: str | None = Field(
+        default=None, validation_alias="INBOUND_EMAIL_DOMAIN"
+    )
     inbound_max_attachment_bytes: int = Field(
         default=10 * 1024 * 1024, validation_alias="INBOUND_MAX_ATTACHMENT_BYTES"
     )
@@ -136,12 +123,6 @@ class Settings(BaseSettings):
     )
     inbound_ignored_cleanup_interval_seconds: int = Field(
         default=3600, validation_alias="INBOUND_IGNORED_CLEANUP_INTERVAL_SECONDS"
-    )
-    inbound_async_pipeline_enabled: bool = Field(
-        default=False, validation_alias="INBOUND_ASYNC_PIPELINE_ENABLED"
-    )
-    inbound_async_enqueue_via_http: bool = Field(
-        default=False, validation_alias="INBOUND_ASYNC_ENQUEUE_VIA_HTTP"
     )
     redis_url: str = Field(
         default="redis://redis:6379/0",

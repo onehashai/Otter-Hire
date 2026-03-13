@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import hashlib
+import heapq
 import hmac
 import json
 import logging
@@ -11,10 +12,10 @@ import time
 import urllib.error
 import urllib.request
 from datetime import datetime, timedelta, timezone
-from uuid import UUID
 from email import policy
 from email.parser import BytesParser
 from email.utils import parseaddr
+from uuid import UUID
 
 import boto3
 import redis
@@ -167,6 +168,62 @@ def _mark_key_ignored_in_redis(raw_key: str) -> None:
         r.setex(f"inbound:ignored:{raw_key}", _IGNORED_TTL_SECONDS, "1")
     except Exception:
         logger.exception("SES bridge redis setex ignored failed key=%s", raw_key)
+
+
+def _select_latest_keys_from_s3_objects(
+    objects: list[tuple[str, datetime | None]],
+    limit: int,
+) -> list[tuple[str, datetime | None]]:
+    bounded_limit = max(1, limit)
+    return heapq.nlargest(
+        bounded_limit,
+        objects,
+        key=lambda item: item[1] or datetime.fromtimestamp(0, tz=timezone.utc),
+    )
+
+
+def _list_latest_raw_keys(
+    s3_client,
+    bucket: str,
+    prefix: str,
+    limit: int,
+) -> tuple[list[tuple[str, datetime | None]], int, int, datetime | None]:
+    paginator = s3_client.get_paginator("list_objects_v2")
+    page_iterator = paginator.paginate(
+        Bucket=bucket,
+        Prefix=prefix,
+        PaginationConfig={"PageSize": 1000},
+    )
+
+    pages_scanned = 0
+    objects_seen = 0
+    newest_seen: datetime | None = None
+    latest_objects: list[tuple[str, datetime | None]] = []
+
+    for page in page_iterator:
+        pages_scanned += 1
+        page_objects = [
+            (obj["Key"], obj.get("LastModified")) for obj in page.get("Contents", [])
+        ]
+        if not page_objects:
+            continue
+
+        objects_seen += len(page_objects)
+        page_newest = max(
+            (mtime for _, mtime in page_objects if mtime is not None),
+            default=None,
+        )
+        if page_newest and (newest_seen is None or page_newest > newest_seen):
+            newest_seen = page_newest
+
+        latest_objects.extend(page_objects)
+        latest_objects = _select_latest_keys_from_s3_objects(latest_objects, limit)
+
+    latest_objects.sort(
+        key=lambda item: item[1] or datetime.fromtimestamp(0, tz=timezone.utc),
+        reverse=True,
+    )
+    return latest_objects, pages_scanned, objects_seen, newest_seen
 
 
 async def _is_key_already_processed(raw_key: str) -> bool:
@@ -419,42 +476,21 @@ async def run_ses_raw_bridge_loop(stop_event: asyncio.Event) -> None:
     max_parallel = 10
     while not stop_event.is_set():
         try:
-            # Paginate across all available objects so new keys are not skipped when
-            # the prefix grows beyond a single list_objects_v2 page.
-            keys_with_mtime: list[tuple[str, datetime | None]] = []
-            continuation_token: str | None = None
-            while True:
-                request = {
-                    "Bucket": bucket,
-                    "Prefix": prefix,
-                    "MaxKeys": max(1, settings.ses_raw_bridge_max_keys),
-                }
-                if continuation_token:
-                    request["ContinuationToken"] = continuation_token
-                response = s3_client.list_objects_v2(**request)
-                keys_with_mtime.extend(
-                    (obj["Key"], obj.get("LastModified")) for obj in response.get("Contents", [])
-                )
-                if not response.get("IsTruncated"):
-                    break
-                continuation_token = response.get("NextContinuationToken")
-                if not continuation_token:
-                    break
-
-            # Prioritize latest raw emails first for lower end-to-end latency.
-            keys_with_mtime.sort(
-                key=lambda item: item[1] or datetime.fromtimestamp(0, tz=timezone.utc),
-                reverse=True,
+            keys_with_mtime, pages_scanned, objects_seen, newest_seen = await asyncio.to_thread(
+                _list_latest_raw_keys,
+                s3_client,
+                bucket,
+                prefix,
+                settings.ses_raw_bridge_max_keys,
             )
 
             if keys_with_mtime:
-                newest_seen = keys_with_mtime[0][1]
-                keys_with_mtime = keys_with_mtime[: max(1, settings.ses_raw_bridge_max_keys)]
                 logger.info(
-                    "SES bridge scan bucket=%s prefix=%s keys=%s newest=%s processing=%s",
+                    "SES bridge scan bucket=%s prefix=%s pages=%s seen=%s newest=%s processing=%s",
                     bucket,
                     prefix,
-                    len(keys_with_mtime),
+                    pages_scanned,
+                    objects_seen,
                     newest_seen.isoformat() if newest_seen else None,
                     len(keys_with_mtime),
                 )

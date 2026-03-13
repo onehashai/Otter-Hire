@@ -2,6 +2,10 @@ from __future__ import annotations
 
 import temporalio.exceptions
 
+from app.integrations.app_store.email_integration.ses_bridge import (
+    _clear_key_enqueued_in_redis,
+    _mark_key_enqueued_in_redis,
+)
 from app.integrations.app_store.email_integration.temporal.types import (
     InboundWorkflowInput,
     OutboundWorkflowInput,
@@ -17,6 +21,7 @@ async def enqueue_ses_raw_key(bucket: str, key: str) -> dict[str, str | bool]:
     client = await get_temporal_client()
     workflow_id = f"inbound-{key.replace('/', '-')[:180]}"
     try:
+        _mark_key_enqueued_in_redis(key)
         handle = await client.start_workflow(
             InboundEmailWorkflow.run,
             InboundWorkflowInput(bucket=bucket, key=key),
@@ -27,6 +32,9 @@ async def enqueue_ses_raw_key(bucket: str, key: str) -> dict[str, str | bool]:
     except temporalio.exceptions.WorkflowAlreadyStartedError:
         # SNS can deliver the same S3 event multiple times; workflow already running/completed
         return {"workflow_id": workflow_id, "started": False}
+    except Exception:
+        _clear_key_enqueued_in_redis(key)
+        raise
 
 
 async def enqueue_outbound_email(input_data: OutboundWorkflowInput) -> str:

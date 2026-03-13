@@ -209,8 +209,8 @@ async def send_outbound_email_activity(input_data: OutboundWorkflowInput) -> dic
                 from_email_addr = (cfg.get("from_email") or "").strip()
                 from_name_val = cfg.get("from_name")
             else:
-                from_email_addr = (settings.ses_outbound_from_email or "").strip()
-                from_name_val = (settings.ses_outbound_from_name or "").strip() or None
+                from_email_addr = ""
+                from_name_val = None
 
             if not from_email_addr or "@" not in from_email_addr:
                 await db.execute(

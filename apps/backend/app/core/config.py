@@ -115,6 +115,9 @@ class Settings(BaseSettings):
         default=30, validation_alias="SES_RAW_BRIDGE_POLL_SECONDS"
     )
     ses_raw_bridge_max_keys: int = Field(default=20, validation_alias="SES_RAW_BRIDGE_MAX_KEYS")
+    inbound_sns_fallback_grace_seconds: int = Field(
+        default=120, validation_alias="INBOUND_SNS_FALLBACK_GRACE_SECONDS"
+    )
     inbound_ignored_cleanup_enabled: bool = Field(
         default=True, validation_alias="INBOUND_IGNORED_CLEANUP_ENABLED"
     )

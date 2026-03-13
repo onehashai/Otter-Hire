@@ -36,13 +36,6 @@ async def send_email(
             cfg = outbound_row.config or {}
             from_email = cfg.get("from_email", "")
             from_name = cfg.get("from_name")
-        elif (
-            settings.ses_outbound_from_email
-            and settings.aws_access_key_id
-            and settings.aws_secret_access_key
-        ):
-            from_email = (settings.ses_outbound_from_email or "").strip()
-            from_name = (settings.ses_outbound_from_name or "").strip() or None
         else:
             from_email = ""
             from_name = None

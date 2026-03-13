@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.logging import logger
 from app.templates import EmailContent
+from app.templates.email.candidate_note_mention import build_candidate_note_mention_email
 from app.templates.email.invite import build_invite_email
 from app.templates.email.verification import build_verification_email
 
@@ -35,7 +36,11 @@ async def send_email(
             cfg = outbound_row.config or {}
             from_email = cfg.get("from_email", "")
             from_name = cfg.get("from_name")
-        elif settings.ses_outbound_from_email and settings.aws_access_key_id and settings.aws_secret_access_key:
+        elif (
+            settings.ses_outbound_from_email
+            and settings.aws_access_key_id
+            and settings.aws_secret_access_key
+        ):
             from_email = (settings.ses_outbound_from_email or "").strip()
             from_name = (settings.ses_outbound_from_name or "").strip() or None
         else:
@@ -82,6 +87,33 @@ async def send_invite_email(
         expiry_days=settings.invite_token_expire_days,
     )
     await send_email(to_email, content, fallback_url=invite_url)
+
+
+async def send_candidate_note_mention_email(
+    *,
+    to_email: str,
+    recipient_name: str,
+    author_name: str,
+    candidate_name: str,
+    candidate_url: str,
+    note_excerpt: str,
+    org_id: UUID | None = None,
+    db: AsyncSession | None = None,
+) -> None:
+    content = build_candidate_note_mention_email(
+        recipient_name=recipient_name,
+        author_name=author_name,
+        candidate_name=candidate_name,
+        candidate_url=candidate_url,
+        note_excerpt=note_excerpt,
+    )
+    await send_email(
+        to_email,
+        content,
+        fallback_url=candidate_url,
+        org_id=org_id,
+        db=db,
+    )
 
 
 async def _send_via_mailtrap(
@@ -146,5 +178,3 @@ async def _send_via_zeptomail(to_email: str, subject: str, html_body: str, text_
         response.raise_for_status()
 
     logger.info(f"Email sent to {to_email} via ZeptoMail: {subject}")
-
-

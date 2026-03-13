@@ -9,8 +9,6 @@ import json
 import logging
 import re
 import time
-import urllib.error
-import urllib.request
 from datetime import datetime, timedelta, timezone
 from email import policy
 from email.parser import BytesParser
@@ -18,6 +16,7 @@ from email.utils import parseaddr
 from uuid import UUID
 
 import boto3
+import httpx
 import redis
 from sqlalchemy import delete, select
 
@@ -380,17 +379,18 @@ def _post_to_inbound_api(payload: dict, secret: str) -> tuple[int, str]:
     body = json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
     signature = "sha256=" + hmac.new(secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
 
-    req = urllib.request.Request(
-        f"{settings.inbound_internal_api_base_url.rstrip('/')}/public/inbound/email",
-        data=body,
-        headers={"Content-Type": "application/json", "X-OneHash-Signature": signature},
-        method="POST",
-    )
+    url = f"{settings.inbound_internal_api_base_url.rstrip('/')}/public/inbound/email"
+    headers = {"Content-Type": "application/json", "X-OneHash-Signature": signature}
     try:
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            return resp.status, resp.read().decode("utf-8", errors="ignore")
-    except urllib.error.HTTPError as exc:
-        return exc.code, exc.read().decode("utf-8", errors="ignore")
+        with httpx.Client(timeout=60.0, verify=True) as client:
+            resp = client.post(url, content=body, headers=headers)
+            resp.raise_for_status()
+            return resp.status_code, resp.text
+    except httpx.HTTPStatusError as exc:
+        return exc.response.status_code, exc.response.text
+    except Exception as exc:
+        logger.error("Inbound API call failed: %s", exc)
+        return 500, str(exc)
 
 
 async def _process_raw_key(s3_client, bucket: str, key: str) -> None:

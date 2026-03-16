@@ -20,9 +20,19 @@ async def get_temporal_client() -> Client:
         delay = _CONNECT_INITIAL_DELAY_SECONDS
         while True:
             try:
+                logger.info(
+                    "Temporal client connect start server=%s namespace=%s",
+                    settings.temporal_server_url,
+                    settings.temporal_namespace,
+                )
                 _temporal_client = await Client.connect(
                     settings.temporal_server_url,
                     namespace=settings.temporal_namespace,
+                )
+                logger.info(
+                    "Temporal client connected server=%s namespace=%s",
+                    settings.temporal_server_url,
+                    settings.temporal_namespace,
                 )
                 break
             except Exception:

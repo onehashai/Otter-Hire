@@ -29,6 +29,10 @@ PERMISSIONS = {
     "templates:create",
     "templates:update",
     "templates:delete",
+    "automations:read",
+    "automations:create",
+    "automations:update",
+    "automations:delete",
 }
 
 ROLE_PERMISSIONS: dict[str, set[str]] = {
@@ -59,6 +63,10 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "templates:create",
         "templates:update",
         "templates:delete",
+        "automations:read",
+        "automations:create",
+        "automations:update",
+        "automations:delete",
     },
     "recruiter": {
         "jobs:read",
@@ -74,7 +82,10 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "templates:create",
         "templates:update",
         "templates:delete",
-        # Intentionally no destructive/publishing/system settings permissions for recruiter.
+        "automations:read",
+        "automations:create",
+        "automations:update",
+        "automations:delete",
     },
     "hiring_manager": {
         "jobs:read",

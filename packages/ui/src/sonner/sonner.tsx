@@ -20,6 +20,7 @@ const SonnerToaster = ({ ...props }: ToasterProps) => {
         },
       }}
       {...props}
+      style={{ ...(props.style as React.CSSProperties), zIndex: 99999 }}
     />
   );
 };

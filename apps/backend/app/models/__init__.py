@@ -15,6 +15,7 @@ from app.models.note import Note
 from app.models.org_membership import OrgMembership
 from app.models.integration_credential import IntegrationCredential
 from app.models.organization import Organization, OrgInbox
+from app.models.automation import Automation, AutomationExecution
 from app.models.stage import Stage
 from app.models.user import User
 
@@ -41,4 +42,6 @@ __all__ = [
     "InboundEmailAttachment",
     "Conversation",
     "Message",
+    "Automation",
+    "AutomationExecution",
 ]

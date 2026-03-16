@@ -7,9 +7,9 @@ import {
   Users,
   MessageSquare,
   FileText,
-  // TODO(mvp-nav): Re-enable Reports/Automations/AI Assistant icons after MVP launch.
+  // TODO(mvp-nav): Re-enable Reports/AI Assistant icons after MVP launch.
   // BarChart3,
-  // Zap,
+  Zap,
   // Bot,
   Settings,
   Sun,
@@ -37,8 +37,7 @@ const navItems = [
   // { title: "Interviews", url: "/interviews", icon: Calendar },
   // TODO(mvp-nav): Re-enable Reports in sidebar after MVP launch.
   // { title: "Reports", url: "/reports", icon: BarChart3 },
-  // TODO(mvp-nav): Re-enable Automations in sidebar after MVP launch.
-  // { title: "Automations", url: "/automations", icon: Zap },
+  { title: "Automations", url: "/automations", icon: Zap },
   // TODO(mvp-nav): Re-enable AI Assistant in sidebar after MVP launch.
   // { title: "AI Assistant", url: "/ai-assistant", icon: Bot },
   { title: "Settings", url: "/settings/profile", icon: Settings },

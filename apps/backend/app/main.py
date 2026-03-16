@@ -1,5 +1,5 @@
 import asyncio
-from uuid import uuid4
+from uuid import uuid7
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
@@ -50,7 +50,7 @@ app.include_router(api_router)
 
 @app.middleware("http")
 async def attach_request_id(request: Request, call_next):
-    request.state.request_id = str(uuid4())
+    request.state.request_id = str(uuid7())
     response = await call_next(request)
     response.headers["X-Request-ID"] = request.state.request_id
     return response

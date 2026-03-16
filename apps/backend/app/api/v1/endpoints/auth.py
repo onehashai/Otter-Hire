@@ -2,7 +2,7 @@ import secrets
 import urllib.parse
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
-from uuid import uuid4
+from app.utils.uuid import uuid7
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -16,8 +16,8 @@ from app.core.config import settings
 from app.core.security import create_access_token, hash_password, verify_password
 from app.db.session import get_db
 from app.deps.auth import get_current_user
-from app.templates.email.defaults import create_default_templates_for_org
 from app.services.default_categories import create_default_job_categories_for_org
+from app.templates.email.defaults import create_default_templates_for_org
 from app.models.org_membership import OrgMembership
 from app.models.organization import Organization
 from app.models.user import User
@@ -89,7 +89,7 @@ async def signup(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already in use")
 
     org_name = f"{(payload.name or normalized_email).split('@')[0]} Organization"
-    organization = Organization(id=uuid4(), name=org_name)
+    organization = Organization(id=uuid7(), name=org_name)
     db.add(organization)
     await db.flush()
 
@@ -103,7 +103,7 @@ async def signup(
     )
 
     user = User(
-        id=uuid4(),
+        id=uuid7(),
         org_id=organization.id,
         email=normalized_email,
         hashed_password=hash_password(payload.password),
@@ -647,7 +647,7 @@ async def google_oauth_callback(
         else:
             # New user — create org + user, auto-verified (Google already verified the email)
             org_name = f"{name.split()[0] if name else normalized_email.split('@')[0]} Organization"
-            organization = Organization(id=uuid4(), name=org_name)
+            organization = Organization(id=uuid7(), name=org_name)
             db.add(organization)
             await db.flush()
 
@@ -655,7 +655,7 @@ async def google_oauth_callback(
             create_default_templates_for_org(db, organization.id)
 
             user = User(
-                id=uuid4(),
+                id=uuid7(),
                 org_id=organization.id,
                 email=normalized_email,
                 hashed_password=None,

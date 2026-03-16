@@ -23,6 +23,7 @@ import {
   type JobDetailResponse,
   type JobUpdatePayload,
 } from "@/api";
+import { generateId } from "@/lib/utils";
 
 export type Stage = { name: string; interviewer: string };
 
@@ -405,7 +406,7 @@ export function JobSetupProvider({ children }: { children: ReactNode }) {
     stagesDirtyRef.current = true;
     setState((s) => ({
       ...s,
-      hiringStages: [...s.hiringStages, { id: crypto.randomUUID(), name: "" }],
+      hiringStages: [...s.hiringStages, { id: generateId(), name: "" }],
       hasUnsavedChanges: true,
     }));
   }, []);
@@ -420,7 +421,7 @@ export function JobSetupProvider({ children }: { children: ReactNode }) {
       setState((s) => {
         const nextState = {
           ...s,
-          hiringStages: [...s.hiringStages, { id: crypto.randomUUID(), name: stageName }],
+          hiringStages: [...s.hiringStages, { id: generateId(), name: stageName }],
           hasUnsavedChanges: true,
         };
         nextStateSnapshot = nextState;

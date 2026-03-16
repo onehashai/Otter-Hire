@@ -1,14 +1,16 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Card, CardContent } from "@onehash/ui/card";
 import { Button } from "@onehash/ui/button";
 import { InputField } from "@onehash/ui/input";
 import { Label } from "@onehash/ui/label";
-import { Textarea } from "@onehash/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@onehash/ui/select";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@onehash/ui/tooltip";
 import { X, Zap, Eye } from "lucide-react";
 import { FieldRow } from "./FieldRow";
-import { actionTypes, stages, emailTemplates, type Action } from "./types";
+import { actionTypes, stages, type Action } from "./types";
+import { getTemplates, type TemplateResponse } from "@/api/templates";
 
 export interface ActionsStepProps {
   actions: Action[];
@@ -16,6 +18,9 @@ export interface ActionsStepProps {
   onUpdateActionConfig: (id: string, key: string, value: string) => void;
   onRemoveAction: (id: string) => void;
   onEmailPreviewOpen: () => void;
+  /** When true, the "Move to stage" action is disabled (e.g. multiple jobs with different stages) */
+  moveToStageDisabled?: boolean;
+  moveToStageDisabledReason?: string;
 }
 
 export function ActionsStep({
@@ -24,7 +29,38 @@ export function ActionsStep({
   onUpdateActionConfig,
   onRemoveAction,
   onEmailPreviewOpen,
+  moveToStageDisabled = false,
+  moveToStageDisabledReason,
 }: ActionsStepProps) {
+  const [templates, setTemplates] = useState<TemplateResponse[]>([]);
+  const [templatesLoading, setTemplatesLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setTemplatesLoading(true);
+        const data = await getTemplates();
+        if (!cancelled) {
+          // Prefer email-type templates if categories are used
+          const emailTemplates = data.filter(
+            (t) => !t.category || t.category.toLowerCase() === "email",
+          );
+          setTemplates(emailTemplates.length ? emailTemplates : data);
+        }
+      } catch {
+        // Keep builder usable even if templates API fails.
+      } finally {
+        if (!cancelled) {
+          setTemplatesLoading(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <div className="p-4 space-y-4">
       <p className="text-xs text-muted-foreground">
@@ -69,9 +105,14 @@ export function ActionsStep({
                           <SelectValue placeholder="Select template" />
                         </SelectTrigger>
                         <SelectContent>
-                          {emailTemplates.map((tmpl) => (
+                          {templatesLoading && templates.length === 0 && (
+                            <SelectItem value="__loading" disabled className="text-xs">
+                              Loading templates...
+                            </SelectItem>
+                          )}
+                          {templates.map((tmpl) => (
                             <SelectItem key={tmpl.id} value={tmpl.id} className="text-xs">
-                              {tmpl.label}
+                              {tmpl.name}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -91,21 +132,28 @@ export function ActionsStep({
               )}
               {a.type === "move_stage" && (
                 <FieldRow label="Move to">
-                  <Select
-                    value={a.config.stage ?? ""}
-                    onValueChange={(v) => onUpdateActionConfig(a.id, "stage", v)}
-                  >
-                    <SelectTrigger className="h-8 text-xs">
-                      <SelectValue placeholder="Select stage" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {stages.map((s) => (
-                        <SelectItem key={s} value={s} className="text-xs">
-                          {s}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  {moveToStageDisabled && moveToStageDisabledReason ? (
+                    <p className="text-xs text-amber-600 dark:text-amber-500">
+                      {moveToStageDisabledReason} Switch to a specific job or align stages across
+                      jobs.
+                    </p>
+                  ) : (
+                    <Select
+                      value={a.config.stage ?? ""}
+                      onValueChange={(v) => onUpdateActionConfig(a.id, "stage", v)}
+                    >
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue placeholder="Select stage" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {stages.map((s) => (
+                          <SelectItem key={s} value={s} className="text-xs">
+                            {s}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
                 </FieldRow>
               )}
               {a.type === "assign_recruiter" && (
@@ -141,26 +189,6 @@ export function ActionsStep({
                   />
                 </FieldRow>
               )}
-              {a.type === "add_note" && (
-                <FieldRow label="Note content">
-                  <Textarea
-                    value={a.config.note ?? ""}
-                    onChange={(e) => onUpdateActionConfig(a.id, "note", e.target.value)}
-                    className="text-xs min-h-[50px] resize-none"
-                    placeholder="Note text..."
-                  />
-                </FieldRow>
-              )}
-              {a.type === "send_notification" && (
-                <FieldRow label="Message">
-                  <InputField
-                    value={a.config.message ?? ""}
-                    onChange={(e) => onUpdateActionConfig(a.id, "message", e.target.value)}
-                    className="h-8 text-xs"
-                    placeholder="Notification message"
-                  />
-                </FieldRow>
-              )}
             </CardContent>
           </Card>
         );
@@ -178,18 +206,46 @@ export function ActionsStep({
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
                 {items.map((at) => {
                   const ActionIcon = at.icon;
-                  return (
+                  const isAlreadyAdded = actions.some((a) => a.type === at.id);
+                  const isMoveStageDisabled =
+                    at.id === "move_stage" && moveToStageDisabled;
+                  const isDisabled = isAlreadyAdded || isMoveStageDisabled;
+                  const tooltipReason = isAlreadyAdded
+                    ? "Already added"
+                    : isMoveStageDisabled
+                      ? moveToStageDisabledReason
+                      : null;
+                  const button = (
                     <Button
                       key={at.id}
                       type="button"
                       variant="outline"
                       size="sm"
                       className="h-9 text-xs justify-start gap-1.5"
-                      onClick={() => onAddAction(at.id)}
+                      disabled={isDisabled}
+                      onClick={() => {
+                        if (isDisabled) return;
+                        onAddAction(at.id);
+                      }}
                     >
                       <ActionIcon className="h-3 w-3" /> {at.label}
                     </Button>
                   );
+                  if (isDisabled && tooltipReason) {
+                    return (
+                      <Tooltip key={at.id}>
+                        <TooltipTrigger asChild>
+                          <span className="inline-block cursor-not-allowed">
+                            {button}
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-xs">
+                          {tooltipReason}
+                        </TooltipContent>
+                      </Tooltip>
+                    );
+                  }
+                  return button;
                 })}
               </div>
             </div>

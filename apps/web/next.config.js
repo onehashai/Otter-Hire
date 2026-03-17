@@ -15,11 +15,11 @@ const nextConfig = {
       },
       {
         source: "/temporal-dashboard",
-        destination: `${temporalUiUrl}/temporal-dashboard`,
+        destination: `${temporalUiUrl}/`,
       },
       {
         source: "/temporal-dashboard/:path*",
-        destination: `${temporalUiUrl}/temporal-dashboard/:path*`,
+        destination: `${temporalUiUrl}/:path*`,
       },
     ];
   },

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 
 import temporalio.exceptions
 
@@ -34,6 +35,7 @@ async def enqueue_ses_raw_key(bucket: str, key: str) -> dict[str, str | bool]:
             InboundWorkflowInput(bucket=bucket, key=key),
             id=workflow_id,
             task_queue="email-inbound",
+            task_timeout=timedelta(seconds=60),
         )
         logger.info(
             "Inbound workflow start succeeded bucket=%s key=%s workflow_id=%s",

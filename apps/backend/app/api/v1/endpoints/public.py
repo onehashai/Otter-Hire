@@ -55,6 +55,7 @@ from app.schemas.public_jobs import (
     PublicJobDetail,
     PublicJobListItem,
 )
+from app.services.resume_links import resolve_resume_from_body
 from app.services.storage import storage_service
 
 router = APIRouter()
@@ -1652,6 +1653,52 @@ async def ingest_inbound_email(
                 resume_text = _parse_resume_bytes(safe_name, att.content_type, content)
             except Exception as exc:
                 parse_error = f"Resume parse failed: {exc}"
+
+    # Fallback: when no attachment-based resume was found, try resolving a resume from links in the body
+    if resume_attachment is None:
+        try:
+            link_result = await resolve_resume_from_body(
+                body_text,
+                max_bytes=settings.inbound_max_attachment_bytes,
+                timeout=10.0,
+            )
+        except Exception:
+            link_result = None
+
+        if link_result is not None:
+            filename, content_type, content = link_result
+            safe_name = _guess_file_name(filename, "resume_from_link.bin")
+            # Strict extension allowlist for resumes from links
+            allowed_extensions = {".pdf", ".doc", ".docx"}
+            lower_name = safe_name.lower()
+            ext = ""
+            if "." in lower_name:
+                ext = "." + lower_name.rsplit(".", 1)[-1]
+            if ext not in allowed_extensions:
+                # Do not treat this as a resume; leave flow to behave as "no resume attachment"
+                link_result = None
+            else:
+                storage_key = (
+                    f"orgs/{org_inbox.org_id}/inbox/attachments/{inbound_email.id}/link_{safe_name}"
+                )
+                await storage_service.write_bytes(
+                    storage_key, content, content_type or "application/octet-stream"
+                )
+                resume_attachment = InboundEmailAttachment(
+                    inbound_email_id=inbound_email.id,
+                    filename=safe_name,
+                    content_type=content_type or "application/octet-stream",
+                    storage_key=storage_key,
+                    size_bytes=len(content),
+                    sha256=hashlib.sha256(content).hexdigest(),
+                )
+                db.add(resume_attachment)
+                try:
+                    resume_text = _parse_resume_bytes(safe_name, content_type, content)
+                    has_resume = True
+                    inbound_email.has_resume_attachment = True
+                except Exception as exc:
+                    parse_error = f"Resume parse failed: {exc}"
 
     inbound_from_email = (inbound_email.from_email or "").strip()
     inbound_subject = (inbound_email.subject or "").strip()

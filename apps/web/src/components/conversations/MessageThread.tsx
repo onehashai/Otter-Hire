@@ -77,7 +77,7 @@ function OutboundStatus({ status }: { status: MessageStatus | undefined }) {
       className: "text-muted-foreground",
     },
     read: {
-      icon: <Eye className="h-3 w-3" />,
+      icon: <CheckCheck className="h-3 w-3 text-blue-500" />,
       label: "Read",
       className: "text-blue-500",
     },

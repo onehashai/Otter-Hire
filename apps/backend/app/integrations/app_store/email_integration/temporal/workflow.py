@@ -71,7 +71,7 @@ class InboundEmailWorkflow:
                 "run_id": workflow.info().run_id,
                 "occurred_at": workflow.now().isoformat(),
             },
-            start_to_close_timeout=timedelta(seconds=30),
+            start_to_close_timeout=timedelta(seconds=60),
         )
         workflow.logger.info(
             "Inbound workflow publish completed workflow_id=%s key=%s",

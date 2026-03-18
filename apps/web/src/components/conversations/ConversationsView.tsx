@@ -10,7 +10,7 @@ import { ConversationList, type Conversation } from "./ConversationList";
 import { MessageThread, type Message } from "./MessageThread";
 import { CandidateContext } from "./CandidateContext";
 import { ComposeModal } from "./components/ComposeMessageModal";
-import { API_BASE_URL } from "@/api/client/client";
+import { getWebSocketBaseUrl } from "@/api/client/client";
 import {
   listConversations,
   getConversation,
@@ -110,7 +110,7 @@ export function ConversationsView({ initialId }: ConversationsViewProps) {
 
   // Live push: WebSocket for message status updates (delivered, read, failed)
   useEffect(() => {
-    const wsBase = API_BASE_URL.replace(/^http/i, "ws");
+    const wsBase = getWebSocketBaseUrl();
     const socket = new WebSocket(`${wsBase}/public/inbound/events/ws`);
     socket.onmessage = (event) => {
       try {

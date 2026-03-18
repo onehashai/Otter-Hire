@@ -27,7 +27,7 @@ import {
   type JobListItemResponse,
   type CandidateListItemResponse,
 } from "@/api";
-import { API_BASE_URL } from "@/api/client/client";
+import { getWebSocketBaseUrl } from "@/api/client/client";
 
 const stages = ["Applied", "Screening", "Interview", "Offer", "Hired", "Rejected"];
 const stageOptions = stages.map((s) => ({ value: s, label: s }));
@@ -164,7 +164,7 @@ export default function CandidatesPage() {
 
     const connect = () => {
       if (stopped) return;
-      const wsBase = API_BASE_URL.replace(/^http/i, "ws");
+      const wsBase = getWebSocketBaseUrl();
       socket = new WebSocket(`${wsBase}/public/inbound/events/ws`);
 
       socket.onmessage = (event) => {

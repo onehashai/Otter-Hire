@@ -34,7 +34,7 @@ services:
     environment:
       - TEMPORAL_ADDRESS=temporal:7233
       - TEMPORAL_UI_PORT=8080
-      - TEMPORAL_UI_PUBLIC_PATH=/temporal-dashboard
+      - TEMPORAL_UI_PUBLIC_PATH=/temporal
     ports:
       - "8080:8080"
     depends_on:
@@ -70,7 +70,7 @@ services:
       - ./apps/backend/.env
     environment:
       DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/ats_db
-      CORS_ORIGINS: http://app.localhost.com:3000,http://jobs.localhost.com:3000,http://api.localhost.com:8000
+      CORS_ORIGINS: http://app.localhost.com:3000,http://jobs.localhost.com:3000
       APP_DOMAIN: localhost.com
       APP_SUBDOMAIN: app
       JOBS_SUBDOMAIN: jobs
@@ -103,7 +103,7 @@ services:
       - ./apps/backend/.env
     environment:
       DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/ats_db
-      CORS_ORIGINS: http://app.localhost.com:3000,http://jobs.localhost.com:3000,http://api.localhost.com:8000
+      CORS_ORIGINS: http://app.localhost.com:3000,http://jobs.localhost.com:3000
       APP_DOMAIN: localhost.com
       APP_SUBDOMAIN: app
       JOBS_SUBDOMAIN: jobs
@@ -134,13 +134,12 @@ services:
       dockerfile: apps/web/Dockerfile
     container_name: ats-web
     environment:
-      NEXT_PUBLIC_API_URL: /api
       NEXT_PUBLIC_APP_SUBDOMAIN: app
       NEXT_PUBLIC_JOBS_SUBDOMAIN: jobs
       NEXT_PUBLIC_APP_ROOT_HOST: localhost.com:3000
       NEXT_PUBLIC_INBOUND_EMAIL_DOMAIN: inbound.smartats.in
-      API_INTERNAL_URL: http://backend:8000
-      TEMPORAL_UI_INTERNAL_URL: http://temporal-ui:8080
+      BACKEND_URL: http://backend:8000
+      TEMPORAL_UI_BACKEND_URL: http://temporal-ui:8080
     ports:
       - "3000:3000"
     depends_on:

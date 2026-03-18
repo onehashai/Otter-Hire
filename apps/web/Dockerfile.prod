@@ -3,9 +3,11 @@ FROM node:20-alpine AS deps
 
 WORKDIR /app
 
+# Install UI dependencies
 COPY packages/ui/package.json packages/ui/package-lock.json* ./packages/ui/
 RUN cd packages/ui && npm ci
 
+# Install Web/App dependencies
 COPY apps/web/package.json apps/web/package-lock.json* ./apps/web/
 RUN cd apps/web && npm ci
 
@@ -14,60 +16,48 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
+# Copy node_modules from deps stage
 COPY --from=deps /app/packages/ui/node_modules ./packages/ui/node_modules
 COPY --from=deps /app/apps/web/node_modules ./apps/web/node_modules
 
+# Copy source code
 COPY packages/ui ./packages/ui
 COPY apps/web ./apps/web
 
 WORKDIR /app/apps/web
 
-# NEXT_PUBLIC_* vars are baked into the client JS bundle at build time.
-# Next rewrites are also resolved during build, so internal proxy targets
-# must be present here as well to avoid falling back to localhost defaults.
-ARG NEXT_PUBLIC_API_URL=/api
+# Build-time arguments
 ARG NEXT_PUBLIC_APP_SUBDOMAIN=app
 ARG NEXT_PUBLIC_JOBS_SUBDOMAIN=jobs
 ARG NEXT_PUBLIC_APP_ROOT_HOST
 ARG NEXT_PUBLIC_INBOUND_EMAIL_DOMAIN
-ARG NEXT_PUBLIC_TEMPORAL_UI_URL
-ARG API_INTERNAL_URL
-ARG TEMPORAL_UI_INTERNAL_URL
 
-ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+# Environment variables baked into frontend + rewrites
 ENV NEXT_PUBLIC_APP_SUBDOMAIN=$NEXT_PUBLIC_APP_SUBDOMAIN
 ENV NEXT_PUBLIC_JOBS_SUBDOMAIN=$NEXT_PUBLIC_JOBS_SUBDOMAIN
 ENV NEXT_PUBLIC_APP_ROOT_HOST=$NEXT_PUBLIC_APP_ROOT_HOST
 ENV NEXT_PUBLIC_INBOUND_EMAIL_DOMAIN=$NEXT_PUBLIC_INBOUND_EMAIL_DOMAIN
-ENV NEXT_PUBLIC_TEMPORAL_UI_URL=$NEXT_PUBLIC_TEMPORAL_UI_URL
-ENV API_INTERNAL_URL=$API_INTERNAL_URL
-ENV TEMPORAL_UI_INTERNAL_URL=$TEMPORAL_UI_INTERNAL_URL
 
-# Enables standalone output — only required files are emitted, no full node_modules copy
+# Standalone build
 ENV NEXT_BUILD_STANDALONE=true
 
 RUN npm run build
 
-# ── Stage 3: runtime (lean — standalone output only) ──────────────────────────
+# ── Stage 3: runtime (lean) ────────────────────────────────────────────────────
 FROM node:20-alpine AS runner
 
 WORKDIR /app/apps/web
 
-ARG API_INTERNAL_URL
-ARG TEMPORAL_UI_INTERNAL_URL
-
+# BACKEND_URL provided by ECS task definition at runtime for server-side API calls
 ENV NODE_ENV=production
-ENV API_INTERNAL_URL=$API_INTERNAL_URL
-ENV TEMPORAL_UI_INTERNAL_URL=$TEMPORAL_UI_INTERNAL_URL
 
-# standalone/ contains server.js + minimal node_modules (no full install needed)
+# Copy built standalone app
 COPY --from=builder /app/apps/web/.next/standalone ./
 
-# Static assets must sit next to standalone server
+# Copy static assets
 COPY --from=builder /app/apps/web/.next/static ./.next/static
 COPY --from=builder /app/apps/web/public ./public
 
 EXPOSE 3000
 
-# Standalone emits a self-contained server.js — no npm needed
 CMD ["node", "server.js"]

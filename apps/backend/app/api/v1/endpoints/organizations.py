@@ -8,8 +8,9 @@ from app.core.config import settings
 from app.core.security import create_access_token
 from app.db.session import get_db
 from app.deps.auth import get_current_user, require_active_user
-from app.models.job_category import JobCategory
 from app.models.org_membership import OrgMembership
+from app.services.default_categories import create_default_job_categories_for_org
+from app.templates.email.defaults import create_default_templates_for_org
 from app.models.organization import Organization
 from app.models.user import User
 from app.schemas.organization import (
@@ -220,8 +221,8 @@ async def create_organization(
     db.add(organization)
     await db.flush()
 
-    for cat_name in ["Engineering", "Design", "Marketing", "Sales", "Data", "Operations", "HR"]:
-        db.add(JobCategory(org_id=organization.id, name=cat_name, is_system_default=True))
+    create_default_job_categories_for_org(db, organization.id)
+    create_default_templates_for_org(db, organization.id)
 
     membership = OrgMembership(
         id=uuid7(),

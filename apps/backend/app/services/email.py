@@ -1,19 +1,59 @@
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from uuid import UUID
 
 import httpx
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.logging import logger
-from app.email_templates import EmailContent
-from app.email_templates.invite import build_invite_email
-from app.email_templates.verification import build_verification_email
+from app.templates import EmailContent
+from app.templates.email.invite import build_invite_email
+from app.templates.email.verification import build_verification_email
 
 
 async def send_email(
-    to_email: str, content: EmailContent, *, fallback_url: str | None = None
+    to_email: str,
+    content: EmailContent,
+    *,
+    fallback_url: str | None = None,
+    org_id: UUID | None = None,
+    db: AsyncSession | None = None,
 ) -> None:
+    # Route through SES (org-level identity) when configured
+    if org_id is not None and db is not None:
+        from app.integrations.app_store.email_integration.outbound_service import (
+            get_verified_outbound_for_org,
+        )
+        from app.services.ses_outbound import send_email_via_ses
+
+        outbound_row = await get_verified_outbound_for_org(db, org_id)
+        from_email: str
+        from_name: str | None
+        if outbound_row is not None:
+            cfg = outbound_row.config or {}
+            from_email = cfg.get("from_email", "")
+            from_name = cfg.get("from_name")
+        elif settings.ses_outbound_from_email and settings.aws_access_key_id and settings.aws_secret_access_key:
+            from_email = (settings.ses_outbound_from_email or "").strip()
+            from_name = (settings.ses_outbound_from_name or "").strip() or None
+        else:
+            from_email = ""
+            from_name = None
+
+        if from_email and "@" in from_email:
+            send_email_via_ses(
+                from_email=from_email,
+                from_name=from_name,
+                to_email=to_email,
+                subject=content.subject,
+                text_body=content.text,
+                html_body=content.html,
+            )
+            logger.info("Email sent to %s via SES: %s", to_email, content.subject)
+            return
+
     if settings.is_production:
         await _send_via_zeptomail(to_email, content.subject, content.html, content.text)
     else:
@@ -106,3 +146,5 @@ async def _send_via_zeptomail(to_email: str, subject: str, html_body: str, text_
         response.raise_for_status()
 
     logger.info(f"Email sent to {to_email} via ZeptoMail: {subject}")
+
+

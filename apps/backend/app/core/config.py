@@ -19,6 +19,13 @@ class Settings(BaseSettings):
         return url
 
     is_production: bool = Field(default=False, validation_alias="IS_PRODUCTION")
+
+    # SQLAdmin (local development only — ignored in production)
+    sqladmin_username: str = Field(default="admin", validation_alias="SQLADMIN_USERNAME")
+    sqladmin_password: str = Field(default="admin", validation_alias="SQLADMIN_PASSWORD")
+    sqladmin_secret_key: str = Field(
+        default="sqladmin-dev-secret-change-me", validation_alias="SQLADMIN_SECRET_KEY"
+    )
     cors_origins_raw: str = Field(default="", validation_alias="CORS_ORIGINS")
     jwt_secret_key: str = Field(validation_alias="JWT_SECRET_KEY")
     jwt_algorithm: str = Field(default="HS256", validation_alias="JWT_ALGORITHM")
@@ -27,10 +34,30 @@ class Settings(BaseSettings):
     )
     log_level: str = "INFO"
 
-    # Frontend URL
-    frontend_base_url: str = Field(
-        default="http://localhost:3000", validation_alias="FRONTEND_BASE_URL"
-    )
+    # Domain configuration
+    # APP_DOMAIN     — root domain, e.g. "localhost.com" (dev) or "onehash.ai" (prod)
+    # APP_SUBDOMAIN  — main app subdomain,      e.g. "app"
+    # JOBS_SUBDOMAIN — public job board subdomain, e.g. "jobs"
+    app_domain: str = Field(default="localhost.com", validation_alias="APP_DOMAIN")
+    app_subdomain: str = Field(default="app", validation_alias="APP_SUBDOMAIN")
+    jobs_subdomain: str = Field(default="jobs", validation_alias="JOBS_SUBDOMAIN")
+
+    # Frontend URL — defaults to http://{APP_SUBDOMAIN}.{APP_DOMAIN}:3000 if not set explicitly
+    frontend_base_url: str = Field(default="", validation_alias="FRONTEND_BASE_URL")
+
+    # Google OAuth
+    google_client_id: str | None = Field(default=None, validation_alias="GOOGLE_CLIENT_ID")
+    google_client_secret: str | None = Field(default=None, validation_alias="GOOGLE_CLIENT_SECRET")
+
+    # SMTP credential encryption (Fernet key, base64-encoded 32 bytes)
+    # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    smtp_encryption_key: str | None = Field(default=None, validation_alias="SMTP_ENCRYPTION_KEY")
+
+    # SES outbound configuration set name — when set, X-SES-Configuration-Set is added to every
+    # outbound email so SES publishes Delivery/Open/Bounce events to the SNS topic below.
+    ses_configuration_set: str | None = Field(default=None, validation_alias="SES_CONFIGURATION_SET")
+    # Comma-separated SNS topic ARN(s) allowed to post SES event notifications.
+    ses_events_sns_topic_arns: str = Field(default="", validation_alias="SES_EVENTS_SNS_TOPIC_ARNS")
 
     # Cookie domain (empty for localhost, .domain.com for production)
     cookie_domain: str = Field(default="", validation_alias="COOKIE_DOMAIN")
@@ -70,6 +97,9 @@ class Settings(BaseSettings):
     inbound_webhook_secret: str | None = Field(
         default=None, validation_alias="INBOUND_WEBHOOK_SECRET"
     )
+    inbound_email_domain: str | None = Field(
+        default=None, validation_alias="INBOUND_EMAIL_DOMAIN"
+    )
     inbound_max_attachment_bytes: int = Field(
         default=10 * 1024 * 1024, validation_alias="INBOUND_MAX_ATTACHMENT_BYTES"
     )
@@ -94,12 +124,6 @@ class Settings(BaseSettings):
     inbound_ignored_cleanup_interval_seconds: int = Field(
         default=3600, validation_alias="INBOUND_IGNORED_CLEANUP_INTERVAL_SECONDS"
     )
-    inbound_async_pipeline_enabled: bool = Field(
-        default=False, validation_alias="INBOUND_ASYNC_PIPELINE_ENABLED"
-    )
-    inbound_async_enqueue_via_http: bool = Field(
-        default=False, validation_alias="INBOUND_ASYNC_ENQUEUE_VIA_HTTP"
-    )
     redis_url: str = Field(
         default="redis://redis:6379/0",
         validation_alias="REDIS_URL",
@@ -112,10 +136,6 @@ class Settings(BaseSettings):
         default="default",
         validation_alias="TEMPORAL_NAMESPACE",
     )
-    temporal_task_queue: str = Field(
-        default="inbound",
-        validation_alias="TEMPORAL_TASK_QUEUE",
-    )
     inbound_events_channel: str = Field(
         default="ats:inbound:events", validation_alias="INBOUND_EVENTS_CHANNEL"
     )
@@ -126,6 +146,9 @@ class Settings(BaseSettings):
     inbound_sns_auto_confirm: bool = Field(
         default=True, validation_alias="INBOUND_SNS_AUTO_CONFIRM"
     )
+    inbound_sns_verify_signature: bool = Field(
+        default=False, validation_alias="INBOUND_SNS_VERIFY_SIGNATURE"
+    )
     feature_integrations_app_store_ui: bool = Field(
         default=False, validation_alias="FEATURE_INTEGRATIONS_APP_STORE_UI"
     )
@@ -135,6 +158,29 @@ class Settings(BaseSettings):
     feature_legacy_org_inbox_route_redirect: bool = Field(
         default=False, validation_alias="FEATURE_LEGACY_ORG_INBOX_ROUTE_REDIRECT"
     )
+
+    @property
+    def _scheme(self) -> str:
+        return "https" if self.is_production else "http"
+
+    @property
+    def effective_frontend_base_url(self) -> str:
+        if self.frontend_base_url:
+            return self.frontend_base_url.rstrip("/")
+        port = "" if self.is_production else ":3000"
+        return f"{self._scheme}://{self.app_subdomain}.{self.app_domain}{port}"
+
+    @property
+    def effective_google_redirect_uri(self) -> str | None:
+        """Returns the explicit override if set, otherwise derives from APP_DOMAIN."""
+        if self.app_domain:
+            port = "" if self.is_production else ":8000"
+            return f"{self._scheme}://{self.app_subdomain}.{self.app_domain}{port}/auth/google/callback"
+        return None
+
+    @property
+    def google_oauth_enabled(self) -> bool:
+        return bool(self.google_client_id and self.google_client_secret)
 
     @property
     def cors_origins(self) -> list[str]:

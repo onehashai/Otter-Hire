@@ -5,6 +5,7 @@ from app.core.permissions import require_permission
 from app.db.session import get_db
 from app.integrations.app_store.registry import all_integrations, get_integration_by_slug
 from app.models.user import User
+from app.integrations.app_store.email_integration import outbound_service
 from app.schemas.integrations import (
     IntegrationAppsResponse,
     IntegrationEmailConfigActionResponse,
@@ -12,6 +13,8 @@ from app.schemas.integrations import (
     IntegrationEmailConfigUpsertRequest,
     IntegrationInstalledAppsResponse,
     IntegrationOwnerContext,
+    OutboundConfigResponse,
+    OutboundConfigUpsertRequest,
 )
 
 router = APIRouter(prefix="/integrations", tags=["integrations"])
@@ -108,3 +111,50 @@ async def verify_email_integration_complete(
     if integration is None or not hasattr(integration, "verify_complete"):
         raise HTTPException(status_code=404, detail="Integration not found")
     return await integration.verify_complete(db, _owner_ctx(current_user))
+
+
+@router.post("/email/disconnect")
+async def disconnect_email_integration(
+    current_user: User = Depends(require_permission("org:inbox:manage")),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.integrations.app_store.email_integration import service as email_service
+
+    await email_service.disconnect(db, _owner_ctx(current_user))
+    return {"status": "disconnected", "message": "Email integration disconnected"}
+
+
+# ---------------------------------------------------------------------------
+# Outbound email (domain-only, SES)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/email/outbound/config", response_model=OutboundConfigResponse | None)
+async def get_outbound_config(
+    current_user: User = Depends(require_permission("org:inbox:manage")),
+    db: AsyncSession = Depends(get_db),
+):
+    return await outbound_service.get_outbound_config(db, _owner_ctx(current_user))
+
+
+@router.put("/email/outbound/config", response_model=OutboundConfigResponse)
+async def upsert_outbound_config(
+    body: OutboundConfigUpsertRequest,
+    current_user: User = Depends(require_permission("org:inbox:manage")),
+    db: AsyncSession = Depends(get_db),
+):
+    return await outbound_service.upsert_outbound_config(
+        db,
+        _owner_ctx(current_user),
+        sending_domain=body.sending_domain,
+        from_email=body.from_email,
+        from_name=body.from_name,
+    )
+
+
+@router.delete("/email/outbound/config", status_code=204)
+async def delete_outbound_config(
+    current_user: User = Depends(require_permission("org:inbox:manage")),
+    db: AsyncSession = Depends(get_db),
+):
+    await outbound_service.delete_outbound_config(db, _owner_ctx(current_user))

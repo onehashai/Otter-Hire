@@ -1,0 +1,36 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv
+.venv
+env
+ENV
+*.egg-info
+.pytest_cache
+.mypy_cache
+
+# Environment (don't bake secrets into image)
+.env
+.env.*
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Tests / dev (optional: remove if you need them in image)
+tests
+*.md
+!README.md

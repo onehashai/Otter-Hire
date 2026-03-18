@@ -204,19 +204,19 @@ export const permissionMatrix: {
       },
     ],
   },
-  {
-    category: "Account & Billing",
-    permissions: [
-      {
-        label: "Manage billing",
-        roles: {
-          Admin: false,
-          Recruiter: false,
-          "Hiring Manager": false,
-          Interviewer: false,
-          Employee: false,
-        },
-      },
-    ],
-  },
+  // {
+  //   category: "Account & Billing",
+  //   permissions: [
+  //     {
+  //       label: "Manage billing",
+  //       roles: {
+  //         Admin: false,
+  //         Recruiter: false,
+  //         "Hiring Manager": false,
+  //         Interviewer: false,
+  //         Employee: false,
+  //       },
+  //     },
+  //   ],
+  // },
 ];

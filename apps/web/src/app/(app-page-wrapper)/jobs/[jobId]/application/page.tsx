@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { SelectField } from "@onehash/ui/select";
 import { toast } from "sonner";
+import { generateId } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { useJobSetup } from "../context";
 import { useTranslation } from "react-i18next";
@@ -275,7 +276,7 @@ export default function ApplicationFormPage() {
       setCustomQuestions((prev) => [
         ...prev,
         {
-          id: crypto.randomUUID(),
+          id: generateId(),
           title: qTitle.trim(),
           answerType: qType,
           required: qRequired,

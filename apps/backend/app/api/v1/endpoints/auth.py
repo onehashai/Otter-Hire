@@ -1,9 +1,12 @@
 import secrets
+import urllib.parse
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
-from uuid import uuid4
+from app.utils.uuid import uuid7
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi.responses import RedirectResponse
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy import select
@@ -13,7 +16,8 @@ from app.core.config import settings
 from app.core.security import create_access_token, hash_password, verify_password
 from app.db.session import get_db
 from app.deps.auth import get_current_user
-from app.models.job_category import JobCategory
+from app.services.default_categories import create_default_job_categories_for_org
+from app.templates.email.defaults import create_default_templates_for_org
 from app.models.org_membership import OrgMembership
 from app.models.organization import Organization
 from app.models.user import User
@@ -85,14 +89,12 @@ async def signup(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already in use")
 
     org_name = f"{(payload.name or normalized_email).split('@')[0]} Organization"
-    organization = Organization(id=uuid4(), name=org_name)
+    organization = Organization(id=uuid7(), name=org_name)
     db.add(organization)
     await db.flush()
 
-    # Seed default categories
-    for cat_name in ["Engineering", "Design", "Marketing", "Sales", "Data", "Operations", "HR"]:
-        category = JobCategory(org_id=organization.id, name=cat_name, is_system_default=True)
-        db.add(category)
+    create_default_job_categories_for_org(db, organization.id)
+    create_default_templates_for_org(db, organization.id)
 
     raw_token = secrets.token_urlsafe(32)
     token_hash = sha256(raw_token.encode()).hexdigest()
@@ -101,12 +103,11 @@ async def signup(
     )
 
     user = User(
-        id=uuid4(),
+        id=uuid7(),
         org_id=organization.id,
         email=normalized_email,
         hashed_password=hash_password(payload.password),
         name=payload.name or normalized_email.split("@")[0],
-        role="owner",
         status="active",
         is_verified=False,
         verification_token_hash=token_hash,
@@ -126,7 +127,7 @@ async def signup(
     await db.refresh(user)
     await db.refresh(membership)
 
-    verify_url = f"{settings.frontend_base_url}/verify?token={raw_token}"
+    verify_url = f"{settings.effective_frontend_base_url}/verify?token={raw_token}"
     await send_verification_email(user.email, verify_url)
 
     token = _create_session_token(user, membership)
@@ -150,7 +151,15 @@ async def login(
                 "message": "Email or password is incorrect.",
             },
         )
-    if not user.hashed_password or not verify_password(payload.password, user.hashed_password):
+    if not user.hashed_password:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "code": "AUTH_GOOGLE_ACCOUNT",
+                "message": "This account was created with Google Sign-In. Please use the 'Continue with Google' button.",
+            },
+        )
+    if not verify_password(payload.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={
@@ -266,7 +275,7 @@ async def resend_verification(
         user.verification_token_expires_at = token_expires_at
         await db.commit()
 
-        verify_url = f"{settings.frontend_base_url}/verify?token={raw_token}"
+        verify_url = f"{settings.effective_frontend_base_url}/verify?token={raw_token}"
         await send_verification_email(user.email, verify_url)
 
     return VerifyEmailResponse(ok=True)
@@ -368,7 +377,7 @@ async def accept_invite(
     await db.commit()
     await db.refresh(user)
     await db.refresh(membership)
-    verify_url = f"{settings.frontend_base_url}/verify?token={raw_token}"
+    verify_url = f"{settings.effective_frontend_base_url}/verify?token={raw_token}"
     await send_verification_email(user.email, verify_url)
 
     token = _create_session_token(user, membership)
@@ -454,7 +463,7 @@ async def get_invite_details(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invite not found")
 
     membership, user, org = row
-    account_exists = bool(user.hashed_password)
+    account_exists = bool(user.hashed_password or user.google_id)
     return InviteDetailsResponse(
         org_name=org.name,
         role=membership.role,
@@ -490,6 +499,225 @@ async def decline_invite(
     await db.commit()
 
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+_GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
+_GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
+_GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v3/userinfo"
+_OAUTH_STATE_COOKIE = "oauth_state"
+_OAUTH_STATE_TTL_SECONDS = 600  # 10 minutes
+
+
+@router.get("/google/enabled")
+async def google_oauth_enabled() -> dict:
+    return {"enabled": settings.google_oauth_enabled}
+
+
+@router.get("/google")
+async def google_oauth_redirect(request: Request, response: Response) -> RedirectResponse:
+    if not settings.google_oauth_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Google OAuth is not configured",
+        )
+
+    state_token = secrets.token_urlsafe(32)
+    state_hash = sha256(state_token.encode()).hexdigest()
+
+    callback_uri = settings.effective_google_redirect_uri
+    params = {
+        "client_id": settings.google_client_id,
+        "redirect_uri": callback_uri,
+        "response_type": "code",
+        "scope": "openid email profile",
+        "state": state_token,
+        "access_type": "offline",
+        "prompt": "select_account",
+    }
+    auth_url = f"{_GOOGLE_AUTH_URL}?{urllib.parse.urlencode(params)}"
+
+    redirect = RedirectResponse(url=auth_url, status_code=status.HTTP_302_FOUND)
+    redirect.set_cookie(
+        key=_OAUTH_STATE_COOKIE,
+        value=state_hash,
+        httponly=True,
+        samesite="lax",
+        secure=settings.is_production,
+        max_age=_OAUTH_STATE_TTL_SECONDS,
+        domain=settings.cookie_domain or None,
+    )
+    return redirect
+
+
+@router.get("/google/callback")
+async def google_oauth_callback(
+    request: Request,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+) -> RedirectResponse:
+    error_base = f"{settings.effective_frontend_base_url}/login"
+
+    def _error_redirect(message: str) -> RedirectResponse:
+        params = urllib.parse.urlencode({"oauth_error": message})
+        redir = RedirectResponse(url=f"{error_base}?{params}", status_code=status.HTTP_302_FOUND)
+        redir.delete_cookie(
+            key=_OAUTH_STATE_COOKIE,
+            path="/",
+            domain=settings.cookie_domain or None,
+        )
+        return redir
+
+    code = request.query_params.get("code")
+    state = request.query_params.get("state")
+    error_param = request.query_params.get("error")
+
+    if error_param:
+        return _error_redirect("Google sign-in was cancelled or denied.")
+
+    if not code or not state:
+        return _error_redirect("Invalid OAuth response from Google.")
+
+    # Validate CSRF state
+    stored_state_hash = request.cookies.get(_OAUTH_STATE_COOKIE)
+    if not stored_state_hash or sha256(state.encode()).hexdigest() != stored_state_hash:
+        return _error_redirect("OAuth state mismatch. Please try signing in again.")
+
+    # Exchange code for tokens — must match exactly what was sent to Google
+    callback_uri = settings.effective_google_redirect_uri
+    try:
+        async with httpx.AsyncClient() as client:
+            token_resp = await client.post(
+                _GOOGLE_TOKEN_URL,
+                data={
+                    "code": code,
+                    "client_id": settings.google_client_id,
+                    "client_secret": settings.google_client_secret,
+                    "redirect_uri": callback_uri,
+                    "grant_type": "authorization_code",
+                },
+                timeout=10.0,
+            )
+            if token_resp.status_code != 200:
+                return _error_redirect("Failed to exchange code with Google.")
+
+            access_token = token_resp.json().get("access_token")
+            if not access_token:
+                return _error_redirect("No access token received from Google.")
+
+            userinfo_resp = await client.get(
+                _GOOGLE_USERINFO_URL,
+                headers={"Authorization": f"Bearer {access_token}"},
+                timeout=10.0,
+            )
+            if userinfo_resp.status_code != 200:
+                return _error_redirect("Failed to fetch user info from Google.")
+
+            userinfo = userinfo_resp.json()
+    except httpx.RequestError:
+        return _error_redirect("Network error while contacting Google. Please try again.")
+
+    google_id: str | None = userinfo.get("sub")
+    email: str | None = userinfo.get("email")
+    name: str = userinfo.get("name") or (email.split("@")[0] if email else "User")
+    picture: str | None = userinfo.get("picture")
+
+    if not google_id or not email:
+        return _error_redirect("Google did not return required account information.")
+
+    normalized_email = email.lower()
+    now = datetime.now(timezone.utc)
+
+    # Look up user by google_id first, then by email
+    result = await db.execute(select(User).where(User.google_id == google_id))
+    user = result.scalar_one_or_none()
+
+    if user is None:
+        result = await db.execute(select(User).where(User.email == normalized_email))
+        user = result.scalar_one_or_none()
+
+        if user is not None:
+            # Auto-link: existing password account — attach google_id
+            user.google_id = google_id
+            user.auth_provider = "both" if user.hashed_password else "google"
+            if not user.avatar_url and picture:
+                user.avatar_url = picture
+            await db.commit()
+            await db.refresh(user)
+        else:
+            # New user — create org + user, auto-verified (Google already verified the email)
+            org_name = f"{name.split()[0] if name else normalized_email.split('@')[0]} Organization"
+            organization = Organization(id=uuid7(), name=org_name)
+            db.add(organization)
+            await db.flush()
+
+            create_default_job_categories_for_org(db, organization.id)
+            create_default_templates_for_org(db, organization.id)
+
+            user = User(
+                id=uuid7(),
+                org_id=organization.id,
+                email=normalized_email,
+                hashed_password=None,
+                google_id=google_id,
+                auth_provider="google",
+                name=name,
+                status="active",
+                is_verified=True,
+                verified_at=now,
+                is_onboarded=False,
+                avatar_url=picture,
+            )
+            db.add(user)
+            await db.flush()
+
+            membership = OrgMembership(
+                user_id=user.id,
+                org_id=organization.id,
+                role="owner",
+                status="active",
+            )
+            db.add(membership)
+            await db.commit()
+            await db.refresh(user)
+            await db.refresh(membership)
+
+            session_token = _create_session_token(user, membership)
+            redir = RedirectResponse(
+                url=f"{settings.effective_frontend_base_url}/onboarding",
+                status_code=status.HTTP_302_FOUND,
+            )
+            _set_access_cookie(redir, session_token)
+            redir.delete_cookie(
+                key=_OAUTH_STATE_COOKIE,
+                path="/",
+                domain=settings.cookie_domain or None,
+            )
+            return redir
+
+    # Fetch membership for existing/linked user
+    membership_result = await db.execute(
+        select(OrgMembership)
+        .where(OrgMembership.user_id == user.id, OrgMembership.status == "active")
+        .order_by(OrgMembership.created_at.asc())
+    )
+    membership = membership_result.scalars().first()
+    if membership is None:
+        return _error_redirect("No active organization membership found for this account.")
+
+    dest = (
+        f"{settings.effective_frontend_base_url}/onboarding"
+        if not user.is_onboarded
+        else settings.effective_frontend_base_url
+    )
+    session_token = _create_session_token(user, membership)
+    redir = RedirectResponse(url=dest, status_code=status.HTTP_302_FOUND)
+    _set_access_cookie(redir, session_token)
+    redir.delete_cookie(
+        key=_OAUTH_STATE_COOKIE,
+        path="/",
+        domain=settings.cookie_domain or None,
+    )
+    return redir
 
 
 # MANUAL TESTING CHECKLIST:

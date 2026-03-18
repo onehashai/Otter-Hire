@@ -163,5 +163,14 @@
   "edit_automation_subtitle": "Manage automation details, conditions, and actions.",
   "templates": "Templates",
   "reports_title": "Reports",
-  "reports_subtitle": "View your reports and analytics."
+  "reports_subtitle": "View your reports and analytics.",
+  "conversations_title": "Conversations",
+  "conversations_subtitle": "Manage your conversations.",
+  "templates_title": "Templates",
+  "templates_subtitle": "Create and manage reusable templates for candidate communication and workflows.",
+  "edit_template_title": "Edit Template",
+  "edit_template_subtitle": "Manage template details, subject, and body.",
+  "create_template": "Create Template",
+  "create_template_description": "Enter a name for your new template.",
+  "template_name": "Template Name"
 }

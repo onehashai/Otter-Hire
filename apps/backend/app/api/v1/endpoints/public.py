@@ -11,9 +11,12 @@ import zipfile
 from datetime import datetime, timezone
 from io import BytesIO
 from typing import Optional
-from urllib.parse import unquote_plus
 from urllib.request import urlopen
 from uuid import UUID
+
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric.padding import PKCS1v15
+from cryptography.x509 import load_pem_x509_certificate
 
 import pycountry
 import redis.asyncio as aioredis
@@ -35,15 +38,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.security import verify_access_token
 from app.db.session import get_db
-from app.integrations.app_store.email_integration.temporal.queue import enqueue_ses_raw_key
 from app.models.candidate import Candidate
 from app.models.candidate_document import CandidateDocument
+from app.models.conversation import Conversation
 from app.models.email import InboundEmail, InboundEmailAttachment
 from app.models.job import Job
 from app.models.job_application import JobApplication
+from app.models.message import Message
 from app.models.org_membership import OrgMembership
 from app.models.organization import Organization, OrgInbox
 from app.models.stage import Stage
+from app.integrations.app_store.email_integration.temporal.queue import enqueue_ses_raw_key
 from app.schemas.public_jobs import (
     InboundEmailPayload,
     PublicJobApplyRequest,
@@ -56,41 +61,6 @@ from app.services.storage import storage_service
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
 logger = logging.getLogger(__name__)
-
-
-def _extract_s3_event_entries(payload: dict) -> list[tuple[str, str]]:
-    entries: list[tuple[str, str]] = []
-    if not isinstance(payload, dict):
-        return entries
-
-    records = payload.get("Records")
-    if isinstance(records, list):
-        for record in records:
-            if not isinstance(record, dict):
-                continue
-            s3_obj = (record.get("s3") or {}) if isinstance(record.get("s3"), dict) else {}
-            bucket = ((s3_obj.get("bucket") or {}).get("name") or "").strip()
-            key = unquote_plus(((s3_obj.get("object") or {}).get("key") or "").strip())
-            if bucket and key:
-                entries.append((bucket, key))
-        if entries:
-            return entries
-
-    # SNS wrapper payload: {"Type":"Notification","Message":"{...s3 event...}"}
-    message_raw = payload.get("Message")
-    if isinstance(message_raw, str) and message_raw.strip():
-        try:
-            nested = json.loads(message_raw)
-        except Exception:
-            nested = None
-        if isinstance(nested, dict):
-            return _extract_s3_event_entries(nested)
-
-    bucket = str(payload.get("bucket") or "").strip()
-    key = unquote_plus(str(payload.get("key") or "").strip())
-    if bucket and key:
-        entries.append((bucket, key))
-    return entries
 
 
 def get_country_name(iso_code: str) -> str:
@@ -675,6 +645,75 @@ def _confirm_sns_subscription(subscribe_url: str) -> bool:
         return False
 
 
+# ---------------------------------------------------------------------------
+# SNS message signature verification
+# ---------------------------------------------------------------------------
+
+_SNS_CERT_URL_RE = re.compile(r"^https://sns\.[a-z0-9-]+\.amazonaws\.com/")
+_sns_cert_cache: dict[str, bytes] = {}
+
+
+def _fetch_sns_cert(cert_url: str) -> bytes:
+    """Download and cache the PEM certificate SNS uses to sign messages."""
+    if cert_url in _sns_cert_cache:
+        return _sns_cert_cache[cert_url]
+    with urlopen(cert_url, timeout=10) as resp:
+        pem = resp.read()
+    _sns_cert_cache[cert_url] = pem
+    return pem
+
+
+def _build_sns_string_to_sign(payload: dict) -> bytes:
+    """Reconstruct the canonical string SNS signed, per AWS documentation."""
+    msg_type = payload.get("Type", "")
+    if msg_type == "Notification":
+        # Subject is optional — only include it when present in the payload
+        field_order = ["Message", "MessageId", "Subject", "Timestamp", "TopicArn", "Type"]
+    elif msg_type in ("SubscriptionConfirmation", "UnsubscribeConfirmation"):
+        field_order = ["Message", "MessageId", "SubscribeURL", "Timestamp", "Token", "TopicArn", "Type"]
+    else:
+        return b""
+    parts = []
+    for field in field_order:
+        value = payload.get(field)
+        if value is not None:
+            parts.append(f"{field}\n{value}\n")
+    return "".join(parts).encode("utf-8")
+
+
+def _verify_sns_signature(payload: dict) -> bool:
+    """Verify the RSA signature SNS attaches to every notification.
+
+    Supports SignatureVersion 1 (SHA1) and 2 (SHA256).
+    Returns True only when the signature is cryptographically valid.
+    Returns False on missing fields, a non-AWS cert URL, or any error.
+    """
+    cert_url = str(payload.get("SigningCertURL") or "").strip()
+    signature_b64 = str(payload.get("Signature") or "").strip()
+    sig_version = str(payload.get("SignatureVersion") or "1").strip()
+
+    if not cert_url or not signature_b64:
+        logger.warning("SNS verify skipped: missing SigningCertURL or Signature")
+        return False
+
+    if not _SNS_CERT_URL_RE.match(cert_url):
+        logger.warning("SNS verify rejected: cert URL not from sns.*.amazonaws.com: %s", cert_url)
+        return False
+
+    try:
+        pem = _fetch_sns_cert(cert_url)
+        cert = load_pem_x509_certificate(pem)
+        public_key = cert.public_key()
+        string_to_sign = _build_sns_string_to_sign(payload)
+        signature = base64.b64decode(signature_b64)
+        hash_algo: hashes.HashAlgorithm = hashes.SHA256() if sig_version == "2" else hashes.SHA1()
+        public_key.verify(signature, string_to_sign, PKCS1v15(), hash_algo)
+        return True
+    except Exception:
+        logger.exception("SNS signature verification failed")
+        return False
+
+
 async def get_org_member_id(
     request: Request,
     authorization: Optional[str] = Header(None),
@@ -1090,6 +1129,389 @@ async def apply_public_job(
     )
 
 
+# ---------------------------------------------------------------------------
+# Inbound email helpers
+# ---------------------------------------------------------------------------
+
+# Sender address substrings that indicate non-human / automated senders
+_NO_REPLY_PATTERNS = frozenset(
+    [
+        "noreply",
+        "no-reply",
+        "no_reply",
+        "donotreply",
+        "do-not-reply",
+        "mailer-daemon",
+        "postmaster",
+        "bounce",
+        "notifications",
+        "alerts",
+        "daemon",
+    ]
+)
+
+# For new conversations only: require content to look like a real candidate / job inquiry
+_JOB_APPLICATION_SUBJECT_KEYWORDS = frozenset(
+    [
+        "application",
+        "applying",
+        "apply",
+        "job",
+        "position",
+        "role",
+        "vacancy",
+        "opening",
+        "opportunity",
+        "resume",
+        "cv",
+        "curriculum vitae",
+        "candidacy",
+        "candidate",
+        "hiring",
+        "interest in",
+        "interested in",
+        "cover letter",
+    ]
+)
+_JOB_APPLICATION_BODY_KEYWORDS = frozenset(
+    [
+        "i am applying",
+        "i am interested",
+        "i would like to apply",
+        "please find my",
+        "please find attached",
+        "my resume",
+        "my cv",
+        "my application",
+        "years of experience",
+        "work experience",
+        "i have experience",
+        "i am a",
+        "currently working",
+        "looking for",
+        "job application",
+        "open position",
+        "open role",
+        "cover letter",
+        "dear hiring",
+        "dear recruiter",
+        "to whom it may concern",
+    ]
+)
+
+
+def _looks_like_job_inquiry(payload: "InboundEmailPayload") -> bool:
+    """True if subject/body suggest a real candidate or job inquiry. Used to gate new conversations only."""
+    subject = (payload.subject or "").lower()
+    body = (payload.text_body or "").lower()
+
+    if any(kw in subject for kw in _JOB_APPLICATION_SUBJECT_KEYWORDS):
+        return True
+    if any(kw in body for kw in _JOB_APPLICATION_BODY_KEYWORDS):
+        return True
+    combined = subject + " " + body
+    if sum(1 for kw in _JOB_APPLICATION_SUBJECT_KEYWORDS if kw in combined) >= 2:
+        return True
+    return False
+
+
+def _is_automated_email(payload: "InboundEmailPayload") -> str | None:
+    """Return a reason string if the email should be discarded, else None."""
+    auto_submitted = (payload.auto_submitted or "no").lower()
+    if auto_submitted not in ("no", ""):
+        return f"Auto-Submitted: {payload.auto_submitted}"
+
+    if payload.list_unsubscribe:
+        return "Bulk / mailing-list email (List-Unsubscribe present)"
+
+    if (payload.precedence or "").lower() in ("bulk", "junk", "list"):
+        return f"Bulk mail (Precedence: {payload.precedence})"
+
+    suppress = (payload.x_auto_response_suppress or "").lower()
+    if suppress and suppress != "none":
+        return f"X-Auto-Response-Suppress: {payload.x_auto_response_suppress}"
+
+    from_addr = (payload.from_email or "").lower()
+    if any(p in from_addr for p in _NO_REPLY_PATTERNS):
+        return f"No-reply sender address: {payload.from_email}"
+
+    return None
+
+
+# Matches To/Reply-To addresses like reply+<conversation_id>@inbound.domain
+_REPLY_CONVERSATION_PATTERN = re.compile(
+    r"^reply\+([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})@",
+    re.IGNORECASE,
+)
+
+
+def _parse_reply_conversation_id(inbox_address: str) -> UUID | None:
+    """If inbox_address is reply+<conversation_id>@..., return that UUID else None."""
+    if not inbox_address:
+        return None
+    addr = inbox_address.strip().lower()
+    m = _REPLY_CONVERSATION_PATTERN.match(addr)
+    if not m:
+        return None
+    try:
+        return UUID(m.group(1))
+    except (ValueError, TypeError):
+        return None
+
+
+async def _resolve_org_inbox_for_reply_address(
+    db: "AsyncSession", inbox_address: str
+) -> tuple["OrgInbox", UUID] | None:
+    """When inbox_address is reply+<conv_id>@..., resolve OrgInbox via conversation lookup."""
+    conv_id = _parse_reply_conversation_id(inbox_address)
+    if conv_id is None:
+        return None
+    conv_result = await db.execute(
+        select(Conversation).where(Conversation.id == conv_id)
+    )
+    conv = conv_result.scalar_one_or_none()
+    if conv is None:
+        return None
+    inbox_result = await db.execute(
+        select(OrgInbox).where(OrgInbox.org_id == conv.org_id)
+    )
+    org_inbox = inbox_result.scalar_one_or_none()
+    if org_inbox is None:
+        return None
+    return org_inbox, conv_id
+
+
+async def _route_inbound_to_conversation(
+    db: "AsyncSession",
+    org_inbox: "OrgInbox",
+    payload: "InboundEmailPayload",
+    reply_to_conversation_id: UUID | None = None,
+) -> tuple[str, str] | None:
+    """Attach the inbound email to an existing or new conversation.
+
+    - If reply_to_conversation_id is set (from To: reply+<conv_id>@... or payload): append to that conversation.
+    - Otherwise: create a new conversation (and candidate if new sender).
+
+    Returns ``(conversation_id, message_id)`` if a message was created, else None.
+    Does **not** commit — callers are responsible for flushing/committing.
+    """
+    from app.utils.uuid import uuid7
+
+    org_id: UUID = org_inbox.org_id
+    from_email = (payload.from_email or "").strip().lower()
+    body_text = (payload.text_body or "").strip() or (payload.html_body or "").strip()
+    subject = (payload.subject or "").strip() or "(no subject)"
+    inbox_address = org_inbox.inbox_address
+
+    if not from_email:
+        return None
+
+    conv: Conversation | None = None
+    candidate: Candidate | None = None
+
+    if reply_to_conversation_id is not None:
+        conv_result = await db.execute(
+            select(Conversation).where(
+                Conversation.id == reply_to_conversation_id,
+                Conversation.org_id == org_id,
+            )
+        )
+        conv = conv_result.scalar_one_or_none()
+        if conv is not None:
+            cand_result = await db.execute(
+                select(Candidate).where(Candidate.id == conv.candidate_id)
+            )
+            candidate = cand_result.scalar_one_or_none()
+            if candidate is not None:
+                logger.info(
+                    "Inbound email appended via reply_to_conversation_id=%s from=%s",
+                    conv.id,
+                    from_email,
+                )
+            else:
+                conv = None
+
+    # New conversation path: only accept if content looks like a real candidate (ATS gate)
+    if conv is None:
+        has_resume = any(
+            _is_resume_attachment(att.filename, att.content_type)
+            for att in (payload.attachments or [])
+        )
+        if not has_resume and not _looks_like_job_inquiry(payload):
+            logger.info(
+                "Inbound email skipped (new conversation gate: not candidate/job content) from=%s org_id=%s subject=%r",
+                from_email,
+                org_id,
+                payload.subject,
+            )
+            return None
+
+        cand_result = await db.execute(
+            select(Candidate).where(
+                Candidate.org_id == org_id,
+                func.lower(Candidate.email) == from_email,
+            )
+        )
+        candidate = cand_result.scalar_one_or_none()
+        if candidate is None:
+            display_name = (payload.from_name or "").strip()
+            if not display_name:
+                display_name = from_email.split("@")[0].replace(".", " ").replace("_", " ").title()
+            candidate = Candidate(
+                org_id=org_id,
+                job_id=None,
+                stage_id=None,
+                status="active",
+                name=display_name,
+                email=from_email,
+                phone=None,
+                location=None,
+                profile_links={},
+                source="email_inbound",
+                tags=[],
+            )
+            db.add(candidate)
+            await db.flush()
+            logger.info(
+                "Inbound email created new candidate candidate_id=%s email=%s org_id=%s",
+                candidate.id,
+                from_email,
+                org_id,
+            )
+        now = datetime.now(tz=timezone.utc)
+        conv = Conversation(
+            id=uuid7(),
+            org_id=org_id,
+            candidate_id=candidate.id,
+            job_id=None,
+            subject=subject,
+            channel="email",
+            status="open",
+            last_message_at=now,
+        )
+        db.add(conv)
+        await db.flush()
+        logger.info(
+            "Inbound email created new conversation conversation_id=%s from=%s",
+            conv.id,
+            from_email,
+        )
+    elif conv.status == "closed":
+        conv.status = "open"
+
+    now = datetime.now(tz=timezone.utc)
+    inbound_msg = Message(
+        id=uuid7(),
+        org_id=org_id,
+        conversation_id=conv.id,
+        direction="inbound",
+        sender_type="candidate",
+        sender_user_id=None,
+        from_email=from_email or candidate.email,
+        to_email=inbox_address,
+        body=body_text or "(empty)",
+        html_body=payload.html_body or None,
+        status="received",
+        email_message_id=(payload.message_id or "").strip().strip("<>") or None,
+        in_reply_to=None,
+        created_at=now,
+    )
+    db.add(inbound_msg)
+
+    conv.last_message_at = now
+    await db.flush()
+
+    # Publish a lightweight event so connected WebSocket clients can refresh
+    try:
+        import redis as _sync_redis
+
+        _r = _sync_redis.Redis.from_url(
+            settings.redis_url, decode_responses=True, socket_timeout=1
+        )
+        _r.publish(
+            settings.inbound_events_channel,
+            json.dumps(
+                {
+                    "event_version": 1,
+                    "event": "inbound_message",
+                    "org_id": str(org_id),
+                    "conversation_id": str(conv.id),
+                    "message_id": str(inbound_msg.id),
+                }
+            ),
+        )
+    except Exception:
+        pass  # Non-critical; frontend will refresh on next poll
+
+    logger.info(
+        "Inbound email routed conversation_id=%s message_id=%s org_id=%s from=%s",
+        conv.id,
+        inbound_msg.id,
+        org_id,
+        from_email,
+    )
+    return str(conv.id), str(inbound_msg.id)
+
+
+@router.post("/inbound/s3-event", status_code=200)
+async def inbound_s3_event(request: Request) -> str:
+    """Accept SNS notifications for S3 bucket events (inbound email raw objects).
+
+    When SNS is subscribed to the SES-inbound S3 bucket, AWS POSTs here.
+    - SubscriptionConfirmation: confirm by GETting SubscribeURL.
+    - Notification: Message body is S3 event JSON; enqueue each object to the inbound workflow.
+    Set INBOUND_SNS_TOPIC_ARNS to restrict which topic ARNs are accepted (comma-separated).
+    """
+    try:
+        body = await request.body()
+        payload = json.loads(body)
+    except (json.JSONDecodeError, TypeError):
+        return "ok"
+
+    msg_type = payload.get("Type", "")
+    topic_arn = (payload.get("TopicArn") or "").strip()
+
+    if settings.inbound_sns_topic_arns and not _topic_allowed(topic_arn):
+        logger.warning(
+            "Inbound S3 event webhook: rejected message from unknown topic %s", topic_arn
+        )
+        return "ok"
+
+    if settings.inbound_sns_verify_signature and not _verify_sns_signature(payload):
+        logger.warning("Inbound S3 event webhook: SNS signature verification failed")
+        return "ok"
+
+    if msg_type == "SubscriptionConfirmation":
+        subscribe_url = payload.get("SubscribeURL")
+        if subscribe_url and _confirm_sns_subscription(subscribe_url):
+            logger.info("Inbound S3 event: confirmed SNS subscription")
+        return "ok"
+
+    if msg_type != "Notification":
+        return "ok"
+
+    try:
+        message = json.loads(payload.get("Message") or "{}")
+    except json.JSONDecodeError:
+        return "ok"
+
+    records = message.get("Records") or []
+    for record in records:
+        s3 = (record.get("s3") or {}) if isinstance(record, dict) else {}
+        b = s3.get("bucket")
+        bucket = b.get("name") if isinstance(b, dict) else (b if isinstance(b, str) else None)
+        obj = s3.get("object")
+        key = obj.get("key") if isinstance(obj, dict) else None
+        if not bucket or not key:
+            continue
+        try:
+            await enqueue_ses_raw_key(bucket, key)
+        except Exception:
+            logger.exception("Inbound S3 event: failed to enqueue bucket=%s key=%s", bucket, key)
+
+    return "ok"
+
+
 @router.post("/inbound/email")
 @limiter.limit("30/minute")
 async def ingest_inbound_email(
@@ -1103,11 +1525,33 @@ async def ingest_inbound_email(
     except Exception:
         raise HTTPException(status_code=422, detail="Invalid inbound payload")
 
+    logger.info(
+        "Inbound email received: subject=%r from=%s inbox=%s",
+        (payload.subject or "")[:80],
+        (payload.from_email or "").strip() or "(none)",
+        (payload.inbox_address or "").strip() or "(none)",
+    )
+
     inbox_address = payload.inbox_address.strip().lower()
     inbox_result = await db.execute(select(OrgInbox).where(OrgInbox.inbox_address == inbox_address))
     org_inbox = inbox_result.scalar_one_or_none()
+    reply_to_conv_id: UUID | None = None
+
     if org_inbox is None:
-        raise HTTPException(status_code=404, detail="Inbox configuration not found")
+        # To: reply+<conversation_id>@... → resolve org_inbox via conversation lookup
+        resolved = await _resolve_org_inbox_for_reply_address(db, inbox_address)
+        if resolved is not None:
+            org_inbox, reply_to_conv_id = resolved
+        else:
+            raise HTTPException(status_code=404, detail="Inbox configuration not found")
+    else:
+        # Exact match: still use reply+ conversation id from address or payload
+        reply_to_conv_id = _parse_reply_conversation_id(inbox_address)
+        if reply_to_conv_id is None and getattr(payload, "reply_to_conversation_id", None):
+            try:
+                reply_to_conv_id = UUID(payload.reply_to_conversation_id)
+            except (ValueError, TypeError):
+                pass
 
     secret = org_inbox.secret_hash or settings.inbound_webhook_secret
     if not secret:
@@ -1249,10 +1693,47 @@ async def ingest_inbound_email(
             "org_id": str(org_inbox.org_id),
         }
 
-    if not has_resume or resume_attachment is None:
+    # --- Spam / noise filter ---
+    automated_reason = _is_automated_email(payload)
+    if automated_reason:
         inbound_email.parse_status = "ignored"
-        inbound_email.parse_error = "No resume attachment found"
+        inbound_email.parse_error = f"Automated email skipped: {automated_reason}"
         await db.commit()
+        return {
+            "status": "ok",
+            "message": "Ignored: automated email",
+            "inbound_email_id": str(inbound_email.id),
+            "org_id": str(org_inbox.org_id),
+        }
+
+    # --- Conversation routing (runs for ALL non-automated emails) ---
+    conversation_result = await _route_inbound_to_conversation(
+        db, org_inbox, payload, reply_to_conversation_id=reply_to_conv_id
+    )
+
+    if not has_resume or resume_attachment is None:
+        # No resume — conversation routing (if any) is committed here
+        inbound_email.parse_status = "processed" if conversation_result else "ignored"
+        inbound_email.parse_error = None if conversation_result else "No resume attachment found"
+        await db.commit()
+        if conversation_result:
+            conv_id, msg_id = conversation_result
+            logger.info(
+                "Inbound email created/updated conversation: conversation_id=%s message_id=%s from=%s subject=%r",
+                conv_id, msg_id, inbound_email.from_email, (inbound_email.subject or "")[:60],
+            )
+            return {
+                "status": "ok",
+                "message": "Routed to conversation",
+                "inbound_email_id": str(inbound_email.id),
+                "conversation_id": conv_id,
+                "message_id": msg_id,
+                "org_id": str(org_inbox.org_id),
+            }
+        logger.info(
+            "Inbound email did not create conversation (no resume; job-inquiry gate may have failed): from=%s subject=%r",
+            inbound_email.from_email, (inbound_email.subject or "")[:60],
+        )
         return {
             "status": "ok",
             "message": "Ignored: no resume attachment",
@@ -1384,70 +1865,52 @@ async def ingest_inbound_email(
         )
     parsed_candidate = candidate
 
+    # ------------------------------------------------------------------
+    # Reconcile conversation ownership
+    #
+    # The conversation was routed earlier using the email *sender*
+    # (from_email).  If the resume belongs to a *different* person
+    # (e.g. a recruiter forwarded someone else's CV), we re-link the
+    # conversation to the actual candidate identified in the resume.
+    # This is safe because nothing has been committed yet — both the
+    # conversation write and the resume-candidate write are still in the
+    # same open transaction.
+    # ------------------------------------------------------------------
+    sender_email = (inbound_email.from_email or "").strip().lower()
+    resume_email = (extracted_email or "").strip().lower()
+    is_forwarded_resume = bool(resume_email and resume_email != sender_email)
+
+    if is_forwarded_resume and conversation_result is not None:
+        conv_id_str, _ = conversation_result
+        forwarded_conv = await db.get(Conversation, UUID(conv_id_str))
+        if forwarded_conv is not None:
+            forwarded_conv.candidate_id = parsed_candidate.id
+            logger.info(
+                "Inbound email re-linked conversation to resume candidate "
+                "conv_id=%s sender=%s resume_email=%s candidate_id=%s",
+                conv_id_str,
+                sender_email,
+                resume_email,
+                parsed_candidate.id,
+            )
+
     inbound_email.parsed_candidate_id = parsed_candidate.id
     inbound_email.parse_status = "processed"
     inbound_email.parse_error = None
     await db.commit()
 
-    return {
+    response: dict = {
         "status": "ok",
         "message": "Processed",
         "inbound_email_id": str(inbound_email.id),
         "candidate_id": str(parsed_candidate.id),
         "org_id": str(org_inbox.org_id),
     }
-
-
-@router.post("/inbound/s3-event")
-@limiter.limit("120/minute")
-async def enqueue_inbound_s3_event(
-    request: Request,
-):
-    if not settings.inbound_async_pipeline_enabled:
-        raise HTTPException(status_code=409, detail="Async inbound pipeline is disabled")
-    raw_body = await request.body()
-    try:
-        payload = json.loads(raw_body.decode("utf-8"))
-    except Exception:
-        raise HTTPException(status_code=422, detail="Invalid event payload")
-
-    message_type = str(payload.get("Type") or "").strip()
-    if message_type == "SubscriptionConfirmation":
-        topic_arn = str(payload.get("TopicArn") or "").strip()
-        if topic_arn and not _topic_allowed(topic_arn):
-            raise HTTPException(status_code=403, detail="SNS topic is not allowed")
-        if settings.inbound_sns_auto_confirm:
-            subscribe_url = str(payload.get("SubscribeURL") or "").strip()
-            if not _confirm_sns_subscription(subscribe_url):
-                raise HTTPException(status_code=502, detail="Failed to confirm SNS subscription")
-        return {"status": "accepted", "message": "subscription_confirmation_received"}
-
-    if message_type == "Notification":
-        topic_arn = str(payload.get("TopicArn") or "").strip()
-        if topic_arn and not _topic_allowed(topic_arn):
-            raise HTTPException(status_code=403, detail="SNS topic is not allowed")
-
-    entries = _extract_s3_event_entries(payload)
-    if not entries:
-        raise HTTPException(status_code=422, detail="No S3 object entries found")
-
-    deduped_entries: list[tuple[str, str]] = []
-    seen: set[tuple[str, str]] = set()
-    for entry in entries:
-        if entry in seen:
-            continue
-        seen.add(entry)
-        deduped_entries.append(entry)
-
-    task_ids: list[str] = []
-    for bucket, key in deduped_entries:
-        task_ids.append(await enqueue_ses_raw_key(bucket, key))
-
-    return {
-        "status": "accepted",
-        "count": len(task_ids),
-        "task_ids": task_ids,
-    }
+    if conversation_result:
+        conv_id, msg_id = conversation_result
+        response["conversation_id"] = conv_id
+        response["message_id"] = msg_id
+    return response
 
 
 @router.websocket("/inbound/events/ws")

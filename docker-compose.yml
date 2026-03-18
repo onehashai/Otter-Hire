@@ -70,8 +70,10 @@ services:
       - ./apps/backend/.env
     environment:
       DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/ats_db
-      CORS_ORIGINS: http://app.localhost:3000,http://jobs.localhost:3000,http://api.localhost:8000
-      FRONTEND_BASE_URL: http://app.localhost:3000
+      CORS_ORIGINS: http://app.localhost.com:3000,http://jobs.localhost.com:3000,http://api.localhost.com:8000
+      APP_DOMAIN: localhost.com
+      APP_SUBDOMAIN: app
+      JOBS_SUBDOMAIN: jobs
       COOKIE_DOMAIN: ""
       TEMPORAL_SERVER_URL: temporal:7233
     ports:
@@ -101,8 +103,10 @@ services:
       - ./apps/backend/.env
     environment:
       DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/ats_db
-      CORS_ORIGINS: http://app.localhost:3000,http://jobs.localhost:3000,http://api.localhost:8000
-      FRONTEND_BASE_URL: http://app.localhost:3000
+      CORS_ORIGINS: http://app.localhost.com:3000,http://jobs.localhost.com:3000,http://api.localhost.com:8000
+      APP_DOMAIN: localhost.com
+      APP_SUBDOMAIN: app
+      JOBS_SUBDOMAIN: jobs
       COOKIE_DOMAIN: ""
       INBOUND_INTERNAL_API_BASE_URL: http://backend:8000
       TEMPORAL_SERVER_URL: temporal:7233
@@ -117,9 +121,9 @@ services:
         condition: service_healthy
     volumes:
       - ./apps/backend:/app
-    command: sh -lc "python -m app.workers.inbound_temporal_worker"
+    command: sh -lc "python -m app.workers.worker"
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -f inbound_temporal_worker || exit 1"]
+      test: ["CMD-SHELL", "pgrep -f worker || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -133,7 +137,7 @@ services:
       NEXT_PUBLIC_API_URL: /api
       NEXT_PUBLIC_APP_SUBDOMAIN: app
       NEXT_PUBLIC_JOBS_SUBDOMAIN: jobs
-      NEXT_PUBLIC_APP_ROOT_HOST: localhost:3000
+      NEXT_PUBLIC_APP_ROOT_HOST: localhost.com:3000
       NEXT_PUBLIC_INBOUND_EMAIL_DOMAIN: inbound.smartats.in
       API_INTERNAL_URL: http://backend:8000
       TEMPORAL_UI_INTERNAL_URL: http://temporal-ui:8080

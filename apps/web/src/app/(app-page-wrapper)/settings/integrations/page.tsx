@@ -4,16 +4,13 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Image from "next/image";
 import {
-  getInstalledIntegrationApps,
+  disconnectEmailIntegration,
   getIntegrationApps,
   type IntegrationAppDescriptor,
-  type IntegrationInstalledApp,
 } from "@/api";
-import { EmailIntegrationAppIcon } from "@/features/integrations/app-store/email-integration/EmailIntegrationAppIcon";
-import { EmailIntegrationManager } from "@/features/integrations/app-store/email-integration/EmailIntegrationManager";
+import { EmailIntegrationAppIcon } from "@/features/integrations/email-integration/EmailIntegrationAppIcon";
+import { EmailIntegrationManager } from "@/features/integrations/email-integration/EmailIntegrationManager";
 import { Card, CardContent, CardHeader, CardTitle } from "@onehash/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@onehash/ui/tabs";
-import { Badge } from "@onehash/ui/badge";
 import { Button } from "@onehash/ui/button";
 import {
   Dialog,
@@ -23,6 +20,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@onehash/ui/dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@onehash/ui/tooltip";
+import { CheckCircle2, Settings, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 function IntegrationAppIcon({ slug, name }: { slug: string; name: string }) {
@@ -53,24 +57,36 @@ export default function IntegrationsSettingsPage() {
   const searchParams = useSearchParams();
 
   const [apps, setApps] = useState<IntegrationAppDescriptor[]>([]);
-  const [installedApps, setInstalledApps] = useState<IntegrationInstalledApp[]>([]);
   const [loading, setLoading] = useState(true);
-  const [dialogOpen, setDialogOpen] = useState(false);
+  const [manageDialogOpen, setManageDialogOpen] = useState(false);
+  const [disconnectDialogOpen, setDisconnectDialogOpen] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
 
   const loadCatalog = async () => {
     setLoading(true);
     try {
-      const [appsResp, installedResp] = await Promise.all([
-        getIntegrationApps(),
-        getInstalledIntegrationApps(),
-      ]);
+      const appsResp = await getIntegrationApps();
       setApps(appsResp.items || []);
-      setInstalledApps(installedResp.items || []);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to load integrations";
       toast.error(message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDisconnect = async () => {
+    setDisconnecting(true);
+    try {
+      await disconnectEmailIntegration();
+      toast.success("Email integration disconnected.");
+      setDisconnectDialogOpen(false);
+      await loadCatalog();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to disconnect integration";
+      toast.error(message);
+    } finally {
+      setDisconnecting(false);
     }
   };
 
@@ -80,126 +96,102 @@ export default function IntegrationsSettingsPage() {
 
   useEffect(() => {
     if (searchParams.get("app") === "email-integration") {
-      setDialogOpen(true);
+      setManageDialogOpen(true);
     }
   }, [searchParams]);
 
   return (
-    <>
+    <TooltipProvider>
       <h2 className="text-base md:text-lg font-semibold mb-1">Integrations</h2>
       <p className="text-xs text-muted-foreground mb-4 md:mb-6">
-        App Store for organization integrations and automation.
+        Connect external tools to streamline your hiring workflow.
       </p>
 
-      <Tabs defaultValue="app-store" className="w-full">
-        <TabsList className="h-9 w-full justify-start bg-transparent border-b rounded-none p-0 gap-0 overflow-x-auto no-scrollbar">
-          <TabsTrigger
-            value="app-store"
-            className="rounded-none border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent px-4 text-sm"
-          >
-            App Store
-          </TabsTrigger>
-          <TabsTrigger
-            value="installed"
-            className="rounded-none border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent px-4 text-sm"
-          >
-            Installed Apps
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="app-store" className="mt-6">
-          {loading ? (
-            <div className="text-sm text-muted-foreground">Loading integrations...</div>
-          ) : (
-            <div className="grid gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
-              {apps.length === 0 ? (
-                <Card>
-                  <CardContent className="p-8 text-center text-sm text-muted-foreground">
-                    No apps available.
-                  </CardContent>
-                </Card>
-              ) : null}
-              {apps.map((app) => (
-                <Card key={app.app_id} className="border">
-                  <CardHeader className="pb-2">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-2">
-                        <IntegrationAppIcon slug={app.slug} name={app.name} />
-                        <CardTitle className="text-sm">{app.name}</CardTitle>
-                      </div>
-                      <Badge variant={app.installed ? "default" : "outline"}>
-                        {app.installed ? "Installed" : "Available"}
-                      </Badge>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <p className="text-xs text-muted-foreground min-h-10">{app.description}</p>
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] uppercase text-muted-foreground">
-                        {app.category}
-                      </span>
-                      {app.slug === "email-integration" ? (
-                        <Button
-                          size="sm"
-                          className="text-xs h-8"
-                          onClick={() => setDialogOpen(true)}
-                        >
-                          {app.installed ? "Manage" : "Configure"}
-                        </Button>
-                      ) : (
-                        <Button size="sm" className="text-xs h-8" disabled>
-                          Coming Soon
-                        </Button>
+      {loading ? (
+        <div className="text-sm text-muted-foreground">Loading integrations...</div>
+      ) : apps.length === 0 ? (
+        <Card>
+          <CardContent className="p-8 text-center text-sm text-muted-foreground">
+            No integrations available.
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+          {apps.map((app) => (
+            <Card key={app.app_id} className="flex flex-col">
+              <CardHeader className="pb-3">
+                <div className="flex items-start gap-3">
+                  <IntegrationAppIcon slug={app.slug} name={app.name} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <CardTitle className="text-sm truncate">{app.name}</CardTitle>
+                      {app.installed && (
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
                       )}
                     </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-        </TabsContent>
-
-        <TabsContent value="installed" className="mt-6">
-          {loading ? (
-            <div className="text-sm text-muted-foreground">Loading installed apps...</div>
-          ) : installedApps.length === 0 ? (
-            <Card>
-              <CardContent className="p-8 text-center text-sm text-muted-foreground">
-                No installed apps yet.
+                    <span className="text-[10px] uppercase tracking-wide text-muted-foreground mt-0.5 block">
+                      {app.category}
+                    </span>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="flex flex-col flex-1 gap-4 pt-0">
+                <p className="text-xs text-muted-foreground flex-1">{app.description}</p>
+                {app.slug === "email-integration" ? (
+                  <div className="flex items-center justify-between gap-2">
+                    {app.installed ? (
+                      <>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-8 w-8 p-0"
+                              onClick={() => setManageDialogOpen(true)}
+                            >
+                              <Settings className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Manage</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                              onClick={() => setDisconnectDialogOpen(true)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Disconnect</TooltipContent>
+                        </Tooltip>
+                      </>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="default"
+                        className="text-xs h-8 w-full"
+                        onClick={() => setManageDialogOpen(true)}
+                      >
+                        Connect
+                      </Button>
+                    )}
+                  </div>
+                ) : (
+                  <Button size="sm" variant="outline" className="text-xs h-8 w-full" disabled>
+                    Coming Soon
+                  </Button>
+                )}
               </CardContent>
             </Card>
-          ) : (
-            <div className="grid gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
-              {installedApps.map((app) => (
-                <Card key={app.app_id} className="border">
-                  <CardHeader className="pb-2">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-2">
-                        <IntegrationAppIcon slug={app.slug} name={app.name} />
-                        <CardTitle className="text-sm">{app.name}</CardTitle>
-                      </div>
-                      <Badge>{app.status}</Badge>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <p className="text-xs text-muted-foreground">Slug: {app.slug}</p>
-                    <p className="text-xs text-muted-foreground">
-                      Configured: {app.configured ? "Yes" : "No"}
-                    </p>
-                    {app.slug === "email-integration" ? (
-                      <Button size="sm" className="text-xs h-8" onClick={() => setDialogOpen(true)}>
-                        Manage
-                      </Button>
-                    ) : null}
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-        </TabsContent>
-      </Tabs>
+          ))}
+        </div>
+      )}
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      {/* Manage dialog */}
+      <Dialog open={manageDialogOpen} onOpenChange={setManageDialogOpen}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Email Integration</DialogTitle>
@@ -211,12 +203,45 @@ export default function IntegrationsSettingsPage() {
           <EmailIntegrationManager onChanged={loadCatalog} />
 
           <DialogFooter>
-            <Button type="button" className="text-xs h-8" onClick={() => setDialogOpen(false)}>
+            <Button type="button" className="text-xs h-8" onClick={() => setManageDialogOpen(false)}>
               Close
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </>
+
+      {/* Disconnect confirmation dialog */}
+      <Dialog open={disconnectDialogOpen} onOpenChange={setDisconnectDialogOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Disconnect Email Integration</DialogTitle>
+            <DialogDescription>
+              This will remove the email integration and stop inbound email parsing. This action
+              cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="text-xs h-8"
+              onClick={() => setDisconnectDialogOpen(false)}
+              disabled={disconnecting}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              className="text-xs h-8"
+              onClick={handleDisconnect}
+              disabled={disconnecting}
+            >
+              {disconnecting ? "Disconnecting…" : "Disconnect"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </TooltipProvider>
   );
 }

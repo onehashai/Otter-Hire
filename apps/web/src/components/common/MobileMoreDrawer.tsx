@@ -1,15 +1,17 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { Calendar, Settings, Sun, Moon } from "lucide-react";
+import { MessageSquare, Settings, Sun, Moon } from "lucide-react";
 // TODO(mvp-nav): Re-enable Reports/Automations/AI Assistant icons in mobile drawer after MVP launch.
-// import { BarChart3, Zap, Bot } from "lucide-react";
+// import { Calendar, BarChart3, Zap, Bot } from "lucide-react";
 import { useTheme } from "@/components/common/ThemeProvider";
 import { Separator } from "@onehash/ui/separator";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@onehash/ui/drawer";
 
 const moreItems = [
-  { title: "Interviews", url: "/interviews", icon: Calendar },
+  { title: "Conversations", url: "/conversations", icon: MessageSquare },
+  // TODO(mvp-nav): Re-enable Interviews in mobile drawer post-messaging launch.
+  // { title: "Interviews", url: "/interviews", icon: Calendar },
   // TODO(mvp-nav): Re-enable Reports in mobile drawer after MVP launch.
   // { title: "Reports", url: "/reports", icon: BarChart3 },
   // TODO(mvp-nav): Re-enable Automations in mobile drawer after MVP launch.

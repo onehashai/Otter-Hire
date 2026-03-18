@@ -87,6 +87,12 @@ export function verifyCompleteEmailIntegration(): Promise<IntegrationEmailConfig
     method: "POST",
   });
 }
+
+export function disconnectEmailIntegration(): Promise<{ status: string; message: string }> {
+  return apiFetch<{ status: string; message: string }>("/integrations/email/disconnect", {
+    method: "POST",
+  });
+}
 export type IntegrationOrgInboxResponse = {
   id: string;
   org_id: string;
@@ -108,3 +114,4 @@ export type IntegrationInboxActionResponse = {
   message: string;
   action_url?: string | null;
 };
+

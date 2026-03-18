@@ -218,7 +218,6 @@ async def invite_user(
         email=body.email,
         name=body.name or body.email.split("@")[0],
         hashed_password="",
-        role=body.role.value,
         status="invited",
         is_verified=False,
         is_onboarded=False,

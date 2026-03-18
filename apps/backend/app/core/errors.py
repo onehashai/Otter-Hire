@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from typing import Any
-from uuid import uuid4
+from app.utils.uuid import uuid7
 
 
 @dataclass(frozen=True)
@@ -35,6 +35,6 @@ def make_error_payload(
         code=code,
         message=message,
         details=details,
-        request_id=request_id or str(uuid4()),
+        request_id=request_id or str(uuid7()),
         status_code=status_code,
     )

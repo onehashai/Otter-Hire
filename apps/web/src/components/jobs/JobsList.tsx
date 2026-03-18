@@ -84,6 +84,7 @@ export function JobsList({ jobs }: JobsListProps) {
                 </div>
               </div>
               <div className="flex items-center gap-3 shrink-0">
+                <div className="text-xs">{job.candidate_count} {job.candidate_count === 1 ? t("candidate") : t("candidates")}</div>
                 <Button
                   variant="default"
                   size="sm"
@@ -95,13 +96,6 @@ export function JobsList({ jobs }: JobsListProps) {
                 >
                   View Pipeline
                 </Button>
-                <div className="text-right">
-                  <div className="text-sm font-medium">{job.candidate_count}</div>
-                  <div className="text-[10px] text-muted-foreground">
-                    {job.candidate_count === 1 ? t("candidate") : t("candidates")}
-                  </div>
-                </div>
-                <ChevronRight className={cn("h-4 w-4 text-muted-foreground")} />
               </div>
             </div>
           </CardContent>

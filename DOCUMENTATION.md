@@ -1864,7 +1864,7 @@ All team management operations call real backend endpoints:
 
 **Function**: `send_invite_email(to_email, invite_url, org_name, inviter_name)`
 
-**Template**: `apps/backend/app/email_templates/invite.html`
+**Template**: `apps/backend/app/templates/invite.html`
 
 **Content**:
 - Personalized greeting with inviter name
@@ -2904,7 +2904,6 @@ Active settings routes in code include:
 - `/settings/integrations`
 - `/settings/admin` (super-admin gated UI page)
 - `/settings/categories`
-- `/settings/custom-fields`
 - `/settings/billing`
 - `/settings/team`
 - `/settings/profile`

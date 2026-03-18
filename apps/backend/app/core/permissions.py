@@ -25,6 +25,14 @@ PERMISSIONS = {
     "settings:system",
     "billing:manage",
     "org:inbox:manage",
+    "templates:read",
+    "templates:create",
+    "templates:update",
+    "templates:delete",
+    "automations:read",
+    "automations:create",
+    "automations:update",
+    "automations:delete",
 }
 
 ROLE_PERMISSIONS: dict[str, set[str]] = {
@@ -51,6 +59,14 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "reports:read",
         "settings:system",
         "org:inbox:manage",
+        "templates:read",
+        "templates:create",
+        "templates:update",
+        "templates:delete",
+        "automations:read",
+        "automations:create",
+        "automations:update",
+        "automations:delete",
     },
     "recruiter": {
         "jobs:read",
@@ -62,7 +78,14 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "candidates:feedback",
         "interviews:schedule",
         "interviews:feedback",
-        # Intentionally no destructive/publishing/system settings permissions for recruiter.
+        "templates:read",
+        "templates:create",
+        "templates:update",
+        "templates:delete",
+        "automations:read",
+        "automations:create",
+        "automations:update",
+        "automations:delete",
     },
     "hiring_manager": {
         "jobs:read",

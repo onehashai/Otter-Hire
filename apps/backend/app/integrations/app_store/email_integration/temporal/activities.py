@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timezone
 import base64
 import json
 from urllib.error import URLError
@@ -26,6 +27,10 @@ from app.integrations.app_store.email_integration.temporal.types import (
 from app.core.logging import logger
 from app.models.message import Message
 
+redis_client = redis.Redis.from_url(
+    settings.redis_url,
+    decode_responses=True,
+)
 
 @activity.defn
 async def download_email_activity(input_data: InboundWorkflowInput) -> str:
@@ -168,15 +173,39 @@ async def parse_and_create_candidate_activity(input_data: dict) -> dict:
         raise URLError(f"Inbound API failed status={status} body={response_text}")
     return result
 
-
 @activity.defn
 async def publish_update_activity(event_payload: dict) -> None:
-    event_payload = {
-        "event_version": 1,
-        **event_payload,
-    }
-    redis_client = redis.Redis.from_url(settings.redis_url, decode_responses=True)
-    redis_client.publish(settings.inbound_events_channel, json.dumps(event_payload))
+    try:
+        enriched_payload = {
+            "event_version": 1,
+            "occurred_at": datetime.now(tz=timezone.utc).isoformat(),
+            **event_payload,
+        }
+
+        redis_client.publish(
+            settings.inbound_events_channel,
+            json.dumps(enriched_payload),
+        )
+
+        logger.info(
+            "Published inbound event",
+            extra={
+                "channel": settings.inbound_events_channel,
+                "event": enriched_payload.get("event"),
+                "workflow_id": enriched_payload.get("workflow_id"),
+            },
+        )
+
+    except Exception as e:
+        logger.error(
+            "Failed to publish inbound event",
+            exc_info=True,
+            extra={
+                "event": event_payload.get("event"),
+                "workflow_id": event_payload.get("workflow_id"),
+            },
+        )
+        raise
 
 @activity.defn
 async def send_outbound_email_activity(input_data: OutboundWorkflowInput) -> dict:

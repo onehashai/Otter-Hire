@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from typing import Any
-from uuid import uuid7
+from app.utils.uuid import uuid7
 
 
 @dataclass(frozen=True)

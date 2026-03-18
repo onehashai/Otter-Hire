@@ -1,5 +1,5 @@
 import asyncio
-from uuid import uuid7
+from app.utils.uuid import uuid7
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError

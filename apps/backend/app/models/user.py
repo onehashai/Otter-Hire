@@ -26,7 +26,6 @@ class User(Base):
     google_id = Column(String, nullable=True)
     auth_provider = Column(String, nullable=False, server_default="local")
     name = Column(String, nullable=False)
-    role = Column(String, nullable=False)
     status = Column(String, nullable=False)
     is_verified = Column(Boolean, nullable=False, default=False)
     verified_at = Column(DateTime(timezone=True), nullable=True)
@@ -42,13 +41,6 @@ class User(Base):
     __table_args__ = (
         UniqueConstraint("email", name="uq_users_email"),
         UniqueConstraint("google_id", name="uq_users_google_id"),
-        CheckConstraint(
-            "role IN ("
-            "'owner', 'admin', 'super_admin', 'recruiter', "
-            "'hiring_manager', 'interviewer', 'employee'"
-            ")",
-            name="ck_users_role",
-        ),
         CheckConstraint("status IN ('invited', 'active', 'disabled')", name="ck_users_status"),
         CheckConstraint(
             "auth_provider IN ('local', 'google', 'both')",

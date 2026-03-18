@@ -46,7 +46,6 @@ class InboundEmailWorkflow:
                 "org_id": result.get("org_id"),
                 "workflow_id": workflow.info().workflow_id,
                 "run_id": workflow.info().run_id,
-                "occurred_at": workflow.now().isoformat(),
             },
             start_to_close_timeout=timedelta(seconds=30),
         )

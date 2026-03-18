@@ -50,6 +50,11 @@ export type CandidateOverviewResponse = {
     author_user_id: string;
     author_name: string | null;
     content: string;
+    mentions: Array<{
+      user_id: string;
+      name: string | null;
+      email: string;
+    }>;
     created_at: string;
   }>;
   activities: Array<{
@@ -212,10 +217,16 @@ export async function getCandidateOverview(id: string): Promise<CandidateOvervie
   return apiFetch<CandidateOverviewResponse>(`/candidates/${id}/overview`, { method: "GET" });
 }
 
-export async function addCandidateNote(id: string, content: string): Promise<void> {
+export async function addCandidateNote(
+  id: string,
+  payload: { content: string; mentions?: string[] },
+): Promise<void> {
   await apiFetch(`/candidates/${id}/notes`, {
     method: "POST",
-    body: { content },
+    body: {
+      content: payload.content,
+      mentions: payload.mentions ?? [],
+    },
   });
 }
 

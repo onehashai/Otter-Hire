@@ -11,6 +11,7 @@ from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.models.integration_credential import IntegrationCredential
 
 
@@ -49,9 +50,7 @@ async def set_credential(
     return row
 
 
-async def delete_credential(
-    db: AsyncSession, org_id: UUID, integration_type: str
-) -> bool:
+async def delete_credential(db: AsyncSession, org_id: UUID, integration_type: str) -> bool:
     """Remove credentials for (org_id, integration_type). Returns True if a row was deleted."""
     row = await get_credential(db, org_id, integration_type)
     if row is None:

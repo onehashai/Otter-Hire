@@ -9,8 +9,6 @@ from app.core.security import create_access_token
 from app.db.session import get_db
 from app.deps.auth import get_current_user, require_active_user
 from app.models.org_membership import OrgMembership
-from app.services.default_categories import create_default_job_categories_for_org
-from app.templates.email.defaults import create_default_templates_for_org
 from app.models.organization import Organization
 from app.models.user import User
 from app.schemas.organization import (
@@ -20,8 +18,10 @@ from app.schemas.organization import (
     SwitchOrganizationRequest,
     UpdateOrganizationRequest,
 )
+from app.services.default_categories import create_default_job_categories_for_org
 from app.services.media import ensure_avatar_type, read_upload_with_size_check
 from app.services.storage import storage_service
+from app.templates.email.defaults import create_default_templates_for_org
 from app.utils.uuid import uuid7
 
 router = APIRouter(prefix="/organizations", tags=["organizations"])

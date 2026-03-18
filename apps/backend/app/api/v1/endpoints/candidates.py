@@ -8,6 +8,8 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
+from app.core.config import settings
+from app.core.logging import logger
 from app.core.permissions import require_permission
 from app.db.session import get_db
 from app.models.activity import Activity
@@ -17,6 +19,7 @@ from app.models.feedback import Feedback
 from app.models.interview import Interview
 from app.models.job import Job
 from app.models.note import Note
+from app.models.org_membership import OrgMembership
 from app.models.stage import Stage
 from app.models.user import User
 from app.schemas.candidates import (
@@ -34,6 +37,7 @@ from app.schemas.candidates import (
     CandidateInterviewResponse,
     CandidateListItemResponse,
     CandidateListResponse,
+    CandidateNoteMentionResponse,
     CandidateNoteRequest,
     CandidateNoteResponse,
     CandidateOverviewResponse,
@@ -41,6 +45,7 @@ from app.schemas.candidates import (
     CandidateStatusUpdateRequest,
     CandidateUpdateRequest,
 )
+from app.services.email import send_candidate_note_mention_email
 from app.services.media import ensure_pdf_type, read_upload_with_size_check
 from app.services.storage import storage_service
 from app.utils.uuid import uuid7
@@ -75,6 +80,74 @@ async def _log_activity(
             metadata_=metadata or {},
         )
     )
+
+
+def _serialize_note_mentions(raw_mentions: list[dict] | None) -> list[CandidateNoteMentionResponse]:
+    if not raw_mentions:
+        return []
+    mentions: list[CandidateNoteMentionResponse] = []
+    for mention in raw_mentions:
+        user_id = mention.get("user_id")
+        email = (mention.get("email") or "").strip()
+        if not user_id or not email:
+            continue
+        mentions.append(
+            CandidateNoteMentionResponse(
+                user_id=user_id,
+                name=(mention.get("name") or "").strip() or None,
+                email=email,
+            )
+        )
+    return mentions
+
+
+async def _resolve_note_mentions(
+    db: AsyncSession,
+    *,
+    org_id: UUID,
+    mention_ids: list[UUID],
+) -> list[CandidateNoteMentionResponse]:
+    if not mention_ids:
+        return []
+
+    ordered_ids = list(dict.fromkeys(mention_ids))
+    result = await db.execute(
+        select(User, OrgMembership)
+        .join(OrgMembership, OrgMembership.user_id == User.id)
+        .where(
+            OrgMembership.org_id == org_id,
+            OrgMembership.status == "active",
+            User.id.in_(ordered_ids),
+        )
+    )
+    rows = result.all()
+    by_id = {
+        user.id: CandidateNoteMentionResponse(
+            user_id=user.id,
+            name=user.name,
+            email=user.email,
+        )
+        for user, _membership in rows
+    }
+
+    resolved = [by_id[user_id] for user_id in ordered_ids if user_id in by_id]
+    if len(resolved) != len(ordered_ids):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="One or more tagged users are invalid or inactive",
+        )
+    return resolved
+
+
+def _candidate_note_url(candidate_id: UUID) -> str:
+    return f"{settings.frontend_base_url.rstrip('/')}/candidates/{candidate_id}"
+
+
+def _candidate_note_excerpt(content: str, limit: int = 280) -> str:
+    compact = " ".join(content.split())
+    if len(compact) <= limit:
+        return compact
+    return f"{compact[: limit - 1].rstrip()}…"
 
 
 @router.post("", response_model=CandidateDetailResponse, status_code=status.HTTP_201_CREATED)
@@ -644,6 +717,7 @@ async def get_candidate_overview(
                 author_user_id=note.author_user_id,
                 author_name=author_name,
                 content=note.content,
+                mentions=_serialize_note_mentions(note.mentions),
                 created_at=note.created_at,
             )
             for note, author_name in notes_result.all()
@@ -681,14 +755,33 @@ async def create_candidate_note(
     candidate = candidate_result.scalar_one_or_none()
     if candidate is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Candidate not found")
+    note_content = body.content.strip()
+    if not note_content:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Note content is required",
+        )
 
     note = Note(
         org_id=current_user.org_id,
         candidate_id=candidate.id,
         author_user_id=current_user.id,
-        content=body.content.strip(),
+        content=note_content,
         mentions=[],
     )
+    resolved_mentions = await _resolve_note_mentions(
+        db,
+        org_id=current_user.org_id,
+        mention_ids=list(body.mentions or []),
+    )
+    note.mentions = [
+        {
+            "user_id": str(mention.user_id),
+            "name": mention.name,
+            "email": mention.email,
+        }
+        for mention in resolved_mentions
+    ]
     db.add(note)
     await db.flush()
     await _log_activity(
@@ -697,14 +790,41 @@ async def create_candidate_note(
         candidate_id=candidate.id,
         created_by_user_id=current_user.id,
         activity_type="note_added",
-        metadata={"note_id": str(note.id)},
+        metadata={
+            "note_id": str(note.id),
+            "mentioned_user_ids": [str(mention.user_id) for mention in resolved_mentions],
+        },
     )
     await db.commit()
+    candidate_url = _candidate_note_url(candidate.id)
+    note_excerpt = _candidate_note_excerpt(note.content)
+    for mention in resolved_mentions:
+        if mention.user_id == current_user.id:
+            continue
+        try:
+            await send_candidate_note_mention_email(
+                to_email=mention.email,
+                recipient_name=mention.name or mention.email,
+                author_name=current_user.name,
+                candidate_name=candidate.name,
+                candidate_url=candidate_url,
+                note_excerpt=note_excerpt,
+                org_id=current_user.org_id,
+                db=db,
+            )
+        except Exception:
+            # Note persistence succeeds even when notification delivery fails.
+            logger.exception(
+                "Failed to send candidate note mention email note_id=%s user_id=%s",
+                note.id,
+                mention.user_id,
+            )
     return CandidateNoteResponse(
         id=note.id,
         author_user_id=note.author_user_id,
         author_name=current_user.name,
         content=note.content,
+        mentions=resolved_mentions,
         created_at=note.created_at,
     )
 

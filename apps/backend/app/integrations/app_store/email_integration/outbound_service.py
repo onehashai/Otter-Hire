@@ -50,7 +50,9 @@ async def upsert_outbound_config(
     sending_domain = sending_domain.strip().lower()
     from_email = from_email.strip().lower()
     if not sending_domain or "." not in sending_domain:
-        raise HTTPException(status_code=422, detail="Valid sending domain is required (e.g. company.com)")
+        raise HTTPException(
+            status_code=422, detail="Valid sending domain is required (e.g. company.com)"
+        )
     if not from_email or "@" not in from_email:
         raise HTTPException(status_code=422, detail="Valid from email is required")
     if not from_email.endswith(f"@{sending_domain}"):
@@ -92,7 +94,9 @@ async def delete_outbound_config(db: AsyncSession, owner: IntegrationOwnerContex
     await db.commit()
 
 
-async def get_verified_outbound_for_org(db: AsyncSession, org_id: UUID) -> IntegrationCredential | None:
+async def get_verified_outbound_for_org(
+    db: AsyncSession, org_id: UUID
+) -> IntegrationCredential | None:
     """Returns the org's outbound integration when configured and active (uses org SES identity)."""
     row = await _get_row(db, org_id)
     if row is None or row.status != "active":

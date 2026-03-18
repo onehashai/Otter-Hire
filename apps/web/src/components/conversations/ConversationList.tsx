@@ -105,7 +105,7 @@ export function ConversationList({
               onClick={() => onSelect(c.id)}
               className={cn(
                 "flex items-start gap-2.5 px-3 py-3 cursor-pointer transition-colors border-b border-border/50",
-                selectedId === c.id ? "bg-muted" : "hover:bg-muted/50"
+                selectedId === c.id ? "bg-muted" : "hover:bg-muted/50",
               )}
             >
               <Avatar className="h-8 w-8 mt-0.5 shrink-0">
@@ -121,21 +121,17 @@ export function ConversationList({
                   <span
                     className={cn(
                       "text-xs truncate",
-                      c.unread
-                        ? "font-semibold text-foreground"
-                        : "font-medium text-foreground"
+                      c.unread ? "font-semibold text-foreground" : "font-medium text-foreground",
                     )}
                   >
                     {c.candidateName}
                   </span>
-                  <span className="text-[10px] text-muted-foreground shrink-0">
-                    {c.timestamp}
-                  </span>
+                  <span className="text-[10px] text-muted-foreground shrink-0">{c.timestamp}</span>
                 </div>
                 <p
                   className={cn(
                     "text-[11px] truncate mt-0.5",
-                    c.unread ? "text-foreground font-medium" : "text-muted-foreground"
+                    c.unread ? "text-foreground font-medium" : "text-muted-foreground",
                   )}
                 >
                   {c.lastMessage}

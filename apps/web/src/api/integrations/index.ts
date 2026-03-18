@@ -114,4 +114,3 @@ export type IntegrationInboxActionResponse = {
   message: string;
   action_url?: string | null;
 };
-

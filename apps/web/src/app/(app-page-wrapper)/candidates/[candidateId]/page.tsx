@@ -39,6 +39,7 @@ import {
   getCandidateEvaluation,
   getCandidateInterviews,
   getCandidateOverview,
+  getOrgUsers,
   updateCandidate,
   uploadCandidateDocument,
   type CandidateDetailResponse,
@@ -47,6 +48,7 @@ import {
   type CandidateInterviewResponse,
   type JobListItemResponse,
   type CandidateOverviewResponse,
+  type OrgUserResponse,
 } from "@/api";
 import { toast } from "sonner";
 
@@ -131,6 +133,7 @@ export default function CandidateProfilePage() {
   const [evaluation, setEvaluation] = useState<CandidateEvaluationResponse | null>(null);
   const [documents, setDocuments] = useState<CandidateDocumentResponse[]>([]);
   const [jobs, setJobs] = useState<JobListItemResponse[]>([]);
+  const [orgUsers, setOrgUsers] = useState<OrgUserResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -201,8 +204,11 @@ export default function CandidateProfilePage() {
     let cancelled = false;
     (async () => {
       try {
-        const list = await getJobs();
-        if (!cancelled) setJobs(list);
+        const [jobsList, usersList] = await Promise.all([getJobs(), getOrgUsers()]);
+        if (!cancelled) {
+          setJobs(jobsList);
+          setOrgUsers(usersList);
+        }
       } catch {
         // no-op
       }
@@ -284,14 +290,15 @@ export default function CandidateProfilePage() {
         user: n.author_name ?? "Unknown",
         date: new Date(n.created_at).toLocaleDateString(),
         text: n.content,
+        mentions: n.mentions,
       })),
     };
   }, [candidate, overview, interviews, evaluation, documents]);
 
-  const handleAddNote = async (content: string) => {
+  const handleAddNote = async (content: string, mentions: string[]) => {
     if (!id) return;
     try {
-      await addCandidateNote(id, content);
+      await addCandidateNote(id, { content, mentions });
       const ov = await getCandidateOverview(id);
       setOverview(ov);
       toast.success("Note added");
@@ -460,6 +467,7 @@ export default function CandidateProfilePage() {
                 <OverviewTab
                   timeline={uiCandidate.timeline}
                   notes={uiCandidate.notes}
+                  mentionableUsers={orgUsers}
                   onAddNote={handleAddNote}
                   timelineTitle="Hiring Status Timeline"
                   timelineEmptyText="No hiring status updates yet."

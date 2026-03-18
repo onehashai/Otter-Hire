@@ -2,16 +2,27 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, FileText, MoreHorizontal, Eye, Copy, Trash2, Pencil, ChevronRight } from "lucide-react";
+import {
+  Plus,
+  Search,
+  FileText,
+  MoreHorizontal,
+  Eye,
+  Copy,
+  Trash2,
+  Pencil,
+  Upload,
+} from "lucide-react";
 import { Button } from "@onehash/ui/button";
 import { Badge } from "@onehash/ui/badge";
-import { Card, CardContent } from "@onehash/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@onehash/ui/table";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@onehash/ui/dropdown-menu";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@onehash/ui/select";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,7 +36,6 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { getTemplates, createTemplate, deleteTemplate as deleteTemplateApi } from "@/api/templates";
 import { TemplatePreviewModal } from "./components/TemplatePreviewModal";
-import { cn } from "@/lib/utils";
 
 export interface Template {
   id: string;
@@ -82,6 +92,7 @@ export default function TemplatesList({ searchValue, onSearchChange }: Templates
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
   const [internalSearch, setInternalSearch] = useState("");
+  const [isMobile, setIsMobile] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [previewTemplate, setPreviewTemplate] = useState<Template | null>(null);
   const [deleteTemplate, setDeleteTemplate] = useState<Template | null>(null);
@@ -107,6 +118,13 @@ export default function TemplatesList({ searchValue, onSearchChange }: Templates
       cancelled = true;
     };
   }, [toast]);
+
+  useEffect(() => {
+    const update = () => setIsMobile(window.innerWidth < 768);
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
 
   const filtered = templates.filter((t) => {
     const matchSearch = t.name.toLowerCase().includes(search.toLowerCase());
@@ -152,15 +170,15 @@ export default function TemplatesList({ searchValue, onSearchChange }: Templates
   if (filtered.length === 0) {
     return (
       <>
-        <div className="flex flex-col items-center justify-center py-20 text-center">
-          <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-4">
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <div className="mb-4 rounded-full bg-muted p-3">
             <FileText className="h-6 w-6 text-muted-foreground" />
           </div>
-          <h3 className="text-sm font-medium text-foreground mb-1">No templates yet</h3>
-          <p className="text-sm text-muted-foreground mb-4 max-w-sm">
+          <h3 className="mb-1 text-lg font-semibold text-foreground">No templates yet</h3>
+          <p className="mb-6 max-w-md text-sm text-muted-foreground">
             Create your first template to streamline candidate communication.
           </p>
-          <Button size="sm" onClick={() => router.push("/templates/new")}>
+          <Button onClick={() => router.push("/templates/new")}>
             <Plus className="h-4 w-4 mr-1.5" />
             Create Template
           </Button>
@@ -178,8 +196,8 @@ export default function TemplatesList({ searchValue, onSearchChange }: Templates
             <AlertDialogHeader>
               <AlertDialogTitle>Delete template?</AlertDialogTitle>
               <AlertDialogDescription>
-                This will permanently delete &quot;{deleteTemplate?.name}&quot;. This action cannot be
-                undone.
+                This will permanently delete &quot;{deleteTemplate?.name}&quot;. This action cannot
+                be undone.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -199,61 +217,145 @@ export default function TemplatesList({ searchValue, onSearchChange }: Templates
 
   return (
     <>
-      <div className="space-y-2">
-        {filtered.map((t) => (
-          <Card
-            key={t.id}
-            className="cursor-pointer hover:shadow-sm active:bg-muted/50 transition-all"
-            onClick={() => router.push(`/templates/${t.id}`)}
-          >
-            <CardContent className="p-4 py-3">
-              <div className="flex items-center gap-4">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <h3 className="text-sm font-medium truncate">{t.name}</h3>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                    <span>{t.category}</span>
-                    <span>·</span>
-                    <span>{formatTimeAgo(t.updatedAt)}</span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3 shrink-0">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 shrink-0"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                      <DropdownMenuItem onClick={() => router.push(`/templates/${t.id}`)}>
-                        <Pencil className="h-3.5 w-3.5 mr-2" /> Edit
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => setPreviewTemplate(t)}>
-                        <Eye className="h-3.5 w-3.5 mr-2" /> Preview
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleDuplicate(t)}>
-                        <Copy className="h-3.5 w-3.5 mr-2" /> Duplicate
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => setDeleteTemplate(t)}
-                        className="text-destructive"
-                      >
-                        <Trash2 className="h-3.5 w-3.5 mr-2" /> Delete
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="relative w-full sm:max-w-sm">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search templates..."
+            className="h-10 w-full rounded-md border border-input bg-background pl-9 pr-3 text-sm outline-none ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+            <SelectTrigger className="w-[160px]">
+              <SelectValue placeholder="Category" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Categories</SelectItem>
+              <SelectItem value="Email">Email</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button variant="outline" onClick={() => router.push("/templates/import")}>
+            <Upload className="mr-1.5 h-4 w-4" />
+            Import
+          </Button>
+          <Button onClick={() => router.push("/templates/new")}>
+            <Plus className="mr-1.5 h-4 w-4" />
+            Create
+          </Button>
+        </div>
       </div>
+
+      {isMobile ? (
+        <div className="space-y-3">
+          {filtered.map((t) => (
+            <div key={t.id} className="border border-border rounded-lg p-4 space-y-2">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-sm font-medium text-foreground">{t.name}</p>
+                  <Badge variant="secondary" className="mt-1 text-[10px]">
+                    {t.category}
+                  </Badge>
+                </div>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                      <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => router.push(`/templates/${t.id}`)}>
+                      <Pencil className="h-3.5 w-3.5 mr-2" /> Edit
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setPreviewTemplate(t)}>
+                      <Eye className="h-3.5 w-3.5 mr-2" /> Preview
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleDuplicate(t)}>
+                      <Copy className="h-3.5 w-3.5 mr-2" /> Duplicate
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => setDeleteTemplate(t)}
+                      className="text-destructive"
+                    >
+                      <Trash2 className="h-3.5 w-3.5 mr-2" /> Delete
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+              <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                <span>Updated {t.updatedAt}</span>
+                <span>Used {t.usageCount}×</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="py-12 text-center text-sm text-muted-foreground">
+          No templates match your filters.
+        </div>
+      ) : (
+        <div className="border border-border rounded-lg overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Template Name</TableHead>
+                <TableHead>Category</TableHead>
+                <TableHead>Last Updated</TableHead>
+                <TableHead>Created By</TableHead>
+                <TableHead className="text-right">Usage</TableHead>
+                <TableHead className="w-[50px]" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filtered.map((t) => (
+                <TableRow
+                  key={t.id}
+                  className="cursor-pointer"
+                  onClick={() => router.push(`/templates/${t.id}`)}
+                >
+                  <TableCell className="font-medium">{t.name}</TableCell>
+                  <TableCell>
+                    <Badge variant="secondary" className="text-[10px]">
+                      {t.category}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{t.updatedAt}</TableCell>
+                  <TableCell className="text-muted-foreground">{t.createdBy}</TableCell>
+                  <TableCell className="text-right text-muted-foreground">{t.usageCount}</TableCell>
+                  <TableCell onClick={(e) => e.stopPropagation()}>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => router.push(`/templates/${t.id}`)}>
+                          <Pencil className="h-3.5 w-3.5 mr-2" /> Edit
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setPreviewTemplate(t)}>
+                          <Eye className="h-3.5 w-3.5 mr-2" /> Preview
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleDuplicate(t)}>
+                          <Copy className="h-3.5 w-3.5 mr-2" /> Duplicate
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => setDeleteTemplate(t)}
+                          className="text-destructive"
+                        >
+                          <Trash2 className="h-3.5 w-3.5 mr-2" /> Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
 
       {previewTemplate && (
         <TemplatePreviewModal

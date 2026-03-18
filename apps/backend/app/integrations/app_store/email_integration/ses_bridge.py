@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import hashlib
+import heapq
 import hmac
 import json
 import logging
@@ -11,10 +12,10 @@ import time
 import urllib.error
 import urllib.request
 from datetime import datetime, timedelta, timezone
-from uuid import UUID
 from email import policy
 from email.parser import BytesParser
 from email.utils import parseaddr
+from uuid import UUID
 
 import boto3
 import redis
@@ -120,8 +121,8 @@ def _extract_text_and_attachments(raw_email: bytes) -> dict:
     }
 
 
-_ENQUEUED_TTL_SECONDS = 86400       # 24h  – covers workflow execution time
-_IGNORED_TTL_SECONDS = 2592000      # 30d  – covers ignored emails until S3 lifecycle removes them
+_ENQUEUED_TTL_SECONDS = 86400  # 24h  – covers workflow execution time
+_IGNORED_TTL_SECONDS = 2592000  # 30d  – covers ignored emails until S3 lifecycle removes them
 
 
 def _redis_client() -> redis.Redis:
@@ -138,8 +139,7 @@ def _is_key_enqueued_in_redis(raw_key: str) -> bool:
     try:
         r = _redis_client()
         return bool(
-            r.exists(f"inbound:enqueued:{raw_key}")
-            or r.exists(f"inbound:ignored:{raw_key}")
+            r.exists(f"inbound:enqueued:{raw_key}") or r.exists(f"inbound:ignored:{raw_key}")
         )
     except Exception:
         logger.exception("SES bridge redis exists failed key=%s", raw_key)
@@ -155,6 +155,15 @@ def _mark_key_enqueued_in_redis(raw_key: str) -> None:
         logger.exception("SES bridge redis setex failed key=%s", raw_key)
 
 
+def _clear_key_enqueued_in_redis(raw_key: str) -> None:
+    """Clear the temporary enqueue marker so fallback polling can retry the key."""
+    try:
+        r = _redis_client()
+        r.delete(f"inbound:enqueued:{raw_key}")
+    except Exception:
+        logger.exception("SES bridge redis delete failed key=%s", raw_key)
+
+
 def _mark_key_ignored_in_redis(raw_key: str) -> None:
     """Permanently mark a key as ignored so the polling loop never re-enqueues it.
 
@@ -167,6 +176,60 @@ def _mark_key_ignored_in_redis(raw_key: str) -> None:
         r.setex(f"inbound:ignored:{raw_key}", _IGNORED_TTL_SECONDS, "1")
     except Exception:
         logger.exception("SES bridge redis setex ignored failed key=%s", raw_key)
+
+
+def _select_latest_keys_from_s3_objects(
+    objects: list[tuple[str, datetime | None]],
+    limit: int,
+) -> list[tuple[str, datetime | None]]:
+    bounded_limit = max(1, limit)
+    return heapq.nlargest(
+        bounded_limit,
+        objects,
+        key=lambda item: item[1] or datetime.fromtimestamp(0, tz=timezone.utc),
+    )
+
+
+def _list_latest_raw_keys(
+    s3_client,
+    bucket: str,
+    prefix: str,
+    limit: int,
+) -> tuple[list[tuple[str, datetime | None]], int, int, datetime | None]:
+    paginator = s3_client.get_paginator("list_objects_v2")
+    page_iterator = paginator.paginate(
+        Bucket=bucket,
+        Prefix=prefix,
+        PaginationConfig={"PageSize": 1000},
+    )
+
+    pages_scanned = 0
+    objects_seen = 0
+    newest_seen: datetime | None = None
+    latest_objects: list[tuple[str, datetime | None]] = []
+
+    for page in page_iterator:
+        pages_scanned += 1
+        page_objects = [(obj["Key"], obj.get("LastModified")) for obj in page.get("Contents", [])]
+        if not page_objects:
+            continue
+
+        objects_seen += len(page_objects)
+        page_newest = max(
+            (mtime for _, mtime in page_objects if mtime is not None),
+            default=None,
+        )
+        if page_newest and (newest_seen is None or page_newest > newest_seen):
+            newest_seen = page_newest
+
+        latest_objects.extend(page_objects)
+        latest_objects = _select_latest_keys_from_s3_objects(latest_objects, limit)
+
+    latest_objects.sort(
+        key=lambda item: item[1] or datetime.fromtimestamp(0, tz=timezone.utc),
+        reverse=True,
+    )
+    return latest_objects, pages_scanned, objects_seen, newest_seen
 
 
 async def _is_key_already_processed(raw_key: str) -> bool:
@@ -251,9 +314,7 @@ async def _resolve_inbox_context(
             conv_uuid = UUID(conv_id_str)
         except (ValueError, TypeError):
             return None
-        conv_result = await db.execute(
-            select(Conversation).where(Conversation.id == conv_uuid)
-        )
+        conv_result = await db.execute(select(Conversation).where(Conversation.id == conv_uuid))
         conv = conv_result.scalar_one_or_none()
         if conv is None:
             return None
@@ -334,68 +395,74 @@ async def _process_raw_key(s3_client, bucket: str, key: str) -> None:
     if await _is_key_already_processed(key):
         logger.info("SES bridge skipped key=%s reason=already_processed", key)
         return
+    _mark_key_enqueued_in_redis(key)
 
-    logger.info("SES bridge processing key=%s bucket=%s", key, bucket)
-    logger.info("SES bridge s3 fetch start key=%s", key)
-    raw_email = await asyncio.to_thread(
-        lambda: s3_client.get_object(Bucket=bucket, Key=key)["Body"].read()
-    )
-    logger.info("SES bridge s3 fetch done key=%s bytes=%s", key, len(raw_email))
-    logger.info("SES bridge parse start key=%s", key)
-    normalized = _extract_text_and_attachments(raw_email)
-    logger.info("SES bridge parse done key=%s inbox=%s", key, normalized.get("inbox_address"))
-    inbox_address = normalized.get("inbox_address")
-    if not inbox_address:
-        logger.warning("SES bridge skipped key=%s reason=missing_recipient", key)
-        return
-
-    inbox_context = await _resolve_inbox_context(inbox_address)
-    if not inbox_context:
-        logger.warning(
-            "SES bridge skipped key=%s inbox=%s reason=inbox_or_secret_not_found",
-            key,
-            inbox_address,
+    try:
+        logger.info("SES bridge processing key=%s bucket=%s", key, bucket)
+        logger.info("SES bridge s3 fetch start key=%s", key)
+        raw_email = await asyncio.to_thread(
+            lambda: s3_client.get_object(Bucket=bucket, Key=key)["Body"].read()
         )
-        return
-    secret, canonical_inbox_address, reply_to_conv_id = inbox_context
+        logger.info("SES bridge s3 fetch done key=%s bytes=%s", key, len(raw_email))
+        logger.info("SES bridge parse start key=%s", key)
+        normalized = _extract_text_and_attachments(raw_email)
+        logger.info("SES bridge parse done key=%s inbox=%s", key, normalized.get("inbox_address"))
+        inbox_address = normalized.get("inbox_address")
+        if not inbox_address:
+            logger.warning("SES bridge skipped key=%s reason=missing_recipient", key)
+            return
 
-    payload = {
-        "inbox_address": canonical_inbox_address,
-        "reply_to_conversation_id": reply_to_conv_id,
-        "from_email": normalized.get("from_email"),
-        "subject": normalized.get("subject"),
-        "message_id": normalized.get("message_id"),
-        "in_reply_to": normalized.get("in_reply_to"),
-        "references": normalized.get("references"),
-        "auto_submitted": normalized.get("auto_submitted"),
-        "list_unsubscribe": normalized.get("list_unsubscribe") or False,
-        "precedence": normalized.get("precedence"),
-        "x_auto_response_suppress": normalized.get("x_auto_response_suppress"),
-        "received_at": datetime.now(timezone.utc).isoformat(),
-        "raw_storage_key": key,
-        "text_body": normalized.get("text_body") or None,
-        "html_body": normalized.get("html_body") or None,
-        "attachments": normalized.get("attachments") or [],
-    }
+        inbox_context = await _resolve_inbox_context(inbox_address)
+        if not inbox_context:
+            logger.warning(
+                "SES bridge skipped key=%s inbox=%s reason=inbox_or_secret_not_found",
+                key,
+                inbox_address,
+            )
+            return
+        secret, canonical_inbox_address, reply_to_conv_id = inbox_context
 
-    status, response_text = await asyncio.to_thread(_post_to_inbound_api, payload, secret)
-    if status >= 400:
-        logger.error(
-            "SES bridge post failed key=%s inbox=%s status=%s body=%s",
+        payload = {
+            "inbox_address": canonical_inbox_address,
+            "reply_to_conversation_id": reply_to_conv_id,
+            "from_email": normalized.get("from_email"),
+            "subject": normalized.get("subject"),
+            "message_id": normalized.get("message_id"),
+            "in_reply_to": normalized.get("in_reply_to"),
+            "references": normalized.get("references"),
+            "auto_submitted": normalized.get("auto_submitted"),
+            "list_unsubscribe": normalized.get("list_unsubscribe") or False,
+            "precedence": normalized.get("precedence"),
+            "x_auto_response_suppress": normalized.get("x_auto_response_suppress"),
+            "received_at": datetime.now(timezone.utc).isoformat(),
+            "raw_storage_key": key,
+            "text_body": normalized.get("text_body") or None,
+            "html_body": normalized.get("html_body") or None,
+            "attachments": normalized.get("attachments") or [],
+        }
+
+        status, response_text = await asyncio.to_thread(_post_to_inbound_api, payload, secret)
+        if status >= 400:
+            _clear_key_enqueued_in_redis(key)
+            logger.error(
+                "SES bridge post failed key=%s inbox=%s status=%s body=%s",
+                key,
+                inbox_address,
+                status,
+                response_text,
+            )
+            return
+
+        logger.info(
+            "SES bridge processed key=%s inbox=%s canonical_inbox=%s status=%s",
             key,
             inbox_address,
+            canonical_inbox_address,
             status,
-            response_text,
         )
-        return
-
-    logger.info(
-        "SES bridge processed key=%s inbox=%s canonical_inbox=%s status=%s",
-        key,
-        inbox_address,
-        canonical_inbox_address,
-        status,
-    )
+    except Exception:
+        _clear_key_enqueued_in_redis(key)
+        raise
 
 
 async def run_ses_raw_bridge_loop(stop_event: asyncio.Event) -> None:
@@ -419,42 +486,21 @@ async def run_ses_raw_bridge_loop(stop_event: asyncio.Event) -> None:
     max_parallel = 10
     while not stop_event.is_set():
         try:
-            # Paginate across all available objects so new keys are not skipped when
-            # the prefix grows beyond a single list_objects_v2 page.
-            keys_with_mtime: list[tuple[str, datetime | None]] = []
-            continuation_token: str | None = None
-            while True:
-                request = {
-                    "Bucket": bucket,
-                    "Prefix": prefix,
-                    "MaxKeys": max(1, settings.ses_raw_bridge_max_keys),
-                }
-                if continuation_token:
-                    request["ContinuationToken"] = continuation_token
-                response = s3_client.list_objects_v2(**request)
-                keys_with_mtime.extend(
-                    (obj["Key"], obj.get("LastModified")) for obj in response.get("Contents", [])
-                )
-                if not response.get("IsTruncated"):
-                    break
-                continuation_token = response.get("NextContinuationToken")
-                if not continuation_token:
-                    break
-
-            # Prioritize latest raw emails first for lower end-to-end latency.
-            keys_with_mtime.sort(
-                key=lambda item: item[1] or datetime.fromtimestamp(0, tz=timezone.utc),
-                reverse=True,
+            keys_with_mtime, pages_scanned, objects_seen, newest_seen = await asyncio.to_thread(
+                _list_latest_raw_keys,
+                s3_client,
+                bucket,
+                prefix,
+                settings.ses_raw_bridge_max_keys,
             )
 
             if keys_with_mtime:
-                newest_seen = keys_with_mtime[0][1]
-                keys_with_mtime = keys_with_mtime[: max(1, settings.ses_raw_bridge_max_keys)]
                 logger.info(
-                    "SES bridge scan bucket=%s prefix=%s keys=%s newest=%s processing=%s",
+                    "SES bridge scan bucket=%s prefix=%s pages=%s seen=%s newest=%s processing=%s",
                     bucket,
                     prefix,
-                    len(keys_with_mtime),
+                    pages_scanned,
+                    objects_seen,
                     newest_seen.isoformat() if newest_seen else None,
                     len(keys_with_mtime),
                 )
@@ -484,9 +530,23 @@ async def run_ses_raw_bridge_loop(stop_event: asyncio.Event) -> None:
                         logger.exception("SES bridge failed key=%s", raw_key)
 
             tasks: list[asyncio.Task[None]] = []
-            for key, _ in keys_with_mtime:
+            fallback_grace_seconds = max(0, int(settings.inbound_sns_fallback_grace_seconds))
+            now_utc = datetime.now(timezone.utc)
+            for key, modified_at in keys_with_mtime:
                 if stop_event.is_set():
                     break
+                if (
+                    fallback_grace_seconds > 0
+                    and modified_at is not None
+                    and (now_utc - modified_at).total_seconds() < fallback_grace_seconds
+                ):
+                    logger.debug(
+                        "SES bridge deferred key=%s age_seconds=%s grace_seconds=%s",
+                        key,
+                        int((now_utc - modified_at).total_seconds()),
+                        fallback_grace_seconds,
+                    )
+                    continue
                 tasks.append(asyncio.create_task(_process_with_limit(key)))
 
             if tasks:

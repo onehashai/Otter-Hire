@@ -23,15 +23,16 @@ COPY apps/web ./apps/web
 WORKDIR /app/apps/web
 
 # NEXT_PUBLIC_* vars are baked into the client JS bundle at build time.
-# Pass these via --build-arg (CI/CD pipeline or docker-compose build.args).
-# API_INTERNAL_URL / TEMPORAL_UI_INTERNAL_URL are NOT needed here —
-# Next.js re-reads next.config.js at server startup so they stay runtime vars.
+# Next rewrites are also resolved during build, so internal proxy targets
+# must be present here as well to avoid falling back to localhost defaults.
 ARG NEXT_PUBLIC_API_URL=/api
 ARG NEXT_PUBLIC_APP_SUBDOMAIN=app
 ARG NEXT_PUBLIC_JOBS_SUBDOMAIN=jobs
 ARG NEXT_PUBLIC_APP_ROOT_HOST
 ARG NEXT_PUBLIC_INBOUND_EMAIL_DOMAIN
 ARG NEXT_PUBLIC_TEMPORAL_UI_URL
+ARG API_INTERNAL_URL
+ARG TEMPORAL_UI_INTERNAL_URL
 
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_APP_SUBDOMAIN=$NEXT_PUBLIC_APP_SUBDOMAIN
@@ -39,6 +40,8 @@ ENV NEXT_PUBLIC_JOBS_SUBDOMAIN=$NEXT_PUBLIC_JOBS_SUBDOMAIN
 ENV NEXT_PUBLIC_APP_ROOT_HOST=$NEXT_PUBLIC_APP_ROOT_HOST
 ENV NEXT_PUBLIC_INBOUND_EMAIL_DOMAIN=$NEXT_PUBLIC_INBOUND_EMAIL_DOMAIN
 ENV NEXT_PUBLIC_TEMPORAL_UI_URL=$NEXT_PUBLIC_TEMPORAL_UI_URL
+ENV API_INTERNAL_URL=$API_INTERNAL_URL
+ENV TEMPORAL_UI_INTERNAL_URL=$TEMPORAL_UI_INTERNAL_URL
 
 # Enables standalone output — only required files are emitted, no full node_modules copy
 ENV NEXT_BUILD_STANDALONE=true
@@ -50,12 +53,15 @@ FROM node:20-alpine AS runner
 
 WORKDIR /app/apps/web
 
+ARG API_INTERNAL_URL
+ARG TEMPORAL_UI_INTERNAL_URL
+
 ENV NODE_ENV=production
+ENV API_INTERNAL_URL=$API_INTERNAL_URL
+ENV TEMPORAL_UI_INTERNAL_URL=$TEMPORAL_UI_INTERNAL_URL
 
 # standalone/ contains server.js + minimal node_modules (no full install needed)
-COPY --from=builder /app/apps/web/.next/standalone/apps/web ./
-COPY --from=builder /app/apps/web/.next/standalone/packages ./../../packages
-COPY --from=builder /app/apps/web/.next/standalone/node_modules ./../../node_modules
+COPY --from=builder /app/apps/web/.next/standalone ./
 
 # Static assets must sit next to standalone server
 COPY --from=builder /app/apps/web/.next/static ./.next/static

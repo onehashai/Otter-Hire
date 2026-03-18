@@ -10,6 +10,10 @@ const nextConfig = {
         destination: `${apiUrl}/:path*`,
       },
       {
+        source: "/public/:path*",
+        destination: `${apiUrl}/public/:path*`,
+      },
+      {
         source: "/temporal-dashboard",
         destination: `${temporalUiUrl}/temporal-dashboard`,
       },

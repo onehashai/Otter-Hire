@@ -6,13 +6,7 @@ import { ArrowLeft, Eye, Save, ChevronDown } from "lucide-react";
 import { Button } from "@onehash/ui/button";
 import { InputField } from "@onehash/ui/input";
 import { Label } from "@onehash/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@onehash/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@onehash/ui/select";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -106,7 +100,12 @@ export default function TemplateEditor() {
     }
     try {
       if (isEdit && templateId) {
-        await updateTemplate(templateId, { name: name.trim(), category, subject: subject.trim(), body });
+        await updateTemplate(templateId, {
+          name: name.trim(),
+          category,
+          subject: subject.trim(),
+          body,
+        });
         toast({ title: "Template updated" });
       } else {
         await createTemplate({ name: name.trim(), category, subject: subject.trim(), body });
@@ -114,7 +113,10 @@ export default function TemplateEditor() {
       }
       router.push("/templates");
     } catch {
-      toast({ title: isEdit ? "Failed to update template" : "Failed to create template", variant: "destructive" });
+      toast({
+        title: isEdit ? "Failed to update template" : "Failed to create template",
+        variant: "destructive",
+      });
     }
   };
 
@@ -140,9 +142,7 @@ export default function TemplateEditor() {
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
-            <h1 className="text-lg font-semibold text-foreground">
-              {name}
-            </h1>
+            <h1 className="text-lg font-semibold text-foreground">{name}</h1>
           </div>
         </div>
         <div className="flex items-center gap-2">

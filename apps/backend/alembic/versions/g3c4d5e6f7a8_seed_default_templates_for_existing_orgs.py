@@ -67,7 +67,7 @@ def upgrade() -> None:
     orgs = conn.execute(sa.text("SELECT id FROM organizations")).fetchall()
     for (org_id,) in orgs:
         count = conn.execute(
-            sa.text("SELECT COUNT(*) FROM templates WHERE org_id = :org_id"),
+            sa.text("SELECT COUNT(*) FROM email_templates WHERE org_id = :org_id"),
             {"org_id": org_id},
         ).scalar()
         if count and count > 0:
@@ -75,7 +75,7 @@ def upgrade() -> None:
         for name, subject, body in DEFAULT_TEMPLATES:
             conn.execute(
                 sa.text("""
-                    INSERT INTO templates (id, org_id, name, category, subject, body, created_at, updated_at)
+                    INSERT INTO email_templates (id, org_id, name, category, subject, body, created_at, updated_at)
                     VALUES (gen_random_uuid(), :org_id, :name, 'Email', :subject, :body, NOW(), NOW())
                 """),
                 {"org_id": org_id, "name": name, "subject": subject, "body": body},
@@ -88,6 +88,6 @@ def downgrade() -> None:
     default_names = [t[0] for t in DEFAULT_TEMPLATES]
     for name in default_names:
         conn.execute(
-            sa.text("DELETE FROM templates WHERE name = :name"),
+            sa.text("DELETE FROM email_templates WHERE name = :name"),
             {"name": name},
         )

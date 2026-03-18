@@ -6,7 +6,6 @@ from starlette.requests import Request
 from app.core.config import settings
 from app.db.session import engine
 
-
 class _AdminAuth(AuthenticationBackend):
     async def login(self, request: Request) -> bool:
         form = await request.form()

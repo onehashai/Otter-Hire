@@ -94,9 +94,7 @@ export function ConversationsView({ initialId }: ConversationsViewProps) {
   const [threadLoading, setThreadLoading] = useState(false);
 
   // Mobile: track which panel is visible ("list" | "thread")
-  const [mobileView, setMobileView] = useState<"list" | "thread">(
-    initialId ? "thread" : "list",
-  );
+  const [mobileView, setMobileView] = useState<"list" | "thread">(initialId ? "thread" : "list");
 
   const [composeOpen, setComposeOpen] = useState(false);
 
@@ -122,13 +120,19 @@ export function ConversationsView({ initialId }: ConversationsViewProps) {
           message_id?: string;
           status?: string;
         };
-        if (data.event !== "message_status_updated" || !data.conversation_id || !data.message_id || !data.status) return;
+        if (
+          data.event !== "message_status_updated" ||
+          !data.conversation_id ||
+          !data.message_id ||
+          !data.status
+        )
+          return;
         setActiveConversation((prev) => {
           if (!prev || prev.id !== data.conversation_id) return prev;
           return {
             ...prev,
             messages: prev.messages.map((m) =>
-              m.id === data.message_id ? { ...m, status: data.status as MessageRead["status"] } : m
+              m.id === data.message_id ? { ...m, status: data.status as MessageRead["status"] } : m,
             ),
           };
         });
@@ -267,9 +271,7 @@ export function ConversationsView({ initialId }: ConversationsViewProps) {
   const handleSend = async (content: string) => {
     if (!selectedId || !activeConversation) return;
     const msg = await sendMessage(selectedId, { body: content });
-    setActiveConversation((prev) =>
-      prev ? { ...prev, messages: [...prev.messages, msg] } : prev,
-    );
+    setActiveConversation((prev) => (prev ? { ...prev, messages: [...prev.messages, msg] } : prev));
     // Track this queued message and start polling until it resolves
     pendingMessageIds.current.add(msg.id);
     startPolling(selectedId);

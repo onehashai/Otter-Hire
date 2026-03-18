@@ -83,6 +83,13 @@ class CandidateBulkUpdateResponse(BaseModel):
 
 class CandidateNoteRequest(BaseModel):
     content: str = Field(min_length=1, max_length=5000)
+    mentions: list[UUID] = []
+
+
+class CandidateNoteMentionResponse(BaseModel):
+    user_id: UUID
+    name: Optional[str] = None
+    email: str
 
 
 class CandidateNoteResponse(BaseModel):
@@ -90,6 +97,7 @@ class CandidateNoteResponse(BaseModel):
     author_user_id: UUID
     author_name: Optional[str] = None
     content: str
+    mentions: list[CandidateNoteMentionResponse] = []
     created_at: datetime
 
 

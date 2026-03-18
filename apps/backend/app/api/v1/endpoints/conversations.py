@@ -32,6 +32,7 @@ from app.utils.uuid import uuid7
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 
+
 def _reply_address_for_conversation(
     conv_id: UUID,
     *,
@@ -126,9 +127,7 @@ async def list_conversations(
             .where(Message.conversation_id.in_(conv_ids))
             .subquery()
         )
-        rows = await db.execute(
-            select(subq.c.conversation_id, subq.c.body).where(subq.c.rn == 1)
-        )
+        rows = await db.execute(select(subq.c.conversation_id, subq.c.body).where(subq.c.rn == 1))
         raw_last_msgs = {row.conversation_id: row.body for row in rows}
         # Use only visible part (no quoted block) for list preview
         from app.utils.email_parse import parse_email_body
@@ -255,7 +254,9 @@ async def create_conversation(
         fixed_domain=settings.inbound_email_domain,
         inbox_address=org_inbox.inbox_address if org_inbox else None,
     )
-    org_result = await db.execute(select(Organization).where(Organization.id == current_user.org_id))
+    org_result = await db.execute(
+        select(Organization).where(Organization.id == current_user.org_id)
+    )
     org = org_result.scalar_one_or_none()
     if org:
         org_name = org.name
@@ -353,7 +354,9 @@ async def send_message(
         fixed_domain=settings.inbound_email_domain,
         inbox_address=org_inbox.inbox_address if org_inbox else None,
     )
-    org_result = await db.execute(select(Organization).where(Organization.id == current_user.org_id))
+    org_result = await db.execute(
+        select(Organization).where(Organization.id == current_user.org_id)
+    )
     org = org_result.scalar_one_or_none()
     if org:
         org_name = org.name
@@ -374,7 +377,9 @@ async def send_message(
         if last_with_id and last_with_id.email_message_id
         else None
     )
-    references_val: str | None = in_reply_to_msg_id if in_reply_to_msg_id else None  # same as In-Reply-To for direct reply
+    references_val: str | None = (
+        in_reply_to_msg_id if in_reply_to_msg_id else None
+    )  # same as In-Reply-To for direct reply
 
     from_email = reply_to or ""
     now = datetime.now(tz=timezone.utc)

@@ -32,7 +32,9 @@ from app.schemas.auth import (
     VerifyEmailRequest,
     VerifyEmailResponse,
 )
+from app.services.default_categories import create_default_job_categories_for_org
 from app.services.email import send_verification_email
+from app.templates.email.defaults import create_default_templates_for_org
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 limiter = Limiter(key_func=get_remote_address)

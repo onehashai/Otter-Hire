@@ -55,7 +55,9 @@ class Settings(BaseSettings):
 
     # SES outbound configuration set name — when set, X-SES-Configuration-Set is added to every
     # outbound email so SES publishes Delivery/Open/Bounce events to the SNS topic below.
-    ses_configuration_set: str | None = Field(default=None, validation_alias="SES_CONFIGURATION_SET")
+    ses_configuration_set: str | None = Field(
+        default=None, validation_alias="SES_CONFIGURATION_SET"
+    )
     # Comma-separated SNS topic ARN(s) allowed to post SES event notifications.
     ses_events_sns_topic_arns: str = Field(default="", validation_alias="SES_EVENTS_SNS_TOPIC_ARNS")
 
@@ -97,9 +99,7 @@ class Settings(BaseSettings):
     inbound_webhook_secret: str | None = Field(
         default=None, validation_alias="INBOUND_WEBHOOK_SECRET"
     )
-    inbound_email_domain: str | None = Field(
-        default=None, validation_alias="INBOUND_EMAIL_DOMAIN"
-    )
+    inbound_email_domain: str | None = Field(default=None, validation_alias="INBOUND_EMAIL_DOMAIN")
     inbound_max_attachment_bytes: int = Field(
         default=10 * 1024 * 1024, validation_alias="INBOUND_MAX_ATTACHMENT_BYTES"
     )
@@ -115,6 +115,9 @@ class Settings(BaseSettings):
         default=30, validation_alias="SES_RAW_BRIDGE_POLL_SECONDS"
     )
     ses_raw_bridge_max_keys: int = Field(default=20, validation_alias="SES_RAW_BRIDGE_MAX_KEYS")
+    inbound_sns_fallback_grace_seconds: int = Field(
+        default=120, validation_alias="INBOUND_SNS_FALLBACK_GRACE_SECONDS"
+    )
     inbound_ignored_cleanup_enabled: bool = Field(
         default=True, validation_alias="INBOUND_IGNORED_CLEANUP_ENABLED"
     )

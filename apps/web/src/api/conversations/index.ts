@@ -82,23 +82,17 @@ export type MessageCreateRequest = {
 // API functions
 // ---------------------------------------------------------------------------
 
-export function listConversations(
-  page = 1,
-  pageSize = 30,
-): Promise<ConversationListResponse> {
-  return apiFetch<ConversationListResponse>(
-    `/conversations?page=${page}&page_size=${pageSize}`,
-    { method: "GET" },
-  );
+export function listConversations(page = 1, pageSize = 30): Promise<ConversationListResponse> {
+  return apiFetch<ConversationListResponse>(`/conversations?page=${page}&page_size=${pageSize}`, {
+    method: "GET",
+  });
 }
 
 export function getConversation(conversationId: string): Promise<ConversationDetail> {
   return apiFetch<ConversationDetail>(`/conversations/${conversationId}`, { method: "GET" });
 }
 
-export function createConversation(
-  data: ConversationCreateRequest,
-): Promise<ConversationDetail> {
+export function createConversation(data: ConversationCreateRequest): Promise<ConversationDetail> {
   return apiFetch<ConversationDetail>("/conversations", { method: "POST", body: data });
 }
 

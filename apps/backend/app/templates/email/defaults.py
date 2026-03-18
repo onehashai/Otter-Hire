@@ -2,6 +2,7 @@
 Default email templates created for every organization on signup or when backfilling.
 Each entry: (name, subject, body) with placeholders like {{candidate_name}}, {{job_title}}, etc.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -31,7 +32,6 @@ DEFAULT_EMAIL_TEMPLATES: list[DefaultTemplate] = [
             "</p>"
         ),
     ),
-
     DefaultTemplate(
         name="Interview Invitation",
         subject="Interview Invitation — {{job_title}}",
@@ -53,7 +53,6 @@ DEFAULT_EMAIL_TEMPLATES: list[DefaultTemplate] = [
             "</p>"
         ),
     ),
-
     DefaultTemplate(
         name="Interview Confirmation",
         subject="Interview confirmed — {{job_title}}",
@@ -71,7 +70,6 @@ DEFAULT_EMAIL_TEMPLATES: list[DefaultTemplate] = [
             "</p>"
         ),
     ),
-
     DefaultTemplate(
         name="Interview Reminder",
         subject="Reminder: Upcoming Interview for {{job_title}}",
@@ -89,7 +87,6 @@ DEFAULT_EMAIL_TEMPLATES: list[DefaultTemplate] = [
             "</p>"
         ),
     ),
-
     DefaultTemplate(
         name="Candidate Rejection",
         subject="Update on your application — {{job_title}}",
@@ -110,7 +107,6 @@ DEFAULT_EMAIL_TEMPLATES: list[DefaultTemplate] = [
             "</p>"
         ),
     ),
-
     DefaultTemplate(
         name="Send Offer Letter",
         subject="Offer of Employment — {{job_title}} at {{company_name}}",
@@ -131,7 +127,6 @@ DEFAULT_EMAIL_TEMPLATES: list[DefaultTemplate] = [
             "</p>"
         ),
     ),
-
     DefaultTemplate(
         name="Interview Feedback Request",
         subject="Quick feedback — your interview for {{job_title}}",
@@ -153,7 +148,6 @@ DEFAULT_EMAIL_TEMPLATES: list[DefaultTemplate] = [
             "</p>"
         ),
     ),
-
     DefaultTemplate(
         name="Candidate Follow-up",
         subject="Following up — {{job_title}} at {{company_name}}",

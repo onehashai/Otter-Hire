@@ -84,7 +84,10 @@ export function JobsList({ jobs }: JobsListProps) {
                 </div>
               </div>
               <div className="flex items-center gap-3 shrink-0">
-                <div className="text-xs">{job.candidate_count} {job.candidate_count === 1 ? t("candidate") : t("candidates")}</div>
+                <div className="text-xs">
+                  {job.candidate_count}{" "}
+                  {job.candidate_count === 1 ? t("candidate") : t("candidates")}
+                </div>
                 <Button
                   variant="default"
                   size="sm"

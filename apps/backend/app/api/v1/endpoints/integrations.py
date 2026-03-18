@@ -3,9 +3,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.permissions import require_permission
 from app.db.session import get_db
+from app.integrations.app_store.email_integration import outbound_service
 from app.integrations.app_store.registry import all_integrations, get_integration_by_slug
 from app.models.user import User
-from app.integrations.app_store.email_integration import outbound_service
 from app.schemas.integrations import (
     IntegrationAppsResponse,
     IntegrationEmailConfigActionResponse,

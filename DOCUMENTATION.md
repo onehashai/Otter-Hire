@@ -453,8 +453,8 @@ The frontend (Next.js 14) communicates with the backend (FastAPI) via HTTP reque
 
 **Location**: `apps/web/src/api/` (client in `client.ts`; auth in `auth.ts`; invites in `invites.ts`; re-exports in `index.ts`)
 
-- **Public API URL**: `process.env.NEXT_PUBLIC_API_URL` (default: `http://localhost:8000`)
-- **Internal API URL**: `process.env.API_INTERNAL_URL` (fallback to public URL)
+- **API path**: `/api` — browser uses same-origin proxy
+- **Backend URL**: `process.env.BACKEND_URL` (default: `http://localhost:8000`) — server-side proxy target
 - **Runtime Selection**: Server-side requests use internal URL; client-side uses public URL
 
 ### Request Patterns
@@ -2143,22 +2143,22 @@ The application uses a deterministic subdomain system with automatic protocol de
 **Development** (`apps/web/.env.local`):
 ```env
 NEXT_PUBLIC_APP_SUBDOMAIN=app
+NEXT_PUBLIC_JOBS_SUBDOMAIN=jobs
 NEXT_PUBLIC_APP_ROOT_HOST=localhost:3000
-NEXT_PUBLIC_API_URL=http://localhost:8000
 ```
 
 **Production**:
 ```env
 NEXT_PUBLIC_APP_SUBDOMAIN=app
+NEXT_PUBLIC_JOBS_SUBDOMAIN=jobs
 NEXT_PUBLIC_APP_ROOT_HOST=onehash.ai
-NEXT_PUBLIC_API_URL=https://api.onehash.ai
 ```
 
 **Staging**:
 ```env
 NEXT_PUBLIC_APP_SUBDOMAIN=app
+NEXT_PUBLIC_JOBS_SUBDOMAIN=jobs
 NEXT_PUBLIC_APP_ROOT_HOST=staging.onehash.ai
-NEXT_PUBLIC_API_URL=https://api.staging.onehash.ai
 ```
 
 ### Backend
@@ -2278,8 +2278,10 @@ CORS_ORIGINS=http://app.localhost:3000,http://localhost:3000
 ```yaml
 environment:
   NEXT_PUBLIC_APP_SUBDOMAIN: app
+  NEXT_PUBLIC_JOBS_SUBDOMAIN: jobs
   NEXT_PUBLIC_APP_ROOT_HOST: localhost:3000
-  NEXT_PUBLIC_API_URL: http://localhost:8000
+  BACKEND_URL: http://backend:8000
+  TEMPORAL_UI_BACKEND_URL: http://temporal-ui:8080
 ```
 
 **Backend Service**:
@@ -2332,14 +2334,14 @@ Use Next.js API proxy to keep frontend and backend on the same origin, eliminati
 **Location**: `apps/web/next.config.js`
 
 ```javascript
-const API_INTERNAL_URL = process.env.API_INTERNAL_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const backendUrl = process.env.BACKEND_URL || "http://localhost:8000";
 
 export default {
   async rewrites() {
     return [
       {
         source: "/api/:path*",
-        destination: `${API_INTERNAL_URL}/:path*`,
+        destination: `${backendUrl}/:path*`,
       },
     ];
   },
@@ -2356,7 +2358,6 @@ export default {
 
 **Frontend** (`apps/web/.env.local`):
 ```env
-NEXT_PUBLIC_API_URL=/api
 NEXT_PUBLIC_APP_SUBDOMAIN=app
 NEXT_PUBLIC_APP_ROOT_HOST=localhost:3000
 ```
@@ -2365,13 +2366,13 @@ NEXT_PUBLIC_APP_ROOT_HOST=localhost:3000
 ```yaml
 web:
   environment:
-    NEXT_PUBLIC_API_URL: /api
-    API_INTERNAL_URL: http://backend:8000
+    BACKEND_URL: http://backend:8000
+    TEMPORAL_UI_BACKEND_URL: http://temporal-ui:8080
 ```
 
 **Key Points**:
-- `NEXT_PUBLIC_API_URL=/api` — Client-side API calls go to relative `/api` path
-- `API_INTERNAL_URL=http://backend:8000` — Server-side proxy target (Docker service name)
+- API calls use `/api` (same-origin proxy; path is fixed)
+- `BACKEND_URL=http://backend:8000` — Server-side proxy target (Docker service name)
 
 ### Middleware Exclusion
 
@@ -2478,8 +2479,7 @@ Browser ← 200 OK with user data
 
 **Frontend** (Cloudflare/Vercel):
 ```env
-NEXT_PUBLIC_API_URL=/api
-API_INTERNAL_URL=http://internal-backend-service:8000
+BACKEND_URL=http://internal-backend-service:8000
 ```
 
 **Backend** (ECS/EC2):
@@ -2682,7 +2682,6 @@ getPublicJobDetail(orgId: string, jobId: string): Promise<PublicJobDetail>
 NEXT_PUBLIC_APP_SUBDOMAIN=app
 NEXT_PUBLIC_JOBS_SUBDOMAIN=jobs
 NEXT_PUBLIC_APP_ROOT_HOST=localhost:3000
-NEXT_PUBLIC_API_URL=/api
 ```
 
 **Production:**
@@ -2690,7 +2689,6 @@ NEXT_PUBLIC_API_URL=/api
 NEXT_PUBLIC_APP_SUBDOMAIN=app
 NEXT_PUBLIC_JOBS_SUBDOMAIN=jobs
 NEXT_PUBLIC_APP_ROOT_HOST=onehash.ai
-NEXT_PUBLIC_API_URL=/api
 ```
 
 ### Backend

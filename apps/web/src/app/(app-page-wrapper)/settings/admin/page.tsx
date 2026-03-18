@@ -7,8 +7,6 @@ import { useAuthSession } from "@/app/providers";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@onehash/ui/tabs";
 import { Activity } from "lucide-react";
 
-// Use same-origin proxy to avoid port conflicts and nginx default page on localhost:8080
-const TEMPORAL_UI_URL = "/temporal-dashboard";
 
 export default function AdminSettingsPage() {
   const { user, loading } = useAuthSession();
@@ -55,7 +53,7 @@ export default function AdminSettingsPage() {
           <div className="rounded-lg border bg-card overflow-hidden">
             <div className="relative w-full min-h-[600px]">
               <iframe
-                src={TEMPORAL_UI_URL}
+                src="/temporal"
                 title="Temporal Dashboard"
                 className="absolute inset-0 w-full h-full min-h-[600px] border-0"
                 sandbox="allow-same-origin allow-scripts allow-popups allow-forms"

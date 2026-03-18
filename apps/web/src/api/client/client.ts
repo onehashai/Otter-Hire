@@ -1,44 +1,37 @@
-const PUBLIC_API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-const INTERNAL_API_BASE_URL = process.env.API_INTERNAL_URL ?? PUBLIC_API_BASE_URL;
+const BACKEND_URL = process.env.BACKEND_URL ?? "http://localhost:8000";
 
+/** Client uses /api (same-origin); server uses BACKEND_URL for proxying. */
 export const API_BASE_URL =
-  typeof window === "undefined" ? INTERNAL_API_BASE_URL : PUBLIC_API_BASE_URL;
+  typeof window === "undefined" ? BACKEND_URL : "/api";
+
+/** Full WebSocket base URL (e.g. ws://localhost:3000/api). Use for client-side WebSocket connections. */
+export function getWebSocketBaseUrl(): string {
+  if (typeof window !== "undefined") {
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    return API_BASE_URL.startsWith("/")
+      ? `${protocol}//${window.location.host}${API_BASE_URL}`
+      : API_BASE_URL.replace(/^http/i, "ws");
+  }
+  return API_BASE_URL.startsWith("/")
+    ? `ws://localhost:${process.env.PORT || 3000}${API_BASE_URL}`
+    : API_BASE_URL.replace(/^http/i, "ws");
+}
 
 export function normalizeApiUrl(url: string | null | undefined): string | null {
   if (!url) return null;
   if (/^https?:\/\//i.test(url)) return url;
-  const normalizedPath = url.startsWith("/") ? url : `/${url}`;
+  const path = url.startsWith("/") ? url : `/${url}`;
 
-  // File URLs should remain same-origin so app host serves /api/files/* in all environments.
-  if (normalizedPath.startsWith("/api/files/")) {
-    return normalizedPath;
-  }
-
-  // Stored legacy URLs may still contain /api/files/local/...
-  // Keep /api prefix when frontend talks to a relative API base (e.g. NEXT_PUBLIC_API_URL=/api),
-  // but strip it when talking directly to an absolute backend URL.
-  let path = normalizedPath;
+  // File URLs: same-origin for client; strip /api for server direct fetch
   if (path.startsWith("/api/files/")) {
-    let shouldStripApiPrefix = false;
-    try {
-      const parsed = new URL(API_BASE_URL);
-      const basePath = parsed.pathname.replace(/\/+$/, "");
-      shouldStripApiPrefix = basePath !== "/api";
-    } catch {
-      shouldStripApiPrefix = false;
-    }
-    if (shouldStripApiPrefix) {
-      path = path.replace(/^\/api/, "");
-    }
+    if (API_BASE_URL.startsWith("/")) return path;
+    return `${BACKEND_URL}${path.replace(/^\/api/, "")}`;
   }
 
-  // Avoid double-prefixing when API base is relative (e.g. "/api")
-  // and payload URL already starts with that same prefix.
-  if (API_BASE_URL.startsWith("/") && path.startsWith(`${API_BASE_URL}/`)) {
-    return path;
-  }
+  // Avoid double-prefixing when path already has /api
+  if (API_BASE_URL.startsWith("/") && path.startsWith("/api/")) return path;
 
-  return `${API_BASE_URL}${path}`;
+  return `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
 export type ApiErrorResponse = {

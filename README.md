@@ -229,7 +229,6 @@ CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 ### Frontend (`apps/web/.env.local` local only)
 
 ```env
-NEXT_PUBLIC_API_URL=http://localhost:8000
 ```
 
 Notes:
@@ -299,6 +298,7 @@ Required `staging` variables:
 - `ECS_WEB_TASKDEF`
 - `API_HEALTHCHECK_URL`
 - `WEB_HEALTHCHECK_URL`
+- `NEXT_PUBLIC_APP_SUBDOMAIN`, `NEXT_PUBLIC_JOBS_SUBDOMAIN`, `NEXT_PUBLIC_APP_ROOT_HOST`, `NEXT_PUBLIC_INBOUND_EMAIL_DOMAIN`
 
 Required `staging` secrets:
 - `AWS_ACCESS_KEY_ID`
@@ -345,7 +345,7 @@ python3 -m pip install -r apps/backend/requirements.txt
 - Ensure `CORS_ORIGINS` includes frontend origin.
 - Local defaults: `http://localhost:3000,http://127.0.0.1:3000`
 
-### `NEXT_PUBLIC_API_URL` issues
+### API path issues
 - For host dev: set in `apps/web/.env.local`.
 - For Docker: verify env in `docker-compose.yml`.
 

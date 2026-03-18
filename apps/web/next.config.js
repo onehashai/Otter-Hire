@@ -2,24 +2,24 @@
 const nextConfig = {
   output: process.env.NEXT_BUILD_STANDALONE === "true" ? "standalone" : undefined,
   async rewrites() {
-    const apiUrl = process.env.API_INTERNAL_URL || "http://localhost:8000";
-    const temporalUiUrl = process.env.TEMPORAL_UI_INTERNAL_URL || "http://localhost:8080";
+    const backendUrl = process.env.BACKEND_URL || "http://localhost:8000";
+    const temporalBackendUrl = process.env.TEMPORAL_UI_BACKEND_URL || "http://localhost:8080";
     return [
       {
         source: "/api/:path*",
-        destination: `${apiUrl}/:path*`,
+        destination: `${backendUrl}/:path*`,
       },
       {
         source: "/public/:path*",
-        destination: `${apiUrl}/public/:path*`,
+        destination: `${backendUrl}/public/:path*`,
       },
       {
-        source: "/temporal-dashboard",
-        destination: `${temporalUiUrl}/temporal-dashboard`,
+        source: "/temporal",
+        destination: `${temporalBackendUrl}/temporal`,
       },
       {
-        source: "/temporal-dashboard/:path*",
-        destination: `${temporalUiUrl}/temporal-dashboard/:path*`,
+        source: "/temporal/:path*",
+        destination: `${temporalBackendUrl}/temporal/:path*`,
       },
     ];
   },

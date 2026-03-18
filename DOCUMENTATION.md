@@ -1,8 +1,6 @@
 # OneHash ATS – System Documentation
 
-This document describes the actual implementation of three core systems in the OneHash ATS application: Frontend-Backend Communication, Authentication, and the Email Verification + Onboarding Lifecycle.
-
-## Current Implementation Status (2026-02-24)
+This document describes the actual implementation of three core systems in the OneHash ATS application
 
 This repository currently contains a mix of:
 

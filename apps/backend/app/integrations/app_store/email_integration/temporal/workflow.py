@@ -23,6 +23,9 @@ with workflow.unsafe.imports_passed_through():
 class InboundEmailWorkflow:
     @workflow.run
     async def run(self, input_data: InboundWorkflowInput) -> dict:
+        # Log even during replay so we see activity in worker logs (default is skip during replay)
+        if getattr(workflow.logger, "log_during_replay", None) is not None:
+            workflow.logger.log_during_replay = True  # type: ignore[attr-defined]
         retry = RetryPolicy(initial_interval=timedelta(seconds=2), maximum_attempts=3)
         workflow.logger.info(
             "Inbound workflow started workflow_id=%s run_id=%s bucket=%s key=%s",
@@ -67,7 +70,7 @@ class InboundEmailWorkflow:
                 "workflow_id": workflow.info().workflow_id,
                 "run_id": workflow.info().run_id,
             },
-            start_to_close_timeout=timedelta(seconds=30),
+            start_to_close_timeout=timedelta(seconds=60),
         )
         workflow.logger.info(
             "Inbound workflow publish completed workflow_id=%s key=%s",

@@ -102,7 +102,7 @@ export function EmailIntegrationManager({ onChanged }: EmailIntegrationManagerPr
     return () => window.clearInterval(timer);
   }, [verifyDialogOpen, verificationStatus, inboxStatus]);
 
-  const forwardingDomain = process.env.NEXT_PUBLIC_INBOUND_EMAIL_DOMAIN || "inbound.ottr.ai";
+  const forwardingDomain = process.env.NEXT_PUBLIC_INBOUND_EMAIL_DOMAIN || "inbound.smartats.in";
   const forwardingAddress = user?.org_id
     ? `org-${user.org_id.replace(/-/g, "")}@${forwardingDomain}`
     : `org-<org-id>@${forwardingDomain}`;

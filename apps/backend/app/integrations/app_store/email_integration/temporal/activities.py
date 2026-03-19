@@ -131,6 +131,11 @@ async def download_and_extract_resume_activity(input_data: InboundWorkflowInput)
 
 @activity.defn
 async def process_s3_inbound_email_activity(input_data: InboundWorkflowInput) -> dict:
+    activity.logger.info(
+        "process_s3_inbound_email_activity started bucket=%s key=%s",
+        input_data.bucket,
+        input_data.key,
+    )
     extracted = await download_and_extract_resume_activity(input_data)
     return await parse_and_create_candidate_activity({"data": extracted, "key": input_data.key})
 

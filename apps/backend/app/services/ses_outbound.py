@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html as html_module
 from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
@@ -59,14 +60,21 @@ def send_email_via_ses(
     """Send one email via SES API. Returns the SES MessageId for the sent message."""
     client = _ses_client()
     source = f"{from_name} <{from_email}>" if from_name else from_email
+    # Always include HTML so SES can inject open-tracking pixel when enabled on the configuration set
+    effective_html = (
+        html_body
+        if html_body
+        else f'<p style="white-space: pre-wrap;">{html_module.escape(text_body)}</p>'
+    )
     content: dict[str, Any] = {
         "Simple": {
             "Subject": {"Data": subject, "Charset": "UTF-8"},
-            "Body": {"Text": {"Data": text_body, "Charset": "UTF-8"}},
+            "Body": {
+                "Text": {"Data": text_body, "Charset": "UTF-8"},
+                "Html": {"Data": effective_html, "Charset": "UTF-8"},
+            },
         }
     }
-    if html_body:
-        content["Simple"]["Body"]["Html"] = {"Data": html_body, "Charset": "UTF-8"}
 
     # Threading: In-Reply-To and References so Gmail (and others) keep the reply in the same thread
     if in_reply_to or references:

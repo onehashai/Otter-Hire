@@ -1,20 +1,47 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import { API_BASE_URL, getHealth, getMe } from "@/api/index";
 
-export default async function DebugApiPage() {
-  const [healthResult, meResult] = await Promise.allSettled([getHealth(), getMe()]);
+export default function DebugApiPage() {
+  const [health, setHealth] = useState<unknown>(null);
+  const [me, setMe] = useState<unknown>(null);
+  const [loading, setLoading] = useState(true);
 
-  const health =
-    healthResult.status === "fulfilled"
-      ? healthResult.value
-      : {
-          error:
-            healthResult.reason instanceof Error ? healthResult.reason.message : "Unknown error",
-        };
+  useEffect(() => {
+    Promise.allSettled([getHealth(), getMe()]).then(([healthResult, meResult]) => {
+      setHealth(
+        healthResult.status === "fulfilled"
+          ? healthResult.value
+          : {
+              error:
+                healthResult.reason instanceof Error
+                  ? healthResult.reason.message
+                  : "Unknown error",
+            },
+      );
+      setMe(
+        meResult.status === "fulfilled"
+          ? meResult.value
+          : {
+              error:
+                meResult.reason instanceof Error
+                  ? meResult.reason.message
+                  : "Unknown error",
+            },
+      );
+      setLoading(false);
+    });
+  }, []);
 
-  const me =
-    meResult.status === "fulfilled"
-      ? meResult.value
-      : { error: meResult.reason instanceof Error ? meResult.reason.message : "Unknown error" };
+  if (loading) {
+    return (
+      <div className="space-y-4">
+        <h1 className="text-xl font-semibold">API Debug</h1>
+        <p className="text-sm text-muted-foreground">Loading...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">

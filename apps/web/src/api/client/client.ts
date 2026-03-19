@@ -1,8 +1,5 @@
-/** Base URL of the API (no trailing slash). Prod: https://api.smartats.in, Local: http://localhost:8000 */
 const API_BASE =
-  (typeof window !== "undefined"
-    ? process.env.NEXT_PUBLIC_API_BASE_URL
-    : process.env.BACKEND_URL) ?? "http://localhost:8000";
+  process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
 
 /** Full internal API base — all frontend calls use /v1/internal/* (JWT/session auth) */
 export const API_BASE_URL = `${API_BASE.replace(/\/$/, "")}/v1/internal`;
@@ -13,27 +10,34 @@ export function getWebSocketBaseUrl(): string {
   return `${base}/v1/internal/inbound/events/ws`;
 }
 
+/** Normalize API or file URLs */
 export function normalizeApiUrl(url: string | null | undefined): string | null {
   if (!url) return null;
+
+  // Already absolute
   if (/^https?:\/\//i.test(url)) return url;
+
   const path = url.startsWith("/") ? url : `/${url}`;
 
-  // File URLs: prepend API base when path is relative
+  // File URLs (served from backend)
   if (
     path.startsWith("/v1/internal/files/") ||
-    path.startsWith("/api/files/") ||
     path.startsWith("/files/")
   ) {
     return `${API_BASE.replace(/\/$/, "")}${path}`;
   }
 
-  return `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
+  return `${API_BASE_URL}${path}`;
 }
 
-/** Base API URL (without /v1/internal) — for health checks, WebSocket, etc. */
+/** Base API URL (without /v1/internal) */
 export function getApiBase(): string {
   return API_BASE.replace(/\/$/, "");
 }
+
+/* =========================
+   Error Handling
+========================= */
 
 export type ApiErrorResponse = {
   code?: string;
@@ -116,12 +120,15 @@ async function readApiErrorBody(res: Response): Promise<ApiErrorResponse | null>
 
 async function toApiError(res: Response, fallback: string): Promise<ApiError> {
   const body = await readApiErrorBody(res);
+
   const rawMessage =
     (typeof body?.message === "string" && body.message.trim()) ||
     (typeof body?.detail === "string" && body.detail.trim()) ||
     (typeof body?.error === "string" && body.error.trim()) ||
     fallback;
+
   const message = mapErrorCodeToMessage(res.status, body?.code, rawMessage);
+
   return new ApiError(message, res.status, body?.code, body?.request_id, body?.details);
 }
 
@@ -129,6 +136,10 @@ export async function parseErrorResponse(res: Response, defaultMessage: string):
   const err = await toApiError(res, defaultMessage);
   return err.message;
 }
+
+/* =========================
+   API Helpers
+========================= */
 
 export type ApiGetOptions = {
   credentials?: RequestCredentials;
@@ -146,7 +157,8 @@ export async function apiGet<T>(path: string, options: ApiGetOptions = {}): Prom
   });
 
   if (!res.ok) {
-    throw new Error(`API request failed: ${res.status} ${res.statusText}`);
+    const err = await toApiError(res, `GET failed: ${res.status}`);
+    throw err;
   }
 
   return (await res.json()) as T;
@@ -171,13 +183,10 @@ export async function apiPost<T>(
   });
 
   if (!res.ok) {
-    const err = await toApiError(res, `API request failed: ${res.status} ${res.statusText}`);
-    throw err;
+    throw await toApiError(res, `POST failed: ${res.status}`);
   }
 
-  if (res.status === 204) {
-    return {} as T;
-  }
+  if (res.status === 204) return {} as T;
 
   return (await res.json()) as T;
 }
@@ -187,6 +196,7 @@ export async function apiFetch<T>(
   options: { method: string; body?: unknown },
 ): Promise<T> {
   const headers: Record<string, string> = { Accept: "application/json" };
+
   if (options.body !== undefined) {
     headers["Content-Type"] = "application/json";
   }
@@ -200,11 +210,11 @@ export async function apiFetch<T>(
   });
 
   if (!res.ok) {
-    const err = await toApiError(res, `Request failed: ${res.status} ${res.statusText}`);
-    throw err;
+    throw await toApiError(res, `Request failed: ${res.status}`);
   }
 
   if (res.status === 204) return {} as T;
+
   return (await res.json()) as T;
 }
 
@@ -216,7 +226,6 @@ export async function apiDelete(path: string): Promise<void> {
   });
 
   if (!res.ok) {
-    const err = await toApiError(res, `API request failed: ${res.status} ${res.statusText}`);
-    throw err;
+    throw await toApiError(res, `DELETE failed: ${res.status}`);
   }
 }

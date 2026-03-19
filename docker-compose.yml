@@ -139,8 +139,9 @@ services:
       NEXT_PUBLIC_APP_ROOT_HOST: localhost.com:3000
       NEXT_PUBLIC_INBOUND_EMAIL_DOMAIN: inbound.smartats.in
       NEXT_PUBLIC_API_BASE_URL: http://api.localhost.com:8000
-      BACKEND_URL: http://backend:8000
       TEMPORAL_UI_BACKEND_URL: http://temporal-ui:8080
+    extra_hosts:
+      - "api.localhost.com:host-gateway"
     ports:
       - "3000:3000"
     depends_on:

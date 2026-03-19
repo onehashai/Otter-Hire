@@ -453,9 +453,7 @@ The frontend (Next.js 14) communicates with the backend (FastAPI) via HTTP reque
 
 **Location**: `apps/web/src/api/` (client in `client.ts`; auth in `auth.ts`; invites in `invites.ts`; re-exports in `index.ts`)
 
-- **API path**: `/api` — browser uses same-origin proxy
-- **Backend URL**: `process.env.BACKEND_URL` (default: `http://localhost:8000`) — server-side proxy target
-- **Runtime Selection**: Server-side requests use internal URL; client-side uses public URL
+- **API base**: `process.env.NEXT_PUBLIC_API_BASE_URL` (default: `http://localhost:8000`) — single env var for client and rewrites
 
 ### Request Patterns
 
@@ -2280,8 +2278,10 @@ environment:
   NEXT_PUBLIC_APP_SUBDOMAIN: app
   NEXT_PUBLIC_JOBS_SUBDOMAIN: jobs
   NEXT_PUBLIC_APP_ROOT_HOST: localhost:3000
-  BACKEND_URL: http://backend:8000
+  NEXT_PUBLIC_API_BASE_URL: http://api.localhost.com:8000
   TEMPORAL_UI_BACKEND_URL: http://temporal-ui:8080
+extra_hosts:
+  - "api.localhost.com:host-gateway"
 ```
 
 **Backend Service**:
@@ -2334,14 +2334,14 @@ Use Next.js API proxy to keep frontend and backend on the same origin, eliminati
 **Location**: `apps/web/next.config.js`
 
 ```javascript
-const backendUrl = process.env.BACKEND_URL || "http://localhost:8000";
+const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
 
 export default {
   async rewrites() {
     return [
       {
         source: "/api/:path*",
-        destination: `${backendUrl}/:path*`,
+        destination: `${apiBase}/:path*`,
       },
     ];
   },
@@ -2366,13 +2366,15 @@ NEXT_PUBLIC_APP_ROOT_HOST=localhost:3000
 ```yaml
 web:
   environment:
-    BACKEND_URL: http://backend:8000
+    NEXT_PUBLIC_API_BASE_URL: http://api.localhost.com:8000
     TEMPORAL_UI_BACKEND_URL: http://temporal-ui:8080
+  extra_hosts:
+    - "api.localhost.com:host-gateway"
 ```
 
 **Key Points**:
-- API calls use `/api` (same-origin proxy; path is fixed)
-- `BACKEND_URL=http://backend:8000` — Server-side proxy target (Docker service name)
+- Single env var `NEXT_PUBLIC_API_BASE_URL` for client and rewrites
+- `extra_hosts` lets the web container resolve `api.localhost.com` to reach the backend
 
 ### Middleware Exclusion
 
@@ -2479,7 +2481,7 @@ Browser ← 200 OK with user data
 
 **Frontend** (Cloudflare/Vercel):
 ```env
-BACKEND_URL=http://internal-backend-service:8000
+NEXT_PUBLIC_API_BASE_URL=https://api.onehash.ai
 ```
 
 **Backend** (ECS/EC2):

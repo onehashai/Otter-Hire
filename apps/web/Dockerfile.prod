@@ -50,7 +50,6 @@ FROM node:20-alpine AS runner
 
 WORKDIR /app/apps/web
 
-# BACKEND_URL provided by ECS task definition at runtime for server-side API calls
 ENV NODE_ENV=production
 
 # Copy built standalone app

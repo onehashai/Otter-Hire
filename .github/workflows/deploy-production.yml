@@ -107,6 +107,7 @@ jobs:
             NEXT_PUBLIC_APP_SUBDOMAIN=${{ vars.NEXT_PUBLIC_APP_SUBDOMAIN }}
             NEXT_PUBLIC_JOBS_SUBDOMAIN=${{ vars.NEXT_PUBLIC_JOBS_SUBDOMAIN }}
             NEXT_PUBLIC_APP_ROOT_HOST=${{ vars.NEXT_PUBLIC_APP_ROOT_HOST }}
+            NEXT_PUBLIC_API_BASE_URL=${{ vars.NEXT_PUBLIC_API_BASE_URL }}
             NEXT_PUBLIC_INBOUND_EMAIL_DOMAIN=${{ vars.NEXT_PUBLIC_INBOUND_EMAIL_DOMAIN }}
       - name: Deploy web service
         if: steps.changes.outputs.web == 'true'

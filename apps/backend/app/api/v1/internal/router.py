@@ -42,6 +42,5 @@ internal_router.include_router(candidates_router)
 internal_router.include_router(conversations_router)
 internal_router.include_router(files_router)
 internal_router.include_router(integrations_router)
-# Public job board (orgs/jobs, apply) + inbound email + webhooks — used by frontend
 internal_router.include_router(public_router, tags=["public"])
 internal_router.include_router(webhooks_router)

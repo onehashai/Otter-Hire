@@ -369,7 +369,7 @@ def _post_to_inbound_api(payload: dict, secret: str) -> tuple[int, str]:
     signature = "sha256=" + hmac.new(secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
 
     req = urllib.request.Request(
-        f"{settings.inbound_internal_api_base_url.rstrip('/')}/v1/internal/inbound/email",
+        f"{settings.backend_url.rstrip('/')}/v1/internal/inbound/email",
         data=body,
         headers={"Content-Type": "application/json", "X-OneHash-Signature": signature},
         method="POST",

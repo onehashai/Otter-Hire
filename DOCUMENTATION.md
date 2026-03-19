@@ -2279,7 +2279,6 @@ environment:
   NEXT_PUBLIC_JOBS_SUBDOMAIN: jobs
   NEXT_PUBLIC_APP_ROOT_HOST: localhost:3000
   NEXT_PUBLIC_API_BASE_URL: http://api.localhost.com:8000
-  TEMPORAL_UI_BACKEND_URL: http://temporal-ui:8080
 extra_hosts:
   - "api.localhost.com:host-gateway"
 ```
@@ -2367,7 +2366,6 @@ NEXT_PUBLIC_APP_ROOT_HOST=localhost:3000
 web:
   environment:
     NEXT_PUBLIC_API_BASE_URL: http://api.localhost.com:8000
-    TEMPORAL_UI_BACKEND_URL: http://temporal-ui:8080
   extra_hosts:
     - "api.localhost.com:host-gateway"
 ```

@@ -64,7 +64,7 @@ def send_email_via_ses(
     effective_html = (
         html_body
         if html_body
-        else f"<p style=\"white-space: pre-wrap;\">{html_module.escape(text_body)}</p>"
+        else f'<p style="white-space: pre-wrap;">{html_module.escape(text_body)}</p>'
     )
     content: dict[str, Any] = {
         "Simple": {

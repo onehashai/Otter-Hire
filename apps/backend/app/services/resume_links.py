@@ -3,7 +3,6 @@ from __future__ import annotations
 import ipaddress
 import re
 from dataclasses import dataclass
-from typing import Optional
 from urllib.parse import urlparse
 
 import httpx
@@ -228,4 +227,3 @@ async def resolve_resume_from_body(
         return suggested_name, content_type, content
 
     return None
-

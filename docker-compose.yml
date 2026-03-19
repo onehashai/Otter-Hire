@@ -34,7 +34,6 @@ services:
     environment:
       - TEMPORAL_ADDRESS=temporal:7233
       - TEMPORAL_UI_PORT=8080
-      - TEMPORAL_UI_PUBLIC_PATH=/temporal
     ports:
       - "8080:8080"
     depends_on:
@@ -139,14 +138,13 @@ services:
       NEXT_PUBLIC_APP_ROOT_HOST: localhost.com:3000
       NEXT_PUBLIC_INBOUND_EMAIL_DOMAIN: inbound.smartats.in
       NEXT_PUBLIC_API_BASE_URL: http://api.localhost.com:8000
-      TEMPORAL_UI_BACKEND_URL: http://temporal-ui:8080
+      NEXT_PUBLIC_TEMPORAL_UI_URL: http://temporal.localhost.com:8080
     extra_hosts:
       - "api.localhost.com:host-gateway"
     ports:
       - "3000:3000"
     depends_on:
       - backend
-      - temporal-ui
     volumes:
       - ./apps/web:/app/apps/web
       - ./packages/ui:/app/packages/ui

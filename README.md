@@ -21,9 +21,14 @@ docker compose up --build
 ```
 
 Open:
-- `http://localhost:3000`
-- `http://localhost:8000/openapi.json`
-- `http://localhost:3000/debug-api`
+- `http://localhost:3000` or `http://app.localhost.com:3000`
+- `http://localhost:8000/openapi.json` or `http://api.localhost.com:8000`
+- `http://temporal.localhost.com:8080` — Temporal UI
+
+Add to `/etc/hosts` for subdomains:
+```
+127.0.0.1 app.localhost.com api.localhost.com jobs.localhost.com temporal.localhost.com
+```
 
 Stop:
 
@@ -298,7 +303,7 @@ Required `staging` variables:
 - `ECS_WEB_TASKDEF`
 - `API_HEALTHCHECK_URL`
 - `WEB_HEALTHCHECK_URL`
-- `NEXT_PUBLIC_APP_SUBDOMAIN`, `NEXT_PUBLIC_JOBS_SUBDOMAIN`, `NEXT_PUBLIC_APP_ROOT_HOST`, `NEXT_PUBLIC_INBOUND_EMAIL_DOMAIN`
+- `NEXT_PUBLIC_APP_SUBDOMAIN`, `NEXT_PUBLIC_JOBS_SUBDOMAIN`, `NEXT_PUBLIC_APP_ROOT_HOST`, `NEXT_PUBLIC_API_BASE_URL`, `NEXT_PUBLIC_INBOUND_EMAIL_DOMAIN`, `NEXT_PUBLIC_TEMPORAL_UI_URL` (e.g. `https://temporal.smartats.in` for prod, `https://temporal.staging.smartats.in` for staging)
 
 Required `staging` secrets:
 - `AWS_ACCESS_KEY_ID`

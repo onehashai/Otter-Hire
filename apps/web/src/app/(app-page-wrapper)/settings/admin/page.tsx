@@ -53,7 +53,7 @@ export default function AdminSettingsPage() {
           <div className="rounded-lg border bg-card overflow-hidden">
             <div className="relative w-full min-h-[600px]">
               <iframe
-                src="/temporal"
+                src={process.env.NEXT_PUBLIC_TEMPORAL_UI_URL || "http://temporal.localhost.com:8080"}
                 title="Temporal Dashboard"
                 className="absolute inset-0 w-full h-full min-h-[600px] border-0"
                 sandbox="allow-same-origin allow-scripts allow-popups allow-forms"

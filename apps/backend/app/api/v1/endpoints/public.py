@@ -1105,7 +1105,9 @@ async def apply_public_job(
             latest_version = existing_version_result.scalar_one_or_none() or 0
 
             object_key = file_url
-            if file_url.startswith("/api/files/local/"):
+            if file_url.startswith("/v1/internal/files/local/"):
+                object_key = file_url.removeprefix("/v1/internal/files/local/")
+            elif file_url.startswith("/api/files/local/"):
                 object_key = file_url.removeprefix("/api/files/local/")
             elif file_url.startswith("/files/local/"):
                 object_key = file_url.removeprefix("/files/local/")

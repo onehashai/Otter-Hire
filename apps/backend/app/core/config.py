@@ -45,6 +45,10 @@ class Settings(BaseSettings):
     # Frontend URL — defaults to http://{APP_SUBDOMAIN}.{APP_DOMAIN}:3000 if not set explicitly
     frontend_base_url: str = Field(default="", validation_alias="FRONTEND_BASE_URL")
 
+    # API base URL — prod https://api.smartats.in, local http://localhost:8000
+    # Used for OAuth redirect_uri when API is on dedicated subdomain
+    api_base_url: str = Field(default="", validation_alias="API_BASE_URL")
+
     # Google OAuth
     google_client_id: str | None = Field(default=None, validation_alias="GOOGLE_CLIENT_ID")
     google_client_secret: str | None = Field(default=None, validation_alias="GOOGLE_CLIENT_SECRET")
@@ -175,10 +179,13 @@ class Settings(BaseSettings):
 
     @property
     def effective_google_redirect_uri(self) -> str | None:
-        """Returns the explicit override if set, otherwise derives from APP_DOMAIN."""
+        """Returns the explicit override if set, otherwise derives from API_BASE_URL or APP_DOMAIN."""
+        if self.api_base_url:
+            base = self.api_base_url.rstrip("/")
+            return f"{base}/v1/internal/auth/google/callback"
         if self.app_domain:
             port = "" if self.is_production else ":8000"
-            return f"{self._scheme}://{self.app_subdomain}.{self.app_domain}{port}/auth/google/callback"
+            return f"{self._scheme}://{self.app_subdomain}.{self.app_domain}{port}/v1/internal/auth/google/callback"
         return None
 
     @property

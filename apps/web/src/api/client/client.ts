@@ -1,20 +1,16 @@
-const BACKEND_URL = process.env.BACKEND_URL ?? "http://localhost:8000";
+/** Base URL of the API (no trailing slash). Prod: https://api.smartats.in, Local: http://localhost:8000 */
+const API_BASE =
+  (typeof window !== "undefined"
+    ? process.env.NEXT_PUBLIC_API_BASE_URL
+    : process.env.BACKEND_URL) ?? "http://localhost:8000";
 
-/** Client uses /api (same-origin); server uses BACKEND_URL for proxying. */
-export const API_BASE_URL =
-  typeof window === "undefined" ? BACKEND_URL : "/api";
+/** Full internal API base — all frontend calls use /v1/internal/* (JWT/session auth) */
+export const API_BASE_URL = `${API_BASE.replace(/\/$/, "")}/v1/internal`;
 
-/** Full WebSocket base URL (e.g. ws://localhost:3000/api). Use for client-side WebSocket connections. */
+/** Full WebSocket base URL for client-side WebSocket connections. */
 export function getWebSocketBaseUrl(): string {
-  if (typeof window !== "undefined") {
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    return API_BASE_URL.startsWith("/")
-      ? `${protocol}//${window.location.host}${API_BASE_URL}`
-      : API_BASE_URL.replace(/^http/i, "ws");
-  }
-  return API_BASE_URL.startsWith("/")
-    ? `ws://localhost:${process.env.PORT || 3000}${API_BASE_URL}`
-    : API_BASE_URL.replace(/^http/i, "ws");
+  const base = API_BASE.replace(/^http/i, "ws");
+  return `${base}/v1/internal/inbound/events/ws`;
 }
 
 export function normalizeApiUrl(url: string | null | undefined): string | null {
@@ -22,16 +18,21 @@ export function normalizeApiUrl(url: string | null | undefined): string | null {
   if (/^https?:\/\//i.test(url)) return url;
   const path = url.startsWith("/") ? url : `/${url}`;
 
-  // File URLs: same-origin for client; strip /api for server direct fetch
-  if (path.startsWith("/api/files/")) {
-    if (API_BASE_URL.startsWith("/")) return path;
-    return `${BACKEND_URL}${path.replace(/^\/api/, "")}`;
+  // File URLs: prepend API base when path is relative
+  if (
+    path.startsWith("/v1/internal/files/") ||
+    path.startsWith("/api/files/") ||
+    path.startsWith("/files/")
+  ) {
+    return `${API_BASE.replace(/\/$/, "")}${path}`;
   }
 
-  // Avoid double-prefixing when path already has /api
-  if (API_BASE_URL.startsWith("/") && path.startsWith("/api/")) return path;
-
   return `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
+/** Base API URL (without /v1/internal) — for health checks, WebSocket, etc. */
+export function getApiBase(): string {
+  return API_BASE.replace(/\/$/, "");
 }
 
 export type ApiErrorResponse = {

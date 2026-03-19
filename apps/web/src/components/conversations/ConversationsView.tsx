@@ -110,8 +110,7 @@ export function ConversationsView({ initialId }: ConversationsViewProps) {
 
   // Live push: WebSocket for message status updates (delivered, read, failed)
   useEffect(() => {
-    const wsBase = getWebSocketBaseUrl();
-    const socket = new WebSocket(`${wsBase}/public/inbound/events/ws`);
+    const socket = new WebSocket(getWebSocketBaseUrl());
     socket.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data) as {

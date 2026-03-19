@@ -164,8 +164,7 @@ export default function CandidatesPage() {
 
     const connect = () => {
       if (stopped) return;
-      const wsBase = getWebSocketBaseUrl();
-      socket = new WebSocket(`${wsBase}/public/inbound/events/ws`);
+      socket = new WebSocket(getWebSocketBaseUrl());
 
       socket.onmessage = (event) => {
         try {

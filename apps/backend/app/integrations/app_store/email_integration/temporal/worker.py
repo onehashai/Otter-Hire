@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-import logging
+from app.core.logging import logger
 
 from temporalio.worker import Worker
 
@@ -21,13 +21,7 @@ from app.integrations.app_store.email_integration.temporal.workflow import (
 )
 from app.services.temporal_client import get_temporal_client
 
-logger = logging.getLogger(__name__)
-
-
 async def run_worker() -> None:
-    import logging
-
-    logger = logging.getLogger(__name__)
     try:
         logger.info("Attempting to connect to Temporal...")
         client = await get_temporal_client()
@@ -45,7 +39,7 @@ async def run_worker() -> None:
                 process_s3_inbound_email_activity,
                 publish_update_activity,
             ],
-            max_concurrent_activities=50,
+            max_concurrent_activities=20,
             max_concurrent_workflow_tasks=5,
         )
         worker_outbound = Worker(
@@ -56,8 +50,8 @@ async def run_worker() -> None:
                 send_outbound_email_activity,
                 mark_message_failed_activity,
             ],
-            max_concurrent_activities=50,
-            max_concurrent_workflow_tasks=20,
+            max_concurrent_activities=20,
+            max_concurrent_workflow_tasks=5,
         )
         logger.info(
             "Temporal email workers started task_queues=%s,%s",
@@ -72,5 +66,4 @@ async def run_worker() -> None:
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
     asyncio.run(run_worker())

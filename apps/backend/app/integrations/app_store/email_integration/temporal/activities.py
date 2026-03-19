@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from datetime import datetime, timezone
 import base64
 import json
@@ -13,7 +14,8 @@ from sqlalchemy import update as sa_update
 from temporalio import activity
 
 from app.core.config import settings
-from app.core.logging import logger
+
+logger = logging.getLogger("ats_worker")
 from app.db.session import AsyncSessionLocal
 from app.integrations.app_store.email_integration.ses_bridge import (
     _extract_text_and_attachments,

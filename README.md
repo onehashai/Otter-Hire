@@ -23,7 +23,7 @@ docker compose up --build
 Open:
 - `http://localhost:3000` or `http://app.localhost.com:3000`
 - `http://localhost:8000/openapi.json` or `http://api.localhost.com:8000`
-- `http://temporal.localhost.com:8080` — Temporal UI
+- `http://temporal.localhost.com:8081` — Temporal UI
 
 Add to `/etc/hosts` for subdomains:
 ```

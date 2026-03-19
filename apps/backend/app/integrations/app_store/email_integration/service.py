@@ -120,17 +120,20 @@ async def upsert_email_config(
         )
         db.add(inbox)
     else:
+        address_unchanged = _normalize_inbox_address(inbox.inbox_address) == normalized_address
         inbox.inbox_address = normalized_address
         inbox.provider = body.provider.strip().lower() or inbox.provider
-        inbox.status = "pending"
-        inbox.verified_at = None
-        inbox.verification_status = "pending"
-        inbox.verification_provider = None
-        inbox.verification_email_id = None
-        inbox.verification_action_type = None
-        inbox.verification_action_payload = None
-        inbox.verification_detected_at = None
-        inbox.verification_error = None
+        # Only reset verification state when the user actually changed the inbox address
+        if not address_unchanged:
+            inbox.status = "pending"
+            inbox.verified_at = None
+            inbox.verification_status = "pending"
+            inbox.verification_provider = None
+            inbox.verification_email_id = None
+            inbox.verification_action_type = None
+            inbox.verification_action_payload = None
+            inbox.verification_detected_at = None
+            inbox.verification_error = None
 
     await db.commit()
     await db.refresh(inbox)

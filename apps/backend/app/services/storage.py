@@ -64,11 +64,15 @@ class StorageService:
             path.unlink()
 
     async def resolve_url(self, object_key: str) -> str:
-        return f"/api/files/local/{object_key.lstrip('/')}"
+        return f"/v1/internal/files/local/{object_key.lstrip('/')}"
 
     async def delete_by_url(self, url: str) -> None:
         clean = (url or "").strip()
         if not clean:
+            return
+        if clean.startswith("/v1/internal/files/local/"):
+            object_key = clean[len("/v1/internal/files/local/") :]
+            await self.delete_object(object_key)
             return
         if clean.startswith("/api/files/local/"):
             object_key = clean[len("/api/files/local/") :]

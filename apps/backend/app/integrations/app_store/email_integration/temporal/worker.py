@@ -46,7 +46,7 @@ async def run_worker() -> None:
                 publish_update_activity,
             ],
             max_concurrent_activities=50,
-            max_concurrent_workflow_tasks=20,
+            max_concurrent_workflow_tasks=5,
         )
         worker_outbound = Worker(
             client,

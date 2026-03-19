@@ -51,11 +51,11 @@ export type PublicApplyResponse = {
 };
 
 export async function getPublicJobs(orgId: string): Promise<PublicJobListItem[]> {
-  return apiGet<PublicJobListItem[]>(`/public/orgs/${orgId}/jobs`);
+  return apiGet<PublicJobListItem[]>(`/orgs/${orgId}/jobs`);
 }
 
 export async function getPublicJobDetail(orgId: string, jobId: string): Promise<PublicJobDetail> {
-  return apiGet<PublicJobDetail>(`/public/orgs/${orgId}/jobs/${jobId}`);
+  return apiGet<PublicJobDetail>(`/orgs/${orgId}/jobs/${jobId}`);
 }
 
 export async function applyToPublicJob(
@@ -63,7 +63,7 @@ export async function applyToPublicJob(
   jobId: string,
   payload: PublicApplyPayload,
 ): Promise<PublicApplyResponse> {
-  return apiFetch<PublicApplyResponse>(`/public/orgs/${orgId}/jobs/${jobId}/apply`, {
+  return apiFetch<PublicApplyResponse>(`/orgs/${orgId}/jobs/${jobId}/apply`, {
     method: "POST",
     body: payload,
   });

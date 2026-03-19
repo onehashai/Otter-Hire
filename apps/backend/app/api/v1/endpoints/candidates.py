@@ -55,7 +55,9 @@ router = APIRouter(prefix="/candidates", tags=["candidates"])
 
 async def _resolve_candidate_document_url(doc: CandidateDocument) -> str:
     clean_url = (doc.url or "").strip()
-    if clean_url.startswith(("http://", "https://", "/api/files/local/", "/files/local/")):
+    if clean_url.startswith(
+        ("http://", "https://", "/v1/internal/files/local/", "/api/files/local/", "/files/local/")
+    ):
         return clean_url
     if (doc.object_key or "").strip():
         return await storage_service.resolve_url(doc.object_key)

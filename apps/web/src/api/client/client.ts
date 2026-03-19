@@ -1,38 +1,43 @@
-const BACKEND_URL = process.env.BACKEND_URL ?? "http://localhost:8000";
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
 
-/** Client uses /api (same-origin); server uses BACKEND_URL for proxying. */
-export const API_BASE_URL =
-  typeof window === "undefined" ? BACKEND_URL : "/api";
+/** Full internal API base — all frontend calls use /v1/internal/* (JWT/session auth) */
+export const API_BASE_URL = `${API_BASE.replace(/\/$/, "")}/v1/internal`;
 
-/** Full WebSocket base URL (e.g. ws://localhost:3000/api). Use for client-side WebSocket connections. */
+/** Full WebSocket base URL for client-side WebSocket connections. */
 export function getWebSocketBaseUrl(): string {
-  if (typeof window !== "undefined") {
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    return API_BASE_URL.startsWith("/")
-      ? `${protocol}//${window.location.host}${API_BASE_URL}`
-      : API_BASE_URL.replace(/^http/i, "ws");
-  }
-  return API_BASE_URL.startsWith("/")
-    ? `ws://localhost:${process.env.PORT || 3000}${API_BASE_URL}`
-    : API_BASE_URL.replace(/^http/i, "ws");
+  const base = API_BASE.replace(/^http/i, "ws");
+  return `${base}/v1/internal/inbound/events/ws`;
 }
 
+/** Normalize API or file URLs */
 export function normalizeApiUrl(url: string | null | undefined): string | null {
   if (!url) return null;
+
+  // Already absolute
   if (/^https?:\/\//i.test(url)) return url;
+
   const path = url.startsWith("/") ? url : `/${url}`;
 
-  // File URLs: same-origin for client; strip /api for server direct fetch
-  if (path.startsWith("/api/files/")) {
-    if (API_BASE_URL.startsWith("/")) return path;
-    return `${BACKEND_URL}${path.replace(/^\/api/, "")}`;
+  // File URLs (served from backend)
+  if (
+    path.startsWith("/v1/internal/files/") ||
+    path.startsWith("/files/")
+  ) {
+    return `${API_BASE.replace(/\/$/, "")}${path}`;
   }
 
-  // Avoid double-prefixing when path already has /api
-  if (API_BASE_URL.startsWith("/") && path.startsWith("/api/")) return path;
-
-  return `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
+  return `${API_BASE_URL}${path}`;
 }
+
+/** Base API URL (without /v1/internal) */
+export function getApiBase(): string {
+  return API_BASE.replace(/\/$/, "");
+}
+
+/* =========================
+   Error Handling
+========================= */
 
 export type ApiErrorResponse = {
   code?: string;
@@ -115,12 +120,15 @@ async function readApiErrorBody(res: Response): Promise<ApiErrorResponse | null>
 
 async function toApiError(res: Response, fallback: string): Promise<ApiError> {
   const body = await readApiErrorBody(res);
+
   const rawMessage =
     (typeof body?.message === "string" && body.message.trim()) ||
     (typeof body?.detail === "string" && body.detail.trim()) ||
     (typeof body?.error === "string" && body.error.trim()) ||
     fallback;
+
   const message = mapErrorCodeToMessage(res.status, body?.code, rawMessage);
+
   return new ApiError(message, res.status, body?.code, body?.request_id, body?.details);
 }
 
@@ -128,6 +136,10 @@ export async function parseErrorResponse(res: Response, defaultMessage: string):
   const err = await toApiError(res, defaultMessage);
   return err.message;
 }
+
+/* =========================
+   API Helpers
+========================= */
 
 export type ApiGetOptions = {
   credentials?: RequestCredentials;
@@ -145,7 +157,8 @@ export async function apiGet<T>(path: string, options: ApiGetOptions = {}): Prom
   });
 
   if (!res.ok) {
-    throw new Error(`API request failed: ${res.status} ${res.statusText}`);
+    const err = await toApiError(res, `GET failed: ${res.status}`);
+    throw err;
   }
 
   return (await res.json()) as T;
@@ -170,13 +183,10 @@ export async function apiPost<T>(
   });
 
   if (!res.ok) {
-    const err = await toApiError(res, `API request failed: ${res.status} ${res.statusText}`);
-    throw err;
+    throw await toApiError(res, `POST failed: ${res.status}`);
   }
 
-  if (res.status === 204) {
-    return {} as T;
-  }
+  if (res.status === 204) return {} as T;
 
   return (await res.json()) as T;
 }
@@ -186,6 +196,7 @@ export async function apiFetch<T>(
   options: { method: string; body?: unknown },
 ): Promise<T> {
   const headers: Record<string, string> = { Accept: "application/json" };
+
   if (options.body !== undefined) {
     headers["Content-Type"] = "application/json";
   }
@@ -199,11 +210,11 @@ export async function apiFetch<T>(
   });
 
   if (!res.ok) {
-    const err = await toApiError(res, `Request failed: ${res.status} ${res.statusText}`);
-    throw err;
+    throw await toApiError(res, `Request failed: ${res.status}`);
   }
 
   if (res.status === 204) return {} as T;
+
   return (await res.json()) as T;
 }
 
@@ -215,7 +226,6 @@ export async function apiDelete(path: string): Promise<void> {
   });
 
   if (!res.ok) {
-    const err = await toApiError(res, `API request failed: ${res.status} ${res.statusText}`);
-    throw err;
+    throw await toApiError(res, `DELETE failed: ${res.status}`);
   }
 }

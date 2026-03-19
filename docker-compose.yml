@@ -74,7 +74,7 @@ services:
       APP_DOMAIN: localhost.com
       APP_SUBDOMAIN: app
       JOBS_SUBDOMAIN: jobs
-      COOKIE_DOMAIN: ""
+      COOKIE_DOMAIN: .localhost.com
       TEMPORAL_SERVER_URL: temporal:7233
     ports:
       - "8000:8000"
@@ -138,8 +138,10 @@ services:
       NEXT_PUBLIC_JOBS_SUBDOMAIN: jobs
       NEXT_PUBLIC_APP_ROOT_HOST: localhost.com:3000
       NEXT_PUBLIC_INBOUND_EMAIL_DOMAIN: inbound.smartats.in
-      BACKEND_URL: http://backend:8000
+      NEXT_PUBLIC_API_BASE_URL: http://api.localhost.com:8000
       TEMPORAL_UI_BACKEND_URL: http://temporal-ui:8080
+    extra_hosts:
+      - "api.localhost.com:host-gateway"
     ports:
       - "3000:3000"
     depends_on:

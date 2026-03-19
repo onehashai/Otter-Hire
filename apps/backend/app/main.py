@@ -1,7 +1,7 @@
 import asyncio
 from app.utils.uuid import uuid7
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -15,13 +15,12 @@ from app.core.config import settings
 from app.core.errors import make_error_payload
 from app.core.logging import logger, setup_logging
 from app.integrations.app_store.email_integration.ses_bridge import run_ses_raw_bridge_loop
-from app.middleware.context import RequestContext, get_request_context
 from app.middleware.errors import (
     generic_exception_handler,
     http_exception_handler,
     validation_exception_handler,
 )
-from app.schemas.common import HealthResponse, RequestContextSchema
+from app.schemas.common import HealthResponse
 
 setup_logging()
 
@@ -97,6 +96,3 @@ async def health():
     return HealthResponse(status="ok")
 
 
-@app.get("/me", response_model=RequestContextSchema)
-async def get_me(ctx: RequestContext = Depends(get_request_context)):
-    return ctx.to_schema()

@@ -149,7 +149,6 @@ class Settings(BaseSettings):
     backend_url: str = Field(
         default="http://localhost:8000",
         validation_alias="BACKEND_URL",
-        description="Backend API base URL for internal calls (worker → backend). ECS: internal ALB or service discovery.",
     )
     inbound_sns_topic_arns: str = Field(default="", validation_alias="INBOUND_SNS_TOPIC_ARNS")
     inbound_sns_auto_confirm: bool = Field(

@@ -131,19 +131,42 @@ async def download_and_extract_resume_activity(input_data: InboundWorkflowInput)
 
 @activity.defn
 async def process_s3_inbound_email_activity(input_data: InboundWorkflowInput) -> dict:
-    activity.logger.info(
-        "process_s3_inbound_email_activity started bucket=%s key=%s",
+    ctx = activity.info()
+    logger.info(
+        "Activity started: process_s3_inbound_email bucket=%s key=%s workflow_id=%s",
         input_data.bucket,
         input_data.key,
+        ctx.workflow_id,
     )
-    extracted = await download_and_extract_resume_activity(input_data)
-    return await parse_and_create_candidate_activity({"data": extracted, "key": input_data.key})
+    try:
+        extracted = await download_and_extract_resume_activity(input_data)
+        result = await parse_and_create_candidate_activity({"data": extracted, "key": input_data.key})
+        logger.info(
+            "Activity completed: process_s3_inbound_email key=%s status=%s workflow_id=%s",
+            input_data.key,
+            result.get("status"),
+            ctx.workflow_id,
+        )
+        return result
+    except Exception as e:
+        logger.exception(
+            "Activity failed: process_s3_inbound_email key=%s workflow_id=%s error=%s",
+            input_data.key,
+            ctx.workflow_id,
+            e,
+        )
+        raise
 
 
 @activity.defn
 async def parse_and_create_candidate_activity(input_data: dict) -> dict:
     data = input_data.get("data") or {}
     key = str(input_data.get("key") or "")
+    logger.info(
+        "Activity: parse_and_create_candidate key=%s status=%s",
+        key,
+        data.get("status"),
+    )
     if data.get("status") != "ready":
         # Workflow completed without creating an InboundEmail DB record (unknown inbox,
         # bad format, etc.).  Mark the key as permanently ignored in Redis so the
@@ -174,6 +197,12 @@ async def parse_and_create_candidate_activity(input_data: dict) -> dict:
         "inbound_email_id": parsed_response.get("inbound_email_id"),
         "org_id": parsed_response.get("org_id"),
     }
+    logger.info(
+        "Activity: parse_and_create_candidate done key=%s http_status=%s candidate_id=%s",
+        key,
+        status,
+        parsed_response.get("candidate_id"),
+    )
     if status >= 400:
         raise URLError(f"Inbound API failed status={status} body={response_text}")
     return result
@@ -219,6 +248,11 @@ async def send_outbound_email_activity(input_data: OutboundWorkflowInput) -> dic
 
     Raises on send error so Temporal will retry. Message row stays ``queued`` until success.
     """
+    logger.info(
+        "Activity started: send_outbound_email message_id=%s to=%s",
+        input_data.message_id,
+        input_data.to_email,
+    )
     from app.integrations.app_store.email_integration.outbound_service import (
         get_verified_outbound_for_org,
     )
@@ -284,6 +318,10 @@ async def send_outbound_email_activity(input_data: OutboundWorkflowInput) -> dic
         )
         await db.commit()
 
+    logger.info(
+        "Activity completed: send_outbound_email message_id=%s status=sent",
+        input_data.message_id,
+    )
     return {
         "status": "sent",
         "message_id": input_data.message_id,
@@ -294,6 +332,7 @@ async def send_outbound_email_activity(input_data: OutboundWorkflowInput) -> dic
 @activity.defn
 async def mark_message_failed_activity(message_id: str) -> None:
     """Flip a message to 'failed' after all send retries are exhausted."""
+    logger.warning("Activity: mark_message_failed message_id=%s", message_id)
     async with AsyncSessionLocal() as db:
         await db.execute(
             sa_update(Message).where(Message.id == UUID(message_id)).values(status="failed")

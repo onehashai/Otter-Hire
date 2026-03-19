@@ -107,7 +107,7 @@ services:
       APP_SUBDOMAIN: app
       JOBS_SUBDOMAIN: jobs
       COOKIE_DOMAIN: ""
-      INBOUND_INTERNAL_API_BASE_URL: http://backend:8000
+      BACKEND_URL: http://backend:8000
       TEMPORAL_SERVER_URL: temporal:7233
     depends_on:
       postgres:

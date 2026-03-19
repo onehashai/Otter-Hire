@@ -1,5 +1,3 @@
-"""Compatibility entrypoint for the migrated email integration Temporal worker."""
-
 from __future__ import annotations
 
 import asyncio

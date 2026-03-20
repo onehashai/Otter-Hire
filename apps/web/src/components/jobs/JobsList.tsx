@@ -4,11 +4,9 @@ import { useTranslation } from "react-i18next";
 import { Card, CardContent } from "@onehash/ui/card";
 import { Badge } from "@onehash/ui/badge";
 import { Button } from "@onehash/ui/button";
-import { ChevronRight } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { JobListItemResponse } from "@/api";
 import { CategoryType, JobStatusType } from "@/app/(app-page-wrapper)/jobs/[jobId]/constants";
-import { cn } from "@/lib/utils";
 
 const statusKey: Record<JobStatusType, string> = {
   open: "open",

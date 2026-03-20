@@ -5,8 +5,6 @@ import { Card, CardContent } from "@onehash/ui/card";
 import { Button } from "@onehash/ui/button";
 import { Badge } from "@onehash/ui/badge";
 import { Avatar, AvatarFallback } from "@onehash/ui/avatar";
-import { Checkbox } from "@onehash/ui/checkbox";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@onehash/ui/table";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,7 +13,6 @@ import {
   DropdownMenuTrigger,
 } from "@onehash/ui/dropdown-menu";
 import { Icon } from "@onehash/ui/icon";
-import { useIsMobile } from "@/hooks/use-mobile";
 import { useToast } from "@/hooks/use-toast";
 import { useTranslation } from "react-i18next";
 
@@ -39,89 +36,17 @@ const stageVariant = (stage: string) => {
   return "secondary";
 };
 
-const sourceLabel = (source: string): string => {
-  const normalized = source.trim().toLowerCase();
-  if (normalized === "job_board") return "Job Portal";
-  if (normalized === "manual") return "Manual";
-  if (normalized === "email_inbound") return "Email Automation";
-  return source
-    .split("_")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-};
-
 interface CandidatesListProps {
   candidates: Candidate[];
-  selected: Set<string>;
-  onToggleSelect: (id: string) => void;
-  onToggleAll: () => void;
-  onBulkAction: (action: string) => void;
-  onClearSelection: () => void;
-  total?: number;
 }
 
-export function CandidatesList({
-  candidates,
-  selected,
-  onToggleSelect,
-  onToggleAll,
-  onBulkAction,
-  onClearSelection,
-  total,
-}: CandidatesListProps) {
+export function CandidatesList({ candidates }: CandidatesListProps) {
   const { t } = useTranslation();
   const router = useRouter();
-  const isMobile = useIsMobile();
   const { toast } = useToast();
 
   return (
     <>
-      {typeof total === "number" && (
-        <p className="text-xs text-muted-foreground mb-2">
-          Showing {candidates.length} of {total} candidates
-        </p>
-      )}
-      {/* Bulk Actions */}
-      {selected.size > 0 && (
-        <Card>
-          <CardContent className="p-2.5 flex items-center gap-2 flex-wrap">
-            <span className="text-xs font-medium">
-              {t("selected_count", { count: selected.size })}
-            </span>
-            <div className="flex gap-1.5 ml-auto">
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 text-xs"
-                onClick={() => onBulkAction("Move stage")}
-              >
-                <Icon name="UserCheck" className="h-3 w-3 mr-1" /> Move Stage
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 text-xs"
-                onClick={() => onBulkAction("Assign recruiter")}
-              >
-                {t("assign")}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 text-xs text-destructive"
-                onClick={() => onBulkAction("Reject")}
-              >
-                <Icon name="X" className="h-3 w-3 mr-1" /> {t("reject")}
-              </Button>
-              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={onClearSelection}>
-                {t("clear")}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Empty state */}
       {candidates.length === 0 ? (
         <Card>
           <CardContent className="py-16 flex flex-col items-center gap-3 text-center">
@@ -139,24 +64,16 @@ export function CandidatesList({
             </Button>
           </CardContent>
         </Card>
-      ) : isMobile ? (
-        /* Mobile Cards */
+      ) : (
         <div className="space-y-2">
           {candidates.map((c) => (
             <Card
               key={c.id}
-              className="active:bg-muted/50 transition-colors cursor-pointer"
+              className="cursor-pointer hover:shadow-sm active:bg-muted/50 transition-all"
               onClick={() => router.push(`/candidates/${c.id}`)}
             >
-              <CardContent className="p-4">
-                <div className="flex items-start gap-2.5">
-                  <div className="pt-0.5">
-                    <Checkbox
-                      checked={selected.has(c.id)}
-                      onCheckedChange={() => onToggleSelect(c.id)}
-                      onClick={(e) => e.stopPropagation()}
-                    />
-                  </div>
+              <CardContent className="p-4 py-3">
+                <div className="flex items-center gap-3 sm:gap-4">
                   <Avatar className="h-8 w-8 shrink-0">
                     <AvatarFallback className="text-xs bg-muted">
                       {c.name
@@ -166,128 +83,65 @@ export function CandidatesList({
                     </AvatarFallback>
                   </Avatar>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium truncate">{c.name}</span>
-                      <Icon
-                        name="ChevronLeft"
-                        className="h-4 w-4 text-muted-foreground shrink-0 rotate-180"
-                      />
+                    <div className="flex flex-wrap items-center gap-2 mb-0.5 min-w-0">
+                      <h3 className="text-sm font-medium truncate min-w-0 max-w-[10rem] sm:max-w-[14rem]">
+                        {c.name}
+                      </h3>
+                      <div className="flex flex-wrap items-center gap-2 shrink-0">
+                        <Badge variant={stageVariant(c.stage)} className="text-[10px]">
+                          {c.stage}
+                        </Badge>
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] max-w-[12rem] font-normal"
+                          title={c.role}
+                        >
+                          <span className="block truncate">{c.role}</span>
+                        </Badge>
+                      </div>
                     </div>
-                    <p className="text-xs text-muted-foreground truncate">{c.role}</p>
-                    <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-                      <Badge variant={stageVariant(c.stage)} className="text-[10px]">
-                        {c.stage}
-                      </Badge>
-                    </div>
-                    <div className="mt-2 text-[10px] text-muted-foreground">{c.lastActivity}</div>
+                    <p className="text-xs text-muted-foreground truncate">{c.email}</p>
+                  </div>
+                  <div
+                    className="flex items-center gap-2 shrink-0"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" size="icon" className="h-8 w-8">
+                          <Icon name="MoreHorizontal" className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-44">
+                        <DropdownMenuItem
+                          className="text-xs"
+                          onClick={() => toast({ title: "Stage updated" })}
+                        >
+                          <Icon name="UserCheck" className="h-3.5 w-3.5 mr-2" /> Move Stage
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="text-xs"
+                          onClick={() => toast({ title: "Interview scheduled" })}
+                        >
+                          <Icon name="Clock" className="h-3.5 w-3.5 mr-2" /> Schedule Interview
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          className="text-xs text-destructive focus:text-destructive"
+                          onClick={() =>
+                            toast({ title: "Candidate rejected", variant: "destructive" })
+                          }
+                        >
+                          <Icon name="X" className="h-3.5 w-3.5 mr-2" /> Reject
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 </div>
               </CardContent>
             </Card>
           ))}
         </div>
-      ) : (
-        /* Desktop Table */
-        <Card>
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-10">
-                    <Checkbox
-                      checked={selected.size === candidates.length && candidates.length > 0}
-                      onCheckedChange={onToggleAll}
-                    />
-                  </TableHead>
-                  <TableHead className="text-xs">Candidate</TableHead>
-                  <TableHead className="text-xs text-center">Applied For</TableHead>
-                  <TableHead className="text-xs text-center">Source</TableHead>
-                  <TableHead className="text-xs text-center">Stage</TableHead>
-                  <TableHead className="text-xs text-center">Activity</TableHead>
-                  <TableHead className="w-10" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {candidates.map((c) => (
-                  <TableRow
-                    key={c.id}
-                    className="cursor-pointer hover:bg-muted/50"
-                    onClick={() => router.push(`/candidates/${c.id}`)}
-                  >
-                    <TableCell onClick={(e) => e.stopPropagation()}>
-                      <Checkbox
-                        checked={selected.has(c.id)}
-                        onCheckedChange={() => onToggleSelect(c.id)}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Avatar className="h-7 w-7">
-                          <AvatarFallback className="text-[10px] bg-muted">
-                            {c.name
-                              .split(" ")
-                              .map((n) => n[0])
-                              .join("")}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <span className="text-sm font-medium">{c.name}</span>
-                          <p className="text-[11px] text-muted-foreground">{c.email}</p>
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground text-center">
-                      {c.role}
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground text-center">
-                      {sourceLabel(c.source)}
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <Badge variant={stageVariant(c.stage)} className="text-[10px]">
-                        {c.stage}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground text-center">
-                      {c.lastActivity}
-                    </TableCell>
-                    <TableCell onClick={(e) => e.stopPropagation()}>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
-                            <Icon name="MoreHorizontal" className="h-3.5 w-3.5" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-44">
-                          <DropdownMenuItem
-                            className="text-xs"
-                            onClick={() => toast({ title: "Stage updated" })}
-                          >
-                            <Icon name="UserCheck" className="h-3.5 w-3.5 mr-2" /> Move Stage
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            className="text-xs"
-                            onClick={() => toast({ title: "Interview scheduled" })}
-                          >
-                            <Icon name="Clock" className="h-3.5 w-3.5 mr-2" /> Schedule Interview
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            className="text-xs text-destructive focus:text-destructive"
-                            onClick={() =>
-                              toast({ title: "Candidate rejected", variant: "destructive" })
-                            }
-                          >
-                            <Icon name="X" className="h-3.5 w-3.5 mr-2" /> Reject
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
       )}
     </>
   );

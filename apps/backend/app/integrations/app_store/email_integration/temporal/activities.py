@@ -1,41 +1,35 @@
 from __future__ import annotations
 
 import asyncio
-import logging
-from datetime import datetime, timezone
 import base64
 import json
+import logging
+from datetime import datetime, timezone
 from urllib.error import URLError
 from uuid import UUID
 
-import boto3
-import redis
-from sqlalchemy import update as sa_update
 from temporalio import activity
 
 from app.core.config import settings
-
-logger = logging.getLogger("ats_worker")
-from app.db.session import AsyncSessionLocal
-from app.integrations.app_store.email_integration.ses_bridge import (
-    _extract_text_and_attachments,
-    _mark_key_ignored_in_redis,
-    _post_to_inbound_api,
-    _resolve_inbox_context,
-)
 from app.integrations.app_store.email_integration.temporal.types import (
     InboundWorkflowInput,
     OutboundWorkflowInput,
 )
-from app.models.message import Message
 
-redis_client = redis.Redis.from_url(
-    settings.redis_url,
-    decode_responses=True,
-)
+logger = logging.getLogger("ats_worker")
 
-@activity.defn
+def _get_redis_client():
+    import redis
+
+    return redis.Redis.from_url(
+        settings.redis_url,
+        decode_responses=True,
+    )
+
+@activity.defn(name="download_email_activity")
 async def download_email_activity(input_data: InboundWorkflowInput) -> str:
+    import boto3
+
     if "AMAZON_SES_SETUP_NOTIFICATION" in input_data.key:
         return json.dumps({"status": "ignored", "reason": "setup_notification"})
 
@@ -50,9 +44,13 @@ async def download_email_activity(input_data: InboundWorkflowInput) -> str:
     )
     return base64.b64encode(raw_email).decode("ascii")
 
-
-@activity.defn
+@activity.defn(name="extract_resume_activity")
 async def extract_resume_activity(raw_email_b64: str) -> dict:
+    from app.integrations.app_store.email_integration.ses_bridge import (
+        _extract_text_and_attachments,
+        _resolve_inbox_context,
+    )
+
     if raw_email_b64.startswith("{"):
         parsed = json.loads(raw_email_b64)
         if parsed.get("status") == "ignored":
@@ -88,8 +86,15 @@ async def extract_resume_activity(raw_email_b64: str) -> dict:
     }
 
 
-@activity.defn
+
+@activity.defn(name="download_and_extract_resume_activity")
 async def download_and_extract_resume_activity(input_data: InboundWorkflowInput) -> dict:
+    import boto3
+    from app.integrations.app_store.email_integration.ses_bridge import (
+        _extract_text_and_attachments,
+        _resolve_inbox_context,
+    )
+
     if "AMAZON_SES_SETUP_NOTIFICATION" in input_data.key:
         return {"status": "ignored", "reason": "setup_notification"}
 
@@ -130,8 +135,7 @@ async def download_and_extract_resume_activity(input_data: InboundWorkflowInput)
         "payload": payload,
     }
 
-
-@activity.defn
+@activity.defn(name="process_s3_inbound_email_activity")
 async def process_s3_inbound_email_activity(input_data: InboundWorkflowInput) -> dict:
     ctx = activity.info()
     logger.info(
@@ -159,9 +163,13 @@ async def process_s3_inbound_email_activity(input_data: InboundWorkflowInput) ->
         )
         raise
 
-
-@activity.defn
+@activity.defn(name="parse_and_create_candidate_activity")
 async def parse_and_create_candidate_activity(input_data: dict) -> dict:
+    from app.integrations.app_store.email_integration.ses_bridge import (
+        _mark_key_ignored_in_redis,
+        _post_to_inbound_api,
+    )
+
     data = input_data.get("data") or {}
     key = str(input_data.get("key") or "")
     logger.info(
@@ -169,10 +177,8 @@ async def parse_and_create_candidate_activity(input_data: dict) -> dict:
         key,
         data.get("status"),
     )
+
     if data.get("status") != "ready":
-        # Workflow completed without creating an InboundEmail DB record (unknown inbox,
-        # bad format, etc.).  Mark the key as permanently ignored in Redis so the
-        # polling loop never re-enqueues it after the short-lived 'enqueued' TTL expires.
         if key:
             _mark_key_ignored_in_redis(key)
         return data
@@ -199,79 +205,77 @@ async def parse_and_create_candidate_activity(input_data: dict) -> dict:
         "inbound_email_id": parsed_response.get("inbound_email_id"),
         "org_id": parsed_response.get("org_id"),
     }
+
     logger.info(
         "Activity: parse_and_create_candidate done key=%s http_status=%s candidate_id=%s",
         key,
         status,
         parsed_response.get("candidate_id"),
     )
+
     if status >= 400:
         raise URLError(f"Inbound API failed status={status} body={response_text}")
+
     return result
 
-@activity.defn
+@activity.defn(name="publish_update_activity")
 async def publish_update_activity(event_payload: dict) -> None:
     try:
+        redis_client = _get_redis_client()
         enriched_payload = {
             "event_version": 1,
             "occurred_at": datetime.now(tz=timezone.utc).isoformat(),
             **event_payload,
         }
 
-        redis_client.publish(
+        await asyncio.to_thread(
+            redis_client.publish,
             settings.inbound_events_channel,
             json.dumps(enriched_payload),
         )
 
         logger.info(
-            "Published inbound event",
-            extra={
-                "channel": settings.inbound_events_channel,
-                "event": enriched_payload.get("event"),
-                "workflow_id": enriched_payload.get("workflow_id"),
-            },
+            "Published inbound event channel=%s event=%s workflow_id=%s",
+            settings.inbound_events_channel,
+            enriched_payload.get("event"),
+            enriched_payload.get("workflow_id"),
         )
 
-    except Exception as e:
-        logger.error(
-            "Failed to publish inbound event",
-            exc_info=True,
-            extra={
-                "event": event_payload.get("event"),
-                "workflow_id": event_payload.get("workflow_id"),
-            },
+    except Exception:
+        logger.exception(
+            "Failed to publish inbound event event=%s workflow_id=%s",
+            event_payload.get("event"),
+            event_payload.get("workflow_id"),
         )
         raise
 
-
-@activity.defn
+@activity.defn(name="send_outbound_email_activity")
 async def send_outbound_email_activity(input_data: OutboundWorkflowInput) -> dict:
-    """Send one outbound email via SES (org-level identity; from address from config or env).
+    from sqlalchemy import update as sa_update
 
-    Raises on send error so Temporal will retry. Message row stays ``queued`` until success.
-    """
+    from app.db.session import AsyncSessionLocal
+    from app.integrations.app_store.email_integration.outbound_service import (
+        get_verified_outbound_for_org,
+    )
+    from app.models.message import Message
+    from app.services.ses_outbound import send_email_via_ses
+
     logger.info(
         "Activity started: send_outbound_email message_id=%s to=%s",
         input_data.message_id,
         input_data.to_email,
     )
-    from app.integrations.app_store.email_integration.outbound_service import (
-        get_verified_outbound_for_org,
-    )
-    from app.services.ses_outbound import send_email_via_ses
 
     org_id = UUID(input_data.org_id)
     message_id = UUID(input_data.message_id)
 
     async with AsyncSessionLocal() as db:
-        # Prefer reply+conv@inbound.domain as From so replies land in the same conversation
         reply_as_from = (input_data.reply_to or "").strip()
         if reply_as_from and "@" in reply_as_from:
             from_email_addr = reply_as_from
             if input_data.org_name:
                 display_name = f"{input_data.from_name or 'Recruiter'} from {input_data.org_name}"
             else:
-                # Never use the reply+ address as display name; use name or "Recruiter"
                 display_name = (input_data.from_name or "Recruiter").strip() or "Recruiter"
         else:
             outbound_row = await get_verified_outbound_for_org(db, org_id)
@@ -294,7 +298,8 @@ async def send_outbound_email_activity(input_data: OutboundWorkflowInput) -> dic
 
         html_body = input_data.html_body
 
-        ses_message_id = send_email_via_ses(
+        ses_message_id = await asyncio.to_thread(
+            send_email_via_ses,
             from_email=from_email_addr,
             from_name=display_name,
             to_email=input_data.to_email,
@@ -307,6 +312,7 @@ async def send_outbound_email_activity(input_data: OutboundWorkflowInput) -> dic
             message_id_tag=input_data.message_id,
             org_id_tag=input_data.org_id,
         )
+
         provider_message_id = f"ses:{ses_message_id}"
 
         await db.execute(
@@ -324,17 +330,22 @@ async def send_outbound_email_activity(input_data: OutboundWorkflowInput) -> dic
         "Activity completed: send_outbound_email message_id=%s status=sent",
         input_data.message_id,
     )
+
     return {
         "status": "sent",
         "message_id": input_data.message_id,
         "provider_message_id": provider_message_id,
     }
 
-
-@activity.defn
+@activity.defn(name="mark_message_failed_activity")
 async def mark_message_failed_activity(message_id: str) -> None:
-    """Flip a message to 'failed' after all send retries are exhausted."""
+    from sqlalchemy import update as sa_update
+
+    from app.db.session import AsyncSessionLocal
+    from app.models.message import Message
+
     logger.warning("Activity: mark_message_failed message_id=%s", message_id)
+
     async with AsyncSessionLocal() as db:
         await db.execute(
             sa_update(Message).where(Message.id == UUID(message_id)).values(status="failed")

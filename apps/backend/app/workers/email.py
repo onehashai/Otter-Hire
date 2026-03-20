@@ -80,7 +80,3 @@ async def run_worker() -> None:
     except Exception as e:
         logger.error(f"Worker failed to start: {type(e).__name__}: {e}", exc_info=True)
         raise
-
-
-if __name__ == "__main__":
-    asyncio.run(run_worker())

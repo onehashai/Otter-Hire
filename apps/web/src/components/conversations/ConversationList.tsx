@@ -56,12 +56,6 @@ export function ConversationList({
   return (
     <div className="flex flex-col h-full">
       <div className="p-3 space-y-2 border-b border-border">
-        {/* <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-foreground">{t("conversations_title")}</h2>
-          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onCompose}>
-            <Plus className="h-4 w-4" />
-          </Button>
-        </div> */}
         <div className="flex gap-1.5">
           <div className="relative flex-1">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
@@ -72,6 +66,17 @@ export function ConversationList({
               className="h-8 pl-8 text-xs"
             />
           </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="h-8 w-8 shrink-0"
+            onClick={onCompose}
+            aria-label={t("new_conversation")}
+            title={t("new_conversation")}
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="icon" className="h-8 w-8 shrink-0">

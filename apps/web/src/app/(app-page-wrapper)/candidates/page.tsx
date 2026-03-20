@@ -18,12 +18,9 @@ import { CandidatesList, type Candidate } from "@/components/candidates/Candidat
 import { useTranslation } from "react-i18next";
 import { useSetPageMetadata } from "@/hooks/useSetPageMetadata";
 import {
-  bulkUpdateCandidateStage,
-  bulkUpdateCandidateStatus,
   createCandidate,
   getCandidatesPaginated,
   getJobs,
-  getJobById,
   type JobListItemResponse,
   type CandidateListItemResponse,
 } from "@/api";
@@ -83,7 +80,6 @@ export default function CandidatesPage() {
   const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [stageFilter, setStageFilter] = useState<string[]>([]);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [items, setItems] = useState<CandidateListItemResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
@@ -92,12 +88,6 @@ export default function CandidatesPage() {
   const pageSize = 20;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
-  const [moveStageOpen, setMoveStageOpen] = useState(false);
-  const [moveStageOptions, setMoveStageOptions] = useState<Array<{ value: string; label: string }>>(
-    [],
-  );
-  const [selectedMoveStageId, setSelectedMoveStageId] = useState("");
-  const [moveLoading, setMoveLoading] = useState(false);
   const [jobs, setJobs] = useState<JobListItemResponse[]>([]);
   const [addOpen, setAddOpen] = useState(false);
   const [addLoading, setAddLoading] = useState(false);
@@ -217,12 +207,6 @@ export default function CandidatesPage() {
     };
   }, [addJobId]);
 
-  const candidateById = useMemo(() => {
-    const map = new Map<string, CandidateListItemResponse>();
-    for (const item of items) map.set(item.id, item);
-    return map;
-  }, [items]);
-
   const filtered = useMemo(() => {
     const list = items.map(toUiCandidate).filter((c) => {
       const matchStage = stageFilter.length === 0 || stageFilter.includes(c.stage);
@@ -238,136 +222,6 @@ export default function CandidatesPage() {
 
     return list;
   }, [items, stageFilter]);
-
-  const toggleSelect = (id: string) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
-  };
-
-  const toggleAll = () => {
-    if (selected.size === filtered.length) {
-      setSelected(new Set());
-    } else {
-      setSelected(new Set(filtered.map((c) => c.id)));
-    }
-  };
-
-  const openMoveStageDialog = async (ids: string[]) => {
-    const selectedCandidates = ids
-      .map((id) => candidateById.get(id))
-      .filter((x): x is CandidateListItemResponse => Boolean(x));
-
-    if (selectedCandidates.length === 0) return;
-
-    const uniqueJobs = new Set(
-      selectedCandidates.map((c) => c.job_id).filter((id): id is string => Boolean(id)),
-    );
-    if (selectedCandidates.some((c) => !c.job_id)) {
-      toast({
-        title: "Some selected candidates are not linked to a job",
-        variant: "destructive",
-      });
-      return;
-    }
-    if (uniqueJobs.size !== 1) {
-      toast({
-        title: "Select candidates from a single job to move stage",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const jobId = selectedCandidates[0].job_id;
-    try {
-      const job = await getJobById(jobId);
-      const options = job.hiring_stages
-        .slice()
-        .sort((a, b) => a.position - b.position)
-        .map((s) => ({ value: s.id, label: s.name }));
-      setMoveStageOptions(options);
-      setSelectedMoveStageId(options[0]?.value ?? "");
-      setMoveStageOpen(true);
-    } catch (err) {
-      toast({
-        title: err instanceof Error ? err.message : "Failed to load stages",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const bulkAction = async (action: string) => {
-    const ids = Array.from(selected);
-    if (ids.length === 0) return;
-
-    if (action === "Reject") {
-      try {
-        const result = await bulkUpdateCandidateStatus(ids, "rejected");
-        setItems((prev) =>
-          prev.map((item) =>
-            ids.includes(item.id) ? { ...item, status: "rejected", stage_name: "Rejected" } : item,
-          ),
-        );
-        toast({ title: `Rejected ${result.updated_count} candidate(s)` });
-      } catch (err) {
-        toast({
-          title: err instanceof Error ? err.message : "Failed to reject candidates",
-          variant: "destructive",
-        });
-      } finally {
-        setSelected(new Set());
-      }
-      return;
-    }
-
-    if (action === "Move stage") {
-      await openMoveStageDialog(ids);
-      return;
-    }
-
-    toast({ title: `${action} action is not configured yet.` });
-    setSelected(new Set());
-  };
-
-  const submitMoveStage = async () => {
-    const ids = Array.from(selected);
-    if (ids.length === 0 || !selectedMoveStageId) {
-      setMoveStageOpen(false);
-      return;
-    }
-
-    const nextStageName = moveStageOptions.find((s) => s.value === selectedMoveStageId)?.label;
-
-    try {
-      setMoveLoading(true);
-      const result = await bulkUpdateCandidateStage(ids, selectedMoveStageId);
-      setItems((prev) =>
-        prev.map((item) =>
-          ids.includes(item.id)
-            ? {
-                ...item,
-                stage_id: selectedMoveStageId,
-                stage_name: nextStageName ?? item.stage_name,
-                status:
-                  item.status === "rejected" || item.status === "hired" ? "active" : item.status,
-              }
-            : item,
-        ),
-      );
-      toast({ title: `Moved ${result.updated_count} candidate(s)` });
-      setSelected(new Set());
-      setMoveStageOpen(false);
-    } catch (err) {
-      toast({
-        title: err instanceof Error ? err.message : "Failed to move candidates",
-        variant: "destructive",
-      });
-    } finally {
-      setMoveLoading(false);
-    }
-  };
 
   const submitAddCandidate = async () => {
     if (!addName.trim() || !addEmail.trim()) return;
@@ -451,15 +305,7 @@ export default function CandidatesPage() {
           <p className="text-sm text-muted-foreground">Loading candidates...</p>
         ) : (
           <div className="space-y-3">
-            <CandidatesList
-              candidates={filtered}
-              selected={selected}
-              onToggleSelect={toggleSelect}
-              onToggleAll={toggleAll}
-              onBulkAction={bulkAction}
-              onClearSelection={() => setSelected(new Set())}
-              total={total}
-            />
+            <CandidatesList candidates={filtered} />
             <div className="flex items-center justify-between">
               <p className="text-xs text-muted-foreground">
                 Page {page} of {totalPages}
@@ -488,43 +334,6 @@ export default function CandidatesPage() {
           </div>
         )}
       </MainPagesLayout>
-
-      <Dialog open={moveStageOpen} onOpenChange={setMoveStageOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Move candidates to stage</DialogTitle>
-            <DialogDescription>
-              Select the target stage for {selected.size} selected candidate(s).
-            </DialogDescription>
-          </DialogHeader>
-
-          <SelectField
-            label="Target Stage"
-            value={selectedMoveStageId}
-            onValueChange={setSelectedMoveStageId}
-            options={moveStageOptions}
-            placeholder="Select stage"
-          />
-
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setMoveStageOpen(false)}
-              disabled={moveLoading}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              onClick={submitMoveStage}
-              disabled={moveLoading || !selectedMoveStageId}
-            >
-              {moveLoading ? "Moving..." : "Move"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
         <DialogContent className="sm:max-w-md">

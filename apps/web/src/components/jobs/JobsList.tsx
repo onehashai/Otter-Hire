@@ -6,21 +6,12 @@ import { Badge } from "@onehash/ui/badge";
 import { Button } from "@onehash/ui/button";
 import { useRouter } from "next/navigation";
 import type { JobListItemResponse } from "@/api";
-import { CategoryType, JobStatusType } from "@/app/(app-page-wrapper)/jobs/[jobId]/constants";
+import { JobStatusType } from "@/app/(app-page-wrapper)/jobs/[jobId]/constants";
 
 const statusKey: Record<JobStatusType, string> = {
   open: "open",
   draft: "draft",
   archived: "archived",
-};
-const categoryKey: Record<CategoryType, string> = {
-  engineering: "engineering",
-  design: "design",
-  data: "data",
-  marketing: "marketing",
-  sales: "sales",
-  operations: "operations",
-  hr: "hr",
 };
 
 const statusVariant = (s: JobStatusType) =>
@@ -73,12 +64,8 @@ export function JobsList({ jobs }: JobsListProps) {
                 </div>
                 <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                   <span>
-                    {job.category
-                      ? t(categoryKey[job.category as CategoryType] ?? job.category)
-                      : "—"}
+                    {job.category ? t(job.category, { defaultValue: job.category }) : "—"}
                   </span>
-                  <span>·</span>
-                  <span>{formatTimeAgo(job.updated_at)}</span>
                 </div>
               </div>
               <div className="flex items-center gap-3 shrink-0">

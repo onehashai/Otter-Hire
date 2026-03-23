@@ -50,21 +50,34 @@ export type PublicApplyResponse = {
   status: string;
 };
 
-export async function getPublicJobs(orgId: string): Promise<PublicJobListItem[]> {
-  return apiGet<PublicJobListItem[]>(`/orgs/${orgId}/jobs`);
+function publicCareersQuery(orgSlugPrefix: string): string {
+  const q = new URLSearchParams({ org_slug: orgSlugPrefix });
+  return `?${q.toString()}`;
 }
 
-export async function getPublicJobDetail(orgId: string, jobId: string): Promise<PublicJobDetail> {
-  return apiGet<PublicJobDetail>(`/orgs/${orgId}/jobs/${jobId}`);
+export async function getPublicJobs(orgId: string, orgSlugPrefix: string): Promise<PublicJobListItem[]> {
+  return apiGet<PublicJobListItem[]>(`/orgs/${orgId}/jobs${publicCareersQuery(orgSlugPrefix)}`);
+}
+
+export async function getPublicJobDetail(
+  orgId: string,
+  jobId: string,
+  orgSlugPrefix: string,
+): Promise<PublicJobDetail> {
+  return apiGet<PublicJobDetail>(`/orgs/${orgId}/jobs/${jobId}${publicCareersQuery(orgSlugPrefix)}`);
 }
 
 export async function applyToPublicJob(
   orgId: string,
   jobId: string,
+  orgSlugPrefix: string,
   payload: PublicApplyPayload,
 ): Promise<PublicApplyResponse> {
-  return apiFetch<PublicApplyResponse>(`/orgs/${orgId}/jobs/${jobId}/apply`, {
-    method: "POST",
-    body: payload,
-  });
+  return apiFetch<PublicApplyResponse>(
+    `/orgs/${orgId}/jobs/${jobId}/apply${publicCareersQuery(orgSlugPrefix)}`,
+    {
+      method: "POST",
+      body: payload,
+    },
+  );
 }

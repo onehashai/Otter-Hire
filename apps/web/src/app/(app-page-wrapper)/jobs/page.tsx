@@ -8,7 +8,13 @@ import { Calendar } from "@onehash/ui/calendar";
 import { MultiSelect } from "@onehash/ui/select";
 import { MainPagesLayout } from "@/components/common/MainPagesLayout";
 import { format, isAfter, isBefore, subDays, startOfDay } from "date-fns";
-import { CategoryType, EmploymentType, JobStatusType } from "./[jobId]/constants";
+import {
+  JobCategories,
+  EmploymentType,
+  JobStatusType,
+  employmentTypes,
+  jobStatuses,
+} from "./[jobId]/constants";
 import { getJobs, createJob, type JobListItemResponse } from "@/api";
 import { toast } from "sonner";
 import { useAuthSession } from "@/app/providers";
@@ -20,31 +26,10 @@ import { EmptyCard, ErrorCard } from "@onehash/ui/card";
 import { useSetPageMetadata } from "@/hooks/useSetPageMetadata";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useRouter } from "next/navigation";
-const allCategories: CategoryType[] = [
-  "engineering",
-  "design",
-  "data",
-  "marketing",
-  "sales",
-  "operations",
-  "hr",
-];
-const allTypes: EmploymentType[] = ["full_time", "part_time", "contract", "internship"];
-const allStatuses = ["open", "draft", "archived"] as const;
-
 const statusKey: Record<JobStatusType, string> = {
   open: "open",
   draft: "draft",
   archived: "archived",
-};
-const categoryKey: Record<CategoryType, string> = {
-  engineering: "engineering",
-  design: "design",
-  data: "data",
-  marketing: "marketing",
-  sales: "sales",
-  operations: "operations",
-  hr: "hr",
 };
 const typeKey: Record<EmploymentType, string> = {
   full_time: "full_time",
@@ -149,8 +134,7 @@ export default function JobsPage() {
       )
         return false;
       if (statusFilter.length && !statusFilter.includes(job.status as JobStatusType)) return false;
-      if (categoryFilter.length && !categoryFilter.includes((job.category ?? "") as CategoryType))
-        return false;
+      if (categoryFilter.length && !categoryFilter.includes(job.category ?? "")) return false;
       if (typeFilter.length && !typeFilter.includes((job.employment_type ?? "") as EmploymentType))
         return false;
       if (dateRange.from) {
@@ -165,9 +149,9 @@ export default function JobsPage() {
     });
   }, [jobs, search, statusFilter, categoryFilter, typeFilter, dateRange]);
 
-  const statusOptions = allStatuses.map((s) => ({ value: s, label: t(statusKey[s]) }));
-  const categoryOptions = allCategories.map((d) => ({ value: d, label: t(categoryKey[d]) }));
-  const typeOptions = allTypes.map((tp) => ({ value: tp, label: t(typeKey[tp]) }));
+  const statusOptions = jobStatuses.map((s) => ({ value: s, label: t(statusKey[s]) }));
+  const categoryOptions = JobCategories.map((d) => ({ value: d, label: t(d) }));
+  const typeOptions = employmentTypes.map((tp) => ({ value: tp, label: t(typeKey[tp]) }));
 
   const activeChips: { label: string; clear: () => void }[] = [];
   statusFilter.forEach((s) =>
@@ -178,7 +162,7 @@ export default function JobsPage() {
   );
   categoryFilter.forEach((d) =>
     activeChips.push({
-      label: t(categoryKey[d as CategoryType]),
+      label: t(d, { defaultValue: d }),
       clear: () => setCategoryFilter((p) => p.filter((v) => v !== d)),
     }),
   );

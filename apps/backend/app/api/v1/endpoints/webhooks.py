@@ -29,7 +29,6 @@ _STATUS_MAP = {
     "Send": "sent",
 }
 
-# Only advance status forward (queued→sent→delivered→read; never downgrade read→delivered)
 _STATUS_RANK = {"queued": 0, "sent": 1, "delivered": 2, "read": 3, "failed": 99}
 
 

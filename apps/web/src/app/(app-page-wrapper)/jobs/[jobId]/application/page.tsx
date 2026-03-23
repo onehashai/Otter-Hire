@@ -25,6 +25,7 @@ import {
   Linkedin,
   Github,
   Link2,
+  ChevronDown,
 } from "lucide-react";
 import { SelectField } from "@onehash/ui/select";
 import { toast } from "sonner";
@@ -137,42 +138,35 @@ function VisibilityDropdown({
   onChange: (v: FieldVisibility) => void;
   locked?: boolean;
 }) {
+  const options = [
+    { value: "required", label: "Required" },
+    { value: "optional", label: "Optional" },
+    { value: "hidden", label: "Hidden" },
+  ] as const;
+  const label = options.find((o) => o.value === value)?.label ?? value;
+
   if (locked) {
     return (
-      <Badge variant="secondary" className="text-[10px] capitalize">
-        {value}
-      </Badge>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled
+        className="h-9 justify-between px-3 font-normal pointer-events-none w-[7rem] shrink-0"
+      >
+        <span className="truncate">{label}</span>
+        <ChevronDown className="h-4 w-4 shrink-0 opacity-50" aria-hidden />
+      </Button>
     );
   }
   return (
     <SelectField
       label={undefined}
+      className="w-[7rem] shrink-0"
       value={value}
       onValueChange={(v) => onChange(v as FieldVisibility)}
-      options={[
-        { value: "required", label: "Required" },
-        { value: "optional", label: "Optional" },
-        { value: "hidden", label: "Hidden" },
-      ]}
+      options={[...options]}
     />
-  );
-}
-
-function FieldRow({
-  label,
-  children,
-  hint,
-}: {
-  label: string;
-  children: React.ReactNode;
-  hint?: string;
-}) {
-  return (
-    <div className="space-y-1.5">
-      <Label className="text-xs font-medium text-muted-foreground">{label}</Label>
-      {children}
-      {hint && <p className="text-[11px] text-muted-foreground/70">{hint}</p>}
-    </div>
   );
 }
 
@@ -413,26 +407,22 @@ export default function ApplicationFormPage() {
     const showOptions = qType === "single_select" || qType === "multi_select";
     return (
       <>
-        <FieldRow label="Question Title">
-          <InputField
-            value={qTitle}
-            onChange={(e) => setQTitle(e.target.value)}
-            placeholder="e.g., Why are you a good fit for this role?"
-            className="h-9 text-sm"
-          />
-        </FieldRow>
-        <FieldRow label="Answer Type">
-          <SelectField
-            label="Answer Type"
-            value={qType}
-            onValueChange={(v) => setQType(v as AnswerType)}
-            options={(Object.entries(answerTypeLabels) as [AnswerType, string][]).map(
-              ([val, label]) => ({ value: val, label }),
-            )}
-          />
-        </FieldRow>
+        <InputField
+          label="Question Title"
+          value={qTitle}
+          onChange={(e) => setQTitle(e.target.value)}
+          placeholder="e.g., Why are you a good fit for this role?"
+          className="h-9 text-sm"
+        />
+        <SelectField
+          label="Answer Type"
+          value={qType}
+          onValueChange={(v) => setQType(v as AnswerType)}
+          options={(Object.entries(answerTypeLabels) as [AnswerType, string][]).map(
+            ([val, label]) => ({ value: val, label }),
+          )}
+        />
         {showOptions && (
-          <FieldRow label="Options">
             <div className="space-y-2">
               {qOptions.map((opt, i) => (
                 <div key={i} className="flex items-center gap-2">
@@ -481,15 +471,16 @@ export default function ApplicationFormPage() {
                 </Label>
               </div>
             </div>
-          </FieldRow>
         )}
         <Separator />
         <div className="flex items-center justify-between py-1">
-          <div>
-            <p className="text-sm font-medium">Required field</p>
-            <p className="text-xs text-muted-foreground">Candidates must answer this question</p>
-          </div>
-          <Switch checked={qRequired} onCheckedChange={setQRequired} />
+          <Label>
+            Required Field
+          </Label>
+          <Switch
+            checked={qRequired}
+            onCheckedChange={(v) => setQRequired(!!v)}
+          />
         </div>
       </>
     );

@@ -64,7 +64,6 @@ export type JobDetailResponse = {
   collect_cover: boolean;
   screening_questions: string[];
   application_form_schema: Record<string, unknown>;
-  pipeline_template: string | null;
   hiring_stages: JobHiringStageResponse[];
   team_members: JobTeamMemberResponse[];
   created_by_user_id: string;
@@ -93,7 +92,6 @@ export type JobUpdatePayload = {
   collect_cover?: boolean;
   screening_questions?: string[];
   application_form_schema?: Record<string, unknown>;
-  pipeline_template?: string;
   hiring_stages?: { id?: string; name: string; position: number }[];
   team_members?: { user_id: string; role: string }[];
 };

@@ -6,6 +6,7 @@ import { Button } from "@onehash/ui/button";
 import { Textarea } from "@onehash/ui/textarea";
 import { Icon } from "@onehash/ui/icon";
 import { cn } from "@/lib/utils";
+import { formatOrdinalLongDate } from "@/lib/format-date";
 
 interface TimelineItem {
   action: string;
@@ -222,7 +223,7 @@ export function OverviewTab({
               <div key={i} className="p-3 rounded-md bg-muted/50 space-y-1">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-medium">{note.user}</span>
-                  <span className="text-[10px] text-muted-foreground">{note.date}</span>
+                  <span className="text-[10px] text-muted-foreground">{formatOrdinalLongDate(note.date)}</span>
                 </div>
                 <p className="text-xs text-muted-foreground">{note.text}</p>
                 {note.mentions && note.mentions.length > 0 ? (

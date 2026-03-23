@@ -11,7 +11,7 @@ import {
 } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
-import type { JobStatusType, SalaryType, TimeframeType, TeamRole } from "./constants";
+import type { JobStatusType, SalaryType, TimeframeType, TeamRoleType } from "./constants";
 import type { HiringStage, TeamMember } from "./constants";
 import { useTranslation } from "react-i18next";
 import {
@@ -45,7 +45,6 @@ export interface JobSetupState {
   salaryMax: string;
   currency: string;
   timeframe: TimeframeType;
-  pipeline: string;
   collectResume: boolean;
   collectCover: boolean;
   screeningQuestions: string[];
@@ -73,7 +72,7 @@ export interface JobSetupState {
 const defaultState: JobSetupState = {
   jobId: null,
   title: "",
-  category: "Engineering",
+  category: "Software Development",
   employmentType: "full_time",
   workplaceType: "onsite",
   country: "",
@@ -88,7 +87,6 @@ const defaultState: JobSetupState = {
   salaryMax: "",
   currency: "USD",
   timeframe: "per_year" as TimeframeType,
-  pipeline: "standard",
   collectResume: true,
   collectCover: false,
   screeningQuestions: [],
@@ -148,7 +146,6 @@ function mapApiToState(job: JobDetailResponse): Partial<JobSetupState> {
     salaryMax: job.salary_max != null ? String(job.salary_max) : "",
     currency: job.currency ?? "USD",
     timeframe: (job.salary_timeframe ?? "per_year") as TimeframeType,
-    pipeline: job.pipeline_template ?? "standard",
     collectResume: job.collect_resume,
     collectCover: job.collect_cover,
     screeningQuestions: job.screening_questions ?? [],
@@ -163,7 +160,7 @@ function mapApiToState(job: JobDetailResponse): Partial<JobSetupState> {
       user_id: m.user_id,
       name: m.name ?? "",
       email: m.email ?? "",
-      role: m.role as TeamRole,
+      role: m.role as TeamRoleType,
       userRole: m.user_role,
     })),
     published: job.status === "open",
@@ -188,7 +185,6 @@ type JobSetupContextValue = JobSetupState & {
   setSalaryMax: (v: string) => void;
   setCurrency: (v: string) => void;
   setTimeframe: (v: TimeframeType) => void;
-  setPipeline: (v: string) => void;
   setCollectResume: (v: boolean) => void;
   setCollectCover: (v: boolean) => void;
   setScreeningQuestions: (v: string[]) => void;
@@ -216,9 +212,9 @@ type JobSetupContextValue = JobSetupState & {
   removeHiringStageAndSave: (id: string) => Promise<void>;
   updateHiringStageName: (id: string, name: string) => void;
   reorderHiringStages: (fromIndex: number, toIndex: number) => void;
-  addTeamMember: (member: Omit<TeamMember, "role"> & { role: TeamRole }) => void;
+  addTeamMember: (member: Omit<TeamMember, "role"> & { role: TeamRoleType }) => void;
   removeTeamMember: (id: string) => void;
-  updateTeamMemberRole: (id: string, role: TeamRole) => void;
+  updateTeamMemberRole: (id: string, role: TeamRoleType) => void;
   handleCountryChange: (val: string) => void;
   handleSave: () => void;
   handlePublish: () => void;
@@ -292,7 +288,6 @@ export function JobSetupProvider({ children }: { children: ReactNode }) {
         collect_cover: currentState.collectCover,
         screening_questions: currentState.screeningQuestions,
         application_form_schema: currentState.applicationFormSchema,
-        pipeline_template: currentState.pipeline,
       };
       if (includeRelations || stagesDirtyRef.current) {
         payload.hiring_stages = currentState.hiringStages
@@ -493,7 +488,7 @@ export function JobSetupProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const addTeamMember = useCallback((member: Omit<TeamMember, "role"> & { role: TeamRole }) => {
+  const addTeamMember = useCallback((member: Omit<TeamMember, "role"> & { role: TeamRoleType }) => {
     teamDirtyRef.current = true;
     setState((s) => ({
       ...s,
@@ -511,7 +506,7 @@ export function JobSetupProvider({ children }: { children: ReactNode }) {
     }));
   }, []);
 
-  const updateTeamMemberRole = useCallback((id: string, role: TeamRole) => {
+  const updateTeamMemberRole = useCallback((id: string, role: TeamRoleType) => {
     teamDirtyRef.current = true;
     setState((s) => ({
       ...s,
@@ -689,10 +684,6 @@ export function JobSetupProvider({ children }: { children: ReactNode }) {
     },
     setTimeframe: (v) => {
       setState((s) => ({ ...s, timeframe: v }));
-      markUnsaved();
-    },
-    setPipeline: (v) => {
-      setState((s) => ({ ...s, pipeline: v }));
       markUnsaved();
     },
     setCollectResume: (v) => {

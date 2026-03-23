@@ -263,7 +263,7 @@ export default function CandidateProfilePage() {
       location: candidate.location ?? "—",
       stage,
       source: candidate.source ?? "job_board",
-      appliedDate: new Date(candidate.created_at).toLocaleDateString(),
+      appliedDate: candidate.created_at,
       documents: [
         ...documents.map((d) => ({
           id: d.id,

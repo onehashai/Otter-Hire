@@ -229,12 +229,6 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
                   .join("")}
               </div>
               <span className="text-xs">{m.name}</span>
-              <span className="text-[10px] text-muted-foreground">
-                ·{" "}
-                {(m.userRole ?? "member")
-                  .replace(/_/g, " ")
-                  .replace(/\b\w/g, (ch) => ch.toUpperCase())}
-              </span>
             </div>
           ))}
           {teamMembers.length === 0 && !hiringManager && (

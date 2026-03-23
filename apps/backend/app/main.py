@@ -26,7 +26,7 @@ setup_logging()
 
 limiter = Limiter(key_func=get_remote_address)
 
-app = FastAPI(title="ATS Backend", version="1.0.0")
+app = FastAPI(title=f"{settings.product_name} API", version="1.0.0")
 app.state.limiter = limiter
 
 if not settings.is_production:

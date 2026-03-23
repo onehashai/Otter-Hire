@@ -67,6 +67,12 @@ class CandidateListResponse(BaseModel):
     offset: int
 
 
+class CandidateStageFilterOptionsResponse(BaseModel):
+    """Ordered hiring stage filter labels (pipeline union + terminal statuses when applicable)."""
+
+    names: list[str]
+
+
 class CandidateBulkStageUpdateRequest(BaseModel):
     candidate_ids: list[UUID] = Field(min_length=1)
     stage_id: UUID

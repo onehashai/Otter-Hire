@@ -19,9 +19,9 @@ from app.schemas.organization import (
     UpdateOrganizationRequest,
 )
 from app.services.default_categories import create_default_job_categories_for_org
+from app.services.default_email_templates import create_default_templates_for_org
 from app.services.media import ensure_avatar_type, read_upload_with_size_check
 from app.services.storage import storage_service
-from app.templates.email.defaults import create_default_templates_for_org
 from app.utils.uuid import uuid7
 
 router = APIRouter(prefix="/organizations", tags=["organizations"])

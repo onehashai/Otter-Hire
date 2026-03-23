@@ -43,7 +43,6 @@ class Job(Base):
     collect_cover = Column(Boolean, nullable=False, server_default="false")
     screening_questions = Column(JSONB, server_default="[]")
     application_form_schema = Column(JSONB, nullable=False, server_default="{}")
-    pipeline_template = Column(String(20), server_default="standard")
     published_at = Column(DateTime(timezone=True))
     closed_at = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), server_default=func.now())

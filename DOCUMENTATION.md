@@ -1225,7 +1225,6 @@ This contract defines the canonical data model, enums, state machine, API shape,
 | `collectResume` | boolean | **Missing** |
 | `collectCover` | boolean | **Missing** |
 | `screeningQuestions` | string[] | **Missing** |
-| `pipeline` | string (template name) | **Missing** |
 
 ### 2.2 Status enum mismatch
 
@@ -1283,7 +1282,6 @@ Frontend stores full objects `{id, name, email, role}` inline. The canonical des
 | `collect_resume` | BOOLEAN | NOT NULL | `TRUE` | Application form config |
 | `collect_cover` | BOOLEAN | NOT NULL | `FALSE` | Application form config |
 | `screening_questions` | JSONB | NULL | `'[]'` | Array of question strings |
-| `pipeline_template` | VARCHAR(20) | NULL | `'standard'` | Template used at creation |
 | `published_at` | TIMESTAMPTZ | NULL | — | Set when status → open |
 | `closed_at` | TIMESTAMPTZ | NULL | — | Set when status → closed |
 | `created_at` | TIMESTAMPTZ | NOT NULL | `now()` | — |
@@ -1489,7 +1487,6 @@ Only `title` is required at creation. All other fields use defaults. This matche
   "collect_resume": true,
   "collect_cover": false,
   "screening_questions": [],
-  "pipeline_template": "standard",
   "hiring_stages": [
     { "id": "uuid", "name": "Applied", "position": 0 },
     { "id": "uuid", "name": "Screening", "position": 1 },
@@ -1529,7 +1526,6 @@ Only `title` is required at creation. All other fields use defaults. This matche
   "collect_resume": true,
   "collect_cover": false,
   "screening_questions": ["Why are you interested?"],
-  "pipeline_template": "standard",
   "hiring_stages": [
     { "id": "existing-uuid", "name": "Applied", "position": 0 },
     { "id": null, "name": "New Stage", "position": 1 }
@@ -1623,7 +1619,7 @@ Transitions `open` → `draft`. Clears `published_at`.
 
 ### 9.1 Changes to existing `jobs` table
 
-- **ADD** columns: `department`, `workplace_type`, `country`, `city`, `openings`, `salary_type`, `salary_min`, `salary_max`, `salary_fixed`, `currency`, `salary_timeframe`, `visibility`, `collect_resume`, `collect_cover`, `screening_questions`, `pipeline_template`, `published_at`, `closed_at`
+- **ADD** columns: `department`, `workplace_type`, `country`, `city`, `openings`, `salary_type`, `salary_min`, `salary_max`, `salary_fixed`, `currency`, `salary_timeframe`, `visibility`, `collect_resume`, `collect_cover`, `screening_questions`, `published_at`, `closed_at`
 - **DROP** column: `location` (replaced by `country` + `city`)
 - **ALTER** constraint `ck_jobs_status`: change `'published'` → `'open'`
 - **ADD** constraints: `ck_jobs_visibility`, `ck_jobs_salary_type`, `ck_jobs_salary_range`
@@ -2602,14 +2598,17 @@ The public careers site layout (`(job-page-wrapper)/layout.tsx`) does NOT import
 **File:** `apps/web/src/api/public/index.ts`
 
 ```typescript
-getPublicJobs(orgId: string): Promise<PublicJobListItem[]>
-getPublicJobDetail(orgId: string, jobId: string): Promise<PublicJobDetail>
+getPublicJobs(orgId: string, orgSlugPrefix: string): Promise<PublicJobListItem[]>
+getPublicJobDetail(orgId: string, jobId: string, orgSlugPrefix: string): Promise<PublicJobDetail>
 ```
+
+Calls must include query parameter `org_slug` matching the careers URL name segment (same normalization as the job board: lowercase org name with whitespace collapsed to hyphens). Wrong slug returns 404.
 
 ### Backend Endpoints (Required)
 
-**GET /public/orgs/{orgId}/jobs**
+**GET /v1/internal/orgs/{orgId}/jobs?org_slug={slug}**
 - Returns list of published jobs for organization
+- `org_slug` is required and must match the organization's public careers slug
 - Only includes jobs with `status = 'open'` and `visibility IN ('careers', 'public')`
 - No authentication required
 - Rate limited (e.g., 100 requests per minute per IP)
@@ -2634,8 +2633,9 @@ getPublicJobDetail(orgId: string, jobId: string): Promise<PublicJobDetail>
 ]
 ```
 
-**GET /public/orgs/{orgId}/jobs/{jobId}**
+**GET /v1/internal/orgs/{orgId}/jobs/{jobId}?org_slug={slug}**
 - Returns full job details including description
+- `org_slug` is required and must match the organization's public careers slug
 - Only returns job if `status = 'open'` and `visibility IN ('careers', 'public')`
 - Returns 404 if job not found or not public
 - No authentication required
@@ -2814,7 +2814,7 @@ Organizations can configure a careers inbox and ingest inbound candidate emails 
 - Talent pool insertion:
   - `job_id = null`
   - `stage_id = null`
-  - `source = email_inbound`
+  - `source = email`
 
 ### Storage and Traceability
 

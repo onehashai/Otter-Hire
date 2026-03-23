@@ -37,6 +37,7 @@ from app.schemas.candidates import (
     CandidateInterviewResponse,
     CandidateListItemResponse,
     CandidateListResponse,
+    CandidateStageFilterOptionsResponse,
     CandidateNoteMentionResponse,
     CandidateNoteRequest,
     CandidateNoteResponse,
@@ -422,6 +423,51 @@ async def list_candidates_paginated(
         limit=limit,
         offset=offset,
     )
+
+
+@router.get("/stage-filter-options", response_model=CandidateStageFilterOptionsResponse)
+async def list_candidate_stage_filter_options(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("candidates:read")),
+):
+    """Pipeline stage names across the org, ordered by pipeline order (min position per name).
+
+    When no jobs/stages exist, returns an empty list. Appends ``Hired`` / ``Rejected`` only
+    when there are candidates in that status and the label is not already a stage name.
+    """
+    stmt = (
+        select(Stage.name)
+        .where(Stage.org_id == current_user.org_id)
+        .group_by(Stage.name)
+        .order_by(func.min(Stage.position).asc(), Stage.name.asc())
+    )
+    result = await db.execute(stmt)
+    names = [row[0] for row in result.all()]
+    name_set = set(names)
+
+    if "Hired" not in name_set:
+        hired_n = await db.scalar(
+            select(func.count(Candidate.id)).where(
+                Candidate.org_id == current_user.org_id,
+                Candidate.status == "hired",
+            )
+        )
+        if hired_n and hired_n > 0:
+            names.append("Hired")
+            name_set.add("Hired")
+
+    if "Rejected" not in name_set:
+        rejected_n = await db.scalar(
+            select(func.count(Candidate.id)).where(
+                Candidate.org_id == current_user.org_id,
+                Candidate.status == "rejected",
+            )
+        )
+        if rejected_n and rejected_n > 0:
+            names.append("Rejected")
+            name_set.add("Rejected")
+
+    return CandidateStageFilterOptionsResponse(names=names)
 
 
 @router.get("/{candidate_id}", response_model=CandidateDetailResponse)

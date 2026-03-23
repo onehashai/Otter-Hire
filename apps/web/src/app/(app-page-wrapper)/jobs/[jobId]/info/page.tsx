@@ -11,7 +11,6 @@ import {
   workplaceTypes,
   CITY_VALUE_SEP,
   getCityDisplayName,
-  jobStatuses,
 } from "../constants";
 import { useTranslation } from "react-i18next";
 import { getBasicInfoValidation } from "../../../../../lib/validations/setupValidation";
@@ -35,8 +34,6 @@ export default function JobInfoPage() {
     country,
     city,
     setCity,
-    status,
-    setStatus,
     citySearch,
     setCitySearch,
     handleCountryChange,

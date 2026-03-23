@@ -6,6 +6,7 @@ import { Button } from "@onehash/ui/button";
 import { InputField } from "@onehash/ui/input";
 import { Label } from "@onehash/ui/label";
 import { Icon } from "@onehash/ui/icon";
+import { PRODUCT_LOGO_LETTER, PRODUCT_NAME } from "@/lib/constants";
 import { useTranslation } from "react-i18next";
 
 export default function ForgotPassword() {
@@ -70,9 +71,9 @@ export default function ForgotPassword() {
         <div className="relative z-10 max-w-md px-12">
           <div className="flex items-center gap-2.5 mb-8">
             <div className="h-9 w-9 rounded-lg bg-foreground flex items-center justify-center">
-              <span className="text-background text-sm font-bold">A</span>
+              <span className="text-background text-sm font-bold">{PRODUCT_LOGO_LETTER}</span>
             </div>
-            <span className="text-lg font-semibold tracking-tight">ATS</span>
+            <span className="text-lg font-semibold tracking-tight">{PRODUCT_NAME}</span>
           </div>
           <h1 className="text-3xl font-semibold tracking-tight leading-tight mb-3">
             We've got
@@ -91,9 +92,9 @@ export default function ForgotPassword() {
           {/* Mobile logo */}
           <div className="lg:hidden flex items-center gap-2.5 mb-10 justify-center">
             <div className="h-9 w-9 rounded-lg bg-foreground flex items-center justify-center">
-              <span className="text-background text-sm font-bold">A</span>
+              <span className="text-background text-sm font-bold">{PRODUCT_LOGO_LETTER}</span>
             </div>
-            <span className="text-lg font-semibold tracking-tight">ATS</span>
+            <span className="text-lg font-semibold tracking-tight">{PRODUCT_NAME}</span>
           </div>
 
           <div className="lg:rounded-xl lg:border lg:border-border lg:bg-card lg:p-8 lg:shadow-sm">

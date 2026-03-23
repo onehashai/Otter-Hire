@@ -27,6 +27,10 @@ export type CandidatesPaginatedResponse = {
   offset: number;
 };
 
+export type CandidateStageFilterOptionsResponse = {
+  names: string[];
+};
+
 export type CandidateBulkUpdateResponse = {
   updated_count: number;
 };
@@ -150,6 +154,12 @@ export async function updateCandidate(
   return apiFetch<CandidateDetailResponse>(`/candidates/${id}`, {
     method: "PATCH",
     body: payload,
+  });
+}
+
+export async function getCandidateStageFilterOptions(): Promise<CandidateStageFilterOptionsResponse> {
+  return apiFetch<CandidateStageFilterOptionsResponse>("/candidates/stage-filter-options", {
+    method: "GET",
   });
 }
 

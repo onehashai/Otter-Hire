@@ -11,6 +11,7 @@ import { Checkbox } from "@onehash/ui/checkbox";
 import { Form, FormField, FormItem, FormControl } from "@onehash/ui/form";
 import { Icon } from "@onehash/ui/icon";
 import { useTranslation } from "react-i18next";
+import { PRODUCT_LOGO_LETTER, PRODUCT_NAME } from "@/lib/constants";
 import { loginSchema, type LoginFormValues } from "@/lib/schemas/zodResolver";
 import { acceptExistingInvite, getGoogleAuthEnabled, login, API_BASE_URL } from "@/api/index";
 import { useAuthSession } from "@/app/providers";
@@ -96,9 +97,9 @@ export default function Login() {
         <div className="relative z-10 max-w-md px-12">
           <div className="flex items-center gap-2.5 mb-8">
             <div className="h-9 w-9 rounded-lg bg-foreground flex items-center justify-center">
-              <span className="text-background text-sm font-bold">A</span>
+              <span className="text-background text-sm font-bold">{PRODUCT_LOGO_LETTER}</span>
             </div>
-            <span className="text-lg font-semibold tracking-tight">ATS</span>
+            <span className="text-lg font-semibold tracking-tight">{PRODUCT_NAME}</span>
           </div>
           <h1 className="text-3xl font-semibold tracking-tight leading-tight mb-3">
             Modern hiring,
@@ -118,9 +119,9 @@ export default function Login() {
           {/* Mobile logo */}
           <div className="lg:hidden flex items-center gap-2.5 mb-10 justify-center">
             <div className="h-9 w-9 rounded-lg bg-foreground flex items-center justify-center">
-              <span className="text-background text-sm font-bold">A</span>
+              <span className="text-background text-sm font-bold">{PRODUCT_LOGO_LETTER}</span>
             </div>
-            <span className="text-lg font-semibold tracking-tight">ATS</span>
+            <span className="text-lg font-semibold tracking-tight">{PRODUCT_NAME}</span>
           </div>
 
           <div className="lg:rounded-xl lg:border lg:border-border lg:bg-card lg:p-8 lg:shadow-sm">

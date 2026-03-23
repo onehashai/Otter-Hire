@@ -55,7 +55,7 @@ def setup_admin(app: FastAPI) -> Admin:
         app,
         engine=engine,
         authentication_backend=authentication_backend,
-        title="ATS Admin",
+        title=f"{settings.product_name} Admin",
     )
 
     admin.add_view(UserAdmin)

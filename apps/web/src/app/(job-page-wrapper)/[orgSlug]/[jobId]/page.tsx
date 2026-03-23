@@ -92,7 +92,7 @@ export default function CareerJobDetailPage() {
 
     setOrgName(parsed.orgName);
 
-    getPublicJobDetail(parsed.orgId, jobId)
+    getPublicJobDetail(parsed.orgId, jobId, parsed.orgName)
       .then((data) => {
         setJob(data);
         setLoading(false);
@@ -202,7 +202,13 @@ export default function CareerJobDetailPage() {
           payloadFiles[key] = fileMeta.name;
         }
 
-        await applyToPublicJob(parseOrgSlug(orgSlug)!.orgId, jobId, {
+        const parsedOrg = parseOrgSlug(orgSlug);
+        if (!parsedOrg) {
+          toast.error("Invalid organization");
+          setApplySubmitting(false);
+          return;
+        }
+        await applyToPublicJob(parsedOrg.orgId, jobId, parsedOrg.orgName, {
           full_name: applyForm.fullName,
           email: applyForm.email,
           phone: applyForm.phone || null,

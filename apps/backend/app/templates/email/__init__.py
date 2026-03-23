@@ -1,1 +1,1 @@
-# Email templates: defaults, invite, verification
+# Product/transactional HTML: layout, invite, verification, etc.

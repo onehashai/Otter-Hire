@@ -10,6 +10,7 @@ import { InputField, PasswordField } from "@onehash/ui/input";
 import { Form, FormField, FormItem, FormControl } from "@onehash/ui/form";
 import { Icon } from "@onehash/ui/icon";
 import { useTranslation } from "react-i18next";
+import { PRODUCT_LOGO_LETTER, PRODUCT_NAME } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { signupSchema, type SignupFormValues } from "@/lib/schemas/zodResolver";
 import { signup, acceptInvite, getGoogleAuthEnabled, API_BASE_URL } from "@/api/index";
@@ -98,9 +99,9 @@ export default function Signup() {
         <div className="relative z-10 max-w-md px-12">
           <div className="flex items-center gap-2.5 mb-8">
             <div className="h-9 w-9 rounded-lg bg-foreground flex items-center justify-center">
-              <span className="text-background text-sm font-bold">A</span>
+              <span className="text-background text-sm font-bold">{PRODUCT_LOGO_LETTER}</span>
             </div>
-            <span className="text-lg font-semibold tracking-tight">ATS</span>
+            <span className="text-lg font-semibold tracking-tight">{PRODUCT_NAME}</span>
           </div>
           <h1 className="text-3xl font-semibold tracking-tight leading-tight mb-3">
             Start hiring
@@ -108,8 +109,8 @@ export default function Signup() {
             smarter today.
           </h1>
           <p className="text-muted-foreground text-sm leading-relaxed">
-            Join modern teams using ATS to streamline recruiting, collaborate effortlessly, and find
-            the best talent faster.
+            Join modern teams using {PRODUCT_NAME} to streamline recruiting, collaborate effortlessly,
+            and find the best talent faster.
           </p>
         </div>
       </div>
@@ -119,15 +120,17 @@ export default function Signup() {
         <div className="w-full max-w-[420px]">
           <div className="lg:hidden flex items-center gap-2.5 mb-10 justify-center">
             <div className="h-9 w-9 rounded-lg bg-foreground flex items-center justify-center">
-              <span className="text-background text-sm font-bold">A</span>
+              <span className="text-background text-sm font-bold">{PRODUCT_LOGO_LETTER}</span>
             </div>
-            <span className="text-lg font-semibold tracking-tight">ATS</span>
+            <span className="text-lg font-semibold tracking-tight">{PRODUCT_NAME}</span>
           </div>
 
           <div className="lg:rounded-xl lg:border lg:border-border lg:bg-card lg:p-8 lg:shadow-sm">
             <div className="mb-6">
               <h2 className="text-xl font-semibold tracking-tight">Create your account</h2>
-              <p className="text-sm text-muted-foreground mt-1">Get started with ATS in seconds</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                Get started with {PRODUCT_NAME} in seconds
+              </p>
             </div>
 
             {googleEnabled && (

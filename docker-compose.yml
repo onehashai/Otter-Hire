@@ -69,6 +69,7 @@ services:
       - ./apps/backend/.env
     environment:
       DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/ats_db
+      PRODUCT_NAME: OneHash ATS
       CORS_ORIGINS: http://app.localhost.com:3000,http://jobs.localhost.com:3000
       APP_DOMAIN: localhost.com
       APP_SUBDOMAIN: app
@@ -102,6 +103,7 @@ services:
       - ./apps/backend/.env
     environment:
       DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/ats_db
+      PRODUCT_NAME: OneHash ATS
       CORS_ORIGINS: http://app.localhost.com:3000,http://jobs.localhost.com:3000
       APP_DOMAIN: localhost.com
       APP_SUBDOMAIN: app
@@ -133,6 +135,7 @@ services:
       dockerfile: apps/web/Dockerfile
     container_name: ats-web
     environment:
+      NEXT_PUBLIC_PRODUCT_NAME: OneHash ATS
       NEXT_PUBLIC_APP_SUBDOMAIN: app
       NEXT_PUBLIC_JOBS_SUBDOMAIN: jobs
       NEXT_PUBLIC_APP_ROOT_HOST: localhost.com:3000

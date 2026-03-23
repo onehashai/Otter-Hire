@@ -38,8 +38,6 @@ export default function HiringDetailsPage() {
     setCurrency,
     timeframe,
     setTimeframe,
-    pipeline,
-    setPipeline,
     country,
     city,
     hiringDetailsAttemptedSave,
@@ -169,18 +167,6 @@ export default function HiringDetailsPage() {
           )}
         </>
       )}
-      <Separator />
-      <SelectField
-        label={t("interview_pipeline_template")}
-        value={pipeline}
-        onValueChange={setPipeline}
-        options={[
-          { value: "standard", label: t("standard") },
-          { value: "fast", label: t("fast") },
-          { value: "executive", label: t("executive") },
-        ]}
-        placeholder={t("select")}
-      />
     </div>
   );
 }

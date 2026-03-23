@@ -24,6 +24,7 @@ from fastapi import (
     Depends,
     Header,
     HTTPException,
+    Query,
     Request,
     Response,
     WebSocket,
@@ -61,6 +62,18 @@ from app.services.storage import storage_service
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
 logger = logging.getLogger(__name__)
+
+
+def _careers_public_org_slug_prefix(org_name: str) -> str:
+    """Match apps/web job board: lowercase, each run of whitespace -> single hyphen."""
+    return re.sub(r"\s+", "-", (org_name or "").strip().lower())
+
+
+def _require_public_org_slug(org: Organization, org_slug: str) -> None:
+    """Reject careers URLs whose name prefix does not match the organization (404 = not found)."""
+    expected = _careers_public_org_slug_prefix(org.name)
+    if (org_slug or "").strip().lower() != expected:
+        raise HTTPException(status_code=404, detail="Organization not found")
 
 
 def get_country_name(iso_code: str) -> str:
@@ -760,6 +773,7 @@ async def get_public_jobs(
     request: Request,
     response: Response,
     org_id: str,
+    org_slug: str = Query(..., min_length=1, description="Careers URL name segment before org UUID"),
     authorization: Optional[str] = Header(None),
     db: AsyncSession = Depends(get_db),
 ):
@@ -774,6 +788,8 @@ async def get_public_jobs(
     org = org_result.scalar_one_or_none()
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
+
+    _require_public_org_slug(org, org_slug)
 
     # Check if user is org member
     is_org_member = await get_org_member_id(request, authorization, db, org_uuid) is not None
@@ -856,6 +872,7 @@ async def get_public_job_detail(
     response: Response,
     org_id: str,
     job_id: str,
+    org_slug: str = Query(..., min_length=1, description="Careers URL name segment before org UUID"),
     authorization: Optional[str] = Header(None),
     db: AsyncSession = Depends(get_db),
 ):
@@ -865,6 +882,12 @@ async def get_public_job_detail(
         job_uuid = UUID(job_id)
     except ValueError:
         raise HTTPException(status_code=404, detail="Job not found")
+
+    org_row = await db.execute(select(Organization).where(Organization.id == org_uuid))
+    org_for_slug = org_row.scalar_one_or_none()
+    if not org_for_slug:
+        raise HTTPException(status_code=404, detail="Job not found")
+    _require_public_org_slug(org_for_slug, org_slug)
 
     # Check if user is org member
     is_org_member = await get_org_member_id(request, authorization, db, org_uuid) is not None
@@ -942,6 +965,7 @@ async def apply_public_job(
     org_id: str,
     job_id: str,
     body: PublicJobApplyRequest,
+    org_slug: str = Query(..., min_length=1, description="Careers URL name segment before org UUID"),
     db: AsyncSession = Depends(get_db),
 ):
     try:
@@ -949,6 +973,12 @@ async def apply_public_job(
         job_uuid = UUID(job_id)
     except ValueError:
         raise HTTPException(status_code=404, detail="Job not found")
+
+    org_row = await db.execute(select(Organization).where(Organization.id == org_uuid))
+    org_for_slug = org_row.scalar_one_or_none()
+    if not org_for_slug:
+        raise HTTPException(status_code=404, detail="Job not found")
+    _require_public_org_slug(org_for_slug, org_slug)
 
     result = await db.execute(
         select(Job).where(
@@ -1380,7 +1410,7 @@ async def _route_inbound_to_conversation(
                     phone=None,
                     location=None,
                     profile_links={},
-                    source="email_inbound",
+                    source="Email",
                     tags=[],
                 )
                 db.add(candidate)
@@ -1886,7 +1916,7 @@ async def ingest_inbound_email(
             phone=extracted_phone,
             location=extracted_location,
             profile_links={},
-            source="email_inbound",
+            source="Email",
             tags=[],
         )
         db.add(candidate)

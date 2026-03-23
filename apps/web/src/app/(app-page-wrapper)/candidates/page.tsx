@@ -19,6 +19,7 @@ import { useTranslation } from "react-i18next";
 import { useSetPageMetadata } from "@/hooks/useSetPageMetadata";
 import {
   createCandidate,
+  getCandidateStageFilterOptions,
   getCandidatesPaginated,
   getJobs,
   type JobListItemResponse,
@@ -26,23 +27,12 @@ import {
 } from "@/api";
 import { getWebSocketBaseUrl } from "@/api/client/client";
 
-const stages = ["Applied", "Screening", "Interview", "Offer", "Hired", "Rejected"];
-const stageOptions = stages.map((s) => ({ value: s, label: s }));
 const NO_JOB_VALUE = "__no_job__";
-
-const stageOrder: Record<string, number> = {
-  Applied: 0,
-  Screening: 1,
-  Interview: 2,
-  Offer: 3,
-  Hired: 4,
-  Rejected: 5,
-};
 
 const mapStage = (item: CandidateListItemResponse): string => {
   if (item.status === "rejected") return "Rejected";
   if (item.status === "hired") return "Hired";
-  return item.stage_name ?? "Applied";
+  return item.stage_name ?? "—";
 };
 
 const formatActivityDate = (value: string): string => {
@@ -80,6 +70,10 @@ export default function CandidatesPage() {
   const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [stageFilter, setStageFilter] = useState<string[]>([]);
+  const [stageFilterOptions, setStageFilterOptions] = useState<{ value: string; label: string }[]>(
+    [],
+  );
+  const [stageOrderNames, setStageOrderNames] = useState<string[]>([]);
   const [items, setItems] = useState<CandidateListItemResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
@@ -99,6 +93,26 @@ export default function CandidatesPage() {
   useEffect(() => {
     setPage(1);
   }, [search]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { names } = await getCandidateStageFilterOptions();
+        if (cancelled) return;
+        setStageOrderNames(names);
+        setStageFilterOptions(names.map((n) => ({ value: n, label: n })));
+      } catch {
+        if (!cancelled) {
+          setStageOrderNames([]);
+          setStageFilterOptions([]);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -207,6 +221,11 @@ export default function CandidatesPage() {
     };
   }, [addJobId]);
 
+  const stageRank = useMemo(
+    () => new Map(stageOrderNames.map((n, i) => [n, i])),
+    [stageOrderNames],
+  );
+
   const filtered = useMemo(() => {
     const list = items.map(toUiCandidate).filter((c) => {
       const matchStage = stageFilter.length === 0 || stageFilter.includes(c.stage);
@@ -217,11 +236,16 @@ export default function CandidatesPage() {
       const da = new Date(a.appliedDate).getTime();
       const db = new Date(b.appliedDate).getTime();
       if (Number.isFinite(da) && Number.isFinite(db) && db !== da) return db - da;
-      return (stageOrder[a.stage] ?? 99) - (stageOrder[b.stage] ?? 99);
+      const ra = stageRank.get(a.stage);
+      const rb = stageRank.get(b.stage);
+      if (ra !== undefined && rb !== undefined && ra !== rb) return ra - rb;
+      if (ra !== undefined && rb === undefined) return -1;
+      if (ra === undefined && rb !== undefined) return 1;
+      return a.stage.localeCompare(b.stage);
     });
 
     return list;
-  }, [items, stageFilter]);
+  }, [items, stageFilter, stageRank]);
 
   const submitAddCandidate = async () => {
     if (!addName.trim() || !addEmail.trim()) return;
@@ -269,7 +293,7 @@ export default function CandidatesPage() {
         label="Stage"
         value={stageFilter}
         onValueChange={setStageFilter}
-        options={stageOptions}
+        options={stageFilterOptions}
         placeholder="All stages"
         triggerClassName="h-8 text-xs"
         showSelectAllClear

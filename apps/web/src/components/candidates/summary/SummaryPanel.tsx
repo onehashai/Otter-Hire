@@ -9,6 +9,8 @@ import { Separator } from "@onehash/ui/separator";
 import { Icon } from "@onehash/ui/icon";
 import { InputField } from "@onehash/ui/input";
 import { SelectField } from "@onehash/ui/select";
+import { formatOrdinalLongDate } from "@/lib/format-date";
+import { Label } from "@onehash/ui/label";
 
 interface Document {
   id?: string;
@@ -204,25 +206,29 @@ export function SummaryPanel({
                 </div>
               </div>
               <Separator />
-              <div>
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Stage</p>
-                <Badge variant={stageVariant(candidate.stage)} className="text-[10px] mt-1">
+              <div className="flex flex-col gap-1">
+                <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                  Stage
+                </Label>
+                <Badge variant={stageVariant(candidate.stage)} className="text-[10px] w-fit">
                   {candidate.stage}
                 </Badge>
               </div>
-              <div>
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">
+              <div className="flex flex-col gap-1">
+                <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">
                   Source
-                </p>
-                <Badge variant="outline" className="text-[10px]">
+                </Label>
+                <Badge variant="outline" className="text-[10px] w-fit">
                   {candidate.source}
                 </Badge>
               </div>
-              <div>
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">
+              <div className="flex flex-col gap-1">
+                <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">
                   Applied
+                </Label>
+                <p className="text-xs">
+                  {formatOrdinalLongDate(candidate.appliedDate)}
                 </p>
-                <span className="text-xs">{candidate.appliedDate}</span>
               </div>
             </>
           )}

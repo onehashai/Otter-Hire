@@ -61,7 +61,6 @@ class JobUpdateRequest(BaseModel):
     collect_cover: Optional[bool] = None
     screening_questions: Optional[list[str]] = None
     application_form_schema: Optional[dict[str, Any]] = None
-    pipeline_template: Optional[str] = Field(default=None, max_length=20)
     hiring_stages: Optional[list[HiringStageRequest]] = None
     team_members: Optional[list[TeamMemberRequest]] = None
 
@@ -99,7 +98,6 @@ class JobDetailResponse(BaseModel):
     collect_cover: bool
     screening_questions: list[str] = []
     application_form_schema: dict[str, Any] = {}
-    pipeline_template: Optional[str] = None
     hiring_stages: list[HiringStageResponse] = []
     team_members: list[TeamMemberResponse] = []
     created_by_user_id: UUID

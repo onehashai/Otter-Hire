@@ -68,7 +68,7 @@ export default function CareersListPage() {
 
     setOrgName(parsed.orgName);
 
-    getPublicJobs(parsed.orgId)
+    getPublicJobs(parsed.orgId, parsed.orgName)
       .then((data) => {
         setJobs(data);
         setLoading(false);

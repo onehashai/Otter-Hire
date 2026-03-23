@@ -1,39 +1,55 @@
 from app.templates import EmailContent
+from app.templates.email.base_email_template import (
+    STYLE_HEADING,
+    STYLE_TEXT,
+    STYLE_TEXT_SMALL,
+    base_email_template,
+    block_button,
+    copy_paste_link_block,
+    esc,
+    hr,
+)
 
 
 def build_invite_email(
     invite_url: str,
+    product_name: str,
     org_name: str,
     inviter_name: str,
     expiry_days: int,
 ) -> EmailContent:
+    day_word = "day" if expiry_days == 1 else "days"
+    inner = f"""
+                <h1 style="{STYLE_HEADING}">You&apos;re invited</h1>
+                <p style="{STYLE_TEXT}">
+                <strong>{esc(inviter_name)}</strong> has invited you to join <strong>{esc(org_name)}</strong>
+                on {esc(product_name)}.
+                </p>
+                <p style="{STYLE_TEXT}">Click the button below to set up your account.</p>
+                {block_button(invite_url, "Accept invitation")}
+                {copy_paste_link_block(invite_url)}
+                {hr()}
+                <p style="{STYLE_TEXT_SMALL}">
+                This link will expire in {expiry_days} {day_word}. If you weren&apos;t expecting this
+                invitation, you can ignore this email.
+                </p>
+            """
+    html_body = base_email_template(inner)
     return EmailContent(
-        subject=f"You've been invited to join {org_name} on OneHash ATS",
-        html=f"""
-    <html>
-        <body>
-            <h2>You're invited!</h2>
-            <p>
-                <strong>{inviter_name}</strong> has invited you to join
-                <strong>{org_name}</strong> on OneHash ATS.
-            </p>
-            <p>Click the link below to set up your account:</p>
-            <p><a href="{invite_url}">Accept Invitation</a></p>
-            <p>This link will expire in {expiry_days} days.</p>
-            <p>If you weren't expecting this invitation, please ignore this email.</p>
-        </body>
-    </html>
-    """,
+        subject=f"You've been invited to join {org_name} on {product_name}",
+        html=html_body,
         text=f"""
-    You're invited!
+                You're invited!
 
-    {inviter_name} has invited you to join {org_name} on OneHash ATS.
+                {inviter_name} has invited you to join {org_name} on {product_name}.
 
-    Accept your invitation by visiting:
-    {invite_url}
+                Click the link in this email to accept your invitation.
 
-    This link will expire in {expiry_days} days.
+                Or copy and paste this link:
+                {invite_url}
 
-    If you weren't expecting this invitation, please ignore this email.
-    """,
+                This link will expire in {expiry_days} {day_word}.
+
+                If you weren't expecting this invitation, please ignore this email.
+            """,
     )

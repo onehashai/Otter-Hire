@@ -270,10 +270,10 @@ async def ses_events(
                     )
                 )
                 row = result.first()
-            
+
             if row is not None:
                 break
-            
+
             # Only retry for Send/Delivery events (not Bounce/Complaint which come later)
             if attempt < 2 and notification_type in ("Send", "Delivery"):
                 logger.info(
@@ -284,7 +284,7 @@ async def ses_events(
                 await asyncio.sleep(1)
             else:
                 break
-        
+
         if row is None:
             logger.info(
                 "SES events webhook: no message found for ses_message_id=%s email_message_id=%s (event=%s) after retries",

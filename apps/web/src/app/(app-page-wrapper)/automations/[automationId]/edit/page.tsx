@@ -21,11 +21,7 @@ import {
   type Scope,
   type Action,
 } from "@/components/automations/builder";
-import {
-  createAutomation,
-  getAutomationById,
-  updateAutomation,
-} from "@/api/automations";
+import { createAutomation, getAutomationById, updateAutomation } from "@/api/automations";
 import { useMoveToStageAvailability } from "@/hooks/useMoveToStageAvailability";
 import { generateId } from "@/lib/utils";
 
@@ -66,9 +62,7 @@ export default function AutomationEditPage() {
         if (cancelled) return;
 
         setName(detail.name);
-        setScope(
-          detail.scope === "specific_job" ? "specific_job" : "all",
-        );
+        setScope(detail.scope === "specific_job" ? "specific_job" : "all");
         setSelectedJob(detail.job_id ?? "");
         setSelectedTrigger(detail.trigger_key);
         setTriggerStage(
@@ -78,10 +72,7 @@ export default function AutomationEditPage() {
           detail.actions.map((a) => ({
             id: generateId(),
             type: a.type,
-            label:
-              a.config.label ??
-              actionTypes.find((def) => def.id === a.type)?.label ??
-              a.type,
+            label: a.config.label ?? actionTypes.find((def) => def.id === a.type)?.label ?? a.type,
             config: a.config,
           })),
         );
@@ -140,10 +131,7 @@ export default function AutomationEditPage() {
       toast.error("Please select a job when scope is Specific job");
       return;
     }
-    if (
-      moveToStageDisabled &&
-      actions.some((a) => a.type === "move_stage")
-    ) {
+    if (moveToStageDisabled && actions.some((a) => a.type === "move_stage")) {
       toast.error(
         "Remove the Move to stage action or switch to a specific job. Jobs have different pipeline stages.",
       );
@@ -306,11 +294,7 @@ export default function AutomationEditPage() {
         ))}
       </div>
 
-      <SummaryStrip
-        currentTrigger={currentTrigger}
-        triggerStage={triggerStage}
-        actions={actions}
-      />
+      <SummaryStrip currentTrigger={currentTrigger} triggerStage={triggerStage} actions={actions} />
 
       <EmailPreview open={emailPreviewOpen} onOpenChange={setEmailPreviewOpen} />
     </div>

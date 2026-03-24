@@ -103,7 +103,12 @@ export interface AutomationsListProps {
   showEmptyState: boolean;
   templatesOpen?: boolean;
   onTemplatesOpenChange?: (open: boolean) => void;
-  onSelectTemplate?: (config: { name: string; triggerKey: string; triggerConfig?: Record<string, unknown>; templateId?: string }) => void;
+  onSelectTemplate?: (config: {
+    name: string;
+    triggerKey: string;
+    triggerConfig?: Record<string, unknown>;
+    templateId?: string;
+  }) => void;
   onCreateClick?: () => void;
 }
 
@@ -131,9 +136,7 @@ export function AutomationsList({
     const target = automations.find((a) => a.id === id);
     if (!target) return;
     const nextStatus: AutomationStatus = target.status === "active" ? "paused" : "active";
-    setAutomations((prev) =>
-      prev.map((a) => (a.id === id ? { ...a, status: nextStatus } : a)),
-    );
+    setAutomations((prev) => prev.map((a) => (a.id === id ? { ...a, status: nextStatus } : a)));
     try {
       await updateAutomation(id, { status: nextStatus });
       toast.success("Automation updated");

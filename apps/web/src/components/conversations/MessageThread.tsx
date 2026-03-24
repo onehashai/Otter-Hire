@@ -157,9 +157,10 @@ function EmailCard({ msg }: { msg: Message }) {
           </div>
 
           <div className="px-4 py-3">
-            <pre className="whitespace-pre-wrap font-sans text-xs leading-relaxed text-foreground">
-              {main}
-            </pre>
+            <div
+              className="text-xs leading-relaxed text-foreground prose prose-sm max-w-none"
+              dangerouslySetInnerHTML={{ __html: main }}
+            />
             {quoted && (
               <div className="mt-3">
                 <button
@@ -174,9 +175,10 @@ function EmailCard({ msg }: { msg: Message }) {
                   {showQuoted ? "Hide Quoted Text" : "Show Quoted Text"}
                 </button>
                 {showQuoted && (
-                  <pre className="mt-2 whitespace-pre-wrap font-sans text-[11px] leading-relaxed text-muted-foreground border-l-2 border-border pl-3">
-                    {quoted}
-                  </pre>
+                  <div
+                    className="mt-2 text-[11px] leading-relaxed text-muted-foreground border-l-2 border-border pl-3 prose prose-sm max-w-none"
+                    dangerouslySetInnerHTML={{ __html: quoted }}
+                  />
                 )}
               </div>
             )}

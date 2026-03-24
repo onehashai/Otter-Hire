@@ -144,10 +144,7 @@ export function CreateAutomationDialog({
       toast.error(msg);
       return;
     }
-    if (
-      moveToStageDisabled &&
-      actions.some((a) => a.type === "move_stage")
-    ) {
+    if (moveToStageDisabled && actions.some((a) => a.type === "move_stage")) {
       const msg =
         "Remove the Move to stage action or switch to a specific job. Jobs have different pipeline stages.";
       setValidationError(msg);

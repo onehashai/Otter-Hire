@@ -24,6 +24,7 @@ export interface Conversation {
   unread: boolean;
   unreadCount: number;
   stage: string;
+  status: "open" | "closed" | "archived";
 }
 
 interface ConversationListProps {
@@ -34,6 +35,13 @@ interface ConversationListProps {
 }
 
 const filterOptions = ["All", "Unread", "Assigned to me", "Interview conversations"];
+
+function stripHtmlAndDecode(html: string): string {
+  // Create a temporary div to decode HTML entities and strip tags
+  const temp = document.createElement("div");
+  temp.innerHTML = html;
+  return temp.textContent || temp.innerText || "";
+}
 
 export function ConversationList({
   conversations,
@@ -131,7 +139,18 @@ export function ConversationList({
                   >
                     {c.candidateName}
                   </span>
-                  <span className="text-[10px] text-muted-foreground shrink-0">{c.timestamp}</span>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <div
+                      className={cn(
+                        "h-1.5 w-1.5 rounded-full",
+                        c.status === "open" && "bg-green-500",
+                        c.status === "closed" && "bg-gray-400",
+                        c.status === "archived" && "bg-red-500",
+                      )}
+                      title={c.status.charAt(0).toUpperCase() + c.status.slice(1)}
+                    />
+                    <span className="text-[10px] text-muted-foreground">{c.timestamp}</span>
+                  </div>
                 </div>
                 <p
                   className={cn(
@@ -139,7 +158,7 @@ export function ConversationList({
                     c.unread ? "text-foreground font-medium" : "text-muted-foreground",
                   )}
                 >
-                  {c.lastMessage}
+                  {stripHtmlAndDecode(c.lastMessage)}
                 </p>
               </div>
               {c.unread && (

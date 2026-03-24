@@ -9,8 +9,9 @@ Adds category column to email_templates (default 'Email') for filtering.
 
 from typing import Sequence, Union
 
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 revision: str = "f2b3c4d5e6f7"
 down_revision: Union[str, None] = "e6f7a8b9c0d1"

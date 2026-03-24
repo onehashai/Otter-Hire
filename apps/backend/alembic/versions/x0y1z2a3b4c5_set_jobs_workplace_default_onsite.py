@@ -7,7 +7,6 @@ Create Date: 2026-02-26
 
 from alembic import op
 
-
 # revision identifiers, used by Alembic.
 revision = "x0y1z2a3b4c5"
 down_revision = "w9x0y1z2a3b4"
@@ -21,4 +20,3 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.execute("ALTER TABLE jobs ALTER COLUMN workplace_type SET DEFAULT 'remote'")
-

@@ -3,8 +3,6 @@
 from fastapi import APIRouter, Depends
 
 from app.api.v1.endpoints.auth import router as auth_router
-from app.middleware.context import RequestContext, get_request_context
-from app.schemas.common import HealthResponse, RequestContextSchema
 from app.api.v1.endpoints.automations import router as automations_router
 from app.api.v1.endpoints.candidates import router as candidates_router
 from app.api.v1.endpoints.conversations import router as conversations_router
@@ -17,6 +15,8 @@ from app.api.v1.endpoints.public import router as public_router
 from app.api.v1.endpoints.templates import router as templates_router
 from app.api.v1.endpoints.users import router as users_router
 from app.api.v1.endpoints.webhooks import router as webhooks_router
+from app.middleware.context import RequestContext, get_request_context
+from app.schemas.common import HealthResponse, RequestContextSchema
 
 internal_router = APIRouter(prefix="/internal", tags=["internal"])
 

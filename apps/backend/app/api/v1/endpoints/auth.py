@@ -2,7 +2,6 @@ import secrets
 import urllib.parse
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
-from app.utils.uuid import uuid7
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -33,6 +32,7 @@ from app.schemas.auth import (
 from app.services.default_categories import create_default_job_categories_for_org
 from app.services.default_email_templates import create_default_templates_for_org
 from app.services.email import send_verification_email
+from app.utils.uuid import uuid7
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 limiter = Limiter(key_func=get_remote_address)

@@ -7,9 +7,9 @@ Create Date: 2026-02-26 00:30:00.000000
 
 from typing import Sequence, Union
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 revision: str = "t6u7v8w9x0y1"
 down_revision: Union[str, None] = "s5t6u7v8w9x0"
@@ -26,7 +26,12 @@ def upgrade() -> None:
         sa.Column("job_id", sa.UUID(), nullable=False),
         sa.Column("field_key", sa.String(length=120), nullable=False),
         sa.Column("field_label_snapshot", sa.String(length=255), nullable=True),
-        sa.Column("doc_type", sa.String(length=50), nullable=False, server_default="custom_field_attachment"),
+        sa.Column(
+            "doc_type",
+            sa.String(length=50),
+            nullable=False,
+            server_default="custom_field_attachment",
+        ),
         sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("url", sa.String(length=2048), nullable=False),
         sa.Column("object_key", sa.String(length=2048), nullable=False),
@@ -35,8 +40,18 @@ def upgrade() -> None:
         sa.Column("uploaded_by_user_id", sa.UUID(), nullable=True),
         sa.Column("version", sa.Integer(), nullable=False, server_default="1"),
         sa.Column("is_deleted", sa.Boolean(), nullable=False, server_default=sa.text("false")),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
+        ),
         sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
         sa.ForeignKeyConstraint(["candidate_id"], ["candidates.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["job_id"], ["jobs.id"], ondelete="CASCADE"),
@@ -71,4 +86,3 @@ def downgrade() -> None:
     op.drop_index("ix_candidate_documents_org_job_field", table_name="candidate_documents")
     op.drop_index("ix_candidate_documents_org_candidate_created", table_name="candidate_documents")
     op.drop_table("candidate_documents")
-

@@ -42,9 +42,16 @@ interface PipelineBoardProps {
   onBack: () => void;
   isMobile: boolean;
   onMoveCandidate?: (candidateId: string, stageId: string) => Promise<void>;
+  onCandidateClick?: (candidateId: string) => void;
 }
 
-export const PipelineBoard = ({ job, onBack, isMobile, onMoveCandidate }: PipelineBoardProps) => {
+export const PipelineBoard = ({
+  job,
+  onBack,
+  isMobile,
+  onMoveCandidate,
+  onCandidateClick,
+}: PipelineBoardProps) => {
   const { t } = useTranslation();
 
   useSetPageMetadata({
@@ -141,7 +148,11 @@ export const PipelineBoard = ({ job, onBack, isMobile, onMoveCandidate }: Pipeli
 
         <div className="space-y-2">
           {stageCandidates.map((c) => (
-            <Card key={c.id} className="active:bg-muted/50 transition-colors">
+            <Card
+              key={c.id}
+              className="active:bg-muted/50 transition-colors cursor-pointer"
+              onClick={() => onCandidateClick?.(c.id)}
+            >
               <CardContent className="p-4">
                 <div className="flex items-center gap-3">
                   <Avatar className="h-9 w-9">
@@ -219,9 +230,12 @@ export const PipelineBoard = ({ job, onBack, isMobile, onMoveCandidate }: Pipeli
                     draggable
                     onDragStart={() => handleDragStart(c.id)}
                     onDragEnd={handleDragEnd}
+                    onClick={() => {
+                      if (!dragItem) onCandidateClick?.(c.id);
+                    }}
                     className={cn(
-                      "cursor-grab active:cursor-grabbing hover:shadow-sm transition-all",
-                      dragItem === c.id && "opacity-50",
+                      "cursor-pointer hover:shadow-md transition-all",
+                      dragItem === c.id && "opacity-50 cursor-grabbing",
                     )}
                   >
                     <CardContent className="p-3">

@@ -15,9 +15,11 @@ import {
   listConversations,
   getConversation,
   sendMessage,
+  updateConversationStatus,
   type ConversationListItem,
   type ConversationDetail,
   type MessageRead,
+  type ConversationStatus,
 } from "@/api/conversations";
 import { getCandidateById, type CandidateDetailResponse } from "@/api/candidates";
 import { getMyOrganization } from "@/api/organization/me";
@@ -57,6 +59,7 @@ function mapConversation(item: ConversationListItem): Conversation {
     unread: false,
     unreadCount: 0,
     stage: item.status,
+    status: item.status,
   };
 }
 
@@ -282,6 +285,21 @@ export function ConversationsView({ initialId }: ConversationsViewProps) {
     router.push(`/conversations/${newId}`);
   };
 
+  const handleStatusChange = async (newStatus: ConversationStatus) => {
+    if (!selectedId || !activeConversation) return;
+    try {
+      const updated = await updateConversationStatus(selectedId, newStatus);
+      setActiveConversation(updated);
+      // Update the conversation list to reflect the new status
+      setConversations((prev) =>
+        prev.map((c) => (c.id === selectedId ? { ...c, status: newStatus } : c)),
+      );
+      toast.success(`Conversation ${newStatus}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update conversation status");
+    }
+  };
+
   const messages = (activeConversation?.messages ?? []).map((msg) =>
     mapMessage(msg, activeConversation?.subject),
   );
@@ -382,10 +400,12 @@ export function ConversationsView({ initialId }: ConversationsViewProps) {
             phone={candidateDetail?.phone ?? "—"}
             location={candidateDetail?.location ?? "—"}
             jobTitle={candidateDetail?.job_title ?? activeConversation.subject}
-            stage={candidateDetail?.stage_name ?? activeConversation.status}
+            stage={candidateDetail?.stage_name ?? "—"}
             recruiter="—"
             dateApplied={formatDate(activeConversation.created_at)}
             activities={contextActivities}
+            conversationStatus={activeConversation.status}
+            onConversationStatusChange={handleStatusChange}
             onMoveStage={() => {}}
             onAddNote={() => {}}
             onScheduleInterview={() => {}}

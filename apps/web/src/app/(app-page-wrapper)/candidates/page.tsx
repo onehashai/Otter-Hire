@@ -57,6 +57,9 @@ const toUiCandidate = (item: CandidateListItemResponse): Candidate => ({
   source: item.source ?? "job_board",
   phone: item.phone ?? "—",
   location: "—",
+  jobId: item.job_id,
+  stageId: item.stage_id,
+  status: item.status,
 });
 
 export default function CandidatesPage() {
@@ -114,34 +117,37 @@ export default function CandidatesPage() {
     };
   }, []);
 
+  const refreshCandidates = async () => {
+    try {
+      setLoading(true);
+      const data = await getCandidatesPaginated({
+        limit: pageSize,
+        offset: (page - 1) * pageSize,
+        search: search.trim() || undefined,
+      });
+      setItems(data.items);
+      setTotal(data.total);
+    } catch (err) {
+      toast({
+        title: err instanceof Error ? err.message : "Failed to load candidates",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     let cancelled = false;
-    const refreshCandidates = async () => {
-      try {
-        setLoading(true);
-        const data = await getCandidatesPaginated({
-          limit: pageSize,
-          offset: (page - 1) * pageSize,
-          search: search.trim() || undefined,
-        });
-        if (!cancelled) {
-          setItems(data.items);
-          setTotal(data.total);
-        }
-      } catch (err) {
-        if (!cancelled)
-          toast({
-            title: err instanceof Error ? err.message : "Failed to load candidates",
-            variant: "destructive",
-          });
-      } finally {
-        if (!cancelled) setLoading(false);
+    (async () => {
+      if (!cancelled) {
+        await refreshCandidates();
       }
-    };
-    void refreshCandidates();
+    })();
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [toast, page, search]);
 
   useEffect(() => {
@@ -329,7 +335,7 @@ export default function CandidatesPage() {
           <p className="text-sm text-muted-foreground">Loading candidates...</p>
         ) : (
           <div className="space-y-3">
-            <CandidatesList candidates={filtered} />
+            <CandidatesList candidates={filtered} onRefresh={refreshCandidates} />
             <div className="flex items-center justify-between">
               <p className="text-xs text-muted-foreground">
                 Page {page} of {totalPages}

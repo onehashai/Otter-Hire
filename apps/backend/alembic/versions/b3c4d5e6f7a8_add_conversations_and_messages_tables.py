@@ -8,8 +8,9 @@ Create Date: 2026-03-10
 from typing import Sequence, Union
 
 import sqlalchemy as sa
-from alembic import op
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 revision: str = "b3c4d5e6f7a8"
 down_revision: Union[str, Sequence[str], None] = "a2b3c4d5e6f7"
@@ -49,9 +50,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["job_id"], ["jobs.id"], ondelete="SET NULL"),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index(
-        "ix_conversations_org_candidate", "conversations", ["org_id", "candidate_id"]
-    )
+    op.create_index("ix_conversations_org_candidate", "conversations", ["org_id", "candidate_id"])
     op.create_index(
         "ix_conversations_org_last_message_at",
         "conversations",
@@ -78,19 +77,13 @@ def upgrade() -> None:
             server_default=sa.func.now(),
             nullable=False,
         ),
-        sa.CheckConstraint(
-            "direction IN ('inbound', 'outbound')", name="ck_messages_direction"
-        ),
-        sa.CheckConstraint(
-            "sender_type IN ('user', 'candidate')", name="ck_messages_sender_type"
-        ),
+        sa.CheckConstraint("direction IN ('inbound', 'outbound')", name="ck_messages_direction"),
+        sa.CheckConstraint("sender_type IN ('user', 'candidate')", name="ck_messages_sender_type"),
         sa.CheckConstraint(
             "status IN ('queued', 'sent', 'failed', 'received')", name="ck_messages_status"
         ),
         sa.ForeignKeyConstraint(["org_id"], ["organizations.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(
-            ["conversation_id"], ["conversations.id"], ondelete="CASCADE"
-        ),
+        sa.ForeignKeyConstraint(["conversation_id"], ["conversations.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["sender_user_id"], ["users.id"], ondelete="SET NULL"),
         sa.PrimaryKeyConstraint("id"),
     )

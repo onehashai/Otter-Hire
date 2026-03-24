@@ -7,9 +7,9 @@ Create Date: 2026-02-25 20:40:00.000000
 
 from typing import Sequence, Union
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 revision: str = "r4s5t6u7v8w9"
 down_revision: Union[str, None] = "q3r4s5t6u7v8"
@@ -36,14 +36,26 @@ def downgrade() -> None:
         sa.Column("object_key", sa.String(length=2048), nullable=True),
         sa.Column("doc_type", sa.String(length=50), nullable=False, server_default="attachment"),
         sa.Column("size_label", sa.String(length=50), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=True),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=True
+        ),
         sa.ForeignKeyConstraint(["candidate_id"], ["candidates.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["created_by_user_id"], ["users.id"], ondelete="SET NULL"),
         sa.ForeignKeyConstraint(["org_id"], ["organizations.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index("ix_candidate_documents_candidate_created", "candidate_documents", ["candidate_id", "created_at"], unique=False)
-    op.create_index("ix_candidate_documents_org_candidate", "candidate_documents", ["org_id", "candidate_id"], unique=False)
+    op.create_index(
+        "ix_candidate_documents_candidate_created",
+        "candidate_documents",
+        ["candidate_id", "created_at"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_candidate_documents_org_candidate",
+        "candidate_documents",
+        ["org_id", "candidate_id"],
+        unique=False,
+    )
     op.add_column("users", sa.Column("profile_image_key", sa.String(), nullable=True))
     op.drop_column("candidates", "doc_url")
     op.drop_column("users", "avatar_url")

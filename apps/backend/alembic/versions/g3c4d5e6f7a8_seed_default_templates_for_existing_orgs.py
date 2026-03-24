@@ -9,8 +9,9 @@ For each organization that has no templates, insert the 8 default templates.
 
 from typing import Sequence, Union
 
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 revision: str = "g3c4d5e6f7a8"
 down_revision: Union[str, None] = "f2b3c4d5e6f7"

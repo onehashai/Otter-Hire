@@ -3,7 +3,8 @@ from typing import Sequence
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func as sa_func, select
+from sqlalchemy import func as sa_func
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
@@ -18,7 +19,6 @@ from app.schemas.automations import (
     AutomationListItemResponse,
     AutomationUpdateRequest,
 )
-
 
 router = APIRouter(prefix="/automations", tags=["automations"])
 
@@ -71,9 +71,7 @@ def _build_detail(automation: Automation, created_by_name: str | None) -> Automa
     )
 
 
-async def _get_automation_or_404(
-    db: AsyncSession, automation_id: UUID, org_id: UUID
-) -> Automation:
+async def _get_automation_or_404(db: AsyncSession, automation_id: UUID, org_id: UUID) -> Automation:
     stmt = (
         select(Automation)
         .where(Automation.id == automation_id, Automation.org_id == org_id)
@@ -228,4 +226,3 @@ async def list_automation_executions(
         )
         for row in rows
     ]
-

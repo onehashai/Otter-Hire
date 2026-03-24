@@ -55,7 +55,10 @@ function publicCareersQuery(orgSlugPrefix: string): string {
   return `?${q.toString()}`;
 }
 
-export async function getPublicJobs(orgId: string, orgSlugPrefix: string): Promise<PublicJobListItem[]> {
+export async function getPublicJobs(
+  orgId: string,
+  orgSlugPrefix: string,
+): Promise<PublicJobListItem[]> {
   return apiGet<PublicJobListItem[]>(`/orgs/${orgId}/jobs${publicCareersQuery(orgSlugPrefix)}`);
 }
 
@@ -64,7 +67,9 @@ export async function getPublicJobDetail(
   jobId: string,
   orgSlugPrefix: string,
 ): Promise<PublicJobDetail> {
-  return apiGet<PublicJobDetail>(`/orgs/${orgId}/jobs/${jobId}${publicCareersQuery(orgSlugPrefix)}`);
+  return apiGet<PublicJobDetail>(
+    `/orgs/${orgId}/jobs/${jobId}${publicCareersQuery(orgSlugPrefix)}`,
+  );
 }
 
 export async function applyToPublicJob(

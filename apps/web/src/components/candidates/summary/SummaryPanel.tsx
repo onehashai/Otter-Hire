@@ -226,9 +226,7 @@ export function SummaryPanel({
                 <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">
                   Applied
                 </Label>
-                <p className="text-xs">
-                  {formatOrdinalLongDate(candidate.appliedDate)}
-                </p>
+                <p className="text-xs">{formatOrdinalLongDate(candidate.appliedDate)}</p>
               </div>
             </>
           )}

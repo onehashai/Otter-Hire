@@ -7,11 +7,11 @@ Create Date: 2026-02-26 00:00:02.000000
 
 from typing import Sequence, Union
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy import inspect
 from sqlalchemy.dialects import postgresql
 
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "w9x0y1z2a3b4"
@@ -28,7 +28,9 @@ def upgrade() -> None:
         if "location" not in column_names:
             batch_op.add_column(sa.Column("location", sa.String(), nullable=True))
         if "profile_links" not in column_names:
-            batch_op.add_column(sa.Column("profile_links", postgresql.JSONB(astext_type=sa.Text()), nullable=True))
+            batch_op.add_column(
+                sa.Column("profile_links", postgresql.JSONB(astext_type=sa.Text()), nullable=True)
+            )
 
 
 def downgrade() -> None:
@@ -40,4 +42,3 @@ def downgrade() -> None:
             batch_op.drop_column("profile_links")
         if "location" in column_names:
             batch_op.drop_column("location")
-

@@ -12,6 +12,8 @@ with workflow.unsafe.imports_passed_through():
         InboundWorkflowInput,
         OutboundWorkflowInput,
     )
+
+
 @workflow.defn
 class InboundEmailWorkflow:
     @workflow.run
@@ -71,6 +73,7 @@ class InboundEmailWorkflow:
             input_data.key,
         )
         return result
+
 
 @workflow.defn
 class OutboundEmailWorkflow:

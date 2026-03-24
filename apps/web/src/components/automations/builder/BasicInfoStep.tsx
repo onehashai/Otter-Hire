@@ -44,7 +44,9 @@ export function BasicInfoStep({
       .finally(() => {
         if (!cancelled) setJobsLoading(false);
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [scope]);
 
   return (

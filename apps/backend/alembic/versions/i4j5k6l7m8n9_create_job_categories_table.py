@@ -5,9 +5,10 @@ Revises: h3i4j5k6l7m8
 Create Date: 2025-01-10 12:00:00.000000
 
 """
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 revision = 'i4j5k6l7m8n9'
 down_revision = 'h3i4j5k6l7m8'

@@ -11,8 +11,9 @@ migrates all data from integrations, then drops the integrations table.
 from typing import Sequence, Union
 
 import sqlalchemy as sa
-from alembic import op
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 revision: str = "c8d9e0f1a2b3"
 down_revision: Union[str, Sequence[str], None] = "b7c8d9e0f1a2"

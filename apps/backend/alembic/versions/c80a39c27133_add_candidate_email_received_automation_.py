@@ -5,14 +5,13 @@ Revises: f6d5762fcb12
 Create Date: 2026-03-20 14:35:39.247092
 
 """
-from typing import Sequence, Union
 from datetime import datetime, timezone
+from typing import Sequence, Union
 from uuid import uuid4
 
-from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.dialects.postgresql import UUID, JSONB
 
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = 'c80a39c27133'

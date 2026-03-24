@@ -90,6 +90,7 @@ async def extract_resume_activity(raw_email_b64: str) -> dict:
 @activity.defn(name="download_and_extract_resume_activity")
 async def download_and_extract_resume_activity(input_data: InboundWorkflowInput) -> dict:
     import boto3
+
     from app.integrations.app_store.email_integration.ses_bridge import (
         _extract_text_and_attachments,
         _resolve_inbox_context,

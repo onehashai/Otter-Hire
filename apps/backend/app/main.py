@@ -1,5 +1,4 @@
 import asyncio
-from app.utils.uuid import uuid7
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
@@ -21,6 +20,7 @@ from app.middleware.errors import (
     validation_exception_handler,
 )
 from app.schemas.common import HealthResponse
+from app.utils.uuid import uuid7
 
 setup_logging()
 

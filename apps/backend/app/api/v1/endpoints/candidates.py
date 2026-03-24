@@ -15,11 +15,9 @@ from app.db.session import get_db
 from app.models.activity import Activity
 from app.models.candidate import Candidate
 from app.models.candidate_document import CandidateDocument
-from app.models.conversation import Conversation
 from app.models.feedback import Feedback
 from app.models.interview import Interview
 from app.models.job import Job
-from app.models.message import Message
 from app.models.note import Note
 from app.models.org_membership import OrgMembership
 from app.models.stage import Stage
@@ -39,19 +37,19 @@ from app.schemas.candidates import (
     CandidateInterviewResponse,
     CandidateListItemResponse,
     CandidateListResponse,
-    CandidateStageFilterOptionsResponse,
     CandidateNoteMentionResponse,
     CandidateNoteRequest,
     CandidateNoteResponse,
     CandidateOverviewResponse,
+    CandidateStageFilterOptionsResponse,
     CandidateStageUpdateRequest,
     CandidateStatusUpdateRequest,
     CandidateUpdateRequest,
 )
+from app.services.automation import execute_automations_for_trigger
 from app.services.email import send_candidate_note_mention_email
 from app.services.media import ensure_pdf_type, read_upload_with_size_check
 from app.services.storage import storage_service
-from app.services.automation import execute_automations_for_trigger
 from app.utils.uuid import uuid7
 
 router = APIRouter(prefix="/candidates", tags=["candidates"])

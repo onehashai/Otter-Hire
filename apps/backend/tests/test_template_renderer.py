@@ -5,7 +5,6 @@ Tests variable substitution and context building for automation emails.
 """
 
 import pytest
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.candidate import Candidate

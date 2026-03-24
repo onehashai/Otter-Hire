@@ -5,12 +5,12 @@ Revises: c80a39c27133
 Create Date: 2026-03-20 17:09:33.718544
 
 """
-from typing import Sequence, Union
 import uuid
+from typing import Sequence, Union
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = 'c18b5ba07caa'

@@ -4,16 +4,17 @@ API endpoint tests for candidate status updates.
 Tests idempotency, validation, and automation triggering.
 """
 
-import pytest
 from unittest.mock import AsyncMock, patch
+
+import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.activity import Activity
 from app.models.candidate import Candidate
 from app.models.job import Job
 from app.models.organization import Organization
 from app.models.user import User
-from app.models.activity import Activity
 from app.utils.uuid import uuid7
 
 
@@ -90,8 +91,8 @@ async def test_update_candidate_status_to_rejected(
 ):
     """Test updating candidate status to rejected."""
     from app.api.v1.endpoints.candidates import update_candidate_status
-    from app.schemas.candidates import CandidateStatusUpdateRequest
     from app.models.user import User
+    from app.schemas.candidates import CandidateStatusUpdateRequest
     
     # Mock current user
     mock_user = User(
@@ -143,8 +144,8 @@ async def test_update_candidate_status_idempotency(
 ):
     """Test idempotency - updating to same status should skip."""
     from app.api.v1.endpoints.candidates import update_candidate_status
-    from app.schemas.candidates import CandidateStatusUpdateRequest
     from app.models.user import User
+    from app.schemas.candidates import CandidateStatusUpdateRequest
     
     # Set candidate to rejected
     test_candidate.status = "rejected"
@@ -194,8 +195,8 @@ async def test_update_candidate_status_to_hired(
 ):
     """Test updating candidate status to hired."""
     from app.api.v1.endpoints.candidates import update_candidate_status
-    from app.schemas.candidates import CandidateStatusUpdateRequest
     from app.models.user import User
+    from app.schemas.candidates import CandidateStatusUpdateRequest
     
     mock_user = User(
         id=uuid7(),
@@ -231,8 +232,8 @@ async def test_update_candidate_status_to_active(
 ):
     """Test updating candidate status to active (no automation)."""
     from app.api.v1.endpoints.candidates import update_candidate_status
-    from app.schemas.candidates import CandidateStatusUpdateRequest
     from app.models.user import User
+    from app.schemas.candidates import CandidateStatusUpdateRequest
     
     # Set to rejected first
     test_candidate.status = "rejected"
@@ -265,10 +266,11 @@ async def test_update_candidate_status_to_active(
 @pytest.mark.asyncio
 async def test_update_candidate_status_not_found(db: AsyncSession):
     """Test updating non-existent candidate."""
-    from app.api.v1.endpoints.candidates import update_candidate_status
-    from app.schemas.candidates import CandidateStatusUpdateRequest
-    from app.models.user import User
     from fastapi import HTTPException
+
+    from app.api.v1.endpoints.candidates import update_candidate_status
+    from app.models.user import User
+    from app.schemas.candidates import CandidateStatusUpdateRequest
     
     fake_candidate_id = uuid7()
     mock_user = User(
@@ -302,8 +304,8 @@ async def test_update_candidate_status_activity_metadata(
 ):
     """Test activity log includes old and new status."""
     from app.api.v1.endpoints.candidates import update_candidate_status
-    from app.schemas.candidates import CandidateStatusUpdateRequest
     from app.models.user import User
+    from app.schemas.candidates import CandidateStatusUpdateRequest
     
     # Initial status is "active"
     assert test_candidate.status == "active"
@@ -347,8 +349,8 @@ async def test_update_candidate_status_multiple_times(
 ):
     """Test multiple status updates trigger automations correctly."""
     from app.api.v1.endpoints.candidates import update_candidate_status
-    from app.schemas.candidates import CandidateStatusUpdateRequest
     from app.models.user import User
+    from app.schemas.candidates import CandidateStatusUpdateRequest
     
     mock_user = User(
         id=uuid7(),

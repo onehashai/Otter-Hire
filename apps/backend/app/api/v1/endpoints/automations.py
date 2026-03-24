@@ -3,7 +3,8 @@ from typing import Sequence
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func as sa_func, select
+from sqlalchemy import func as sa_func
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
@@ -18,7 +19,6 @@ from app.schemas.automations import (
     AutomationListItemResponse,
     AutomationUpdateRequest,
 )
-
 
 router = APIRouter(prefix="/automations", tags=["automations"])
 

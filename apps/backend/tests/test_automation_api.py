@@ -4,8 +4,9 @@ Integration tests for complete automation flow using real database.
 Tests end-to-end automation execution with existing data.
 """
 
+from unittest.mock import AsyncMock, patch
+
 import pytest
-from unittest.mock import patch, AsyncMock
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 

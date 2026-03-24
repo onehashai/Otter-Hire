@@ -12,8 +12,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.logging import logger
 from app.models.template import Template
 from app.services.automation.template_renderer import build_template_context, render_template
-from app.services.email import send_email
-from app.templates import EmailContent
 
 
 async def handle_send_email_action(
@@ -43,14 +41,19 @@ async def handle_send_email_action(
     """
     try:
         from datetime import datetime, timezone
+
+        from app.core.config import settings
+        from app.integrations.app_store.email_integration.temporal.queue import (
+            enqueue_outbound_email,
+        )
+        from app.integrations.app_store.email_integration.temporal.types import (
+            OutboundWorkflowInput,
+        )
         from app.models.candidate import Candidate
         from app.models.conversation import Conversation
         from app.models.message import Message
         from app.models.organization import Organization, OrgInbox
         from app.utils.uuid import uuid7
-        from app.integrations.app_store.email_integration.temporal.queue import enqueue_outbound_email
-        from app.integrations.app_store.email_integration.temporal.types import OutboundWorkflowInput
-        from app.core.config import settings
 
         # Extract template ID from config
         template_id_str = action_config.get("template")

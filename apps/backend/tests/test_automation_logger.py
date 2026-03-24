@@ -4,8 +4,9 @@ Unit tests for automation execution logger.
 Tests execution logging and statistics updates.
 """
 
+from datetime import datetime
+
 import pytest
-from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 

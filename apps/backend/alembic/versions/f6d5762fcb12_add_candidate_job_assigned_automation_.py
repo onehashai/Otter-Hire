@@ -5,14 +5,13 @@ Revises: f8g9h0i1j2k3
 Create Date: 2026-03-20 12:39:45.501977
 
 """
-from typing import Sequence, Union
-from datetime import datetime, timezone
 import uuid
+from datetime import datetime, timezone
+from typing import Sequence, Union
+
+import sqlalchemy as sa
 
 from alembic import op
-import sqlalchemy as sa
-from sqlalchemy.dialects.postgresql import UUID, JSONB
-
 
 # revision identifiers, used by Alembic.
 revision: str = 'f6d5762fcb12'
@@ -109,7 +108,7 @@ def upgrade() -> None:
     
     print(f"✅ Created email template: {template_id}")
     print(f"✅ Created automation rule: {automation_id}")
-    print(f"✅ Trigger: candidate_job_assigned")
+    print("✅ Trigger: candidate_job_assigned")
 
 
 def downgrade() -> None:

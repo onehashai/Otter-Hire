@@ -11,14 +11,14 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import asyncio
+
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import NullPool
 
-from app.db.base import Base
 from app.core.config import settings
-
+from app.db.base import Base
 
 # Test database URL (use Docker postgres or localhost)
 # For Docker: use 'localhost' since we're running tests from host

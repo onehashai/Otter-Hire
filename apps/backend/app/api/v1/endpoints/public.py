@@ -56,11 +56,9 @@ from app.schemas.public_jobs import (
     PublicJobDetail,
     PublicJobListItem,
 )
+from app.services.automation import execute_automations_for_trigger
 from app.services.resume_links import resolve_resume_from_body
 from app.services.storage import storage_service
-from app.services.automation import execute_automations_for_trigger
-from app.models.conversation import Conversation
-from app.models.message import Message
 
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)

@@ -4,8 +4,9 @@ Unit tests for automation action handlers.
 Tests email sending and action execution logic.
 """
 
-import pytest
 from unittest.mock import AsyncMock, patch
+
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.candidate import Candidate

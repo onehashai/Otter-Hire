@@ -147,6 +147,7 @@ export default function CandidatesPage() {
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [toast, page, search]);
 
   useEffect(() => {

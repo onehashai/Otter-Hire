@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import urllib.request
 from uuid import UUID
@@ -242,33 +243,51 @@ async def ses_events(
 
     try:
         # When sending via SES API we store SES MessageId; try it first (exact match)
+        # Retry up to 3 times with 1s delay to handle race condition where webhook
+        # arrives before worker commits the message to database
         row = None
-        if ses_message_id:
-            result = await db.execute(
-                select(
-                    Message.id,
-                    Message.status,
-                    Message.org_id,
-                    Message.conversation_id,
-                ).where(Message.email_message_id == ses_message_id)
-            )
-            row = result.first()
-        if row is None and email_message_id:
-            result = await db.execute(
-                select(
-                    Message.id,
-                    Message.status,
-                    Message.org_id,
-                    Message.conversation_id,
-                ).where(
-                    Message.email_message_id.isnot(None),
-                    func.lower(Message.email_message_id) == email_message_id.lower(),
+        for attempt in range(3):
+            if ses_message_id:
+                result = await db.execute(
+                    select(
+                        Message.id,
+                        Message.status,
+                        Message.org_id,
+                        Message.conversation_id,
+                    ).where(Message.email_message_id == ses_message_id)
                 )
-            )
-            row = result.first()
+                row = result.first()
+            if row is None and email_message_id:
+                result = await db.execute(
+                    select(
+                        Message.id,
+                        Message.status,
+                        Message.org_id,
+                        Message.conversation_id,
+                    ).where(
+                        Message.email_message_id.isnot(None),
+                        func.lower(Message.email_message_id) == email_message_id.lower(),
+                    )
+                )
+                row = result.first()
+            
+            if row is not None:
+                break
+            
+            # Only retry for Send/Delivery events (not Bounce/Complaint which come later)
+            if attempt < 2 and notification_type in ("Send", "Delivery"):
+                logger.info(
+                    "SES events webhook: message not found yet (attempt %d/3), retrying in 1s for ses_message_id=%s",
+                    attempt + 1,
+                    ses_message_id,
+                )
+                await asyncio.sleep(1)
+            else:
+                break
+        
         if row is None:
             logger.info(
-                "SES events webhook: no message found for ses_message_id=%s email_message_id=%s (event=%s)",
+                "SES events webhook: no message found for ses_message_id=%s email_message_id=%s (event=%s) after retries",
                 ses_message_id,
                 email_message_id,
                 notification_type,

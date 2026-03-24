@@ -11,11 +11,7 @@ export interface SummaryStripProps {
   actions: Action[];
 }
 
-export function SummaryStrip({
-  currentTrigger,
-  triggerStage,
-  actions,
-}: SummaryStripProps) {
+export function SummaryStrip({ currentTrigger, triggerStage, actions }: SummaryStripProps) {
   const hasContent = currentTrigger || actions.length > 0;
   if (!hasContent) return null;
 

@@ -128,9 +128,9 @@ export default function CandidateProfilePage() {
   const [activeTab, setActiveTab] = useState("overview");
   const { t } = useTranslation();
   const id = params?.candidateId as string | undefined;
-  
-  const fromPipeline = searchParams.get('from') === 'pipeline';
-  const pipelineJobId = searchParams.get('jobId');
+
+  const fromPipeline = searchParams.get("from") === "pipeline";
+  const pipelineJobId = searchParams.get("jobId");
   const [candidate, setCandidate] = useState<CandidateDetailResponse | null>(null);
   const [overview, setOverview] = useState<CandidateOverviewResponse | null>(null);
   const [interviews, setInterviews] = useState<CandidateInterviewResponse[]>([]);
@@ -440,8 +440,10 @@ export default function CandidateProfilePage() {
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <Button variant="ghost" size="sm" className="h-8 text-xs gap-1.5" asChild>
-            <Link href={fromPipeline && pipelineJobId ? `/pipeline/${pipelineJobId}` : "/candidates"}>
-              <Icon name="ChevronLeft" className="h-3.5 w-3.5" /> 
+            <Link
+              href={fromPipeline && pipelineJobId ? `/pipeline/${pipelineJobId}` : "/candidates"}
+            >
+              <Icon name="ChevronLeft" className="h-3.5 w-3.5" />
               {fromPipeline ? "Back to Pipeline" : t("candidates")}
             </Link>
           </Button>

@@ -74,7 +74,8 @@ export function CandidatesList({ candidates, onRefresh }: CandidatesListProps) {
     if (!candidate.jobId) {
       toast({
         title: "Cannot reject candidate",
-        description: "Candidate must be assigned to a job before rejection. Rejection is per-job basis.",
+        description:
+          "Candidate must be assigned to a job before rejection. Rejection is per-job basis.",
         variant: "destructive",
       });
       return;

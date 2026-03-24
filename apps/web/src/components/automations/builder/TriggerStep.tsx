@@ -25,24 +25,22 @@ export function TriggerStep({
     <div className="p-4 space-y-4">
       <p className="text-xs text-muted-foreground">Select what triggers this automation.</p>
       <div className="space-y-2">
-        <Label className="text-xs font-medium text-muted-foreground">
-          Candidate triggers
-        </Label>
+        <Label className="text-xs font-medium text-muted-foreground">Candidate triggers</Label>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
           {triggerOptions.map((tr) => (
-                <Button
-                  key={tr.id}
-                  type="button"
-                  variant={selectedTrigger === tr.id ? "default" : "outline"}
-                  size="sm"
-                  className="h-9 text-xs justify-start"
-                  onClick={() => onSelectedTriggerChange(tr.id)}
-                >
-                  {tr.label}
-                </Button>
-              ))}
-            </div>
-          </div>
+            <Button
+              key={tr.id}
+              type="button"
+              variant={selectedTrigger === tr.id ? "default" : "outline"}
+              size="sm"
+              className="h-9 text-xs justify-start"
+              onClick={() => onSelectedTriggerChange(tr.id)}
+            >
+              {tr.label}
+            </Button>
+          ))}
+        </div>
+      </div>
 
       {currentTrigger?.hasStageSelect && (
         <FieldRow label="Select Stage">

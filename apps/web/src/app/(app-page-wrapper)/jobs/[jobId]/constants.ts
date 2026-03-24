@@ -15,12 +15,7 @@ export const JobCategories = [
 ] as const;
 export type JobCategory = (typeof JobCategories)[number];
 
-export const employmentTypes = [
-  "full_time",
-  "part_time",
-  "contract",
-  "internship",
-] as const;
+export const employmentTypes = ["full_time", "part_time", "contract", "internship"] as const;
 export type EmploymentType = (typeof employmentTypes)[number];
 
 export const workplaceTypes = ["remote", "hybrid", "onsite"] as const;
@@ -32,21 +27,10 @@ export type VisibilityType = (typeof visibilityTypes)[number];
 export const salaryTypes = ["hidden", "fixed", "range"] as const;
 export type SalaryType = (typeof salaryTypes)[number];
 
-export const timeframes = [
-  "per_year",
-  "per_month",
-  "per_week",
-  "per_day",
-  "per_hour",
-] as const;
+export const timeframes = ["per_year", "per_month", "per_week", "per_day", "per_hour"] as const;
 export type TimeframeType = (typeof timeframes)[number];
 
-export const teamRoles = [
-  "hiring_manager",
-  "recruiter",
-  "interviewer",
-  "coordinator",
-] as const;
+export const teamRoles = ["hiring_manager", "recruiter", "interviewer", "coordinator"] as const;
 export type TeamRoleType = (typeof teamRoles)[number];
 
 export const jobStatuses = ["draft", "open", "archived"] as const;

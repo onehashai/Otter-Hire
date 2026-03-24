@@ -157,7 +157,7 @@ function EmailCard({ msg }: { msg: Message }) {
           </div>
 
           <div className="px-4 py-3">
-            <div 
+            <div
               className="text-xs leading-relaxed text-foreground prose prose-sm max-w-none"
               dangerouslySetInnerHTML={{ __html: main }}
             />
@@ -175,7 +175,7 @@ function EmailCard({ msg }: { msg: Message }) {
                   {showQuoted ? "Hide Quoted Text" : "Show Quoted Text"}
                 </button>
                 {showQuoted && (
-                  <div 
+                  <div
                     className="mt-2 text-[11px] leading-relaxed text-muted-foreground border-l-2 border-border pl-3 prose prose-sm max-w-none"
                     dangerouslySetInnerHTML={{ __html: quoted }}
                   />

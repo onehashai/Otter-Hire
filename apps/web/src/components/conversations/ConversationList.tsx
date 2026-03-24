@@ -38,9 +38,9 @@ const filterOptions = ["All", "Unread", "Assigned to me", "Interview conversatio
 
 function stripHtmlAndDecode(html: string): string {
   // Create a temporary div to decode HTML entities and strip tags
-  const temp = document.createElement('div');
+  const temp = document.createElement("div");
   temp.innerHTML = html;
-  return temp.textContent || temp.innerText || '';
+  return temp.textContent || temp.innerText || "";
 }
 
 export function ConversationList({

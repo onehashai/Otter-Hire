@@ -20,13 +20,62 @@ export interface AutomationTemplateConfig {
   templateName: string;
 }
 
-const templates: { name: string; trigger: string; action: string; triggerKey: string; triggerConfig: Record<string, unknown>; templateName: string }[] = [
-  { name: "Application Confirmation", trigger: "Candidate applied", action: "Send Application Received", triggerKey: "candidate_applied", triggerConfig: { label: "Candidate applied" }, templateName: "Application Received" },
-  { name: "Interview Invitation", trigger: "Moved to Interview", action: "Send Interview Invitation", triggerKey: "candidate_moved", triggerConfig: { stage: "Interview", label: "Candidate moved to Interview" }, templateName: "Interview Invitation" },
-  { name: "Rejection Email", trigger: "Moved to Rejected", action: "Send Candidate Rejection", triggerKey: "candidate_moved", triggerConfig: { stage: "Rejected", label: "Candidate moved to Rejected" }, templateName: "Candidate Rejection" },
-  { name: "Hiring Congratulations", trigger: "Moved to Hired", action: "Send Offer Letter", triggerKey: "candidate_moved", triggerConfig: { stage: "Hired", label: "Candidate moved to Hired" }, templateName: "Send Offer Letter" },
-  { name: "Job Assignment Email", trigger: "Job assigned", action: "Send Job Assignment Notification", triggerKey: "candidate_job_assigned", triggerConfig: { label: "Candidate job assigned" }, templateName: "Job Assignment Notification" },
-  { name: "Email Acknowledgment", trigger: "Email received", action: "Send Auto-Reply", triggerKey: "candidate_email_received", triggerConfig: { label: "Candidate email received" }, templateName: "Email Auto-Reply" },
+const templates: {
+  name: string;
+  trigger: string;
+  action: string;
+  triggerKey: string;
+  triggerConfig: Record<string, unknown>;
+  templateName: string;
+}[] = [
+  {
+    name: "Application Confirmation",
+    trigger: "Candidate applied",
+    action: "Send Application Received",
+    triggerKey: "candidate_applied",
+    triggerConfig: { label: "Candidate applied" },
+    templateName: "Application Received",
+  },
+  {
+    name: "Interview Invitation",
+    trigger: "Moved to Interview",
+    action: "Send Interview Invitation",
+    triggerKey: "candidate_moved",
+    triggerConfig: { stage: "Interview", label: "Candidate moved to Interview" },
+    templateName: "Interview Invitation",
+  },
+  {
+    name: "Rejection Email",
+    trigger: "Moved to Rejected",
+    action: "Send Candidate Rejection",
+    triggerKey: "candidate_moved",
+    triggerConfig: { stage: "Rejected", label: "Candidate moved to Rejected" },
+    templateName: "Candidate Rejection",
+  },
+  {
+    name: "Hiring Congratulations",
+    trigger: "Moved to Hired",
+    action: "Send Offer Letter",
+    triggerKey: "candidate_moved",
+    triggerConfig: { stage: "Hired", label: "Candidate moved to Hired" },
+    templateName: "Send Offer Letter",
+  },
+  {
+    name: "Job Assignment Email",
+    trigger: "Job assigned",
+    action: "Send Job Assignment Notification",
+    triggerKey: "candidate_job_assigned",
+    triggerConfig: { label: "Candidate job assigned" },
+    templateName: "Job Assignment Notification",
+  },
+  {
+    name: "Email Acknowledgment",
+    trigger: "Email received",
+    action: "Send Auto-Reply",
+    triggerKey: "candidate_email_received",
+    triggerConfig: { label: "Candidate email received" },
+    templateName: "Email Auto-Reply",
+  },
 ];
 
 export interface AutomationTemplatesDialogProps {
@@ -35,7 +84,11 @@ export interface AutomationTemplatesDialogProps {
   onSelectTemplate?: (config: AutomationTemplateConfig & { templateId?: string }) => void;
 }
 
-export function AutomationTemplatesDialog({ open, onOpenChange, onSelectTemplate }: AutomationTemplatesDialogProps) {
+export function AutomationTemplatesDialog({
+  open,
+  onOpenChange,
+  onSelectTemplate,
+}: AutomationTemplatesDialogProps) {
   const [templatesById, setTemplatesById] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -51,7 +104,9 @@ export function AutomationTemplatesDialog({ open, onOpenChange, onSelectTemplate
         setTemplatesById(byName);
       })
       .catch(() => {});
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [open]);
 
   const handleSelectTemplate = (t: (typeof templates)[0]) => {

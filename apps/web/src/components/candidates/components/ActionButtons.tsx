@@ -67,7 +67,8 @@ export function ActionButtons({
     if (!jobId) {
       toast({
         title: "Cannot reject candidate",
-        description: "Candidate must be assigned to a job before rejection. Rejection is per-job basis.",
+        description:
+          "Candidate must be assigned to a job before rejection. Rejection is per-job basis.",
         variant: "destructive",
       });
       return;
@@ -94,93 +95,96 @@ export function ActionButtons({
         >
           <Icon name="UserCheck" className="h-3.5 w-3.5" /> Move Stage
         </Button>
-      <Button
-        variant="outline"
-        size="sm"
-        className="h-8 text-xs gap-1.5 hidden sm:flex"
-        onClick={() => toast({ title: "Interview scheduled" })}
-      >
-        <Icon name="Clock" className="h-3.5 w-3.5" /> Schedule
-      </Button>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="sm" className="h-8 w-8 p-0">
-            <Icon name="MoreHorizontal" className="h-3.5 w-3.5" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-48">
-          <DropdownMenuItem
-            className="text-xs"
-            onClick={() => toast({ title: "Interview scheduled" })}
-          >
-            <Icon name="Clock" className="h-3.5 w-3.5 mr-2" /> Schedule Interview
-          </DropdownMenuItem>
-          <DropdownMenuItem className="text-xs" onClick={() => toast({ title: "Email composed" })}>
-            <Icon name="Send" className="h-3.5 w-3.5 mr-2" /> Send Email
-          </DropdownMenuItem>
-          <DropdownMenuItem className="text-xs" onClick={() => toast({ title: "Offer created" })}>
-            <Icon name="ScrollText" className="h-3.5 w-3.5 mr-2" /> Create Offer
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            className="text-xs text-destructive focus:text-destructive"
-            onClick={handleRejectClick}
-            disabled={!jobId || isRejected}
-          >
-            <Icon name="X" className="h-3.5 w-3.5 mr-2" />
-            {isRejected ? "Already Rejected" : "Reject"}
-          </DropdownMenuItem>
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <DropdownMenuItem
-                className="text-xs text-destructive focus:text-destructive"
-                onSelect={(e) => e.preventDefault()}
-              >
-                <Icon name="X" className="h-3.5 w-3.5 mr-2" /> Delete
-              </DropdownMenuItem>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Delete candidate?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  This will permanently remove {candidateName} and all associated data.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel className="text-xs">Cancel</AlertDialogCancel>
-                <AlertDialogAction
-                  className="text-xs bg-destructive text-destructive-foreground"
-                  onClick={() => {
-                    toast({ title: "Candidate deleted" });
-                    router.push("/candidates");
-                  }}
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 text-xs gap-1.5 hidden sm:flex"
+          onClick={() => toast({ title: "Interview scheduled" })}
+        >
+          <Icon name="Clock" className="h-3.5 w-3.5" /> Schedule
+        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" className="h-8 w-8 p-0">
+              <Icon name="MoreHorizontal" className="h-3.5 w-3.5" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuItem
+              className="text-xs"
+              onClick={() => toast({ title: "Interview scheduled" })}
+            >
+              <Icon name="Clock" className="h-3.5 w-3.5 mr-2" /> Schedule Interview
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="text-xs"
+              onClick={() => toast({ title: "Email composed" })}
+            >
+              <Icon name="Send" className="h-3.5 w-3.5 mr-2" /> Send Email
+            </DropdownMenuItem>
+            <DropdownMenuItem className="text-xs" onClick={() => toast({ title: "Offer created" })}>
+              <Icon name="ScrollText" className="h-3.5 w-3.5 mr-2" /> Create Offer
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              className="text-xs text-destructive focus:text-destructive"
+              onClick={handleRejectClick}
+              disabled={!jobId || isRejected}
+            >
+              <Icon name="X" className="h-3.5 w-3.5 mr-2" />
+              {isRejected ? "Already Rejected" : "Reject"}
+            </DropdownMenuItem>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <DropdownMenuItem
+                  className="text-xs text-destructive focus:text-destructive"
+                  onSelect={(e) => e.preventDefault()}
                 >
-                  Delete
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </div>
+                  <Icon name="X" className="h-3.5 w-3.5 mr-2" /> Delete
+                </DropdownMenuItem>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete candidate?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will permanently remove {candidateName} and all associated data.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel className="text-xs">Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    className="text-xs bg-destructive text-destructive-foreground"
+                    onClick={() => {
+                      toast({ title: "Candidate deleted" });
+                      router.push("/candidates");
+                    }}
+                  >
+                    Delete
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
 
-    <MoveStageDialog
-      open={moveStageOpen}
-      onOpenChange={setMoveStageOpen}
-      candidateId={candidateId}
-      candidateName={candidateName}
-      jobId={jobId}
-      currentStageId={currentStageId}
-      onSuccess={onStageUpdated}
-    />
+      <MoveStageDialog
+        open={moveStageOpen}
+        onOpenChange={setMoveStageOpen}
+        candidateId={candidateId}
+        candidateName={candidateName}
+        jobId={jobId}
+        currentStageId={currentStageId}
+        onSuccess={onStageUpdated}
+      />
 
-    <RejectCandidateDialog
-      open={rejectDialogOpen}
-      onOpenChange={setRejectDialogOpen}
-      candidateId={candidateId}
-      candidateName={candidateName}
-      onSuccess={onStageUpdated}
-    />
-  </>
+      <RejectCandidateDialog
+        open={rejectDialogOpen}
+        onOpenChange={setRejectDialogOpen}
+        candidateId={candidateId}
+        candidateName={candidateName}
+        onSuccess={onStageUpdated}
+      />
+    </>
   );
 }

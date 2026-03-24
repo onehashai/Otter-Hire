@@ -5,13 +5,7 @@ import { Badge } from "@onehash/ui/badge";
 import { Button } from "@onehash/ui/button";
 import { Separator } from "@onehash/ui/separator";
 import { Mail, Phone, MapPin, ArrowRight, StickyNote, Calendar } from "lucide-react";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@onehash/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@onehash/ui/select";
 import type { ConversationStatus } from "@/api/conversations";
 
 interface CandidateContextProps {

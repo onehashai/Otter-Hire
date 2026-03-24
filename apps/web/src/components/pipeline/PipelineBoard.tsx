@@ -45,7 +45,13 @@ interface PipelineBoardProps {
   onCandidateClick?: (candidateId: string) => void;
 }
 
-export const PipelineBoard = ({ job, onBack, isMobile, onMoveCandidate, onCandidateClick }: PipelineBoardProps) => {
+export const PipelineBoard = ({
+  job,
+  onBack,
+  isMobile,
+  onMoveCandidate,
+  onCandidateClick,
+}: PipelineBoardProps) => {
   const { t } = useTranslation();
 
   useSetPageMetadata({
@@ -142,8 +148,8 @@ export const PipelineBoard = ({ job, onBack, isMobile, onMoveCandidate, onCandid
 
         <div className="space-y-2">
           {stageCandidates.map((c) => (
-            <Card 
-              key={c.id} 
+            <Card
+              key={c.id}
               className="active:bg-muted/50 transition-colors cursor-pointer"
               onClick={() => onCandidateClick?.(c.id)}
             >

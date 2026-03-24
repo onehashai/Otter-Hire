@@ -26,9 +26,16 @@ function parseOrgSlug(orgSlug: string): { orgName: string; orgId: string } | nul
 }
 
 function formatSalary(job: PublicJobListItem): string | null {
-  const currencySymbol = job.currency === "INR" ? "₹" : job.currency === "USD" ? "$" : job.currency === "EUR" ? "€" : job.currency;
+  const currencySymbol =
+    job.currency === "INR"
+      ? "₹"
+      : job.currency === "USD"
+        ? "$"
+        : job.currency === "EUR"
+          ? "€"
+          : job.currency;
   const timeframe = job.salary_timeframe.replace("per_", "");
-  
+
   if (job.salary_fixed) {
     return `${currencySymbol}${job.salary_fixed.toLocaleString()} / ${timeframe}`;
   }

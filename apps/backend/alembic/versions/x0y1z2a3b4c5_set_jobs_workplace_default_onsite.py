@@ -20,4 +20,3 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.execute("ALTER TABLE jobs ALTER COLUMN workplace_type SET DEFAULT 'remote'")
-

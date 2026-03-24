@@ -47,7 +47,7 @@ async def build_template_context(
         context["candidate_name"] = candidate.name or ""
         context["candidate_email"] = candidate.email or ""
         context["candidate_phone"] = candidate.phone or ""
-        
+
         # Fetch stage name if candidate has a stage
         if candidate.stage_id:
             stage_stmt = select(Stage.name).where(Stage.id == candidate.stage_id)

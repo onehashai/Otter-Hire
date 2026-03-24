@@ -71,9 +71,7 @@ def _build_detail(automation: Automation, created_by_name: str | None) -> Automa
     )
 
 
-async def _get_automation_or_404(
-    db: AsyncSession, automation_id: UUID, org_id: UUID
-) -> Automation:
+async def _get_automation_or_404(db: AsyncSession, automation_id: UUID, org_id: UUID) -> Automation:
     stmt = (
         select(Automation)
         .where(Automation.id == automation_id, Automation.org_id == org_id)
@@ -228,4 +226,3 @@ async def list_automation_executions(
         )
         for row in rows
     ]
-

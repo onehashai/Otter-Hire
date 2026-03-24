@@ -90,9 +90,9 @@ async def test_render_template_basic_substitution():
         "candidate_name": "John Doe",
         "company_name": "Acme Corp",
     }
-    
+
     result = render_template(template, context)
-    
+
     assert result == "Hello John Doe, welcome to Acme Corp!"
 
 
@@ -106,9 +106,9 @@ async def test_render_template_multiple_variables():
         "company_name": "Tech Inc",
         "job_location": "New York, USA",
     }
-    
+
     result = render_template(template, context)
-    
+
     assert result == "Hi Jane Smith, you applied for Product Manager at Tech Inc in New York, USA."
 
 
@@ -120,9 +120,9 @@ async def test_render_template_missing_variable():
         "candidate_name": "John Doe",
         # candidate_phone is missing
     }
-    
+
     result = render_template(template, context)
-    
+
     # Missing variables should remain as placeholders
     assert "{{candidate_phone}}" in result
 
@@ -157,7 +157,7 @@ async def test_build_template_context_complete(
         org_id=test_org.id,
         job_id=test_job.id,
     )
-    
+
     assert context["candidate_name"] == "John Doe"
     assert context["candidate_email"] == "john.doe@example.com"
     assert context["candidate_phone"] == "+1234567890"
@@ -179,14 +179,14 @@ async def test_build_template_context_no_job(
     test_candidate.job_id = None
     test_candidate.stage_id = None
     await db.commit()
-    
+
     context = await build_template_context(
         db=db,
         candidate_id=test_candidate.id,
         org_id=test_org.id,
         job_id=None,
     )
-    
+
     assert context["candidate_name"] == "John Doe"
     assert context["candidate_email"] == "john.doe@example.com"
     assert context["job_title"] == ""
@@ -212,14 +212,14 @@ async def test_build_template_context_partial_job_location(
     )
     db.add(job_city_only)
     await db.commit()
-    
+
     context = await build_template_context(
         db=db,
         candidate_id=test_candidate.id,
         org_id=test_org.id,
         job_id=job_city_only.id,
     )
-    
+
     assert context["job_location"] == "Boston"
 
 
@@ -234,7 +234,7 @@ async def test_build_template_context_with_metadata(
         "stage_name": "Offer Extended",
         "custom_field": "custom_value",
     }
-    
+
     context = await build_template_context(
         db=db,
         candidate_id=test_candidate.id,
@@ -242,7 +242,7 @@ async def test_build_template_context_with_metadata(
         job_id=None,
         metadata=metadata,
     )
-    
+
     # Metadata should override stage_name
     assert context["stage_name"] == "Offer Extended"
 
@@ -254,14 +254,14 @@ async def test_build_template_context_missing_candidate(
 ):
     """Test handling of missing candidate."""
     fake_candidate_id = uuid7()
-    
+
     context = await build_template_context(
         db=db,
         candidate_id=fake_candidate_id,
         org_id=test_org.id,
         job_id=None,
     )
-    
+
     # Should return empty strings for missing candidate
     assert context["candidate_name"] == ""
     assert context["candidate_email"] == ""
@@ -282,7 +282,7 @@ async def test_render_template_with_real_context(
         org_id=test_org.id,
         job_id=test_job.id,
     )
-    
+
     template = """Dear {{candidate_name}},
 
 Thank you for applying to {{job_title}} at {{company_name}}.
@@ -291,9 +291,9 @@ Your application is currently at {{stage_name}} stage.
 
 Best regards,
 {{company_name}} Team"""
-    
+
     result = render_template(template, context)
-    
+
     assert "Dear John Doe," in result
     assert "Senior Software Engineer" in result
     assert "Acme Corp" in result

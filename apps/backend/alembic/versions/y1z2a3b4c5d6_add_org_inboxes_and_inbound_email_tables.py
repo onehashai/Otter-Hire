@@ -35,7 +35,9 @@ def upgrade() -> None:
         sa.Column("verification_token_hash", sa.String(length=128), nullable=True),
         sa.Column("verification_expires_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("verified_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.Column(
             "updated_at",
             sa.DateTime(timezone=True),
@@ -59,11 +61,15 @@ def upgrade() -> None:
         sa.Column("message_id", sa.String(length=500), nullable=True),
         sa.Column("received_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("raw_storage_key", sa.String(length=2048), nullable=True),
-        sa.Column("has_resume_attachment", sa.Boolean(), nullable=False, server_default=sa.text("false")),
+        sa.Column(
+            "has_resume_attachment", sa.Boolean(), nullable=False, server_default=sa.text("false")
+        ),
         sa.Column("parsed_candidate_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("parse_status", parse_status_enum, nullable=False, server_default="ignored"),
         sa.Column("parse_error", sa.Text(), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.ForeignKeyConstraint(["org_id"], ["organizations.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["parsed_candidate_id"], ["candidates.id"], ondelete="SET NULL"),
         sa.PrimaryKeyConstraint("id"),
@@ -78,7 +84,9 @@ def upgrade() -> None:
         sa.Column("storage_key", sa.String(length=2048), nullable=False),
         sa.Column("size_bytes", sa.BigInteger(), nullable=False),
         sa.Column("sha256", sa.String(length=64), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.ForeignKeyConstraint(["inbound_email_id"], ["inbound_emails.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )

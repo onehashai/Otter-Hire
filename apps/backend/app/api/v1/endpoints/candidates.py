@@ -245,9 +245,7 @@ async def create_candidate(
     # Fetch stage name for automation metadata
     stage_name = None
     if candidate.stage_id:
-        stage_result = await db.execute(
-            select(Stage.name).where(Stage.id == candidate.stage_id)
-        )
+        stage_result = await db.execute(select(Stage.name).where(Stage.id == candidate.stage_id))
         stage_name = stage_result.scalar_one_or_none()
 
     # Trigger automations for candidate_applied ONLY if job is assigned
@@ -549,7 +547,7 @@ async def update_candidate(
     # Track if job was assigned (from None to a job_id)
     old_job_id = candidate.job_id
     job_was_assigned = False
-    
+
     if body.name is not None:
         candidate.name = body.name.strip()
     if body.email is not None:
@@ -581,7 +579,7 @@ async def update_candidate(
             # Job is being assigned or changed
             if old_job_id is None and body.job_id is not None:
                 job_was_assigned = True  # Talent pool candidate assigned to job
-            
+
             candidate.job_id = body.job_id
             first_stage_result = await db.execute(
                 select(Stage)
@@ -601,22 +599,20 @@ async def update_candidate(
         metadata={"job_id": str(candidate.job_id) if candidate.job_id else None},
     )
     await db.commit()
-    
+
     # Trigger candidate_job_assigned automation when talent pool candidate gets a job
     if job_was_assigned:
         # Fetch job and stage details for metadata
-        job_result = await db.execute(
-            select(Job).where(Job.id == candidate.job_id)
-        )
+        job_result = await db.execute(select(Job).where(Job.id == candidate.job_id))
         job = job_result.scalar_one_or_none()
-        
+
         stage_name = None
         if candidate.stage_id:
             stage_result = await db.execute(
                 select(Stage.name).where(Stage.id == candidate.stage_id)
             )
             stage_name = stage_result.scalar_one_or_none()
-        
+
         try:
             await execute_automations_for_trigger(
                 db=db,
@@ -638,7 +634,7 @@ async def update_candidate(
                 f"Failed to trigger candidate_job_assigned automation: {e}",
                 exc_info=True,
             )
-    
+
     return await get_candidate(candidate.id, db, current_user)
 
 
@@ -721,9 +717,7 @@ async def update_candidate_status(
 
     # Idempotency check: prevent duplicate status updates and automation triggers
     if candidate.status == body.status:
-        logger.info(
-            f"Candidate {candidate_id} already has status '{body.status}', skipping update"
-        )
+        logger.info(f"Candidate {candidate_id} already has status '{body.status}', skipping update")
         return await get_candidate(candidate_id, db, current_user)
 
     # Validation: Cannot reject candidate without job assignment

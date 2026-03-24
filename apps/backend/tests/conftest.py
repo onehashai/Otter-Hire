@@ -47,17 +47,17 @@ async def engine():
         echo=False,
         poolclass=NullPool,
     )
-    
+
     # Create all tables
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    
+
     yield test_engine
-    
+
     # Drop all tables after tests
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
-    
+
     await test_engine.dispose()
 
 
@@ -69,7 +69,7 @@ async def db(engine) -> AsyncSession:
         class_=AsyncSession,
         expire_on_commit=False,
     )
-    
+
     async with async_session() as session:
         yield session
         await session.rollback()

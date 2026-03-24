@@ -67,9 +67,7 @@ async def test_job(db: AsyncSession, test_org: Organization, test_user: User) ->
 
 
 @pytest.fixture
-async def test_candidate(
-    db: AsyncSession, test_org: Organization, test_job: Job
-) -> Candidate:
+async def test_candidate(db: AsyncSession, test_org: Organization, test_job: Job) -> Candidate:
     """Create test candidate."""
     candidate = Candidate(
         id=uuid7(),
@@ -86,9 +84,7 @@ async def test_candidate(
 
 
 @pytest.fixture
-async def test_template(
-    db: AsyncSession, test_org: Organization, test_user: User
-) -> Template:
+async def test_template(db: AsyncSession, test_org: Organization, test_user: User) -> Template:
     """Create test email template."""
     template = Template(
         id=uuid7(),
@@ -116,9 +112,9 @@ async def test_handle_send_email_action_success(
 ):
     """Test successful email sending action."""
     mock_send_email.return_value = None
-    
+
     action_config = {"template": str(test_template.id)}
-    
+
     success, message = await handle_send_email_action(
         db=db,
         action_config=action_config,
@@ -127,11 +123,11 @@ async def test_handle_send_email_action_success(
         job_id=test_job.id,
         metadata=None,
     )
-    
+
     assert success is True
     assert "jane.doe@example.com" in message
     mock_send_email.assert_called_once()
-    
+
     # Verify email content
     call_args = mock_send_email.call_args
     assert call_args.kwargs["to_email"] == "jane.doe@example.com"
@@ -147,7 +143,7 @@ async def test_handle_send_email_action_no_template_id(
 ):
     """Test email action with missing template ID."""
     action_config = {}  # No template specified
-    
+
     success, message = await handle_send_email_action(
         db=db,
         action_config=action_config,
@@ -156,7 +152,7 @@ async def test_handle_send_email_action_no_template_id(
         job_id=None,
         metadata=None,
     )
-    
+
     assert success is False
     assert "No template specified" in message
 
@@ -169,7 +165,7 @@ async def test_handle_send_email_action_invalid_template_id(
 ):
     """Test email action with invalid template ID format."""
     action_config = {"template": "not-a-valid-uuid"}
-    
+
     success, message = await handle_send_email_action(
         db=db,
         action_config=action_config,
@@ -178,7 +174,7 @@ async def test_handle_send_email_action_invalid_template_id(
         job_id=None,
         metadata=None,
     )
-    
+
     assert success is False
     assert "Invalid template ID" in message
 
@@ -192,7 +188,7 @@ async def test_handle_send_email_action_template_not_found(
     """Test email action with non-existent template."""
     fake_template_id = uuid7()
     action_config = {"template": str(fake_template_id)}
-    
+
     success, message = await handle_send_email_action(
         db=db,
         action_config=action_config,
@@ -201,7 +197,7 @@ async def test_handle_send_email_action_template_not_found(
         job_id=None,
         metadata=None,
     )
-    
+
     assert success is False
     assert "not found" in message
 
@@ -225,9 +221,9 @@ async def test_handle_send_email_action_no_candidate_email(
     )
     db.add(candidate_no_email)
     await db.commit()
-    
+
     action_config = {"template": str(test_template.id)}
-    
+
     success, message = await handle_send_email_action(
         db=db,
         action_config=action_config,
@@ -236,7 +232,7 @@ async def test_handle_send_email_action_no_candidate_email(
         job_id=test_job.id,
         metadata=None,
     )
-    
+
     assert success is False
     assert "no email address" in message.lower()
 
@@ -252,9 +248,9 @@ async def test_handle_send_email_action_send_fails(
 ):
     """Test email action when send_email raises exception."""
     mock_send_email.side_effect = Exception("SMTP connection failed")
-    
+
     action_config = {"template": str(test_template.id)}
-    
+
     success, message = await handle_send_email_action(
         db=db,
         action_config=action_config,
@@ -263,7 +259,7 @@ async def test_handle_send_email_action_send_fails(
         job_id=None,
         metadata=None,
     )
-    
+
     assert success is False
     assert "Failed to send email" in message
 
@@ -279,12 +275,12 @@ async def test_execute_action_send_email(
 ):
     """Test execute_action routing to send_email handler."""
     mock_send_email.return_value = None
-    
+
     action = {
         "type": "send_email",
         "config": {"template": str(test_template.id)},
     }
-    
+
     success, message = await execute_action(
         db=db,
         action=action,
@@ -293,7 +289,7 @@ async def test_execute_action_send_email(
         job_id=None,
         metadata=None,
     )
-    
+
     assert success is True
     mock_send_email.assert_called_once()
 
@@ -309,7 +305,7 @@ async def test_execute_action_unknown_type(
         "type": "unknown_action_type",
         "config": {},
     }
-    
+
     success, message = await execute_action(
         db=db,
         action=action,
@@ -318,7 +314,7 @@ async def test_execute_action_unknown_type(
         job_id=None,
         metadata=None,
     )
-    
+
     assert success is False
     assert "Unknown action type" in message
 
@@ -333,12 +329,12 @@ async def test_execute_action_missing_config(
 ):
     """Test execute_action with missing config."""
     mock_send_email.return_value = None
-    
+
     action = {
         "type": "send_email",
         # No config provided
     }
-    
+
     success, message = await execute_action(
         db=db,
         action=action,
@@ -347,7 +343,7 @@ async def test_execute_action_missing_config(
         job_id=None,
         metadata=None,
     )
-    
+
     assert success is False
     assert "No template specified" in message
 
@@ -363,14 +359,14 @@ async def test_handle_send_email_with_metadata(
 ):
     """Test email action with metadata for context."""
     mock_send_email.return_value = None
-    
+
     # Template with stage_name variable
     test_template.body = "You moved to {{stage_name}} stage."
     await db.commit()
-    
+
     action_config = {"template": str(test_template.id)}
     metadata = {"stage_name": "Interview"}
-    
+
     success, message = await handle_send_email_action(
         db=db,
         action_config=action_config,
@@ -379,9 +375,9 @@ async def test_handle_send_email_with_metadata(
         job_id=None,
         metadata=metadata,
     )
-    
+
     assert success is True
-    
+
     # Verify metadata was used in rendering
     call_args = mock_send_email.call_args
     assert "Interview stage" in call_args.kwargs["content"].text

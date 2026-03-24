@@ -23,4 +23,3 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_column("organizations", "avatar_url")
-

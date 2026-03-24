@@ -13,7 +13,7 @@ def base_email_template(inner_html: str) -> str:
     """Wrap inner body HTML in the standard product email layout."""
     name = (settings.product_name or "").strip() or "OneHash ATS"
     name_esc = html.escape(name, quote=False)
-    logo_letter = (name[0].upper() if name else "A")
+    logo_letter = name[0].upper() if name else "A"
     logo_letter_esc = html.escape(logo_letter, quote=False)
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -70,12 +70,8 @@ STYLE_BUTTON = (
 STYLE_LINK_LINE = (
     "font-size:12px;color:#999999;line-height:1.5;word-break:break-all;margin:16px 0 0"
 )
-STYLE_COPY_PASTE_HINT = (
-    "font-size:13px;color:#777777;line-height:1.6;margin:16px 0 4px"
-)
-STYLE_LINK_LINE_TIGHT = (
-    "font-size:12px;color:#999999;line-height:1.5;word-break:break-all;margin:0"
-)
+STYLE_COPY_PASTE_HINT = "font-size:13px;color:#777777;line-height:1.6;margin:16px 0 4px"
+STYLE_LINK_LINE_TIGHT = "font-size:12px;color:#999999;line-height:1.5;word-break:break-all;margin:0"
 STYLE_DIVIDER = "height:1px;background-color:#f0f0f0;border:none;margin:24px 0"
 
 

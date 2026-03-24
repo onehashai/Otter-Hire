@@ -66,9 +66,7 @@ async def test_job(db: AsyncSession, test_org: Organization, test_user: User) ->
 
 
 @pytest.fixture
-async def test_candidate(
-    db: AsyncSession, test_org: Organization, test_job: Job
-) -> Candidate:
+async def test_candidate(db: AsyncSession, test_org: Organization, test_job: Job) -> Candidate:
     """Create test candidate."""
     candidate = Candidate(
         id=uuid7(),
@@ -86,9 +84,7 @@ async def test_candidate(
 
 
 @pytest.fixture
-async def test_template(
-    db: AsyncSession, test_org: Organization, test_user: User
-) -> Template:
+async def test_template(db: AsyncSession, test_org: Organization, test_user: User) -> Template:
     """Create test email template."""
     template = Template(
         id=uuid7(),
@@ -148,9 +144,7 @@ async def test_automation_candidate_applied_trigger(
 
     # Verify execution was logged
     result = await db.execute(
-        select(AutomationExecution).where(
-            AutomationExecution.automation_id == automation.id
-        )
+        select(AutomationExecution).where(AutomationExecution.automation_id == automation.id)
     )
     execution = result.scalar_one_or_none()
 
@@ -200,9 +194,7 @@ async def test_automation_scope_filtering_all_jobs(
     )
 
     result = await db.execute(
-        select(AutomationExecution).where(
-            AutomationExecution.automation_id == automation.id
-        )
+        select(AutomationExecution).where(AutomationExecution.automation_id == automation.id)
     )
     execution = result.scalar_one_or_none()
     assert execution is not None
@@ -257,9 +249,7 @@ async def test_automation_scope_filtering_specific_job(
     )
 
     result = await db.execute(
-        select(AutomationExecution).where(
-            AutomationExecution.automation_id == automation.id
-        )
+        select(AutomationExecution).where(AutomationExecution.automation_id == automation.id)
     )
     executions = result.scalars().all()
     assert len(executions) == 1
@@ -287,9 +277,7 @@ async def test_automation_scope_filtering_specific_job(
     )
 
     result = await db.execute(
-        select(AutomationExecution).where(
-            AutomationExecution.automation_id == automation.id
-        )
+        select(AutomationExecution).where(AutomationExecution.automation_id == automation.id)
     )
     executions = result.scalars().all()
     # Still only 1 execution (from test_job)
@@ -334,9 +322,7 @@ async def test_automation_candidate_moved_stage_filtering(
     )
 
     result = await db.execute(
-        select(AutomationExecution).where(
-            AutomationExecution.automation_id == automation.id
-        )
+        select(AutomationExecution).where(AutomationExecution.automation_id == automation.id)
     )
     executions = result.scalars().all()
     assert len(executions) == 1
@@ -353,9 +339,7 @@ async def test_automation_candidate_moved_stage_filtering(
     )
 
     result = await db.execute(
-        select(AutomationExecution).where(
-            AutomationExecution.automation_id == automation.id
-        )
+        select(AutomationExecution).where(AutomationExecution.automation_id == automation.id)
     )
     executions = result.scalars().all()
     # Still only 1 execution
@@ -398,9 +382,7 @@ async def test_automation_draft_status_not_executed(
 
     # No execution should be logged
     result = await db.execute(
-        select(AutomationExecution).where(
-            AutomationExecution.automation_id == automation.id
-        )
+        select(AutomationExecution).where(AutomationExecution.automation_id == automation.id)
     )
     execution = result.scalar_one_or_none()
     assert execution is None
@@ -454,14 +436,10 @@ async def test_automation_multiple_automations_execute(
 
     # Both should have executions
     result1 = await db.execute(
-        select(AutomationExecution).where(
-            AutomationExecution.automation_id == automation1.id
-        )
+        select(AutomationExecution).where(AutomationExecution.automation_id == automation1.id)
     )
     result2 = await db.execute(
-        select(AutomationExecution).where(
-            AutomationExecution.automation_id == automation2.id
-        )
+        select(AutomationExecution).where(AutomationExecution.automation_id == automation2.id)
     )
 
     assert result1.scalar_one_or_none() is not None
@@ -505,9 +483,7 @@ async def test_automation_missing_template_logs_failure(
 
     # Execution should be logged as failed
     result = await db.execute(
-        select(AutomationExecution).where(
-            AutomationExecution.automation_id == automation.id
-        )
+        select(AutomationExecution).where(AutomationExecution.automation_id == automation.id)
     )
     execution = result.scalar_one_or_none()
 

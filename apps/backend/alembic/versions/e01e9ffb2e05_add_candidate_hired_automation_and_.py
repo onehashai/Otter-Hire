@@ -5,6 +5,7 @@ Revises: 2a050d5aee89
 Create Date: 2026-03-20 17:10:49.374235
 
 """
+
 import uuid
 from typing import Sequence, Union
 
@@ -13,43 +14,44 @@ import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = 'e01e9ffb2e05'
-down_revision: Union[str, None] = '2a050d5aee89'
+revision: str = "e01e9ffb2e05"
+down_revision: Union[str, None] = "2a050d5aee89"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
     conn = op.get_bind()
-    
+
     # Get all orgs
     orgs = conn.execute(sa.text("SELECT id FROM organizations")).fetchall()
-    
+
     for org_row in orgs:
         org_id = org_row[0]
-        
+
         # Get existing Send Offer Letter template
         offer_template = conn.execute(
-            sa.text("SELECT id FROM templates WHERE org_id = :org_id AND name = 'Send Offer Letter'"),
-            {"org_id": org_id}
+            sa.text(
+                "SELECT id FROM templates WHERE org_id = :org_id AND name = 'Send Offer Letter'"
+            ),
+            {"org_id": org_id},
         ).fetchone()
-        
+
         if not offer_template:
             continue
-        
+
         template_id = offer_template[0]
-        
+
         # Get a user from this org for created_by_user_id
         user = conn.execute(
-            sa.text("SELECT id FROM users WHERE org_id = :org_id LIMIT 1"),
-            {"org_id": org_id}
+            sa.text("SELECT id FROM users WHERE org_id = :org_id LIMIT 1"), {"org_id": org_id}
         ).fetchone()
-        
+
         if not user:
             continue
-        
+
         user_id = user[0]
-        
+
         # Create automation for candidate_hired using existing template
         automation_id = uuid.uuid4()
         conn.execute(
@@ -75,10 +77,10 @@ def upgrade() -> None:
                 "trigger_key": "candidate_hired",
                 "trigger_config": '{"label": "Candidate hired"}',
                 "condition_logic": "and",
-                "conditions": '[]',
+                "conditions": "[]",
                 "actions": f'[{{"type": "send_email", "config": {{"template": "{template_id}"}}, "label": "Send Offer Letter"}}]',
-                "description": "Send offer letter when candidate status is changed to hired"
-            }
+                "description": "Send offer letter when candidate status is changed to hired",
+            },
         )
 
 

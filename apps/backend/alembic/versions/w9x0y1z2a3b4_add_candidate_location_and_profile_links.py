@@ -28,7 +28,9 @@ def upgrade() -> None:
         if "location" not in column_names:
             batch_op.add_column(sa.Column("location", sa.String(), nullable=True))
         if "profile_links" not in column_names:
-            batch_op.add_column(sa.Column("profile_links", postgresql.JSONB(astext_type=sa.Text()), nullable=True))
+            batch_op.add_column(
+                sa.Column("profile_links", postgresql.JSONB(astext_type=sa.Text()), nullable=True)
+            )
 
 
 def downgrade() -> None:
@@ -40,4 +42,3 @@ def downgrade() -> None:
             batch_op.drop_column("profile_links")
         if "location" in column_names:
             batch_op.drop_column("location")
-

@@ -774,7 +774,9 @@ async def get_public_jobs(
     request: Request,
     response: Response,
     org_id: str,
-    org_slug: str = Query(..., min_length=1, description="Careers URL name segment before org UUID"),
+    org_slug: str = Query(
+        ..., min_length=1, description="Careers URL name segment before org UUID"
+    ),
     authorization: Optional[str] = Header(None),
     db: AsyncSession = Depends(get_db),
 ):
@@ -873,7 +875,9 @@ async def get_public_job_detail(
     response: Response,
     org_id: str,
     job_id: str,
-    org_slug: str = Query(..., min_length=1, description="Careers URL name segment before org UUID"),
+    org_slug: str = Query(
+        ..., min_length=1, description="Careers URL name segment before org UUID"
+    ),
     authorization: Optional[str] = Header(None),
     db: AsyncSession = Depends(get_db),
 ):
@@ -966,7 +970,9 @@ async def apply_public_job(
     org_id: str,
     job_id: str,
     body: PublicJobApplyRequest,
-    org_slug: str = Query(..., min_length=1, description="Careers URL name segment before org UUID"),
+    org_slug: str = Query(
+        ..., min_length=1, description="Careers URL name segment before org UUID"
+    ),
     db: AsyncSession = Depends(get_db),
 ):
     try:
@@ -1167,9 +1173,7 @@ async def apply_public_job(
     # Fetch stage name for automation metadata
     stage_name = None
     if candidate.stage_id:
-        stage_result = await db.execute(
-            select(Stage.name).where(Stage.id == candidate.stage_id)
-        )
+        stage_result = await db.execute(select(Stage.name).where(Stage.id == candidate.stage_id))
         stage_name = stage_result.scalar_one_or_none()
 
     # Trigger automations for candidate_applied
@@ -1307,7 +1311,7 @@ async def _process_resume_link_fallback(
     db: "AsyncSession",
 ) -> tuple["InboundEmailAttachment", bytes] | None:
     """Try to resolve and store resume from links in email body.
-    
+
     Returns (attachment_row, content) if successful, None otherwise.
     """
     try:
@@ -1324,7 +1328,7 @@ async def _process_resume_link_fallback(
 
     filename, content_type, content = link_result
     safe_name = _guess_file_name(filename, "resume_from_link.bin")
-    
+
     # Validate file extension
     allowed_extensions = {".pdf", ".doc", ".docx"}
     lower_name = safe_name.lower()
@@ -1848,7 +1852,9 @@ async def ingest_inbound_email(
 
         if link_resume is None:
             inbound_email.parse_status = "ignored"
-            inbound_email.parse_error = "No resume attachment or link found - candidate creation requires resume"
+            inbound_email.parse_error = (
+                "No resume attachment or link found - candidate creation requires resume"
+            )
             await db.commit()
             logger.info(
                 "Inbound email ignored (no resume): from=%s subject=%r",
@@ -1861,7 +1867,7 @@ async def ingest_inbound_email(
                 "inbound_email_id": str(inbound_email.id),
                 "org_id": str(org_inbox.org_id),
             }
-        
+
         # Resume link found and stored
         resume_attachment, content = link_resume
         stored_attachments.append((resume_attachment, content))
@@ -1878,9 +1884,7 @@ async def ingest_inbound_email(
             resume_attachment = attachment_row
             try:
                 resume_text = _parse_resume_bytes(
-                    attachment_row.filename,
-                    attachment_row.content_type,
-                    content
+                    attachment_row.filename, attachment_row.content_type, content
                 )
             except Exception as exc:
                 parse_error = f"Resume parse failed: {exc}"
@@ -2036,20 +2040,24 @@ async def ingest_inbound_email(
         else:
             # Existing candidate → Find existing conversation and append message
             existing_conv_result = await db.execute(
-                select(Conversation).where(
+                select(Conversation)
+                .where(
                     Conversation.org_id == org_inbox.org_id,
                     Conversation.candidate_id == parsed_candidate.id,
                     Conversation.status == "open",
-                ).order_by(Conversation.last_message_at.desc()).limit(1)
+                )
+                .order_by(Conversation.last_message_at.desc())
+                .limit(1)
             )
             existing_conv = existing_conv_result.scalar_one_or_none()
-            
+
             if existing_conv:
                 # Append message to existing conversation
                 from app.utils.uuid import uuid7
+
                 body_text = (payload.text_body or "").strip() or (payload.html_body or "").strip()
                 now = datetime.now(tz=timezone.utc)
-                
+
                 inbound_msg = Message(
                     id=uuid7(),
                     org_id=org_inbox.org_id,
@@ -2067,15 +2075,15 @@ async def ingest_inbound_email(
                     created_at=now,
                 )
                 db.add(inbound_msg)
-                
+
                 existing_conv.last_message_at = now
                 if existing_conv.status == "closed":
                     existing_conv.status = "open"
-                
+
                 await db.flush()
-                
+
                 conversation_ids = (str(existing_conv.id), str(inbound_msg.id))
-                
+
                 logger.info(
                     "Inbound email APPENDED to existing conversation for existing candidate "
                     "conv_id=%s candidate_id=%s resume_email=%s",

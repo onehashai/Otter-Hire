@@ -64,9 +64,7 @@ async def test_job(db: AsyncSession, test_org: Organization, test_user: User) ->
 
 
 @pytest.fixture
-async def test_candidate(
-    db: AsyncSession, test_org: Organization, test_job: Job
-) -> Candidate:
+async def test_candidate(db: AsyncSession, test_org: Organization, test_job: Job) -> Candidate:
     """Create test candidate with active status."""
     candidate = Candidate(
         id=uuid7(),
@@ -93,7 +91,7 @@ async def test_update_candidate_status_to_rejected(
     from app.api.v1.endpoints.candidates import update_candidate_status
     from app.models.user import User
     from app.schemas.candidates import CandidateStatusUpdateRequest
-    
+
     # Mock current user
     mock_user = User(
         id=uuid7(),
@@ -102,10 +100,10 @@ async def test_update_candidate_status_to_rejected(
         email="admin@example.com",
         status="active",
     )
-    
+
     # Create request
     request = CandidateStatusUpdateRequest(status="rejected")
-    
+
     # Update status
     result = await update_candidate_status(
         candidate_id=test_candidate.id,
@@ -113,16 +111,16 @@ async def test_update_candidate_status_to_rejected(
         db=db,
         current_user=mock_user,
     )
-    
+
     # Verify status changed
     assert result.status == "rejected"
-    
+
     # Verify automation was triggered
     mock_execute_automations.assert_called_once()
     call_kwargs = mock_execute_automations.call_args.kwargs
     assert call_kwargs["trigger_key"] == "candidate_rejected"
     assert call_kwargs["candidate_id"] == test_candidate.id
-    
+
     # Verify activity logged
     activity_result = await db.execute(
         select(Activity).where(
@@ -146,11 +144,11 @@ async def test_update_candidate_status_idempotency(
     from app.api.v1.endpoints.candidates import update_candidate_status
     from app.models.user import User
     from app.schemas.candidates import CandidateStatusUpdateRequest
-    
+
     # Set candidate to rejected
     test_candidate.status = "rejected"
     await db.commit()
-    
+
     mock_user = User(
         id=uuid7(),
         org_id=test_candidate.org_id,
@@ -158,23 +156,23 @@ async def test_update_candidate_status_idempotency(
         email="admin@example.com",
         status="active",
     )
-    
+
     # Try to reject again
     request = CandidateStatusUpdateRequest(status="rejected")
-    
+
     result = await update_candidate_status(
         candidate_id=test_candidate.id,
         body=request,
         db=db,
         current_user=mock_user,
     )
-    
+
     # Status should still be rejected
     assert result.status == "rejected"
-    
+
     # Automation should NOT be triggered (idempotency)
     mock_execute_automations.assert_not_called()
-    
+
     # No new activity should be logged
     activity_result = await db.execute(
         select(Activity).where(
@@ -197,7 +195,7 @@ async def test_update_candidate_status_to_hired(
     from app.api.v1.endpoints.candidates import update_candidate_status
     from app.models.user import User
     from app.schemas.candidates import CandidateStatusUpdateRequest
-    
+
     mock_user = User(
         id=uuid7(),
         org_id=test_candidate.org_id,
@@ -205,18 +203,18 @@ async def test_update_candidate_status_to_hired(
         email="admin@example.com",
         status="active",
     )
-    
+
     request = CandidateStatusUpdateRequest(status="hired")
-    
+
     result = await update_candidate_status(
         candidate_id=test_candidate.id,
         body=request,
         db=db,
         current_user=mock_user,
     )
-    
+
     assert result.status == "hired"
-    
+
     # Verify candidate_hired automation triggered
     mock_execute_automations.assert_called_once()
     call_kwargs = mock_execute_automations.call_args.kwargs
@@ -234,11 +232,11 @@ async def test_update_candidate_status_to_active(
     from app.api.v1.endpoints.candidates import update_candidate_status
     from app.models.user import User
     from app.schemas.candidates import CandidateStatusUpdateRequest
-    
+
     # Set to rejected first
     test_candidate.status = "rejected"
     await db.commit()
-    
+
     mock_user = User(
         id=uuid7(),
         org_id=test_candidate.org_id,
@@ -246,19 +244,19 @@ async def test_update_candidate_status_to_active(
         email="admin@example.com",
         status="active",
     )
-    
+
     # Change back to active
     request = CandidateStatusUpdateRequest(status="active")
-    
+
     result = await update_candidate_status(
         candidate_id=test_candidate.id,
         body=request,
         db=db,
         current_user=mock_user,
     )
-    
+
     assert result.status == "active"
-    
+
     # No automation for active status
     mock_execute_automations.assert_not_called()
 
@@ -271,7 +269,7 @@ async def test_update_candidate_status_not_found(db: AsyncSession):
     from app.api.v1.endpoints.candidates import update_candidate_status
     from app.models.user import User
     from app.schemas.candidates import CandidateStatusUpdateRequest
-    
+
     fake_candidate_id = uuid7()
     mock_user = User(
         id=uuid7(),
@@ -280,9 +278,9 @@ async def test_update_candidate_status_not_found(db: AsyncSession):
         email="admin@example.com",
         status="active",
     )
-    
+
     request = CandidateStatusUpdateRequest(status="rejected")
-    
+
     with pytest.raises(HTTPException) as exc_info:
         await update_candidate_status(
             candidate_id=fake_candidate_id,
@@ -290,7 +288,7 @@ async def test_update_candidate_status_not_found(db: AsyncSession):
             db=db,
             current_user=mock_user,
         )
-    
+
     assert exc_info.value.status_code == 404
     assert "not found" in exc_info.value.detail.lower()
 
@@ -306,10 +304,10 @@ async def test_update_candidate_status_activity_metadata(
     from app.api.v1.endpoints.candidates import update_candidate_status
     from app.models.user import User
     from app.schemas.candidates import CandidateStatusUpdateRequest
-    
+
     # Initial status is "active"
     assert test_candidate.status == "active"
-    
+
     mock_user = User(
         id=uuid7(),
         org_id=test_candidate.org_id,
@@ -317,16 +315,16 @@ async def test_update_candidate_status_activity_metadata(
         email="admin@example.com",
         status="active",
     )
-    
+
     request = CandidateStatusUpdateRequest(status="rejected")
-    
+
     await update_candidate_status(
         candidate_id=test_candidate.id,
         body=request,
         db=db,
         current_user=mock_user,
     )
-    
+
     # Check activity metadata
     activity_result = await db.execute(
         select(Activity).where(
@@ -335,7 +333,7 @@ async def test_update_candidate_status_activity_metadata(
         )
     )
     activity = activity_result.scalar_one()
-    
+
     assert activity.metadata_["old_status"] == "active"
     assert activity.metadata_["new_status"] == "rejected"
 
@@ -351,7 +349,7 @@ async def test_update_candidate_status_multiple_times(
     from app.api.v1.endpoints.candidates import update_candidate_status
     from app.models.user import User
     from app.schemas.candidates import CandidateStatusUpdateRequest
-    
+
     mock_user = User(
         id=uuid7(),
         org_id=test_candidate.org_id,
@@ -359,7 +357,7 @@ async def test_update_candidate_status_multiple_times(
         email="admin@example.com",
         status="active",
     )
-    
+
     # First update: active -> rejected
     request1 = CandidateStatusUpdateRequest(status="rejected")
     await update_candidate_status(
@@ -368,9 +366,9 @@ async def test_update_candidate_status_multiple_times(
         db=db,
         current_user=mock_user,
     )
-    
+
     assert mock_execute_automations.call_count == 1
-    
+
     # Second update: rejected -> active (should work, not idempotent)
     request2 = CandidateStatusUpdateRequest(status="active")
     await update_candidate_status(
@@ -379,10 +377,10 @@ async def test_update_candidate_status_multiple_times(
         db=db,
         current_user=mock_user,
     )
-    
+
     # Still 1 call (active doesn't trigger automation)
     assert mock_execute_automations.call_count == 1
-    
+
     # Third update: active -> hired
     request3 = CandidateStatusUpdateRequest(status="hired")
     await update_candidate_status(
@@ -391,6 +389,6 @@ async def test_update_candidate_status_multiple_times(
         db=db,
         current_user=mock_user,
     )
-    
+
     # Now 2 calls (hired triggers automation)
     assert mock_execute_automations.call_count == 2

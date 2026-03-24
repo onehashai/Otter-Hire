@@ -91,14 +91,20 @@ def downgrade() -> None:
         sa.Column("status", sa.String(32), nullable=False, server_default="pending"),
         sa.Column("last_tested_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("last_test_error", sa.String(2000), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.ForeignKeyConstraint(["org_id"], ["organizations.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("org_id", "integration_type", name="uq_integrations_org_type"),
     )
     op.create_index("ix_integrations_org_id", "integrations", ["org_id"])
-    op.create_index("ix_integrations_org_type", "integrations", ["org_id", "integration_type"], unique=True)
+    op.create_index(
+        "ix_integrations_org_type", "integrations", ["org_id", "integration_type"], unique=True
+    )
 
     conn = op.get_bind()
     conn.execute(
@@ -116,7 +122,11 @@ def downgrade() -> None:
     op.drop_column("integration_credentials", "status")
     op.drop_column("integration_credentials", "config")
     # Restore NOT NULL: rows with null credentials get empty string so alter succeeds
-    conn.execute(sa.text("UPDATE integration_credentials SET encrypted_credentials = '' WHERE encrypted_credentials IS NULL"))
+    conn.execute(
+        sa.text(
+            "UPDATE integration_credentials SET encrypted_credentials = '' WHERE encrypted_credentials IS NULL"
+        )
+    )
     op.alter_column(
         "integration_credentials",
         "encrypted_credentials",

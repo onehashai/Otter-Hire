@@ -18,9 +18,10 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column("candidate_documents", sa.Column("object_key", sa.String(length=2048), nullable=True))
+    op.add_column(
+        "candidate_documents", sa.Column("object_key", sa.String(length=2048), nullable=True)
+    )
 
 
 def downgrade() -> None:
     op.drop_column("candidate_documents", "object_key")
-

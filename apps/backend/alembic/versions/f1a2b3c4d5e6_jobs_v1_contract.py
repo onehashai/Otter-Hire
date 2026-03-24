@@ -5,6 +5,7 @@ Revises: e5f8a9b2c3d4
 Create Date: 2026-02-18 12:00:00.000000+00:00
 
 """
+
 from typing import Sequence, Union
 
 import sqlalchemy as sa
@@ -20,21 +21,40 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     op.add_column("jobs", sa.Column("department", sa.String(50), nullable=True))
-    op.add_column("jobs", sa.Column("workplace_type", sa.String(10), server_default="remote", nullable=True))
+    op.add_column(
+        "jobs", sa.Column("workplace_type", sa.String(10), server_default="remote", nullable=True)
+    )
     op.add_column("jobs", sa.Column("country", sa.String(2), nullable=True))
     op.add_column("jobs", sa.Column("city", sa.String(255), nullable=True))
     op.add_column("jobs", sa.Column("openings", sa.Integer(), server_default="1", nullable=False))
-    op.add_column("jobs", sa.Column("salary_type", sa.String(10), server_default="hidden", nullable=False))
+    op.add_column(
+        "jobs", sa.Column("salary_type", sa.String(10), server_default="hidden", nullable=False)
+    )
     op.add_column("jobs", sa.Column("salary_min", sa.Integer(), nullable=True))
     op.add_column("jobs", sa.Column("salary_max", sa.Integer(), nullable=True))
     op.add_column("jobs", sa.Column("salary_fixed", sa.Integer(), nullable=True))
     op.add_column("jobs", sa.Column("currency", sa.String(3), server_default="USD", nullable=True))
-    op.add_column("jobs", sa.Column("salary_timeframe", sa.String(10), server_default="per_year", nullable=True))
-    op.add_column("jobs", sa.Column("visibility", sa.String(10), server_default="internal", nullable=False))
-    op.add_column("jobs", sa.Column("collect_resume", sa.Boolean(), server_default="true", nullable=False))
-    op.add_column("jobs", sa.Column("collect_cover", sa.Boolean(), server_default="false", nullable=False))
-    op.add_column("jobs", sa.Column("screening_questions", postgresql.JSONB(), server_default="[]", nullable=True))
-    op.add_column("jobs", sa.Column("pipeline_template", sa.String(20), server_default="standard", nullable=True))
+    op.add_column(
+        "jobs",
+        sa.Column("salary_timeframe", sa.String(10), server_default="per_year", nullable=True),
+    )
+    op.add_column(
+        "jobs", sa.Column("visibility", sa.String(10), server_default="internal", nullable=False)
+    )
+    op.add_column(
+        "jobs", sa.Column("collect_resume", sa.Boolean(), server_default="true", nullable=False)
+    )
+    op.add_column(
+        "jobs", sa.Column("collect_cover", sa.Boolean(), server_default="false", nullable=False)
+    )
+    op.add_column(
+        "jobs",
+        sa.Column("screening_questions", postgresql.JSONB(), server_default="[]", nullable=True),
+    )
+    op.add_column(
+        "jobs",
+        sa.Column("pipeline_template", sa.String(20), server_default="standard", nullable=True),
+    )
     op.add_column("jobs", sa.Column("published_at", sa.DateTime(timezone=True), nullable=True))
     op.add_column("jobs", sa.Column("closed_at", sa.DateTime(timezone=True), nullable=True))
 
@@ -44,9 +64,17 @@ def upgrade() -> None:
     op.execute("UPDATE jobs SET status = 'open' WHERE status = 'published'")
     op.create_check_constraint("ck_jobs_status", "jobs", "status IN ('draft', 'open', 'closed')")
 
-    op.create_check_constraint("ck_jobs_visibility", "jobs", "visibility IN ('internal', 'careers', 'public')")
-    op.create_check_constraint("ck_jobs_salary_type", "jobs", "salary_type IN ('hidden', 'fixed', 'range')")
-    op.create_check_constraint("ck_jobs_salary_range", "jobs", "salary_min IS NULL OR salary_max IS NULL OR salary_min <= salary_max")
+    op.create_check_constraint(
+        "ck_jobs_visibility", "jobs", "visibility IN ('internal', 'careers', 'public')"
+    )
+    op.create_check_constraint(
+        "ck_jobs_salary_type", "jobs", "salary_type IN ('hidden', 'fixed', 'range')"
+    )
+    op.create_check_constraint(
+        "ck_jobs_salary_range",
+        "jobs",
+        "salary_min IS NULL OR salary_max IS NULL OR salary_min <= salary_max",
+    )
 
     op.create_index("ix_jobs_org_status", "jobs", ["org_id", "status"])
 
@@ -55,13 +83,28 @@ def upgrade() -> None:
     op.create_table(
         "job_team_members",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("org_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("organizations.id"), nullable=False),
-        sa.Column("job_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("user_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("users.id"), nullable=False),
+        sa.Column(
+            "org_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("organizations.id"),
+            nullable=False,
+        ),
+        sa.Column(
+            "job_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("jobs.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
+        sa.Column(
+            "user_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("users.id"), nullable=False
+        ),
         sa.Column("role", sa.String(20), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
         sa.UniqueConstraint("job_id", "user_id", name="uq_job_team_member"),
-        sa.CheckConstraint("role IN ('hiring_manager', 'recruiter', 'interviewer', 'coordinator')", name="ck_job_team_role"),
+        sa.CheckConstraint(
+            "role IN ('hiring_manager', 'recruiter', 'interviewer', 'coordinator')",
+            name="ck_job_team_role",
+        ),
         sa.Index("ix_job_team_members_job", "job_id"),
     )
 
@@ -78,7 +121,9 @@ def downgrade() -> None:
 
     op.drop_constraint("ck_jobs_status", "jobs", type_="check")
     op.execute("UPDATE jobs SET status = 'published' WHERE status = 'open'")
-    op.create_check_constraint("ck_jobs_status", "jobs", "status IN ('draft', 'published', 'closed')")
+    op.create_check_constraint(
+        "ck_jobs_status", "jobs", "status IN ('draft', 'published', 'closed')"
+    )
 
     op.add_column("jobs", sa.Column("location", sa.String(), nullable=True))
 

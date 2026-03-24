@@ -47,9 +47,7 @@ def upgrade() -> None:
             "org_id", "integration_type", name="uq_integration_credentials_org_type"
         ),
     )
-    op.create_index(
-        "ix_integration_credentials_org_id", "integration_credentials", ["org_id"]
-    )
+    op.create_index("ix_integration_credentials_org_id", "integration_credentials", ["org_id"])
     op.create_index(
         "ix_integration_credentials_org_type",
         "integration_credentials",

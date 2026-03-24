@@ -101,11 +101,16 @@ async def handle_send_email_action(
         rendered_body = render_template(template.body or "", context)
 
         # Get or create conversation for this candidate
-        conv_stmt = select(Conversation).where(
-            Conversation.org_id == org_id,
-            Conversation.candidate_id == candidate_id,
-            Conversation.status.in_(["open", "closed"])
-        ).order_by(Conversation.last_message_at.desc()).limit(1)
+        conv_stmt = (
+            select(Conversation)
+            .where(
+                Conversation.org_id == org_id,
+                Conversation.candidate_id == candidate_id,
+                Conversation.status.in_(["open", "closed"]),
+            )
+            .order_by(Conversation.last_message_at.desc())
+            .limit(1)
+        )
         conv_result = await db.execute(conv_stmt)
         conversation = conv_result.scalar_one_or_none()
 

@@ -49,9 +49,7 @@ async def test_user(db: AsyncSession, test_org: Organization) -> User:
 
 
 @pytest.fixture
-async def test_automation(
-    db: AsyncSession, test_org: Organization, test_user: User
-) -> Automation:
+async def test_automation(db: AsyncSession, test_org: Organization, test_user: User) -> Automation:
     """Create test automation."""
     automation = Automation(
         id=uuid7(),
@@ -79,7 +77,7 @@ async def test_log_execution_success(
 ):
     """Test logging successful execution."""
     candidate_id = uuid7()
-    
+
     await log_execution(
         db=db,
         automation_id=test_automation.id,
@@ -89,15 +87,13 @@ async def test_log_execution_success(
         status="success",
         message="Email sent successfully",
     )
-    
+
     # Verify execution was logged
     result = await db.execute(
-        select(AutomationExecution).where(
-            AutomationExecution.automation_id == test_automation.id
-        )
+        select(AutomationExecution).where(AutomationExecution.automation_id == test_automation.id)
     )
     execution = result.scalar_one()
-    
+
     assert execution.trigger_event == "candidate_applied"
     assert execution.candidate_id == candidate_id
     assert execution.status == "success"
@@ -112,7 +108,7 @@ async def test_log_execution_failure(
 ):
     """Test logging failed execution."""
     candidate_id = uuid7()
-    
+
     await log_execution(
         db=db,
         automation_id=test_automation.id,
@@ -122,14 +118,12 @@ async def test_log_execution_failure(
         status="failed",
         message="Template not found",
     )
-    
+
     result = await db.execute(
-        select(AutomationExecution).where(
-            AutomationExecution.automation_id == test_automation.id
-        )
+        select(AutomationExecution).where(AutomationExecution.automation_id == test_automation.id)
     )
     execution = result.scalar_one()
-    
+
     assert execution.status == "failed"
     assert "Template not found" in execution.message
 
@@ -142,7 +136,7 @@ async def test_log_execution_with_job_id(
     """Test logging execution with job context."""
     candidate_id = uuid7()
     job_id = uuid7()
-    
+
     await log_execution(
         db=db,
         automation_id=test_automation.id,
@@ -152,14 +146,12 @@ async def test_log_execution_with_job_id(
         status="success",
         message="Stage changed",
     )
-    
+
     result = await db.execute(
-        select(AutomationExecution).where(
-            AutomationExecution.automation_id == test_automation.id
-        )
+        select(AutomationExecution).where(AutomationExecution.automation_id == test_automation.id)
     )
     execution = result.scalar_one()
-    
+
     assert execution.job_id == job_id
 
 
@@ -172,16 +164,16 @@ async def test_update_automation_stats(
     # Initial state
     assert test_automation.execution_count == 0
     assert test_automation.last_run_at is None
-    
+
     # Update stats
     await update_automation_stats(
         db=db,
         automation_id=test_automation.id,
     )
-    
+
     # Refresh from database
     await db.refresh(test_automation)
-    
+
     # Verify stats updated
     assert test_automation.execution_count == 1
     assert test_automation.last_run_at is not None
@@ -211,7 +203,7 @@ async def test_log_multiple_executions(
 ):
     """Test logging multiple executions."""
     candidate_ids = [uuid7() for _ in range(3)]
-    
+
     for candidate_id in candidate_ids:
         await log_execution(
             db=db,
@@ -222,15 +214,13 @@ async def test_log_multiple_executions(
             status="success",
             message="Email sent",
         )
-    
+
     # Verify all executions logged
     result = await db.execute(
-        select(AutomationExecution).where(
-            AutomationExecution.automation_id == test_automation.id
-        )
+        select(AutomationExecution).where(AutomationExecution.automation_id == test_automation.id)
     )
     executions = result.scalars().all()
-    
+
     assert len(executions) == 3
     assert all(e.status == "success" for e in executions)
 
@@ -242,7 +232,7 @@ async def test_log_execution_different_statuses(
 ):
     """Test logging executions with different statuses."""
     candidate_id = uuid7()
-    
+
     # Log success
     await log_execution(
         db=db,
@@ -253,7 +243,7 @@ async def test_log_execution_different_statuses(
         status="success",
         message="Success",
     )
-    
+
     # Log failure
     await log_execution(
         db=db,
@@ -264,15 +254,13 @@ async def test_log_execution_different_statuses(
         status="failed",
         message="Failed",
     )
-    
+
     # Verify both logged
     result = await db.execute(
-        select(AutomationExecution).where(
-            AutomationExecution.automation_id == test_automation.id
-        )
+        select(AutomationExecution).where(AutomationExecution.automation_id == test_automation.id)
     )
     executions = result.scalars().all()
-    
+
     assert len(executions) == 2
     statuses = {e.status for e in executions}
     assert statuses == {"success", "failed"}

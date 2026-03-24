@@ -19,11 +19,18 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column("users", sa.Column("is_verified", sa.Boolean(), nullable=False, server_default="false"))
+    op.add_column(
+        "users", sa.Column("is_verified", sa.Boolean(), nullable=False, server_default="false")
+    )
     op.add_column("users", sa.Column("verified_at", sa.DateTime(timezone=True), nullable=True))
     op.add_column("users", sa.Column("verification_token_hash", sa.String(), nullable=True))
-    op.add_column("users", sa.Column("verification_token_expires_at", sa.DateTime(timezone=True), nullable=True))
-    op.add_column("users", sa.Column("is_onboarded", sa.Boolean(), nullable=False, server_default="false"))
+    op.add_column(
+        "users",
+        sa.Column("verification_token_expires_at", sa.DateTime(timezone=True), nullable=True),
+    )
+    op.add_column(
+        "users", sa.Column("is_onboarded", sa.Boolean(), nullable=False, server_default="false")
+    )
     op.alter_column("users", "is_verified", server_default=None)
     op.alter_column("users", "is_onboarded", server_default=None)
 

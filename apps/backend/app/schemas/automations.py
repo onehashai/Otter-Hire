@@ -96,4 +96,3 @@ class AutomationExecutionLogEntry(BaseModel):
     status: str
     message: str | None = None
     created_at: datetime
-

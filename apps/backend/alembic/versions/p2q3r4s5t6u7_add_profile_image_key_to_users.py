@@ -24,4 +24,3 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_column("users", "profile_image_key")
-

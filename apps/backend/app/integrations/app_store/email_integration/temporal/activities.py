@@ -334,7 +334,7 @@ async def send_outbound_email_activity(input_data: OutboundWorkflowInput) -> dic
             )
         )
         await db.commit()
-        
+
         if result.rowcount == 0:
             logger.error(
                 "Activity failed: send_outbound_email message_id=%s - message not found in database after sending email",

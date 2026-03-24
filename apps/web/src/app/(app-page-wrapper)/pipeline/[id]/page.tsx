@@ -67,6 +67,12 @@ export default function PipelineJobPage() {
     };
   }, [pipeline]);
 
+  const handleCandidateClick = (candidateId: string) => {
+    if (id) {
+      router.push(`/candidates/${candidateId}?from=pipeline&jobId=${id}`);
+    }
+  };
+
   if (loading) {
     return <p className="text-sm text-muted-foreground">Loading pipeline...</p>;
   }
@@ -90,6 +96,7 @@ export default function PipelineJobPage() {
       onMoveCandidate={async (candidateId, stageId) => {
         await updateCandidateStage(candidateId, stageId);
       }}
+      onCandidateClick={handleCandidateClick}
     />
   );
 }

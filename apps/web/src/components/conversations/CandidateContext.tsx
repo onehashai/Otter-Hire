@@ -5,6 +5,14 @@ import { Badge } from "@onehash/ui/badge";
 import { Button } from "@onehash/ui/button";
 import { Separator } from "@onehash/ui/separator";
 import { Mail, Phone, MapPin, ArrowRight, StickyNote, Calendar } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@onehash/ui/select";
+import type { ConversationStatus } from "@/api/conversations";
 
 interface CandidateContextProps {
   name: string;
@@ -16,6 +24,8 @@ interface CandidateContextProps {
   recruiter: string;
   dateApplied: string;
   activities: { label: string; date: string }[];
+  conversationStatus: ConversationStatus;
+  onConversationStatusChange: (status: ConversationStatus) => void;
   onMoveStage: () => void;
   onAddNote: () => void;
   onScheduleInterview: () => void;
@@ -31,6 +41,8 @@ export function CandidateContext({
   recruiter,
   dateApplied,
   activities,
+  conversationStatus,
+  onConversationStatusChange,
   onMoveStage,
   onAddNote,
   onScheduleInterview,
@@ -92,6 +104,39 @@ export function CandidateContext({
             <span className="text-foreground">{dateApplied}</span>
           </div>
         </div>
+      </div>
+
+      <Separator />
+
+      <div className="p-4 space-y-2">
+        <h4 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+          Conversation Status
+        </h4>
+        <Select value={conversationStatus} onValueChange={onConversationStatusChange}>
+          <SelectTrigger className="h-8 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="open" className="text-xs">
+              <div className="flex items-center gap-2">
+                <div className="h-2 w-2 rounded-full bg-green-500" />
+                Open
+              </div>
+            </SelectItem>
+            <SelectItem value="closed" className="text-xs">
+              <div className="flex items-center gap-2">
+                <div className="h-2 w-2 rounded-full bg-gray-400" />
+                Closed
+              </div>
+            </SelectItem>
+            <SelectItem value="archived" className="text-xs">
+              <div className="flex items-center gap-2">
+                <div className="h-2 w-2 rounded-full bg-red-500" />
+                Archived
+              </div>
+            </SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       <Separator />

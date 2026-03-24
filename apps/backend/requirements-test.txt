@@ -1,0 +1,27 @@
+# Test Dependencies for OneHash ATS Backend
+
+# Core testing framework
+pytest==7.4.3
+pytest-asyncio==0.21.1
+pytest-cov==4.1.0
+
+# Async testing support
+anyio==4.2.0
+
+# Mocking and fixtures
+pytest-mock==3.12.0
+
+# Required for pytest plugins
+setuptools>=65.0.0
+
+# Code quality (optional - can be removed if causing issues)
+# pytest-flake8==1.1.1
+# pytest-mypy==0.10.3
+# pytest-postgresql==5.0.0
+
+# Test reporting
+pytest-html==4.1.1
+pytest-json-report==1.5.0
+
+# Coverage reporting
+coverage[toml]==7.4.0

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@onehash/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@onehash/ui/tabs";
@@ -123,10 +123,14 @@ function mapHiringTimelineItem(activity: {
 export default function CandidateProfilePage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const isMobile = useIsMobile();
   const [activeTab, setActiveTab] = useState("overview");
   const { t } = useTranslation();
   const id = params?.candidateId as string | undefined;
+  
+  const fromPipeline = searchParams.get('from') === 'pipeline';
+  const pipelineJobId = searchParams.get('jobId');
   const [candidate, setCandidate] = useState<CandidateDetailResponse | null>(null);
   const [overview, setOverview] = useState<CandidateOverviewResponse | null>(null);
   const [interviews, setInterviews] = useState<CandidateInterviewResponse[]>([]);
@@ -436,11 +440,19 @@ export default function CandidateProfilePage() {
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <Button variant="ghost" size="sm" className="h-8 text-xs gap-1.5" asChild>
-            <Link href="/candidates">
-              <Icon name="ChevronLeft" className="h-3.5 w-3.5" /> {t("candidates")}
+            <Link href={fromPipeline && pipelineJobId ? `/pipeline/${pipelineJobId}` : "/candidates"}>
+              <Icon name="ChevronLeft" className="h-3.5 w-3.5" /> 
+              {fromPipeline ? "Back to Pipeline" : t("candidates")}
             </Link>
           </Button>
-          <ActionButtons candidateName={uiCandidate.name} />
+          <ActionButtons
+            candidateName={uiCandidate.name}
+            candidateId={id}
+            candidateStatus={candidate.status}
+            jobId={candidate.job_id}
+            currentStageId={candidate.stage_id}
+            onStageUpdated={() => loadAll(id)}
+          />
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>

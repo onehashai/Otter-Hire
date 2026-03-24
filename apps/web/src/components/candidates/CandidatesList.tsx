@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@onehash/ui/card";
 import { Button } from "@onehash/ui/button";
@@ -15,6 +16,8 @@ import {
 import { Icon } from "@onehash/ui/icon";
 import { useToast } from "@/hooks/use-toast";
 import { useTranslation } from "react-i18next";
+import { MoveStageDialog } from "./components/MoveStageDialog";
+import { RejectCandidateDialog } from "./components/RejectCandidateDialog";
 
 export interface Candidate {
   id: string;
@@ -28,6 +31,9 @@ export interface Candidate {
   source: string;
   phone: string;
   location: string;
+  jobId?: string | null;
+  stageId?: string | null;
+  status?: string;
 }
 
 const stageVariant = (stage: string) => {
@@ -38,12 +44,58 @@ const stageVariant = (stage: string) => {
 
 interface CandidatesListProps {
   candidates: Candidate[];
+  onRefresh?: () => void;
 }
 
-export function CandidatesList({ candidates }: CandidatesListProps) {
+export function CandidatesList({ candidates, onRefresh }: CandidatesListProps) {
   const { t } = useTranslation();
   const router = useRouter();
   const { toast } = useToast();
+  const [moveStageOpen, setMoveStageOpen] = useState(false);
+  const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
+  const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null);
+
+  const handleMoveStageClick = (candidate: Candidate, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!candidate.jobId) {
+      toast({
+        title: "Cannot move stage",
+        description: "This candidate is not assigned to a job. Please assign a job first.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setSelectedCandidate(candidate);
+    setMoveStageOpen(true);
+  };
+
+  const handleRejectClick = (candidate: Candidate, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!candidate.jobId) {
+      toast({
+        title: "Cannot reject candidate",
+        description: "Candidate must be assigned to a job before rejection. Rejection is per-job basis.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (candidate.status === "rejected") {
+      toast({
+        title: "Already rejected",
+        description: "This candidate has already been rejected.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setSelectedCandidate(candidate);
+    setRejectDialogOpen(true);
+  };
+
+  const handleSuccess = () => {
+    if (onRefresh) {
+      onRefresh();
+    }
+  };
 
   return (
     <>
@@ -115,22 +167,25 @@ export function CandidatesList({ candidates }: CandidatesListProps) {
                       <DropdownMenuContent align="end" className="w-44">
                         <DropdownMenuItem
                           className="text-xs"
-                          onClick={() => toast({ title: "Stage updated" })}
+                          onClick={(e) => handleMoveStageClick(c, e)}
+                          disabled={!c.jobId}
                         >
                           <Icon name="UserCheck" className="h-3.5 w-3.5 mr-2" /> Move Stage
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           className="text-xs"
-                          onClick={() => toast({ title: "Interview scheduled" })}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toast({ title: "Interview scheduled" });
+                          }}
                         >
                           <Icon name="Clock" className="h-3.5 w-3.5 mr-2" /> Schedule Interview
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
                           className="text-xs text-destructive focus:text-destructive"
-                          onClick={() =>
-                            toast({ title: "Candidate rejected", variant: "destructive" })
-                          }
+                          onClick={(e) => handleRejectClick(c, e)}
+                          disabled={!c.jobId || c.status === "rejected"}
                         >
                           <Icon name="X" className="h-3.5 w-3.5 mr-2" /> Reject
                         </DropdownMenuItem>
@@ -142,6 +197,28 @@ export function CandidatesList({ candidates }: CandidatesListProps) {
             </Card>
           ))}
         </div>
+      )}
+
+      {selectedCandidate && (
+        <>
+          <MoveStageDialog
+            open={moveStageOpen}
+            onOpenChange={setMoveStageOpen}
+            candidateId={selectedCandidate.id}
+            candidateName={selectedCandidate.name}
+            jobId={selectedCandidate.jobId ?? null}
+            currentStageId={selectedCandidate.stageId ?? null}
+            onSuccess={handleSuccess}
+          />
+
+          <RejectCandidateDialog
+            open={rejectDialogOpen}
+            onOpenChange={setRejectDialogOpen}
+            candidateId={selectedCandidate.id}
+            candidateName={selectedCandidate.name}
+            onSuccess={handleSuccess}
+          />
+        </>
       )}
     </>
   );

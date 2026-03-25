@@ -35,6 +35,7 @@ class User(Base):
     invite_token_expires_at = Column(DateTime(timezone=True), nullable=True)
     is_onboarded = Column(Boolean, nullable=False, default=False)
     avatar_url = Column(String, nullable=True)
+    role = Column(String, nullable=False, server_default="user")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
@@ -46,8 +47,10 @@ class User(Base):
             "auth_provider IN ('local', 'google', 'both')",
             name="ck_users_auth_provider",
         ),
+        CheckConstraint("role IN ('user', 'admin')", name="ck_users_account_role"),
         Index("ix_users_email", "email"),
         Index("ix_users_google_id", "google_id"),
     )
 
     organization = relationship("Organization")
+    memberships = relationship("OrgMembership", back_populates="user")

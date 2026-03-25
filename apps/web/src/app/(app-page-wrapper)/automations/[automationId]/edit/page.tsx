@@ -7,7 +7,7 @@ import { Button } from "@onehash/ui/button";
 import { Badge } from "@onehash/ui/badge";
 import { Separator } from "@onehash/ui/separator";
 import { ArrowLeft, Save, Zap, ChevronDown, ChevronUp, Play, FileText } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@onehash/ui/sonner";
 import { useSetPageMetadata } from "@/hooks/useSetPageMetadata";
 import { useTranslation } from "react-i18next";
 import {
@@ -145,7 +145,7 @@ export default function AutomationEditPage() {
       actions.some((a) => a.type === "move_stage")
     ) {
       toast.error(
-        "Remove the Move to stage action or switch to a specific job. Jobs have different pipeline stages.",
+        "Remove the Move to stage action or switch to a specific job. Jobs have different hiring stages.",
       );
       return;
     }

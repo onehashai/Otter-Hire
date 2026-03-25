@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
+import { toast } from "@onehash/ui/sonner";
 import { Icon } from "@onehash/ui/icon";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -22,29 +22,7 @@ import {
 import { getCandidateById, type CandidateDetailResponse } from "@/api/candidates";
 import { getMyOrganization } from "@/api/organization/me";
 import type { OrganizationResponse } from "@/api/organization/update";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function formatTimestamp(isoString: string | null): string {
-  if (!isoString) return "";
-  const date = new Date(isoString);
-  const now = new Date();
-  const diffDays = Math.floor((now.getTime() - date.getTime()) / 86_400_000);
-  if (diffDays === 0) return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  if (diffDays === 1) return "Yesterday";
-  if (diffDays < 7) return date.toLocaleDateString([], { weekday: "short" });
-  return date.toLocaleDateString([], { month: "short", day: "numeric" });
-}
-
-function formatDate(isoString: string): string {
-  return new Date(isoString).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
+import { formatTimestamp } from "@/lib/format-date";
 
 function mapConversation(item: ConversationListItem): Conversation {
   return {
@@ -381,14 +359,7 @@ export function ConversationsView({ initialId }: ConversationsViewProps) {
             email={activeConversation.candidate.email}
             phone={candidateDetail?.phone ?? "—"}
             location={candidateDetail?.location ?? "—"}
-            jobTitle={candidateDetail?.job_title ?? activeConversation.subject}
-            stage={candidateDetail?.stage_name ?? activeConversation.status}
-            recruiter="—"
-            dateApplied={formatDate(activeConversation.created_at)}
             activities={contextActivities}
-            onMoveStage={() => {}}
-            onAddNote={() => {}}
-            onScheduleInterview={() => {}}
           />
         </div>
       )}

@@ -16,28 +16,17 @@ import {
 } from "@onehash/ui/dialog";
 import { InputField } from "@onehash/ui/input";
 import { Label } from "@onehash/ui/label";
+import { Avatar } from "@onehash/ui/avatar";
 import { Icon } from "@onehash/ui/icon";
 import type { IconName } from "@onehash/ui/icon";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
-import { toast } from "sonner";
+import { toast } from "@onehash/ui/sonner";
 import { applyToPublicJob, getPublicJobDetail, type PublicJobDetail } from "@/api";
+import { PLATFORM_NAME } from "@/lib/constants";
+import { parseOrgSlug } from "@/lib/public-careers-org";
 
 type ApplyFile = { name: string; size: number; type: string };
-
-function parseOrgSlug(orgSlug: string): { orgName: string; orgId: string } | null {
-  const parts = orgSlug.split("-");
-  if (parts.length < 6) return null;
-
-  const uuidParts = parts.slice(-5);
-  const orgId = uuidParts.join("-");
-  const orgName = parts.slice(0, -5).join("-");
-
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  if (!uuidRegex.test(orgId)) return null;
-
-  return { orgName, orgId };
-}
 
 function formatSalary(job: PublicJobDetail): string | null {
   if (job.salary_fixed) {
@@ -49,11 +38,11 @@ function formatSalary(job: PublicJobDetail): string | null {
   return null;
 }
 
-function formatLocation(job: PublicJobDetail): string {
+function formatLocation(job: PublicJobDetail): string | null {
   if (job.city && job.country) return `${job.city}, ${job.country}`;
   if (job.city) return job.city;
   if (job.country) return job.country;
-  return job.workplace_type || "Remote";
+  return null;
 }
 
 function formatEmploymentType(type: string): string {
@@ -233,6 +222,8 @@ export default function CareerJobDetailPage() {
     );
   }
 
+  console.log(job);
+
   if (error || !job) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background px-4">
@@ -255,13 +246,18 @@ export default function CareerJobDetailPage() {
   }
 
   const salary = formatSalary(job);
-  const location = formatLocation(job);
+  const locationLabel = formatLocation(job);
   const employmentType = formatEmploymentType(job.employment_type);
 
+  const showWorkplacePill =
+    Boolean(job.workplace_type) &&
+    (locationLabel != null ||
+      String(job.workplace_type).toLowerCase() !== "onsite");
+
   const metaItems = [
-    { iconName: "MapPin", label: location },
+    locationLabel && { iconName: "MapPin", label: locationLabel },
+    showWorkplacePill && { iconName: "Clock", label: job.workplace_type },
     { iconName: "Briefcase", label: employmentType },
-    { iconName: "Clock", label: job.workplace_type },
     salary && { iconName: "DollarSign", label: salary },
     job.category && { iconName: "Building2", label: job.category },
   ].filter(Boolean) as { iconName: IconName; label: string }[];
@@ -293,12 +289,14 @@ export default function CareerJobDetailPage() {
             <Icon name="ChevronLeft" className="h-4 w-4" />
           </Button>
           <div className="flex items-center gap-2.5 flex-1 min-w-0">
-            <div className="h-7 w-7 rounded-md bg-foreground flex items-center justify-center shrink-0">
-              <span className="text-background text-[10px] font-bold">
-                {orgName.charAt(0).toUpperCase()}
-              </span>
-            </div>
-            <span className="text-xs text-muted-foreground truncate capitalize">
+            <Avatar
+              className="h-7 w-7 shrink-0 rounded-md"
+              src={job.org_avatar_url}
+              alt={job.org_name || orgName}
+              imageClassName="rounded-md object-cover"
+              fallbackClassName="rounded-md bg-foreground text-background text-[10px] font-bold"
+            />
+            <span className="text-sm font-semibold truncate">
               {job.org_name}
             </span>
           </div>
@@ -308,7 +306,6 @@ export default function CareerJobDetailPage() {
       <div className="mx-auto max-w-3xl px-4 pt-8 md:pt-12 pb-6 md:pb-8">
         <div className="space-y-4">
           <div className="space-y-2">
-            <p className="text-xs font-medium text-muted-foreground capitalize">{job.org_name}</p>
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">{job.title}</h1>
               {job.status === "draft" && (
@@ -326,7 +323,7 @@ export default function CareerJobDetailPage() {
                 className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs text-muted-foreground"
               >
                 <Icon name={item.iconName} className="h-3 w-3 shrink-0" />
-                <span>{item.label}</span>
+                <span className="capitalize">{item.label}</span>
               </div>
             ))}
           </div>
@@ -698,7 +695,7 @@ export default function CareerJobDetailPage() {
       <footer className="border-t border-border">
         <div className="mx-auto max-w-3xl px-4 py-6">
           <p className="text-xs text-muted-foreground capitalize text-center">
-            © {new Date().getFullYear()} {job.org_name}
+            © {new Date().getFullYear()} {PLATFORM_NAME}.
           </p>
         </div>
       </footer>

@@ -56,14 +56,33 @@ export default function JobInfoPage() {
     return cities.filter((c) => c.name.toLowerCase().includes(q));
   }, [cities, citySearch]);
 
+  const needsLocation = workplaceType === "hybrid" || workplaceType === "onsite";
+
   const titleError = useMemo(() => {
     if (!titleTouched && !basicInfoAttemptedNext) return undefined;
-    const { valid, titleError: err } = getBasicInfoValidation({ title });
+    const { valid, titleError: err } = getBasicInfoValidation({
+      title,
+      workplaceType,
+      country,
+      city,
+    });
     if (valid || !err) return undefined;
     if (err === "min") return t("min_char_length", { count: 1 });
     if (err === "max") return t("max_char_length", { count: 100 });
     return t("job_name_invalid");
-  }, [title, titleTouched, basicInfoAttemptedNext, t]);
+  }, [title, titleTouched, basicInfoAttemptedNext, workplaceType, country, city, t]);
+
+  const locationHint = useMemo(() => {
+    if (!basicInfoAttemptedNext || !needsLocation) return undefined;
+    const { valid, locationError } = getBasicInfoValidation({
+      title,
+      workplaceType,
+      country,
+      city,
+    });
+    if (valid || !locationError) return undefined;
+    return t("location_required_hybrid_onsite");
+  }, [basicInfoAttemptedNext, needsLocation, title, workplaceType, country, city, t]);
 
   useEffect(() => {
     getJobCategories()
@@ -117,37 +136,46 @@ export default function JobInfoPage() {
           ))}
         </div>
       </SelectField>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <SearchableSelectField
-          label={t("country")}
-          value={country}
-          onValueChange={handleCountryChange}
-          placeholder={t("select")}
-          options={filteredCountries.map((c) => ({ value: c.isoCode, label: c.name }))}
-          searchPlaceholder={t("search_country")}
-          searchValue={countrySearch}
-          onSearchChange={setCountrySearch}
-          noResultsText={t("no_results")}
-        />
-        <SearchableSelectField
-          label={t("city")}
-          value={city}
-          onValueChange={setCity}
-          placeholder={country ? t("select") : t("select_country_first")}
-          disabled={!country}
-          options={filteredCities.map((c) => ({
-            value: `${c.name}${CITY_VALUE_SEP}${c.stateCode}`,
-            label: c.stateCode ? `${c.name} (${c.stateCode})` : c.name,
-          }))}
-          getDisplayValue={getCityDisplayName}
-          searchPlaceholder={t("search_city")}
-          searchValue={citySearch}
-          onSearchChange={setCitySearch}
-          noResultsText={t("no_results")}
-          typeToNarrowText={t("type_to_narrow")}
-          maxOptions={200}
-        />
-      </div>
+      {needsLocation ? (
+        <div className="space-y-1.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <SearchableSelectField
+              label={t("country")}
+              value={country}
+              onValueChange={handleCountryChange}
+              placeholder={t("select")}
+              options={filteredCountries.map((c) => ({ value: c.isoCode, label: c.name }))}
+              searchPlaceholder={t("search_country")}
+              searchValue={countrySearch}
+              onSearchChange={setCountrySearch}
+              noResultsText={t("no_results")}
+              showAsterisk
+            />
+            <SearchableSelectField
+              label={t("city")}
+              value={city}
+              onValueChange={setCity}
+              placeholder={country ? t("select") : t("select_country_first")}
+              disabled={!country}
+              options={filteredCities.map((c) => ({
+                value: `${c.name}${CITY_VALUE_SEP}${c.stateCode}`,
+                label: c.stateCode ? `${c.name} (${c.stateCode})` : c.name,
+              }))}
+              getDisplayValue={getCityDisplayName}
+              searchPlaceholder={t("search_city")}
+              searchValue={citySearch}
+              onSearchChange={setCitySearch}
+              noResultsText={t("no_results")}
+              typeToNarrowText={t("type_to_narrow")}
+              maxOptions={200}
+              showAsterisk
+            />
+          </div>
+          {locationHint ? (
+            <p className="text-xs text-destructive">{locationHint}</p>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -11,7 +11,7 @@ from app.core.config import settings
 
 def base_email_template(inner_html: str) -> str:
     """Wrap inner body HTML in the standard product email layout."""
-    name = (settings.product_name or "").strip() or "OneHash ATS"
+    name = (settings.platform_name or "").strip() or "OneHash ATS"
     name_esc = html.escape(name, quote=False)
     logo_letter = (name[0].upper() if name else "A")
     logo_letter_esc = html.escape(logo_letter, quote=False)

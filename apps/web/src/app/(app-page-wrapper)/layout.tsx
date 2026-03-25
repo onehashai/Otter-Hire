@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
+import { usePathname } from "next/navigation";
 import { AppSidebar } from "@/components/common/AppSidebar";
+import { JobWorkspaceSidebar } from "@/components/common/JobWorkspaceSidebar";
 import { TopBar } from "@/components/common/TopBar";
 import { BottomNav } from "@/components/common/BottomNav";
 import { CommandPalette } from "@/components/common/CommandPalette";
@@ -12,17 +14,38 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
   const isMobile = useIsMobile();
+  const pathname = usePathname();
+  const segments = pathname.split("/").filter(Boolean);
+  const jobWorkspaceId =
+    segments[0] === "jobs" && segments[1]
+      ? segments.length === 2
+        ? segments[1]
+        : segments.length === 4 && segments[2] === "stage" && segments[3]
+          ? segments[1]
+          : segments.length === 4 && segments[2] === "candidates" && segments[3]
+            ? segments[1]
+            : null
+      : null;
 
   return (
     <PageMetadataProvider>
       <div className="flex min-h-screen w-full bg-background">
-        {!isMobile && (
+        {!isMobile && jobWorkspaceId ? (
+          <Suspense fallback={null}>
+            <JobWorkspaceSidebar
+              jobId={jobWorkspaceId}
+              collapsed={sidebarCollapsed}
+              onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+              onOpenCommandPalette={() => setCommandOpen(true)}
+            />
+          </Suspense>
+        ) : !isMobile ? (
           <AppSidebar
             collapsed={sidebarCollapsed}
             onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
             onOpenCommandPalette={() => setCommandOpen(true)}
           />
-        )}
+        ) : null}
         <div className="flex flex-col flex-1 min-w-0">
           <TopBar />
           <main className="flex-1 overflow-auto">

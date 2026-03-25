@@ -65,7 +65,7 @@ async def send_verification_email(
     verify_url: str,
 ) -> None:
     content = build_verification_email(
-        product_name=settings.product_name,
+        platform_name=settings.platform_name,
         expiry_hours=settings.verification_token_expire_hours,
         verify_url=verify_url,
     )
@@ -80,7 +80,7 @@ async def send_invite_email(
 ) -> None:
     content = build_invite_email(
         invite_url=invite_url,
-        product_name=settings.product_name,
+        platform_name=settings.platform_name,
         org_name=org_name,
         inviter_name=inviter_name,
         expiry_days=settings.invite_token_expire_days,
@@ -164,7 +164,7 @@ async def _send_via_zeptomail(to_email: str, subject: str, html_body: str, text_
     payload = {
         "from": {
             "address": settings.zeptomail_from_email,
-            "name": settings.zeptomail_from_name or settings.product_name,
+            "name": settings.zeptomail_from_name or settings.platform_name,
         },
         "to": [{"email_address": {"address": to_email}}],
         "subject": subject,

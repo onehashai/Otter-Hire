@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@onehash/ui/button";
 import { Icon } from "@onehash/ui/icon";
 import { useTranslation } from "react-i18next";
-import { PRODUCT_LOGO_LETTER, PRODUCT_NAME } from "@/lib/constants";
+import { PRODUCT_LOGO_LETTER, PLATFORM_NAME } from "@/lib/constants";
 import { verifyEmail, resendVerification, logout } from "@/api/index";
 import { useAuthSession } from "@/app/providers";
 
@@ -160,7 +160,7 @@ function VerifyEmailContent() {
           <div className="h-9 w-9 rounded-lg bg-foreground flex items-center justify-center">
             <span className="text-background text-sm font-bold">{PRODUCT_LOGO_LETTER}</span>
           </div>
-          <span className="text-lg font-semibold tracking-tight">{PRODUCT_NAME}</span>
+          <span className="text-lg font-semibold tracking-tight">{PLATFORM_NAME}</span>
         </div>
 
         <div className="rounded-xl border border-border bg-card p-8 shadow-sm">

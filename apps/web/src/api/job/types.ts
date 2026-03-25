@@ -14,7 +14,7 @@ export type JobTeamMemberResponse = {
   user_role: string | null;
 };
 
-export type JobPipelineCandidateResponse = {
+export type JobWorkspaceCandidateResponse = {
   id: string;
   name: string;
   email: string | null;
@@ -23,12 +23,12 @@ export type JobPipelineCandidateResponse = {
   updated_at: string;
 };
 
-export type JobPipelineResponse = {
+export type JobWorkspaceResponse = {
   id: string;
   title: string;
   status: string;
   stages: JobHiringStageResponse[];
-  candidates: JobPipelineCandidateResponse[];
+  candidates: JobWorkspaceCandidateResponse[];
 };
 
 export type JobListItemResponse = {

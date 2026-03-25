@@ -1,12 +1,21 @@
 "use client";
 
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Card, CardContent } from "@onehash/ui/card";
 import { Badge } from "@onehash/ui/badge";
 import { Button } from "@onehash/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@onehash/ui/dropdown-menu";
 import { useRouter } from "next/navigation";
-import type { JobListItemResponse } from "@/api";
+import { Icon } from "@onehash/ui/icon";
+import { archiveJob, type JobListItemResponse } from "@/api";
 import { JobStatusType } from "@/app/(app-page-wrapper)/jobs/[jobId]/constants";
+import { toast } from "@onehash/ui/sonner";
 
 const statusKey: Record<JobStatusType, string> = {
   open: "open",
@@ -17,26 +26,15 @@ const statusKey: Record<JobStatusType, string> = {
 const statusVariant = (s: JobStatusType) =>
   s === "open" ? "default" : s === "draft" ? "secondary" : "outline";
 
-const formatTimeAgo = (dateStr: string) => {
-  const date = new Date(dateStr);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  if (diffMins < 1) return "just now";
-  if (diffMins < 60) return `${diffMins}m ago`;
-  const diffHrs = Math.floor(diffMins / 60);
-  if (diffHrs < 24) return `${diffHrs}h ago`;
-  const diffDays = Math.floor(diffHrs / 24);
-  return `${diffDays}d ago`;
-};
-
 interface JobsListProps {
   jobs: JobListItemResponse[];
+  onJobArchived?: () => void;
 }
 
-export function JobsList({ jobs }: JobsListProps) {
+export function JobsList({ jobs, onJobArchived }: JobsListProps) {
   const { t } = useTranslation();
   const router = useRouter();
+  const [archivingId, setArchivingId] = useState<string | null>(null);
 
   if (jobs.length === 0) {
     return <p className="text-sm text-muted-foreground text-center py-8">{t("no_results")}</p>;
@@ -48,7 +46,7 @@ export function JobsList({ jobs }: JobsListProps) {
         <Card
           key={job.id}
           className="cursor-pointer hover:shadow-sm active:bg-muted/50 transition-all"
-          onClick={() => router.push(`/jobs/${job.id}/info`)}
+          onClick={() => router.push(`/jobs/${job.id}`)}
         >
           <CardContent className="p-4 py-3">
             <div className="flex items-center gap-4">
@@ -68,22 +66,59 @@ export function JobsList({ jobs }: JobsListProps) {
                   </span>
                 </div>
               </div>
-              <div className="flex items-center gap-3 shrink-0">
+              <div className="flex items-center gap-2 shrink-0">
                 <div className="text-xs">
                   {job.candidate_count}{" "}
                   {job.candidate_count === 1 ? t("candidate") : t("candidates")}
                 </div>
-                <Button
-                  variant="default"
-                  size="sm"
-                  className="h-8 text-xs text-primary-foreground"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    router.push(`/pipeline/${job.id}`);
-                  }}
-                >
-                  View Pipeline
-                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground border-border"
+                      onClick={(e) => e.stopPropagation()}
+                      onPointerDown={(e) => e.stopPropagation()}
+                    >
+                      <Icon name="MoreHorizontal" className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-40" onClick={(e) => e.stopPropagation()}>
+                    <DropdownMenuItem
+                      className="text-sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        router.push(`/jobs/${job.id}/info`);
+                      }}
+                    >
+                      <Icon name="PenLine" className="h-4 w-4 mr-2" />
+                      {t("edit")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      className="text-sm text-destructive focus:text-destructive"
+                      disabled={job.status === "archived" || archivingId === job.id}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void (async () => {
+                          try {
+                            setArchivingId(job.id);
+                            await archiveJob(job.id);
+                            toast.success(t("job_archived"));
+                            onJobArchived?.();
+                          } catch (err) {
+                            toast.error(err instanceof Error ? err.message : "Failed to archive job");
+                          } finally {
+                            setArchivingId(null);
+                          }
+                        })();
+                      }}
+                    >
+                      <Icon name="Archive" className="h-4 w-4 mr-2" />
+                      {t("archive")}
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </div>
           </CardContent>

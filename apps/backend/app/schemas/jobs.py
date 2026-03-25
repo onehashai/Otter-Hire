@@ -1,10 +1,29 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field
+
+
+JobDescriptionAiAction = Literal[
+    "generate_full",
+    "improve_tone",
+    "shorten",
+    "expand",
+    "add_responsibilities",
+    "add_requirements",
+]
+
+
+class JobDescriptionAiRequest(BaseModel):
+    action: JobDescriptionAiAction
+    current_html: str = ""
+
+
+class JobDescriptionAiResponse(BaseModel):
+    html: str
 
 
 class HiringStageRequest(BaseModel):
@@ -107,7 +126,7 @@ class JobDetailResponse(BaseModel):
     updated_at: datetime
 
 
-class PipelineCandidateResponse(BaseModel):
+class JobWorkspaceCandidateResponse(BaseModel):
     id: UUID
     name: str
     email: Optional[str] = None
@@ -116,9 +135,9 @@ class PipelineCandidateResponse(BaseModel):
     updated_at: datetime
 
 
-class JobPipelineResponse(BaseModel):
+class JobWorkspaceResponse(BaseModel):
     id: UUID
     title: str
     status: str
     stages: list[HiringStageResponse] = []
-    candidates: list[PipelineCandidateResponse] = []
+    candidates: list[JobWorkspaceCandidateResponse] = []

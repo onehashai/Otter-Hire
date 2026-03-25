@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Avatar, AvatarFallback } from "@onehash/ui/avatar";
+import { Avatar } from "@onehash/ui/avatar";
 import { Button } from "@onehash/ui/button";
 import {
   ChevronLeft,
@@ -14,6 +14,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getInitialsFromName } from "@/lib/name-initials";
 import { ComposeMessageBox } from "./components/ComposeMessageBox";
 
 export type MessageStatus = "queued" | "sent" | "delivered" | "read" | "failed" | "received";
@@ -46,15 +47,6 @@ interface MessageThreadProps {
   onScheduleInterview: () => void;
   onMoveStage: () => void;
   onBack?: () => void;
-}
-
-function getInitials(name: string) {
-  return name
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .toUpperCase()
-    .slice(0, 2);
 }
 
 function OutboundStatus({ status }: { status: MessageStatus | undefined }) {
@@ -105,7 +97,7 @@ function EmailCard({ msg }: { msg: Message }) {
   const quoted = msg.bodyQuoted ?? null;
 
   const isOutbound = msg.sender === "team";
-  const initials = getInitials(msg.senderName);
+  const initials = getInitialsFromName(msg.senderName);
   const fromDisplay =
     msg.senderName && msg.senderName !== msg.senderEmail
       ? `${msg.senderName} <${msg.senderEmail}>`
@@ -202,7 +194,7 @@ export function MessageThread({
   onMoveStage,
   onBack,
 }: MessageThreadProps) {
-  const initials = getInitials(candidateName);
+  const initials = getInitialsFromName(candidateName);
 
   return (
     <div className="flex flex-col h-full">
@@ -219,10 +211,11 @@ export function MessageThread({
               <ChevronLeft className="h-5 w-5" />
             </Button>
           )}
-          <Avatar className="h-8 w-8 shrink-0">
-            <AvatarFallback className="text-[10px] bg-muted text-muted-foreground">
-              {initials}
-            </AvatarFallback>
+          <Avatar
+            className="h-8 w-8 shrink-0"
+            fallbackClassName="text-[10px] bg-muted text-muted-foreground"
+          >
+            {initials}
           </Avatar>
           <div className="min-w-0">
             <h3 className="text-sm font-medium text-foreground truncate">{candidateName}</h3>

@@ -23,7 +23,7 @@ import {
 import { Plus, Zap, MoreHorizontal, Copy, Trash2, Pencil } from "lucide-react";
 import { AutomationTemplatesDialog } from "./AutomationTemplatesDialog";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { toast } from "sonner";
+import { toast } from "@onehash/ui/sonner";
 import { EmptyCard } from "@onehash/ui/card";
 import { useTranslation } from "react-i18next";
 import { deleteAutomation, updateAutomation, createAutomation } from "@/api/automations";

@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { toast } from "sonner";
+import { toast } from "@onehash/ui/sonner";
 import type { JobStatusType, SalaryType, TimeframeType, TeamRoleType } from "./constants";
 import type { HiringStage, TeamMember } from "./constants";
 import { useTranslation } from "react-i18next";
@@ -74,7 +74,7 @@ const defaultState: JobSetupState = {
   title: "",
   category: "Software Development",
   employmentType: "full_time",
-  workplaceType: "onsite",
+  workplaceType: "remote",
   country: "",
   city: "",
   hiringManager: "",
@@ -134,7 +134,7 @@ function mapApiToState(job: JobDetailResponse): Partial<JobSetupState> {
     title: job.title,
     category: job.category ?? "",
     employmentType: job.employment_type ?? "full_time",
-    workplaceType: job.workplace_type ?? "onsite",
+    workplaceType: job.workplace_type ?? "remote",
     country: job.country ?? "",
     city: job.city ?? "",
     status: job.status as JobStatusType,
@@ -235,6 +235,8 @@ export function JobSetupProvider({ children }: { children: ReactNode }) {
   const { t } = useTranslation();
 
   const [state, setState] = useState<JobSetupState>(defaultState);
+  const stateRef = useRef(state);
+  stateRef.current = state;
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savingRef = useRef(false);
   const pendingSaveRef = useRef<JobUpdatePayload | null>(null);
@@ -254,7 +256,7 @@ export function JobSetupProvider({ children }: { children: ReactNode }) {
         }
       } catch {
         if (!cancelled) {
-          toast.error(t("job_not_found") || "Job not found");
+          toast.error(t("job_not_found"));
           router.replace("/jobs");
         }
       }
@@ -274,8 +276,8 @@ export function JobSetupProvider({ children }: { children: ReactNode }) {
         category: currentState.category || null,
         employment_type: currentState.employmentType || null,
         workplace_type: currentState.workplaceType,
-        country: currentState.country || null,
-        city: currentState.city || null,
+        country: currentState.workplaceType === "remote" ? null : currentState.country || null,
+        city: currentState.workplaceType === "remote" ? null : currentState.city || null,
         openings: currentState.openings,
         salary_type: currentState.salaryType,
         salary_fixed: currentState.salaryFixed ? Number(currentState.salaryFixed) : null,
@@ -344,13 +346,11 @@ export function JobSetupProvider({ children }: { children: ReactNode }) {
   const debouncedSave = useCallback(() => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
-      setState((currentState) => {
-        if (!currentState.jobId || !currentState.title.trim()) return currentState;
-        const payload = buildPayload(currentState, false);
-        void executeSave(payload).catch((err) => {
-          toast.error(err instanceof Error ? err.message : "Failed to save");
-        });
-        return currentState;
+      const currentState = stateRef.current;
+      if (!currentState.jobId || !currentState.title.trim()) return;
+      const payload = buildPayload(currentState, false);
+      void executeSave(payload).catch((err) => {
+        toast.error(err instanceof Error ? err.message : "Failed to save");
       });
     }, 1500);
   }, [buildPayload, executeSave]);
@@ -520,19 +520,16 @@ export function JobSetupProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const handleSave = useCallback(() => {
-    setState((currentState) => {
-      if (!currentState.jobId) return currentState;
-      const payload = buildPayload(currentState, false);
-      executeSave(payload)
-        .then(() => {
-          setState((s) => ({ ...s, hasUnsavedChanges: false }));
-          toast.success(t("draft_saved"));
-        })
-        .catch((err) => {
-          toast.error(err instanceof Error ? err.message : "Failed to save");
-        });
-      return currentState;
-    });
+    const currentState = stateRef.current;
+    if (!currentState.jobId) return;
+    const payload = buildPayload(currentState, false);
+    executeSave(payload)
+      .then(() => {
+        toast.success(t("draft_saved"));
+      })
+      .catch((err) => {
+        toast.error(err instanceof Error ? err.message : "Failed to save");
+      });
   }, [buildPayload, executeSave, t]);
 
   const handlePublish = useCallback(async () => {
@@ -597,21 +594,24 @@ export function JobSetupProvider({ children }: { children: ReactNode }) {
   }, [router, state.pendingNavigation]);
 
   const handleSaveAndNavigate = useCallback(() => {
-    setState((currentState) => {
-      if (!currentState.jobId) return currentState;
-      const payload = buildPayload(currentState, false);
-      executeSave(payload)
-        .then(() => {
-          setState((s) => ({ ...s, hasUnsavedChanges: false, showUnsavedDialog: false }));
-          if (currentState.pendingNavigation) {
-            router.push(currentState.pendingNavigation);
-          }
-        })
-        .catch((err) => {
-          toast.error(err instanceof Error ? err.message : "Failed to save");
-        });
-      return currentState;
-    });
+    const currentState = stateRef.current;
+    if (!currentState.jobId) return;
+    const payload = buildPayload(currentState, false);
+    const navTarget = currentState.pendingNavigation;
+    executeSave(payload)
+      .then(() => {
+        setState((s) => ({
+          ...s,
+          showUnsavedDialog: false,
+          pendingNavigation: null,
+        }));
+        if (navTarget) {
+          router.push(navTarget);
+        }
+      })
+      .catch((err) => {
+        toast.error(err instanceof Error ? err.message : "Failed to save");
+      });
   }, [buildPayload, executeSave, router]);
 
   const handleCancelNavigation = useCallback(() => {
@@ -641,7 +641,11 @@ export function JobSetupProvider({ children }: { children: ReactNode }) {
       markUnsaved();
     },
     setWorkplaceType: (v) => {
-      setState((s) => ({ ...s, workplaceType: v }));
+      setState((s) =>
+        v === "remote"
+          ? { ...s, workplaceType: v, country: "", city: "", citySearch: "" }
+          : { ...s, workplaceType: v },
+      );
       markUnsaved();
     },
     setCountry: (v) => {

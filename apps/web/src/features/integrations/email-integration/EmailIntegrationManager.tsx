@@ -21,7 +21,7 @@ import {
 import { InputField } from "@onehash/ui/input";
 import { Separator } from "@onehash/ui/separator";
 import { Check, Copy, Loader2 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@onehash/ui/sonner";
 
 import { copyToClipboard } from "@/lib/clipboard";
 
@@ -232,8 +232,9 @@ export function EmailIntegrationManager({ onChanged }: EmailIntegrationManagerPr
             className="text-xs h-8"
             onClick={handleInboxSave}
             disabled={!canSaveInbox}
+            pending={inboxSaving}
           >
-            {inboxSaving ? "Saving..." : "Save"}
+            Save
           </Button>
         ) : (
           <Button

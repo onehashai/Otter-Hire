@@ -22,16 +22,19 @@ import {
   AlertDialogCancel,
   AlertDialogAction,
 } from "@onehash/ui/alert-dialog";
-import { toast } from "sonner";
+import { toast } from "@onehash/ui/sonner";
 import { cn } from "@/lib/utils";
+import { getInitialsFromName } from "@/lib/name-initials";
 import { JobSetupProvider, useJobSetup } from "./context";
+import { aiJobDescription, type JobDescriptionAiAction } from "@/api";
+import { Loader2 } from "lucide-react";
 import { SETUP_SECTIONS, type SetupStepSlug } from "./constants";
 import {
   isSetupValid,
   getFirstInvalidSection,
   getBasicInfoValidation,
 } from "../../../../lib/validations/setupValidation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useSetPageMetadata } from "@/hooks/useSetPageMetadata";
 
 function SetupLayoutInner({ children }: { children: React.ReactNode }) {
@@ -52,6 +55,9 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
   const sections = SETUP_SECTIONS(t);
   const {
     title,
+    workplaceType,
+    country,
+    city,
     status,
     hiringManager,
     hiringStages,
@@ -115,6 +121,9 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
 
   const validationState = {
     title,
+    workplaceType,
+    country,
+    city,
     salaryType,
     salaryFixed,
     salaryMin,
@@ -131,6 +140,10 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
         toast.error(t("min_char_length", { count: 1 }));
       } else if (titleError === "max") {
         toast.error(t("max_char_length", { count: 100 }));
+      } else if (titleError === "invalid") {
+        toast.error(t("job_name_invalid"));
+      } else if (basicInfoValidation.locationError) {
+        toast.error(t("location_required_hybrid_onsite"));
       } else {
         toast.error(t("job_name_required"));
       }
@@ -205,7 +218,7 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
       </div>
       <Separator />
       <div>
-        <p className="text-xs text-muted-foreground mb-1.5">Pipeline</p>
+        <p className="text-xs text-muted-foreground mb-1.5">Stages</p>
         <div className="flex flex-wrap gap-1">
           {hiringStages
             .filter((s) => s.name)
@@ -223,10 +236,7 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
           {teamMembers.map((m) => (
             <div key={m.id} className="flex items-center gap-2">
               <div className="h-6 w-6 rounded-full bg-muted flex items-center justify-center text-[10px] font-medium text-muted-foreground shrink-0">
-                {m.name
-                  .split(" ")
-                  .map((n) => n[0])
-                  .join("")}
+                {getInitialsFromName(m.name)}
               </div>
               <span className="text-xs">{m.name}</span>
             </div>
@@ -238,7 +248,9 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
       </div>
       <Separator />
       {isSaving ? (
-        <p className="text-[10px] text-muted-foreground text-center">Saving...</p>
+        <div className="flex items-center justify-center py-0.5" aria-busy={true}>
+          <Icon name="Loader" className="h-3.5 w-3.5 animate-spin text-muted-foreground" aria-hidden />
+        </div>
       ) : savedAt ? (
         <p className="text-[10px] text-muted-foreground text-center">Saved at {savedAt}</p>
       ) : null}
@@ -308,14 +320,9 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
               className="h-11 text-sm flex-1"
               onClick={published ? onSave : onPublish}
               disabled={isSaving || isPublishing}
+              pending={published ? isSaving : isPublishing}
             >
-              {isSaving
-                ? "Saving..."
-                : isPublishing
-                  ? "Publishing..."
-                  : published
-                    ? "Save Changes"
-                    : "Publish Job"}
+              {published ? "Save Changes" : "Publish Job"}
             </Button>
           )}
         </div>
@@ -352,8 +359,9 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
           className="h-8 text-xs"
           onClick={onSave}
           disabled={isSaving || isPublishing}
+          pending={isSaving}
         >
-          {isSaving ? t("saving") || "Saving..." : t("save")}
+          {t("save")}
         </Button>
         {published ? (
           <Button
@@ -362,8 +370,9 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
             className="h-8 text-xs"
             onClick={handleUnpublish}
             disabled={isSaving || isPublishing}
+            pending={isPublishing}
           >
-            {isPublishing ? t("processing") || "Processing..." : t("unpublish")}
+            {t("unpublish")}
           </Button>
         ) : (
           <Button
@@ -371,8 +380,9 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
             className="h-8 text-xs"
             onClick={onPublish}
             disabled={isSaving || isPublishing}
+            pending={isPublishing}
           >
-            {isPublishing ? t("publishing") || "Publishing..." : t("publish")}
+            {t("publish")}
           </Button>
         )}
       </div>
@@ -451,8 +461,67 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
   );
 }
 
+const AI_ACTIONS: {
+  label: string;
+  desc: string;
+  action: JobDescriptionAiAction;
+}[] = [
+  {
+    label: "Generate full description",
+    desc: "Create a complete JD from the job title and details",
+    action: "generate_full",
+  },
+  {
+    label: "Improve tone",
+    desc: "Make the language more professional and inclusive",
+    action: "improve_tone",
+  },
+  { label: "Shorten", desc: "Condense the description while keeping key points", action: "shorten" },
+  {
+    label: "Expand",
+    desc: "Add more detail to responsibilities and requirements",
+    action: "expand",
+  },
+  {
+    label: "Add responsibilities section",
+    desc: "Generate a structured list of responsibilities",
+    action: "add_responsibilities",
+  },
+  {
+    label: "Add requirements section",
+    desc: "Generate a structured list of requirements",
+    action: "add_requirements",
+  },
+];
+
 function AiSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
   const isMobile = useIsMobile();
+  const params = useParams();
+  const jobId = params?.jobId as string | undefined;
+  const { description, setDescription } = useJobSetup();
+  const [loadingAction, setLoadingAction] = useState<JobDescriptionAiAction | null>(null);
+
+  const runAction = async (action: JobDescriptionAiAction) => {
+    if (!jobId) {
+      toast.error("Save the job first, then try again.");
+      return;
+    }
+    setLoadingAction(action);
+    try {
+      const { html } = await aiJobDescription(jobId, {
+        action,
+        current_html: description,
+      });
+      setDescription(html);
+      toast.success("Description updated");
+      onOpenChange(false);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "AI request failed");
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
@@ -466,48 +535,61 @@ function AiSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (v: bool
           </SheetDescription>
         </SheetHeader>
         <div className="mt-6 space-y-3">
-          {[
-            {
-              label: "Generate full description",
-              desc: "Create a complete JD from the job title and details",
-            },
-            { label: "Improve tone", desc: "Make the language more professional and inclusive" },
-            { label: "Shorten", desc: "Condense the description while keeping key points" },
-            { label: "Expand", desc: "Add more detail to responsibilities and requirements" },
-            {
-              label: "Add responsibilities section",
-              desc: "Generate a structured list of responsibilities",
-            },
-            {
-              label: "Add requirements section",
-              desc: "Generate a structured list of requirements",
-            },
-          ].map((action) => (
-            <button
-              key={action.label}
-              onClick={() => {
-                toast.success(`AI: "${action.label}" — coming soon`);
-                onOpenChange(false);
-              }}
-              className="w-full flex items-center gap-3 rounded-lg border border-border p-3 text-left hover:bg-muted/50 transition-colors"
-            >
-              <Icon name="Sparkles" className="h-4 w-4 text-muted-foreground shrink-0" />
-              <div>
-                <p className="text-sm font-medium">{action.label}</p>
-                <p className="text-xs text-muted-foreground">{action.desc}</p>
-              </div>
-            </button>
-          ))}
+          {AI_ACTIONS.map((item) => {
+            const busy = loadingAction !== null;
+            const isThis = loadingAction === item.action;
+            return (
+              <button
+                key={item.action}
+                type="button"
+                disabled={busy}
+                onClick={() => void runAction(item.action)}
+                className={cn(
+                  "w-full flex items-center gap-3 rounded-lg border border-border p-3 text-left transition-colors",
+                  busy && !isThis && "opacity-50 pointer-events-none",
+                  !busy && "hover:bg-muted/50",
+                )}
+              >
+                {isThis ? (
+                  <Loader2 className="h-4 w-4 text-muted-foreground shrink-0 animate-spin" />
+                ) : (
+                  <Icon name="Sparkles" className="h-4 w-4 text-muted-foreground shrink-0" />
+                )}
+                <div>
+                  <p className="text-sm font-medium">{item.label}</p>
+                  <p className="text-xs text-muted-foreground">{item.desc}</p>
+                </div>
+              </button>
+            );
+          })}
         </div>
       </SheetContent>
     </Sheet>
   );
 }
 
-export default function SetupLayout({ children }: { children: React.ReactNode }) {
+function JobBranchLayout({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const params = useParams();
+  const jobId = params?.jobId as string | undefined;
+  const segments = pathname.split("/").filter(Boolean);
+  const isJobWorkspaceRoot =
+    Boolean(jobId) &&
+    segments[0] === "jobs" &&
+    segments[1] === jobId &&
+    (segments.length === 2 ||
+      (segments.length === 4 && segments[2] === "stage" && Boolean(segments[3])) ||
+      (segments.length === 4 && segments[2] === "candidates" && Boolean(segments[3])));
+
+  if (isJobWorkspaceRoot) {
+    return <>{children}</>;
+  }
+
   return (
     <JobSetupProvider>
       <SetupLayoutInner>{children}</SetupLayoutInner>
     </JobSetupProvider>
   );
 }
+
+export default JobBranchLayout;

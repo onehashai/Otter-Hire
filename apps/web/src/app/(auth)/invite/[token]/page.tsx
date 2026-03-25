@@ -11,7 +11,7 @@ import {
   declineInvite,
   type InviteDetailsResponse,
 } from "@/api/index";
-import { PRODUCT_LOGO_LETTER, PRODUCT_NAME } from "@/lib/constants";
+import { PRODUCT_LOGO_LETTER, PLATFORM_NAME } from "@/lib/constants";
 import { useAuthSession } from "@/app/providers";
 
 export default function InvitePage() {
@@ -120,7 +120,7 @@ export default function InvitePage() {
               <div className="h-9 w-9 rounded-lg bg-foreground flex items-center justify-center">
                 <span className="text-background text-sm font-bold">{PRODUCT_LOGO_LETTER}</span>
               </div>
-              <span className="text-lg font-semibold tracking-tight">{PRODUCT_NAME}</span>
+              <span className="text-lg font-semibold tracking-tight">{PLATFORM_NAME}</span>
             </div>
             <div className="rounded-xl border border-border bg-card p-8 shadow-sm text-center">
               <div className="mx-auto h-12 w-12 rounded-full bg-destructive/10 flex items-center justify-center mb-5">
@@ -157,7 +157,7 @@ export default function InvitePage() {
             <div className="h-9 w-9 rounded-lg bg-foreground flex items-center justify-center">
               <span className="text-background text-sm font-bold">{PRODUCT_LOGO_LETTER}</span>
             </div>
-            <span className="text-lg font-semibold tracking-tight">{PRODUCT_NAME}</span>
+            <span className="text-lg font-semibold tracking-tight">{PLATFORM_NAME}</span>
           </div>
           <h1 className="text-3xl font-semibold tracking-tight leading-tight mb-3">
             You&apos;re invited
@@ -177,7 +177,7 @@ export default function InvitePage() {
             <div className="h-9 w-9 rounded-lg bg-foreground flex items-center justify-center">
               <span className="text-background text-sm font-bold">{PRODUCT_LOGO_LETTER}</span>
             </div>
-            <span className="text-lg font-semibold tracking-tight">{PRODUCT_NAME}</span>
+            <span className="text-lg font-semibold tracking-tight">{PLATFORM_NAME}</span>
           </div>
 
           <div className="lg:rounded-xl lg:border lg:border-border lg:bg-card lg:p-8 lg:shadow-sm">

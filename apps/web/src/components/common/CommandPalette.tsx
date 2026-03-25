@@ -31,7 +31,7 @@ const pages = [
   // TODO(mvp-nav): Re-enable Dashboard in command palette after MVP launch.
   // { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Jobs", url: "/jobs", icon: Briefcase },
-  { title: "Candidates", url: "/candidates", icon: Users },
+  { title: "Talent Pool", url: "/talent-pool", icon: Users },
   { title: "Interviews", url: "/interviews", icon: Calendar },
   // TODO(mvp-nav): Re-enable Reports in command palette after MVP launch.
   // { title: "Reports", url: "/reports", icon: BarChart3 },

@@ -55,6 +55,9 @@ export * from "./candidates/index";
 // Users
 export * from "./users/index";
 
+// Platform admin
+export * from "./admin/index";
+
 // Integrations
 export * from "./integrations/index";
 

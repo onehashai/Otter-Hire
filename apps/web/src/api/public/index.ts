@@ -1,4 +1,4 @@
-import { apiFetch, apiGet } from "../client/client";
+import { apiFetch, apiGet, normalizeApiUrl } from "../client/client";
 
 export type PublicJobListItem = {
   id: string;
@@ -17,6 +17,12 @@ export type PublicJobListItem = {
   status: string;
 };
 
+export type PublicJobsListResponse = {
+  jobs: PublicJobListItem[];
+  org_name: string;
+  org_avatar_url: string | null;
+};
+
 export type PublicJobDetail = {
   id: string;
   title: string;
@@ -33,6 +39,7 @@ export type PublicJobDetail = {
   salary_timeframe: string;
   published_at: string;
   org_name: string;
+  org_avatar_url: string | null;
   status: string;
   application_form_schema: Record<string, unknown>;
 };
@@ -55,8 +62,14 @@ function publicCareersQuery(orgSlugPrefix: string): string {
   return `?${q.toString()}`;
 }
 
-export async function getPublicJobs(orgId: string, orgSlugPrefix: string): Promise<PublicJobListItem[]> {
-  return apiGet<PublicJobListItem[]>(`/orgs/${orgId}/jobs${publicCareersQuery(orgSlugPrefix)}`);
+export async function getPublicJobs(
+  orgSlugPrefix: string,
+  orgId: string,
+): Promise<PublicJobsListResponse> {
+  const data = await apiGet<PublicJobsListResponse>(
+    `/orgs/${orgId}/jobs${publicCareersQuery(orgSlugPrefix)}`,
+  );
+  return { ...data, org_avatar_url: normalizeApiUrl(data.org_avatar_url) };
 }
 
 export async function getPublicJobDetail(
@@ -64,7 +77,8 @@ export async function getPublicJobDetail(
   jobId: string,
   orgSlugPrefix: string,
 ): Promise<PublicJobDetail> {
-  return apiGet<PublicJobDetail>(`/orgs/${orgId}/jobs/${jobId}${publicCareersQuery(orgSlugPrefix)}`);
+  const data = await apiGet<PublicJobDetail>(`/orgs/${orgId}/jobs/${jobId}${publicCareersQuery(orgSlugPrefix)}`);
+  return { ...data, org_avatar_url: normalizeApiUrl(data.org_avatar_url) };
 }
 
 export async function applyToPublicJob(

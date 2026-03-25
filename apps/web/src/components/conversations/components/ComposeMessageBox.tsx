@@ -8,7 +8,7 @@ import { Textarea } from "@onehash/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@onehash/ui/popover";
 import { Send, Paperclip, Smile } from "lucide-react";
 import EmojiPicker from "emoji-picker-react";
-import { toast } from "sonner";
+import { toast } from "@onehash/ui/sonner";
 import { cn } from "@/lib/utils";
 import { getTemplates, type TemplateResponse } from "@/api/templates";
 import { convert as htmlToText } from "html-to-text";

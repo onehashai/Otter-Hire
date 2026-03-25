@@ -25,11 +25,10 @@ class UserAdmin(ModelView, model=User):
     name = "User"
     name_plural = "Users"
     icon = "fa-solid fa-user"
-    category = "People"
 
-    column_list = [User.id, User.email, User.name, User.status, User.is_verified, User.created_at]
+    column_list = [User.id, User.email, User.name, User.role, User.status, User.is_verified, User.created_at]
     column_searchable_list = [User.email, User.name]
-    column_sortable_list = [User.email, User.name, User.status, User.created_at]
+    column_sortable_list = [User.email, User.name, User.role, User.status, User.created_at]
     column_default_sort = [(User.created_at, True)]
 
     form_excluded_columns = [
@@ -50,7 +49,6 @@ class OrganizationAdmin(ModelView, model=Organization):
     name = "Organization"
     name_plural = "Organizations"
     icon = "fa-solid fa-building"
-    category = "People"
 
     column_list = [
         Organization.id,
@@ -67,7 +65,6 @@ class OrgInboxAdmin(ModelView, model=OrgInbox):
     name = "Org Inbox"
     name_plural = "Org Inboxes"
     icon = "fa-solid fa-inbox"
-    category = "People"
 
     column_list = [
         OrgInbox.id,
@@ -89,7 +86,6 @@ class OrgMembershipAdmin(ModelView, model=OrgMembership):
     name = "Org Membership"
     name_plural = "Org Memberships"
     icon = "fa-solid fa-id-badge"
-    category = "People"
 
     column_list = [
         OrgMembership.id,
@@ -110,7 +106,6 @@ class IntegrationCredentialAdmin(ModelView, model=IntegrationCredential):
     name = "Integration"
     name_plural = "Integrations"
     icon = "fa-solid fa-plug"
-    category = "People"
 
     column_list = [
         IntegrationCredential.id,
@@ -135,7 +130,6 @@ class JobAdmin(ModelView, model=Job):
     name = "Job"
     name_plural = "Jobs"
     icon = "fa-solid fa-briefcase"
-    category = "Recruitment"
 
     column_list = [
         Job.id,
@@ -159,7 +153,6 @@ class JobCategoryAdmin(ModelView, model=JobCategory):
     name = "Job Category"
     name_plural = "Job Categories"
     icon = "fa-solid fa-tags"
-    category = "Recruitment"
 
     column_list = [
         JobCategory.id,
@@ -177,7 +170,6 @@ class JobTeamMemberAdmin(ModelView, model=JobTeamMember):
     name = "Job Team Member"
     name_plural = "Job Team Members"
     icon = "fa-solid fa-users"
-    category = "Recruitment"
 
     column_list = [
         JobTeamMember.id,
@@ -194,7 +186,6 @@ class StageAdmin(ModelView, model=Stage):
     name = "Stage"
     name_plural = "Stages"
     icon = "fa-solid fa-list-ol"
-    category = "Recruitment"
 
     column_list = [
         Stage.id,
@@ -213,7 +204,6 @@ class CandidateAdmin(ModelView, model=Candidate):
     name = "Candidate"
     name_plural = "Candidates"
     icon = "fa-solid fa-person"
-    category = "Candidates"
 
     column_list = [
         Candidate.id,
@@ -235,7 +225,6 @@ class CandidateDocumentAdmin(ModelView, model=CandidateDocument):
     name = "Candidate Document"
     name_plural = "Candidate Documents"
     icon = "fa-solid fa-file"
-    category = "Candidates"
 
     column_list = [
         CandidateDocument.id,
@@ -260,7 +249,6 @@ class JobApplicationAdmin(ModelView, model=JobApplication):
     name = "Job Application"
     name_plural = "Job Applications"
     icon = "fa-solid fa-file-pen"
-    category = "Candidates"
 
     column_list = [
         JobApplication.id,
@@ -291,7 +279,6 @@ class ConversationAdmin(ModelView, model=Conversation):
     name = "Conversation"
     name_plural = "Conversations"
     icon = "fa-solid fa-comments"
-    category = "Messaging"
 
     column_list = [
         Conversation.id,
@@ -316,7 +303,6 @@ class MessageAdmin(ModelView, model=Message):
     name = "Message"
     name_plural = "Messages"
     icon = "fa-solid fa-envelope-open-text"
-    category = "Messaging"
 
     column_list = [
         Message.id,
@@ -344,7 +330,6 @@ class EmailAdmin(ModelView, model=Email):
     name = "Email"
     name_plural = "Emails"
     icon = "fa-solid fa-envelope"
-    category = "Messaging"
 
     column_list = [
         Email.id,
@@ -366,7 +351,6 @@ class InboundEmailAdmin(ModelView, model=InboundEmail):
     name = "Inbound Email"
     name_plural = "Inbound Emails"
     icon = "fa-solid fa-envelope-circle-check"
-    category = "Messaging"
 
     column_list = [
         InboundEmail.id,
@@ -396,7 +380,6 @@ class InboundEmailAttachmentAdmin(ModelView, model=InboundEmailAttachment):
     name = "Inbound Email Attachment"
     name_plural = "Inbound Email Attachments"
     icon = "fa-solid fa-paperclip"
-    category = "Messaging"
 
     column_list = [
         InboundEmailAttachment.id,
@@ -421,7 +404,6 @@ class TemplateAdmin(ModelView, model=Template):
     name = "Template"
     name_plural = "Templates"
     icon = "fa-solid fa-file-lines"
-    category = "Messaging"
 
     column_list = [
         Template.id,
@@ -439,7 +421,6 @@ class InterviewAdmin(ModelView, model=Interview):
     name = "Interview"
     name_plural = "Interviews"
     icon = "fa-solid fa-calendar-check"
-    category = "Evaluation"
 
     column_list = [
         Interview.id,
@@ -464,7 +445,6 @@ class FeedbackAdmin(ModelView, model=Feedback):
     name = "Feedback"
     name_plural = "Feedback"
     icon = "fa-solid fa-star-half-stroke"
-    category = "Evaluation"
 
     column_list = [
         Feedback.id,
@@ -482,7 +462,6 @@ class NoteAdmin(ModelView, model=Note):
     name = "Note"
     name_plural = "Notes"
     icon = "fa-solid fa-note-sticky"
-    category = "Evaluation"
 
     column_list = [Note.id, Note.candidate_id, Note.author_user_id, Note.created_at]
     column_sortable_list = [Note.created_at]
@@ -495,7 +474,6 @@ class ActivityAdmin(ModelView, model=Activity):
     name = "Activity"
     name_plural = "Activities"
     icon = "fa-solid fa-bolt"
-    category = "Evaluation"
 
     column_list = [
         Activity.id,

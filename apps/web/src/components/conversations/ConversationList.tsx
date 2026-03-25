@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { InputField } from "@onehash/ui/input";
-import { Avatar, AvatarFallback } from "@onehash/ui/avatar";
+import { Avatar } from "@onehash/ui/avatar";
 import { Button } from "@onehash/ui/button";
 import { Search, Plus, Filter } from "lucide-react";
 import {
@@ -12,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@onehash/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { getInitialsFromName } from "@/lib/name-initials";
 import { useTranslation } from "react-i18next";
 
 export interface Conversation {
@@ -60,7 +61,7 @@ export function ConversationList({
           <div className="relative flex-1">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
             <InputField
-              placeholder="Search conversations..."
+              placeholder={t("search")}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="h-8 pl-8 text-xs"
@@ -113,13 +114,11 @@ export function ConversationList({
                 selectedId === c.id ? "bg-muted" : "hover:bg-muted/50",
               )}
             >
-              <Avatar className="h-8 w-8 mt-0.5 shrink-0">
-                <AvatarFallback className="text-[10px] bg-muted text-muted-foreground">
-                  {c.candidateName
-                    .split(" ")
-                    .map((n) => n[0])
-                    .join("")}
-                </AvatarFallback>
+              <Avatar
+                className="h-8 w-8 mt-0.5 shrink-0"
+                fallbackClassName="text-[10px] bg-muted text-muted-foreground"
+              >
+                {getInitialsFromName(c.candidateName)}
               </Avatar>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between gap-2">

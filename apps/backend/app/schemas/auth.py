@@ -18,7 +18,8 @@ class AuthUserResponse(BaseModel):
     id: UUID
     email: EmailStr
     name: str
-    role: str
+    role: str  # account: "user" | "admin"
+    membership_role: str
     status: str
     org_id: UUID
     org_name: str

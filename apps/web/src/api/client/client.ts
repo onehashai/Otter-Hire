@@ -104,6 +104,9 @@ function mapErrorCodeToMessage(status: number, code?: string, fallback?: string)
   if (status === 403) {
     return "You don't have permission to perform this action.";
   }
+  if (status === 502 || status === 503) {
+    if (fallback && fallback.trim()) return fallback;
+  }
   if (status >= 500) {
     return "Something went wrong. Please try again.";
   }

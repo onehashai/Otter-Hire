@@ -12,9 +12,9 @@ import { useIsMobile } from "@/hooks/use-mobile";
 interface MainPagesLayoutProps {
   searchValue: string;
   onSearchChange: (value: string) => void;
-  actionLabel: string;
-  actionIcon: IconName;
-  onAction: () => void;
+  actionLabel?: string;
+  actionIcon?: IconName;
+  onAction?: () => void;
   secondaryActionLabel?: string;
   secondaryActionIcon?: IconName;
   onSecondaryAction?: (e?: React.MouseEvent) => void;
@@ -56,7 +56,7 @@ export const MainPagesLayout = ({
             className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground"
           />
           <InputField
-            placeholder={t("search") + "..."}
+            placeholder={t("search")}
             value={searchValue}
             onChange={(e) => onSearchChange(e.target.value)}
             className="h-9 md:h-8 pl-8 text-xs md:w-56"
@@ -110,9 +110,11 @@ export const MainPagesLayout = ({
             {!isMobile && secondaryActionLabel}
           </Button>
         )}
-        <Button size="sm" className="h-9 md:h-8 text-xs gap-1.5 shrink-0" onClick={onAction}>
-          <Icon name={actionIcon} className="h-3.5 w-3.5" /> {actionLabel}
-        </Button>
+        {actionLabel && actionIcon && onAction ? (
+          <Button size="sm" className="h-9 md:h-8 text-xs gap-1.5 shrink-0" onClick={onAction}>
+            <Icon name={actionIcon} className="h-3.5 w-3.5" /> {actionLabel}
+          </Button>
+        ) : null}
       </div>
 
       {activeChips && activeChips.length > 0 && (

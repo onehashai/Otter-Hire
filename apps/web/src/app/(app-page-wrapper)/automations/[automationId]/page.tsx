@@ -16,7 +16,7 @@ import {
 } from "@onehash/ui/dialog";
 import { ArrowLeft, Pencil, Trash2, Mail, Tag } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { toast } from "sonner";
+import { toast } from "@onehash/ui/sonner";
 import { useSetPageMetadata } from "@/hooks/useSetPageMetadata";
 import { useTranslation } from "react-i18next";
 import { OverviewTab } from "@/components/automations/tabs/OverviewTab";

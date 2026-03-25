@@ -16,7 +16,7 @@ import {
   jobStatuses,
 } from "./[jobId]/constants";
 import { getJobs, createJob, type JobListItemResponse } from "@/api";
-import { toast } from "sonner";
+import { toast } from "@onehash/ui/sonner";
 import { useAuthSession } from "@/app/providers";
 import { getJobsBaseUrl } from "@/lib/host";
 import { JobsList } from "@/components/jobs/JobsList";
@@ -313,7 +313,7 @@ export default function JobsPage() {
       activeChips={activeChips}
       onClearAllFilters={clearAll}
     >
-      <JobsList jobs={filtered} />
+      <JobsList jobs={filtered} onJobArchived={() => void fetchJobs()} />
       <CreateJobModal open={createOpen} onOpenChange={setCreateOpen} />
     </MainPagesLayout>
   );

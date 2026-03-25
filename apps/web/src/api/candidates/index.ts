@@ -119,6 +119,7 @@ export async function getCandidates(params?: {
   job_id?: string;
   stage_id?: string;
   status?: string;
+  source?: string;
   limit?: number;
   offset?: number;
 }): Promise<CandidateListItemResponse[]> {
@@ -127,6 +128,7 @@ export async function getCandidates(params?: {
   if (params?.job_id) searchParams.set("job_id", params.job_id);
   if (params?.stage_id) searchParams.set("stage_id", params.stage_id);
   if (params?.status) searchParams.set("status", params.status);
+  if (params?.source) searchParams.set("source", params.source);
   if (params?.limit !== undefined) searchParams.set("limit", String(params.limit));
   if (params?.offset !== undefined) searchParams.set("offset", String(params.offset));
   const query = searchParams.toString();
@@ -157,6 +159,10 @@ export async function updateCandidate(
   });
 }
 
+export async function deleteCandidate(id: string): Promise<void> {
+  await apiFetch<void>(`/candidates/${id}`, { method: "DELETE" });
+}
+
 export async function getCandidateStageFilterOptions(): Promise<CandidateStageFilterOptionsResponse> {
   return apiFetch<CandidateStageFilterOptionsResponse>("/candidates/stage-filter-options", {
     method: "GET",
@@ -168,6 +174,7 @@ export async function getCandidatesPaginated(params?: {
   job_id?: string;
   stage_id?: string;
   status?: string;
+  source?: string;
   limit?: number;
   offset?: number;
 }): Promise<CandidatesPaginatedResponse> {
@@ -176,6 +183,7 @@ export async function getCandidatesPaginated(params?: {
   if (params?.job_id) searchParams.set("job_id", params.job_id);
   if (params?.stage_id) searchParams.set("stage_id", params.stage_id);
   if (params?.status) searchParams.set("status", params.status);
+  if (params?.source) searchParams.set("source", params.source);
   if (params?.limit !== undefined) searchParams.set("limit", String(params.limit));
   if (params?.offset !== undefined) searchParams.set("offset", String(params.offset));
   const query = searchParams.toString();

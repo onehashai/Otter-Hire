@@ -54,7 +54,7 @@ async def get_current_user(
 
     # Compatibility shim: existing handlers expect org-scoped attrs on current_user.
     user.org_id = membership.org_id
-    user.role = membership.role
+    user.membership_role = membership.role
     user.status = membership.status
 
     return user

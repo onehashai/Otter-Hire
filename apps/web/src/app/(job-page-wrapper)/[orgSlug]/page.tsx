@@ -7,23 +7,10 @@ import { InputField } from "@onehash/ui/input";
 import { Badge } from "@onehash/ui/badge";
 import { SelectField } from "@onehash/ui/select";
 import { Search, MapPin, Briefcase, Clock, DollarSign, ArrowRight } from "lucide-react";
-import { useIsMobile } from "@/hooks/use-mobile";
-import { cn } from "@/lib/utils";
 import { getPublicJobs, type PublicJobListItem } from "@/api";
-
-function parseOrgSlug(orgSlug: string): { orgName: string; orgId: string } | null {
-  const parts = orgSlug.split("-");
-  if (parts.length < 6) return null;
-
-  const uuidParts = parts.slice(-5);
-  const orgId = uuidParts.join("-");
-  const orgName = parts.slice(0, -5).join("-");
-
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  if (!uuidRegex.test(orgId)) return null;
-
-  return { orgName, orgId };
-}
+import { parseOrgSlug } from "@/lib/public-careers-org";
+import { Avatar } from "@onehash/ui/avatar";
+import { PLATFORM_NAME } from "@/lib/constants";
 
 function formatSalary(job: PublicJobListItem): string | null {
   if (job.salary_fixed) {
@@ -47,13 +34,12 @@ function formatEmploymentType(type: string): string {
 export default function CareersListPage() {
   const params = useParams();
   const orgSlug = params?.orgSlug as string;
-  const isMobile = useIsMobile();
 
   const [jobs, setJobs] = useState<PublicJobListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [orgName, setOrgName] = useState("");
-
+  const [orgAvatarUrl, setOrgAvatarUrl] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [locationFilter, setLocationFilter] = useState("all");
@@ -66,11 +52,11 @@ export default function CareersListPage() {
       return;
     }
 
-    setOrgName(parsed.orgName);
-
-    getPublicJobs(parsed.orgId, parsed.orgName)
+    getPublicJobs(parsed.orgName, parsed.orgId)
       .then((data) => {
-        setJobs(data);
+        setJobs(data.jobs);
+        setOrgName(data.org_name );
+        setOrgAvatarUrl(data.org_avatar_url);
         setLoading(false);
       })
       .catch((err) => {
@@ -80,7 +66,9 @@ export default function CareersListPage() {
   }, [orgSlug]);
 
   const allCategories = useMemo(() => {
-    const depts = jobs.map((j) => j.category).filter(Boolean) as string[];
+    const depts = jobs
+      .map((j) => j.category)
+      .filter((c): c is string => c != null && c !== "");
     return [...new Set(depts)];
   }, [jobs]);
 
@@ -126,52 +114,56 @@ export default function CareersListPage() {
       <header className="border-b border-border">
         <div className="mx-auto max-w-4xl px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="h-8 w-8 rounded-lg bg-foreground flex items-center justify-center">
-              <span className="text-background text-xs font-bold">
-                {orgName.charAt(0).toUpperCase()}
-              </span>
-            </div>
-            <span className="text-sm font-semibold capitalize">{orgName}</span>
+            <Avatar
+              className="h-8 w-8 shrink-0 rounded-lg"
+              src={orgAvatarUrl}
+              alt={orgName}
+              imageClassName="rounded-lg object-cover"
+              fallbackClassName="rounded-lg bg-foreground text-background text-xs font-bold"
+            />
+            <span className="text-sm font-semibold">{orgName}</span>
           </div>
         </div>
       </header>
 
       <div className="flex-1">
         <div className="mx-auto max-w-4xl pt-12 md:pt-16 px-4 pb-6">
-          <div className="flex gap-3 items-end">
-            <div className="relative flex-1">
+          <div className="flex flex-col gap-3 md:flex-row md:items-end md:gap-3">
+            <div className="relative w-full min-w-0 md:flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none z-10" />
               <InputField
                 placeholder="Search roles…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="pl-9 h-9 text-sm"
+                className="w-full pl-9 h-9 text-sm"
               />
             </div>
-            {allCategories.length > 0 && (
-              <div className="flex flex-col">
-                <SelectField
-                  label={undefined}
-                  value={categoryFilter}
-                  onValueChange={setCategoryFilter}
-                  options={[
-                    { value: "all", label: "All Categories" },
-                    ...allCategories.map((d) => ({ value: d, label: d })),
-                  ]}
-                />
-              </div>
-            )}
-            {allLocations.length > 0 && (
-              <div className="flex flex-col">
-                <SelectField
-                  label={undefined}
-                  value={locationFilter}
-                  onValueChange={setLocationFilter}
-                  options={[
-                    { value: "all", label: "All Locations" },
-                    ...allLocations.map((l) => ({ value: l, label: l })),
-                  ]}
-                />
+            {(allCategories.length > 0 || allLocations.length > 0) && (
+              <div className="flex w-full min-w-0 flex-col gap-3 md:w-auto md:shrink-0 md:flex-row md:items-end md:gap-3">
+                {allCategories.length > 0 && (
+                  <SelectField
+                    className="w-full min-w-0 md:w-44"
+                    label={undefined}
+                    value={categoryFilter}
+                    onValueChange={setCategoryFilter}
+                    options={[
+                      { value: "all", label: "All categories" },
+                      ...allCategories.map((d) => ({ value: d, label: d })),
+                    ]}
+                  />
+                )}
+                {allLocations.length > 0 && (
+                  <SelectField
+                    className="w-full min-w-0 md:w-44"
+                    label={undefined}
+                    value={locationFilter}
+                    onValueChange={setLocationFilter}
+                    options={[
+                      { value: "all", label: "All locations" },
+                      ...allLocations.map((l) => ({ value: l, label: l })),
+                    ]}
+                  />
+                )}
               </div>
             )}
           </div>
@@ -281,7 +273,7 @@ export default function CareersListPage() {
       <footer className="border-t border-border mt-auto">
         <div className="mx-auto max-w-4xl px-4 py-6 text-center">
           <p className="text-xs text-muted-foreground">
-            © {new Date().getFullYear()} {orgName}. All rights reserved.
+            © {new Date().getFullYear()} {PLATFORM_NAME}.
           </p>
         </div>
       </footer>

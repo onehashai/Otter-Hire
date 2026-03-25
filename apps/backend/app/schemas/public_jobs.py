@@ -24,6 +24,12 @@ class PublicJobListItem(BaseModel):
         from_attributes = True
 
 
+class PublicJobsListResponse(BaseModel):
+    jobs: list[PublicJobListItem]
+    org_name: str
+    org_avatar_url: str | None = None
+
+
 class PublicJobDetail(BaseModel):
     id: str
     title: str
@@ -40,6 +46,7 @@ class PublicJobDetail(BaseModel):
     salary_timeframe: str
     published_at: datetime
     org_name: str
+    org_avatar_url: str | None = None
     status: str
     application_form_schema: dict[str, Any] = {}
 

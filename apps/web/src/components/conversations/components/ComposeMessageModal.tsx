@@ -9,7 +9,7 @@ import { Textarea } from "@onehash/ui/textarea";
 import { Label } from "@onehash/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@onehash/ui/select";
 import { Send, Paperclip } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@onehash/ui/sonner";
 import { getCandidates, type CandidateListItemResponse } from "@/api/candidates";
 import { createConversation } from "@/api/conversations";
 import { getTemplates, type TemplateResponse } from "@/api/templates";

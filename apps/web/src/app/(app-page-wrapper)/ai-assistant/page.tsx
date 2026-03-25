@@ -15,7 +15,7 @@ export default function AIAssistantPage() {
           </div>
           <h2 className="text-base md:text-lg font-semibold mb-1">AI Assistant</h2>
           <p className="text-xs md:text-sm text-muted-foreground text-center max-w-sm">
-            Ask me anything about your hiring pipeline, candidates, or let me help draft job
+            Ask me anything about your hiring workflow, candidates, or let me help draft job
             descriptions.
           </p>
           <div className="flex flex-wrap gap-2 mt-4 md:mt-6 justify-center">

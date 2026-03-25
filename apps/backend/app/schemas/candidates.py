@@ -68,7 +68,7 @@ class CandidateListResponse(BaseModel):
 
 
 class CandidateStageFilterOptionsResponse(BaseModel):
-    """Ordered hiring stage filter labels (pipeline union + terminal statuses when applicable)."""
+    """Ordered hiring stage filter labels (stage union + terminal statuses when applicable)."""
 
     names: list[str]
 

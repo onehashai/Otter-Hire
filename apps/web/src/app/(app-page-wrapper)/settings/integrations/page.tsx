@@ -22,7 +22,7 @@ import {
 } from "@onehash/ui/dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@onehash/ui/tooltip";
 import { CheckCircle2, Settings, Trash2 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@onehash/ui/sonner";
 
 function IntegrationAppIcon({ slug, name }: { slug: string; name: string }) {
   const [src, setSrc] = useState("/favicon.ico");

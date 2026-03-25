@@ -44,7 +44,7 @@ export function RichTextEditor({ content, onChange, placeholder, className }: Ri
     editorProps: {
       attributes: {
         class:
-          "prose prose-sm max-w-none min-h-[240px] md:min-h-[320px] px-4 py-3 focus:outline-none text-foreground [&_h1]:text-xl [&_h1]:font-bold [&_h2]:text-base [&_h2]:font-semibold [&_h3]:text-sm [&_h3]:font-semibold [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-5 [&_ol]:pl-5 [&_a]:text-muted-foreground [&_a]:underline [&_pre]:my-2 [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:text-inherit",
+          "prose prose-sm max-w-none min-h-[120px] px-4 py-3 focus:outline-none text-foreground [&_h1]:text-xl [&_h1]:font-bold [&_h2]:text-base [&_h2]:font-semibold [&_h3]:text-sm [&_h3]:font-semibold [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-5 [&_ol]:pl-5 [&_a]:text-muted-foreground [&_a]:underline [&_pre]:my-2 [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:text-inherit",
       },
     },
   });
@@ -61,6 +61,13 @@ export function RichTextEditor({ content, onChange, placeholder, className }: Ri
       editor.off("transaction", onUpdate);
     };
   }, [editor]);
+
+  useEffect(() => {
+    if (!editor) return;
+    const current = editor.getHTML();
+    if (current === content) return;
+    editor.commands.setContent(content || "", { emitUpdate: false });
+  }, [content, editor]);
 
   if (!editor) return null;
 
@@ -129,7 +136,9 @@ export function RichTextEditor({ content, onChange, placeholder, className }: Ri
           <Icon name="Code" className="h-3.5 w-3.5" />
         </ToolBtn>
       </div>
-      <EditorContent editor={editor} />
+      <div className="max-h-[min(60vh,32rem)] overflow-y-auto overflow-x-hidden">
+        <EditorContent editor={editor} />
+      </div>
     </div>
   );
 }

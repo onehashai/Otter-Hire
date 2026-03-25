@@ -36,7 +36,6 @@ class AutomationDetailResponse(BaseModel):
     status: str
     scope: str
     job_id: str | None = None
-    pipeline_id: str | None = None
     trigger_type: str
     trigger_key: str
     trigger_config: dict[str, Any]
@@ -56,7 +55,6 @@ class AutomationCreateRequest(BaseModel):
     status: str = Field(default="draft")
     scope: str = Field(default="all")
     job_id: str | None = None
-    pipeline_id: str | None = None
     trigger_type: str
     trigger_key: str
     trigger_config: dict[str, Any] = Field(default_factory=dict)
@@ -65,7 +63,7 @@ class AutomationCreateRequest(BaseModel):
     actions: list[AutomationAction] = Field(default_factory=list)
     description: str | None = None
 
-    @field_validator("job_id", "pipeline_id", mode="before")
+    @field_validator("job_id", mode="before")
     @classmethod
     def empty_str_to_none(cls, v: str | None) -> str | None:
         if v == "" or (isinstance(v, str) and not v.strip()):
@@ -78,7 +76,6 @@ class AutomationUpdateRequest(BaseModel):
     status: str | None = None
     scope: str | None = None
     job_id: str | None = None
-    pipeline_id: str | None = None
     trigger_type: str | None = None
     trigger_key: str | None = None
     trigger_config: dict[str, Any] | None = None

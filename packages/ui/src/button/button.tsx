@@ -3,6 +3,7 @@
 import * as React from "react";
 import { Slot } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
+import { Icon } from "../icon";
 
 import { cn } from "../lib/utils";
 import {
@@ -46,6 +47,8 @@ export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement>,
     VariantProps<typeof buttonVariants> {
   asChild?: boolean;
+  /** Shows a spinner and disables the button; keeps label text unchanged. */
+  pending?: boolean;
   tooltip?: React.ReactNode;
   tooltipProps?: Omit<TooltipRootProps, "children">;
   tooltipContentProps?: Omit<TooltipContentProps, "children">;
@@ -59,24 +62,38 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       variant,
       size,
       asChild = false,
+      pending = false,
       tooltip,
       tooltipProps,
       tooltipContentProps,
       tooltipProviderProps,
       disabled,
+      children,
       ...props
     },
     ref,
   ) => {
-    const Comp = asChild ? Slot : "button";
+    const useAsChild = asChild && !pending;
+    const Comp = useAsChild ? Slot : "button";
+    const isDisabled = Boolean(disabled) || pending;
 
     const buttonEl = (
       <Comp
         className={cn(buttonVariants({ variant, size, className }))}
         ref={ref}
-        disabled={disabled}
+        disabled={isDisabled}
+        aria-busy={pending}
         {...props}
-      />
+      >
+        {pending ? (
+          <span className="inline-flex max-w-full items-center justify-center gap-2">
+            <Icon name="Loader" className="h-4 w-4 animate-spin shrink-0" aria-hidden />
+            {children}
+          </span>
+        ) : (
+          children
+        )}
+      </Comp>
     );
 
     if (tooltip == null || tooltip === "") {
@@ -84,7 +101,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     }
 
     const triggerChild =
-      disabled === true ? (
+      isDisabled === true ? (
         <span className="inline-flex cursor-not-allowed">{buttonEl}</span>
       ) : (
         buttonEl

@@ -1,24 +1,48 @@
-/** English ordinal day: 1st, 2nd, 3rd, 12th, 21st, … */
-function ordinalDay(n: number): string {
-  const abs = Math.abs(n);
-  const last = abs % 10;
-  const lastTwo = abs % 100;
-  if (lastTwo >= 11 && lastTwo <= 13) return `${n}th`;
-  if (last === 1) return `${n}st`;
-  if (last === 2) return `${n}nd`;
-  if (last === 3) return `${n}rd`;
-  return `${n}th`;
-}
-
 /**
- * Formats an ISO datetime (UTC from API) for display in the user's local calendar date,
- * e.g. "12th March 2026".
+ * Local calendar date without year: "20 March".
  */
-export function formatOrdinalLongDate(iso: string, locale = "en-GB"): string {
+export function formatDayMonth(iso: string, locale = "en-GB"): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   const day = d.getDate();
   const month = d.toLocaleString(locale, { month: "long" });
-  const year = d.getFullYear();
-  return `${ordinalDay(day)} ${month} ${year}`;
+  return `${day} ${month}`;
+}
+
+/** e.g. "22 Mar" this year, or "12 Mar 2025" when not the current year. */
+function formatShortDayMonth(d: Date, now: Date, locale = "en-GB"): string {
+  const sameYear = d.getFullYear() === now.getFullYear();
+  if (sameYear) {
+    return d.toLocaleDateString(locale, { day: "numeric", month: "short" });
+  }
+  return d.toLocaleDateString(locale, { day: "numeric", month: "short", year: "numeric" });
+}
+
+/**
+ * Compact labels for conversation lists and threads:
+ * `4sec`, `10min`, `2hr` when recent; otherwise `22 Mar`, `12 Mar` (short month; year if needed).
+ */
+export function formatTimestamp(isoString: string | null): string {
+  if (!isoString) return "";
+  const date = new Date(isoString);
+  if (Number.isNaN(date.getTime())) return "";
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+
+  if (diffMs < 0) {
+    return formatShortDayMonth(date, now);
+  }
+
+  if (diffMs < 60_000) {
+    const s = Math.max(1, Math.floor(diffMs / 1000));
+    return `${s}sec`;
+  }
+  if (diffMs < 3_600_000) {
+    return `${Math.floor(diffMs / 60_000)}min`;
+  }
+  if (diffMs < 86_400_000) {
+    return `${Math.floor(diffMs / 3_600_000)}hr`;
+  }
+
+  return formatShortDayMonth(date, now);
 }

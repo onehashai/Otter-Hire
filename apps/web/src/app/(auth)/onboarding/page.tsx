@@ -10,7 +10,7 @@ import { Form, FormField, FormItem, FormControl } from "@onehash/ui/form";
 import { Icon } from "@onehash/ui/icon";
 import { onboardingSchema, type OnboardingFormValues } from "@/lib/schemas/zodResolver";
 import { useTranslation } from "react-i18next";
-import { PRODUCT_LOGO_LETTER, PRODUCT_NAME } from "@/lib/constants";
+import { PRODUCT_LOGO_LETTER, PLATFORM_NAME } from "@/lib/constants";
 import { completeOnboarding } from "@/api/index";
 import { useAuthSession } from "@/app/providers";
 
@@ -63,12 +63,12 @@ export default function Onboarding() {
           <div className="h-9 w-9 rounded-lg bg-foreground flex items-center justify-center">
             <span className="text-background text-sm font-bold">{PRODUCT_LOGO_LETTER}</span>
           </div>
-          <span className="text-lg font-semibold tracking-tight">{PRODUCT_NAME}</span>
+          <span className="text-lg font-semibold tracking-tight">{PLATFORM_NAME}</span>
         </div>
 
         <div className="rounded-xl border border-border bg-card p-8 shadow-sm">
           <div className="mb-6">
-            <h2 className="text-xl font-semibold tracking-tight">Welcome to {PRODUCT_NAME}</h2>
+            <h2 className="text-xl font-semibold tracking-tight">Welcome to {PLATFORM_NAME}</h2>
             <p className="text-sm text-muted-foreground mt-1">
               Tell us a little about yourself to get started
             </p>

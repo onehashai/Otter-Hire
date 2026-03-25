@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     is_production: bool = Field(default=False, validation_alias="IS_PRODUCTION")
 
     # Product branding (emails, UI copy, API metadata)
-    product_name: str = Field(default="OneHash ATS", validation_alias="PRODUCT_NAME")
+    platform_name: str = Field(default="OneHash ATS", validation_alias="PLATFORM_NAME")
     support_email: str = Field(default="support@onehash.ai", validation_alias="SUPPORT_EMAIL")
 
     # SQLAdmin (local development only — ignored in production)
@@ -170,6 +170,9 @@ class Settings(BaseSettings):
     feature_legacy_org_inbox_route_redirect: bool = Field(
         default=False, validation_alias="FEATURE_LEGACY_ORG_INBOX_ROUTE_REDIRECT"
     )
+
+    # OpenAI key
+    openai_api_key: str | None = Field(default=None, validation_alias="OPENAI_API_KEY")
 
     @property
     def _scheme(self) -> str:

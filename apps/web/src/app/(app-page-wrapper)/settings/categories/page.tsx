@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@onehash/ui/dialog";
 import { InputField } from "@onehash/ui/input";
 import { Icon } from "@onehash/ui/icon";
-import { toast } from "sonner";
+import { toast } from "@onehash/ui/sonner";
 import {
   getJobCategories,
   createJobCategory,

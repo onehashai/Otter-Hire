@@ -1,24 +1,16 @@
 "use client";
 
-import { Avatar, AvatarFallback } from "@onehash/ui/avatar";
-import { Badge } from "@onehash/ui/badge";
-import { Button } from "@onehash/ui/button";
+import { Avatar } from "@onehash/ui/avatar";
 import { Separator } from "@onehash/ui/separator";
-import { Mail, Phone, MapPin, ArrowRight, StickyNote, Calendar } from "lucide-react";
+import { Mail, Phone, MapPin } from "lucide-react";
+import { getInitialsFromName } from "@/lib/name-initials";
 
 interface CandidateContextProps {
   name: string;
   email: string;
   phone: string;
   location: string;
-  jobTitle: string;
-  stage: string;
-  recruiter: string;
-  dateApplied: string;
   activities: { label: string; date: string }[];
-  onMoveStage: () => void;
-  onAddNote: () => void;
-  onScheduleInterview: () => void;
 }
 
 export function CandidateContext({
@@ -26,28 +18,16 @@ export function CandidateContext({
   email,
   phone,
   location,
-  jobTitle,
-  stage,
-  recruiter,
-  dateApplied,
   activities,
-  onMoveStage,
-  onAddNote,
-  onScheduleInterview,
 }: CandidateContextProps) {
-  const initials = name
-    .split(" ")
-    .map((n) => n[0])
-    .join("");
+  const initials = getInitialsFromName(name);
 
   return (
     <div className="flex flex-col h-full overflow-y-auto">
       <div className="p-4 space-y-3">
         <div className="flex items-center gap-2.5">
-          <Avatar className="h-10 w-10">
-            <AvatarFallback className="text-xs bg-muted text-muted-foreground">
-              {initials}
-            </AvatarFallback>
+          <Avatar className="h-10 w-10" fallbackClassName="text-xs bg-muted text-muted-foreground">
+            {initials}
           </Avatar>
           <div>
             <h3 className="text-sm font-medium text-foreground">{name}</h3>
@@ -68,62 +48,6 @@ export function CandidateContext({
             <span>{location}</span>
           </div>
         </div>
-      </div>
-
-      <Separator />
-
-      <div className="p-4 space-y-2">
-        <h4 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-          Pipeline Status
-        </h4>
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">Stage</span>
-            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
-              {stage}
-            </Badge>
-          </div>
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">Recruiter</span>
-            <span className="text-foreground font-medium">{recruiter}</span>
-          </div>
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">Applied</span>
-            <span className="text-foreground">{dateApplied}</span>
-          </div>
-        </div>
-      </div>
-
-      <Separator />
-
-      <div className="p-4 space-y-1.5">
-        <h4 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-          Quick Actions
-        </h4>
-        <Button
-          variant="outline"
-          size="sm"
-          className="w-full justify-start text-xs h-8 gap-2"
-          onClick={onMoveStage}
-        >
-          <ArrowRight className="h-3 w-3" /> Move Stage
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          className="w-full justify-start text-xs h-8 gap-2"
-          onClick={onAddNote}
-        >
-          <StickyNote className="h-3 w-3" /> Add Note
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          className="w-full justify-start text-xs h-8 gap-2"
-          onClick={onScheduleInterview}
-        >
-          <Calendar className="h-3 w-3" /> Schedule Interview
-        </Button>
       </div>
 
       <Separator />

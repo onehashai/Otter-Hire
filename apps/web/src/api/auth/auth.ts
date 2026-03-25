@@ -12,6 +12,7 @@ export type AuthSessionResponse = {
   email: string;
   name: string;
   role: string;
+  membership_role: string;
   status: string;
   org_id: string;
   org_name: string;
@@ -46,6 +47,20 @@ export function signup(payload: AuthPayload): Promise<unknown> {
   return apiPost<unknown>("/auth/signup", payload);
 }
 
+/** Normalize `/auth/me` payload: older APIs used `role` for org membership only. */
+function normalizeAuthSessionPayload(raw: Record<string, unknown>): AuthSessionResponse {
+  const base = raw as unknown as AuthSessionResponse;
+  if (typeof raw.membership_role === "string") {
+    return base;
+  }
+  const legacyMembership = String(raw.role ?? "");
+  return {
+    ...base,
+    role: "user",
+    membership_role: legacyMembership,
+  };
+}
+
 export async function logout(): Promise<void> {
   const res = await fetch(`${API_BASE_URL}/auth/logout`, {
     method: "POST",
@@ -74,7 +89,8 @@ export async function getAuthSession(): Promise<AuthSessionResponse | null> {
     throw new Error(`API request failed: ${res.status} ${res.statusText}`);
   }
 
-  const session = (await res.json()) as AuthSessionResponse;
+  const raw = (await res.json()) as Record<string, unknown>;
+  const session = normalizeAuthSessionPayload(raw);
   return { ...session, org_avatar_url: normalizeApiUrl(session.org_avatar_url) };
 }
 
@@ -152,7 +168,8 @@ export async function completeOnboarding(data: {
     throw new Error(message);
   }
 
-  return (await res.json()) as AuthSessionResponse;
+  const raw = (await res.json()) as Record<string, unknown>;
+  return normalizeAuthSessionPayload(raw);
 }
 
 export type OrgUserResponse = {

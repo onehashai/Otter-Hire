@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import { PRODUCT_NAME } from "@/lib/constants";
+import { PLATFORM_NAME } from "@/lib/constants";
 import { Providers } from "./providers";
 import { headers } from "next/headers";
 import "../styles/globals.css";
 
 export const metadata: Metadata = {
-  title: PRODUCT_NAME,
+  title: PLATFORM_NAME,
   description: "Applicant Tracking System",
 };
 

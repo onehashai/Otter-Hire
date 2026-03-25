@@ -3,9 +3,10 @@
 import { Card, CardContent } from "@onehash/ui/card";
 import { Button } from "@onehash/ui/button";
 import { Badge } from "@onehash/ui/badge";
-import { Avatar, AvatarFallback } from "@onehash/ui/avatar";
+import { Avatar } from "@onehash/ui/avatar";
 import { Video } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { getInitialsFromName } from "@/lib/name-initials";
 
 export interface Interview {
   candidate: string;
@@ -34,13 +35,8 @@ export const InterviewsList = ({ interviews }: InterviewsListProps) => {
             {isMobile ? (
               <>
                 <div className="flex items-center gap-2.5 mb-2">
-                  <Avatar className="h-8 w-8">
-                    <AvatarFallback className="text-xs bg-muted">
-                      {i.candidate
-                        .split(" ")
-                        .map((n) => n[0])
-                        .join("")}
-                    </AvatarFallback>
+                  <Avatar className="h-8 w-8" fallbackClassName="text-xs bg-muted">
+                    {getInitialsFromName(i.candidate)}
                   </Avatar>
                   <div className="flex-1">
                     <p className="text-sm font-medium">{i.candidate}</p>
@@ -71,13 +67,8 @@ export const InterviewsList = ({ interviews }: InterviewsListProps) => {
                     <p className="text-sm font-medium">{i.time}</p>
                   </div>
                   <div className="h-8 w-px bg-border" />
-                  <Avatar className="h-7 w-7">
-                    <AvatarFallback className="text-[10px] bg-muted">
-                      {i.candidate
-                        .split(" ")
-                        .map((n) => n[0])
-                        .join("")}
-                    </AvatarFallback>
+                  <Avatar className="h-7 w-7" fallbackClassName="text-[10px] bg-muted">
+                    {getInitialsFromName(i.candidate)}
                   </Avatar>
                   <div>
                     <p className="text-sm font-medium">{i.candidate}</p>

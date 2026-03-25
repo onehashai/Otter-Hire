@@ -80,7 +80,9 @@ export function ExecutionLog({ logs, onLogSelect, isMobile }: ExecutionLogProps)
                 onClick={() => onLogSelect(log)}
               >
                 <TableCell className="text-sm font-medium">{log.candidateName}</TableCell>
-                <TableCell className="text-xs text-muted-foreground">{log.candidateEmail}</TableCell>
+                <TableCell className="text-xs text-muted-foreground">
+                  {log.candidateEmail}
+                </TableCell>
                 <TableCell className="text-xs text-muted-foreground">{log.event}</TableCell>
                 <TableCell className="text-xs text-muted-foreground">{log.timestamp}</TableCell>
                 <TableCell>

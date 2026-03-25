@@ -79,7 +79,8 @@ export default function AutomationDetailPage() {
 
         const mappedLogs: ExecutionLogEntry[] = executions.map((e) => ({
           id: e.id,
-          candidateName: e.candidate_id ?? "",
+          candidateName: e.candidate_name || "N/A",
+          candidateEmail: e.candidate_email || "N/A",
           event: e.trigger_event,
           action: "",
           timestamp: new Date(e.created_at).toLocaleString(),

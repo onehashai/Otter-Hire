@@ -38,8 +38,9 @@ DEFAULT_STAGES = [
     ("Interview", 2),
     ("Offer", 3),
     ("Hired", 4),
+    ("Rejected", 5),
 ]
-REQUIRED_STAGE_NAMES = {"Applied", "Hired"}
+REQUIRED_STAGE_NAMES = {"Applied", "Hired", "Rejected"}
 
 
 def _membership_role_for_org(user: User | None, org_id: UUID) -> str | None:
@@ -306,10 +307,10 @@ async def update_job(
     relations_changed = False
 
     if hiring_stages_input is not None:
-        if len(hiring_stages_input) < 2:
+        if len(hiring_stages_input) < 3:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Pipeline must have at least 2 stages",
+                detail="Pipeline must have at least 3 stages",
             )
 
         required_stages = {s.id: s.name for s in job.stages if s.is_required}
@@ -353,6 +354,19 @@ async def update_job(
                     detail=f"Required stage '{required_stages[stage_data.id]}' cannot be renamed",
                 )
 
+        stage_names_in_order = [s.name.strip() for s in hiring_stages_input if s.name.strip()]
+        if (
+            not stage_names_in_order
+            or stage_names_in_order[0].lower() != "applied"
+            or len(stage_names_in_order) < 3
+            or stage_names_in_order[-2].lower() != "hired"
+            or stage_names_in_order[-1].lower() != "rejected"
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Stage order must be Applied first, Hired second last, Rejected last",
+            )
+
         await db.execute(delete(Stage).where(Stage.job_id == job.id))
         for i, stage_data in enumerate(hiring_stages_input):
             stage_name = stage_data.name.strip()
@@ -360,8 +374,9 @@ async def update_job(
                 org_id=current_user.org_id,
                 job_id=job.id,
                 name=stage_name,
-                position=stage_data.position if stage_data.position is not None else i,
-                is_required=stage_data.id in required_stages,
+                position=i,
+                is_required=(stage_data.id in required_stages)
+                or (stage_name.lower() in {n.lower() for n in REQUIRED_STAGE_NAMES}),
             )
             db.add(stage)
         relations_changed = True

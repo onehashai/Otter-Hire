@@ -52,7 +52,7 @@ export const actionTypes: ActionTypeDef[] = [
   },
 ];
 
-export const stages = ["Applied", "Screening", "Interview", "Offer", "Hired"];
+export const stages = ["Applied", "Screening", "Interview", "Offer", "Hired", "Rejected"];
 
 export const emailTemplates = [
   { id: "rejection", label: "Rejection Email" },

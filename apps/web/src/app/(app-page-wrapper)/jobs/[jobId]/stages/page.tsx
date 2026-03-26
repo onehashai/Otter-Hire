@@ -33,7 +33,7 @@ export default function HiringStagesPage() {
 
   const handleRemoveStage = async (id: string, isRequired?: boolean) => {
     if (isRequired) {
-      toast.error("Applied and Hired stages cannot be deleted");
+      toast.error("Required stages cannot be deleted");
       return;
     }
     if (hiringStages.length <= 2) {

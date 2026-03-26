@@ -202,6 +202,16 @@ export async function updateCandidateStage(
   });
 }
 
+export async function updateCandidateStatus(
+  id: string,
+  status: "active" | "rejected" | "hired",
+): Promise<CandidateDetailResponse> {
+  return apiFetch<CandidateDetailResponse>(`/candidates/${id}/status`, {
+    method: "PATCH",
+    body: { status },
+  });
+}
+
 export async function bulkUpdateCandidateStatus(
   candidateIds: string[],
   status: "active" | "rejected" | "hired",

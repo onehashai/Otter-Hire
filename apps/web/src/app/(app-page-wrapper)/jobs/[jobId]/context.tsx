@@ -128,6 +128,25 @@ function stableStringify(value: unknown): string {
   return `{${entries.join(",")}}`;
 }
 
+function normalizeHiringStages(stages: HiringStage[]): HiringStage[] {
+  const byName = (name: string) => stages.find((s) => s.name.trim().toLowerCase() === name);
+  const applied = byName("applied");
+  const hired = byName("hired");
+  const rejected = byName("rejected");
+
+  const customStages = stages.filter((s) => {
+    const n = s.name.trim().toLowerCase();
+    return n !== "applied" && n !== "hired" && n !== "rejected";
+  });
+
+  const normalized: HiringStage[] = [];
+  normalized.push(applied ?? { id: generateId(), name: "Applied", isRequired: true });
+  normalized.push(...customStages);
+  normalized.push(hired ?? { id: generateId(), name: "Hired", isRequired: true });
+  normalized.push(rejected ?? { id: generateId(), name: "Rejected", isRequired: true });
+  return normalized;
+}
+
 function mapApiToState(job: JobDetailResponse): Partial<JobSetupState> {
   return {
     jobId: job.id,
@@ -292,7 +311,8 @@ export function JobSetupProvider({ children }: { children: ReactNode }) {
         application_form_schema: currentState.applicationFormSchema,
       };
       if (includeRelations || stagesDirtyRef.current) {
-        payload.hiring_stages = currentState.hiringStages
+        const normalizedStages = normalizeHiringStages(currentState.hiringStages);
+        payload.hiring_stages = normalizedStages
           .filter((s) => s.name.trim())
           .map((s, i) => ({ id: s.id, name: s.name, position: i }));
         stagesDirtyRef.current = false;

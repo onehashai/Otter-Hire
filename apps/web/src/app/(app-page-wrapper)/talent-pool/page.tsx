@@ -46,7 +46,6 @@ import { Icon } from "@onehash/ui/icon";
 import { toast } from "@onehash/ui/sonner";
 
 const PAGE_SIZE = 25;
-const EMAIL_SOURCE = "Email";
 const STATUS_ALL = "__all__";
 
 export default function TalentPoolPage() {
@@ -128,7 +127,7 @@ export default function TalentPoolPage() {
     setLoading(true);
     try {
       const res = await getCandidatesPaginated({
-        source: EMAIL_SOURCE,
+        talent_pool_only: true,
         search: debouncedSearch || undefined,
         status: status === STATUS_ALL ? undefined : status,
         limit: PAGE_SIZE,

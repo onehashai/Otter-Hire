@@ -410,6 +410,7 @@ async def list_candidates(
     stage_id: UUID | None = None,
     status_filter: str | None = Query(default=None, alias="status"),
     source: str | None = Query(default=None, max_length=100),
+    talent_pool_only: bool = Query(default=False),
     tag: str | None = Query(default=None, max_length=100),
     sort_by: str = Query(
         default="updated_at", pattern=r"^(updated_at|created_at|name|status|job_title|stage_name)$"
@@ -454,6 +455,8 @@ async def list_candidates(
         stmt = stmt.where(Candidate.status == status_filter)
     if source:
         stmt = stmt.where(Candidate.source == source)
+    if talent_pool_only:
+        stmt = stmt.where(Candidate.job_id.is_(None))
     if tag:
         stmt = stmt.where(Candidate.tags.contains([tag]))
 
@@ -491,6 +494,7 @@ async def list_candidates_paginated(
     stage_id: UUID | None = None,
     status_filter: str | None = Query(default=None, alias="status"),
     source: str | None = Query(default=None, max_length=100),
+    talent_pool_only: bool = Query(default=False),
     tag: str | None = Query(default=None, max_length=100),
     sort_by: str = Query(
         default="updated_at", pattern=r"^(updated_at|created_at|name|status|job_title|stage_name)$"
@@ -547,6 +551,9 @@ async def list_candidates_paginated(
     if source:
         stmt = stmt.where(Candidate.source == source)
         count_stmt = count_stmt.where(Candidate.source == source)
+    if talent_pool_only:
+        stmt = stmt.where(Candidate.job_id.is_(None))
+        count_stmt = count_stmt.where(Candidate.job_id.is_(None))
     if tag:
         stmt = stmt.where(Candidate.tags.contains([tag]))
         count_stmt = count_stmt.where(Candidate.tags.contains([tag]))

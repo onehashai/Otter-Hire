@@ -68,10 +68,7 @@ export function ActionButtons({
     [sortedStages],
   );
   const progressionStages = useMemo(
-    () =>
-      sortedStages.filter(
-        (s) => !rejectedStage || s.id !== rejectedStage.id,
-      ),
+    () => sortedStages.filter((s) => !rejectedStage || s.id !== rejectedStage.id),
     [sortedStages, rejectedStage],
   );
   const currentStageIndex = useMemo(
@@ -171,9 +168,7 @@ export function ActionButtons({
             void handleMove(nextStage.id, nextStage.name);
           }
         }}
-        disabled={
-          isInRejectedStage || !nextStage || !candidateId || Boolean(movingToStageId)
-        }
+        disabled={isInRejectedStage || !nextStage || !candidateId || Boolean(movingToStageId)}
         pending={!isInRejectedStage && movingToStageId === nextStage?.id}
       >
         <Icon name="UserCheck" className="h-3.5 w-3.5" />{" "}

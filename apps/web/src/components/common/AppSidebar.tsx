@@ -5,12 +5,10 @@ import {
   // LayoutDashboard,
   Briefcase,
   Users,
-  MessageSquare,
   FileText,
-  // TODO(mvp-nav): Re-enable Reports/AI Assistant icons after MVP launch.
-  // BarChart3,
+  BarChart3,
   Zap,
-  // Bot,
+  Bot,
   Settings,
   Sun,
   Moon,
@@ -33,15 +31,12 @@ const navItems = [
   // { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Jobs", url: "/jobs", icon: Briefcase },
   { title: "Talent Pool", url: "/talent-pool", icon: Users },
-  { title: "Conversations", url: "/conversations", icon: MessageSquare },
   { title: "Templates", url: "/templates", icon: FileText },
   // TODO(mvp-nav): Re-enable Interviews in sidebar post-messaging launch.
   // { title: "Interviews", url: "/interviews", icon: Calendar },
-  // TODO(mvp-nav): Re-enable Reports in sidebar after MVP launch.
-  // { title: "Reports", url: "/reports", icon: BarChart3 },
+  { title: "Reports", url: "/reports", icon: BarChart3 },
   { title: "Automations", url: "/automations", icon: Zap },
-  // TODO(mvp-nav): Re-enable AI Assistant in sidebar after MVP launch.
-  // { title: "AI Assistant", url: "/ai-assistant", icon: Bot },
+  { title: "AI Assistant", url: "/ai-assistant", icon: Bot },
   { title: "Settings", url: "/settings/profile", icon: Settings },
 ];
 

@@ -416,7 +416,10 @@ async def list_jobs(
             Candidate.job_id,
             sa_func.count(Candidate.id).label("cnt"),
         )
-        .where(Candidate.org_id == current_user.org_id)
+        .where(
+            Candidate.org_id == current_user.org_id,
+            Candidate.status == "active",
+        )
         .group_by(Candidate.job_id)
         .subquery()
     )
@@ -476,7 +479,11 @@ async def get_job_workspace(
 
     candidate_result = await db.execute(
         select(Candidate)
-        .where(Candidate.org_id == current_user.org_id, Candidate.job_id == job.id)
+        .where(
+            Candidate.org_id == current_user.org_id,
+            Candidate.job_id == job.id,
+            Candidate.status == "active",
+        )
         .order_by(Candidate.updated_at.desc(), Candidate.created_at.desc())
     )
     candidates = candidate_result.scalars().all()

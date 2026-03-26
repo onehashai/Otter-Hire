@@ -29,11 +29,21 @@ import { parseOrgSlug } from "@/lib/public-careers-org";
 type ApplyFile = { name: string; size: number; type: string };
 
 function formatSalary(job: PublicJobDetail): string | null {
+  const currencySymbol =
+    job.currency === "INR"
+      ? "₹"
+      : job.currency === "USD"
+        ? "$"
+        : job.currency === "EUR"
+          ? "€"
+          : job.currency;
+  const timeframe = job.salary_timeframe.replace("per_", "");
+
   if (job.salary_fixed) {
-    return `$${(job.salary_fixed / 100).toLocaleString()} / ${job.salary_timeframe.replace("per_", "")}`;
+    return `${currencySymbol}${job.salary_fixed.toLocaleString()} / ${timeframe}`;
   }
   if (job.salary_min && job.salary_max) {
-    return `$${(job.salary_min / 100).toLocaleString()} – $${(job.salary_max / 100).toLocaleString()} / ${job.salary_timeframe.replace("per_", "")}`;
+    return `${currencySymbol}${job.salary_min.toLocaleString()} – ${currencySymbol}${job.salary_max.toLocaleString()} / ${timeframe}`;
   }
   return null;
 }

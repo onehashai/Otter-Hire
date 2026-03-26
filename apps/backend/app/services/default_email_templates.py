@@ -168,6 +168,43 @@ DEFAULT_EMAIL_TEMPLATES: list[DefaultTemplate] = [
             "</p>"
         ),
     ),
+    DefaultTemplate(
+        name="Job Assignment Notification",
+        subject="You've been assigned to {{job_title}}",
+        body=(
+            "<p>Hi {{candidate_name}},</p>"
+            "<p>"
+            "Great news! You've been assigned to the <strong>{{job_title}}</strong> "
+            "position at {{company_name}}."
+            "</p>"
+            "<p>"
+            "Our team will be reviewing your profile and will reach out with next steps soon."
+            "</p>"
+            "<br/>"
+            "<p>"
+            "Best regards,<br/>"
+            "The {{company_name}} Team"
+            "</p>"
+        ),
+    ),
+    DefaultTemplate(
+        name="Email Auto-Reply",
+        subject="Re: Your message to {{company_name}}",
+        body=(
+            "<p>Hi {{candidate_name}},</p>"
+            "<p>"
+            "Thank you for your email. We've received your message and will get back to you shortly."
+            "</p>"
+            "<p>"
+            "If your inquiry is urgent, please feel free to reach out to us directly."
+            "</p>"
+            "<br/>"
+            "<p>"
+            "Best regards,<br/>"
+            "The {{company_name}} Team"
+            "</p>"
+        ),
+    ),
 ]
 
 

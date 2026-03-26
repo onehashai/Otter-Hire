@@ -57,6 +57,7 @@ from app.schemas.public_jobs import (
     PublicJobListItem,
     PublicJobsListResponse,
 )
+from app.services.automation import execute_automations_for_trigger
 from app.services.resume_links import resolve_resume_from_body
 from app.services.storage import storage_service
 
@@ -1177,6 +1178,25 @@ async def apply_public_job(
     await db.commit()
     await db.refresh(application)
 
+    # Fetch stage name for automation metadata
+    stage_name = None
+    if candidate.stage_id:
+        stage_result = await db.execute(select(Stage.name).where(Stage.id == candidate.stage_id))
+        stage_name = stage_result.scalar_one_or_none()
+
+    # Trigger automations for candidate_applied
+    await execute_automations_for_trigger(
+        db=db,
+        trigger_key="candidate_applied",
+        org_id=org_uuid,
+        candidate_id=candidate.id,
+        job_id=job_uuid,
+        metadata={
+            "source": "job_board",
+            "stage_name": stage_name,
+        },
+    )
+
     return PublicJobApplyResponse(
         id=str(application.id),
         status=application.status,
@@ -1292,6 +1312,65 @@ def _is_automated_email(payload: "InboundEmailPayload") -> str | None:
     return None
 
 
+async def _process_resume_link_fallback(
+    body_text: str,
+    org_id: UUID,
+    inbound_email_id: UUID,
+    db: "AsyncSession",
+) -> tuple["InboundEmailAttachment", bytes] | None:
+    """Try to resolve and store resume from links in email body.
+
+    Returns (attachment_row, content) if successful, None otherwise.
+    """
+    try:
+        link_result = await resolve_resume_from_body(
+            body_text,
+            max_bytes=settings.inbound_max_attachment_bytes,
+            timeout=10.0,
+        )
+    except Exception:
+        return None
+
+    if link_result is None:
+        return None
+
+    filename, content_type, content = link_result
+    safe_name = _guess_file_name(filename, "resume_from_link.bin")
+
+    # Validate file extension
+    allowed_extensions = {".pdf", ".doc", ".docx"}
+    lower_name = safe_name.lower()
+    ext = ""
+    if "." in lower_name:
+        ext = "." + lower_name.rsplit(".", 1)[-1]
+    if ext not in allowed_extensions:
+        logger.warning(
+            "Resume link has invalid extension: %s (allowed: %s)",
+            ext,
+            allowed_extensions,
+        )
+        return None
+
+    # Store to S3
+    storage_key = f"orgs/{org_id}/inbox/attachments/{inbound_email_id}/link_{safe_name}"
+    await storage_service.write_bytes(
+        storage_key, content, content_type or "application/octet-stream"
+    )
+
+    # Create attachment record
+    resume_attachment = InboundEmailAttachment(
+        inbound_email_id=inbound_email_id,
+        filename=safe_name,
+        content_type=content_type or "application/octet-stream",
+        storage_key=storage_key,
+        size_bytes=len(content),
+        sha256=hashlib.sha256(content).hexdigest(),
+    )
+    db.add(resume_attachment)
+
+    return (resume_attachment, content)
+
+
 # Matches To/Reply-To addresses like reply+<conversation_id>@inbound.domain
 _REPLY_CONVERSATION_PATTERN = re.compile(
     r"^reply\+([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})@",
@@ -1384,77 +1463,54 @@ async def _route_inbound_to_conversation(
             else:
                 conv = None
 
-    # New conversation path: only accept if content looks like a real candidate (ATS gate)
+    # New conversation path: ONLY accept if candidate_override is provided (from resume parsing)
     if conv is None:
-        has_resume = any(
-            _is_resume_attachment(att.filename, att.content_type)
-            for att in (payload.attachments or [])
-        )
-        if not has_resume and not _looks_like_job_inquiry(payload):
+        # Only create conversation if candidate was already created from resume
+        candidate = candidate_override
+        if candidate is None:
+            # No candidate override means no resume was parsed - reject
             logger.info(
-                "Inbound email skipped (new conversation gate: not candidate/job content) from=%s org_id=%s subject=%r",
+                "Inbound email skipped (no resume-based candidate) from=%s org_id=%s subject=%r",
                 from_email,
                 org_id,
                 payload.subject,
             )
             return None
-
-        candidate = candidate_override
-        if candidate is None:
-            cand_result = await db.execute(
-                select(Candidate).where(
-                    Candidate.org_id == org_id,
-                    func.lower(Candidate.email) == from_email,
-                )
+        # One canonical thread per candidate: reuse existing row when present
+        existing_for_cand = await db.execute(
+            select(Conversation).where(
+                Conversation.org_id == org_id,
+                Conversation.candidate_id == candidate.id,
             )
-            candidate = cand_result.scalar_one_or_none()
-            if candidate is None:
-                display_name = (payload.from_name or "").strip()
-                if not display_name:
-                    display_name = (
-                        from_email.split("@")[0].replace(".", " ").replace("_", " ").title()
-                    )
-                candidate = Candidate(
-                    org_id=org_id,
-                    job_id=None,
-                    stage_id=None,
-                    status="active",
-                    name=display_name,
-                    email=from_email,
-                    phone=None,
-                    location=None,
-                    profile_links={},
-                    source="Email",
-                    tags=[],
-                )
-                db.add(candidate)
-                await db.flush()
-                candidate_created = True
-                logger.info(
-                    "Inbound email created new candidate candidate_id=%s email=%s org_id=%s",
-                    candidate.id,
-                    from_email,
-                    org_id,
-                )
-        now = datetime.now(tz=timezone.utc)
-        conv = Conversation(
-            id=uuid7(),
-            org_id=org_id,
-            candidate_id=candidate.id,
-            job_id=None,
-            subject=subject,
-            channel="email",
-            status="open",
-            last_message_at=now,
         )
-        db.add(conv)
-        await db.flush()
-        logger.info(
-            "Inbound email created new conversation conversation_id=%s from=%s",
-            conv.id,
-            from_email,
-        )
-    elif conv.status == "closed":
+        conv = existing_for_cand.scalar_one_or_none()
+        if conv is not None:
+            logger.info(
+                "Inbound email using canonical conversation_id=%s candidate_id=%s from=%s",
+                conv.id,
+                candidate.id,
+                from_email,
+            )
+        else:
+            now = datetime.now(tz=timezone.utc)
+            conv = Conversation(
+                id=uuid7(),
+                org_id=org_id,
+                candidate_id=candidate.id,
+                job_id=None,
+                subject=subject,
+                channel="email",
+                status="open",
+                last_message_at=now,
+            )
+            db.add(conv)
+            await db.flush()
+            logger.info(
+                "Inbound email created new conversation conversation_id=%s from=%s",
+                conv.id,
+                from_email,
+            )
+    if conv.status in ("closed", "archived"):
         conv.status = "open"
 
     now = datetime.now(tz=timezone.utc)
@@ -1655,10 +1711,6 @@ async def ingest_inbound_email(
     db.add(inbound_email)
     await db.flush()
 
-    parsed_candidate: Candidate | None = None
-    parse_error: str | None = None
-    resume_attachment: InboundEmailAttachment | None = None
-    resume_text: str = ""
     body_text = "\n".join(
         [
             payload.subject or "",
@@ -1667,6 +1719,8 @@ async def ingest_inbound_email(
         ]
     ).strip()
 
+    # Store attachments but DON'T parse yet (optimization: parse only after validation)
+    stored_attachments: list[tuple[InboundEmailAttachment, bytes]] = []
     for idx, att in enumerate(payload.attachments or []):
         if not att.content_base64:
             continue
@@ -1692,59 +1746,11 @@ async def ingest_inbound_email(
             sha256=hashlib.sha256(content).hexdigest(),
         )
         db.add(attachment_row)
+        stored_attachments.append((attachment_row, content))
 
-        if resume_attachment is None and _is_resume_attachment(safe_name, att.content_type):
-            resume_attachment = attachment_row
-            try:
-                resume_text = _parse_resume_bytes(safe_name, att.content_type, content)
-            except Exception as exc:
-                parse_error = f"Resume parse failed: {exc}"
-
-    # Fallback: when no attachment-based resume was found, try resolving a resume from links in the body
-    if resume_attachment is None:
-        try:
-            link_result = await resolve_resume_from_body(
-                body_text,
-                max_bytes=settings.inbound_max_attachment_bytes,
-                timeout=10.0,
-            )
-        except Exception:
-            link_result = None
-
-        if link_result is not None:
-            filename, content_type, content = link_result
-            safe_name = _guess_file_name(filename, "resume_from_link.bin")
-            # Strict extension allowlist for resumes from links
-            allowed_extensions = {".pdf", ".doc", ".docx"}
-            lower_name = safe_name.lower()
-            ext = ""
-            if "." in lower_name:
-                ext = "." + lower_name.rsplit(".", 1)[-1]
-            if ext not in allowed_extensions:
-                # Do not treat this as a resume; leave flow to behave as "no resume attachment"
-                link_result = None
-            else:
-                storage_key = (
-                    f"orgs/{org_inbox.org_id}/inbox/attachments/{inbound_email.id}/link_{safe_name}"
-                )
-                await storage_service.write_bytes(
-                    storage_key, content, content_type or "application/octet-stream"
-                )
-                resume_attachment = InboundEmailAttachment(
-                    inbound_email_id=inbound_email.id,
-                    filename=safe_name,
-                    content_type=content_type or "application/octet-stream",
-                    storage_key=storage_key,
-                    size_bytes=len(content),
-                    sha256=hashlib.sha256(content).hexdigest(),
-                )
-                db.add(resume_attachment)
-                try:
-                    resume_text = _parse_resume_bytes(safe_name, content_type, content)
-                    has_resume = True
-                    inbound_email.has_resume_attachment = True
-                except Exception as exc:
-                    parse_error = f"Resume parse failed: {exc}"
+        # Mark if resume attachment exists (but don't parse yet)
+        if _is_resume_attachment(safe_name, att.content_type):
+            has_resume = True
 
     inbound_from_email = (inbound_email.from_email or "").strip()
     inbound_subject = (inbound_email.subject or "").strip()
@@ -1813,6 +1819,7 @@ async def ingest_inbound_email(
             "org_id": str(org_inbox.org_id),
         }
 
+    # Handle reply to existing conversation (no resume required for replies)
     conversation_ids: tuple[str, str] | None = None
     if reply_to_conv_id is not None:
         conversation_result = await _route_inbound_to_conversation(
@@ -1821,47 +1828,91 @@ async def ingest_inbound_email(
         if conversation_result is not None:
             conv_id, msg_id, _, _ = conversation_result
             conversation_ids = (conv_id, msg_id)
-
-    if not has_resume or resume_attachment is None:
-        if conversation_ids is None:
-            conversation_result = await _route_inbound_to_conversation(
-                db, org_inbox, payload, reply_to_conversation_id=reply_to_conv_id
-            )
-            if conversation_result is not None:
-                conv_id, msg_id, _, _ = conversation_result
-                conversation_ids = (conv_id, msg_id)
-        # No resume — conversation routing (if any) is committed here
-        inbound_email.parse_status = "processed" if conversation_ids else "ignored"
-        inbound_email.parse_error = None if conversation_ids else "No resume attachment found"
-        await db.commit()
-        if conversation_ids:
-            conv_id, msg_id = conversation_ids
+            # Reply processed - commit and return
+            inbound_email.parse_status = "processed"
+            inbound_email.parse_error = None
+            await db.commit()
             logger.info(
-                "Inbound email created/updated conversation: conversation_id=%s message_id=%s from=%s subject=%r",
+                "Inbound email reply processed: conversation_id=%s message_id=%s from=%s",
                 conv_id,
                 msg_id,
                 inbound_email.from_email,
-                (inbound_email.subject or "")[:60],
             )
             return {
                 "status": "ok",
-                "message": "Routed to conversation",
+                "message": "Reply processed",
                 "inbound_email_id": str(inbound_email.id),
                 "conversation_id": conv_id,
                 "message_id": msg_id,
                 "org_id": str(org_inbox.org_id),
             }
+
+    # --- Job inquiry validation (for new conversations only) ---
+    if not _looks_like_job_inquiry(payload):
+        inbound_email.parse_status = "ignored"
+        inbound_email.parse_error = "Email does not match job application keywords"
+        await db.commit()
         logger.info(
-            "Inbound email did not create conversation (no resume; job-inquiry gate may have failed): from=%s subject=%r",
+            "Inbound email ignored (not job-related): from=%s subject=%r",
             inbound_email.from_email,
             (inbound_email.subject or "")[:60],
         )
         return {
             "status": "ok",
-            "message": "Ignored: no resume attachment",
+            "message": "Ignored: not job-related",
             "inbound_email_id": str(inbound_email.id),
             "org_id": str(org_inbox.org_id),
         }
+
+    # Check if resume attachment exists (before expensive parsing)
+    if not has_resume:
+        # Try resume link from body as fallback
+        link_resume = await _process_resume_link_fallback(
+            body_text,
+            org_inbox.org_id,
+            inbound_email.id,
+            db,
+        )
+
+        if link_resume is None:
+            inbound_email.parse_status = "ignored"
+            inbound_email.parse_error = (
+                "No resume attachment or link found - candidate creation requires resume"
+            )
+            await db.commit()
+            logger.info(
+                "Inbound email ignored (no resume): from=%s subject=%r",
+                inbound_email.from_email,
+                (inbound_email.subject or "")[:60],
+            )
+            return {
+                "status": "ok",
+                "message": "Ignored: no resume attachment",
+                "inbound_email_id": str(inbound_email.id),
+                "org_id": str(org_inbox.org_id),
+            }
+
+        # Resume link found and stored
+        resume_attachment, content = link_resume
+        stored_attachments.append((resume_attachment, content))
+        has_resume = True
+        inbound_email.has_resume_attachment = True
+
+    # NOW parse resume (after all validation filters passed)
+    resume_attachment: InboundEmailAttachment | None = None
+    resume_text: str = ""
+    parse_error: str | None = None
+
+    for attachment_row, content in stored_attachments:
+        if _is_resume_attachment(attachment_row.filename, attachment_row.content_type):
+            resume_attachment = attachment_row
+            try:
+                resume_text = _parse_resume_bytes(
+                    attachment_row.filename, attachment_row.content_type, content
+                )
+            except Exception as exc:
+                parse_error = f"Resume parse failed: {exc}"
+            break
 
     if parse_error:
         inbound_email.parse_status = "failed"
@@ -1919,6 +1970,7 @@ async def ingest_inbound_email(
             )
     candidate = candidate_query.scalars().first() if candidate_query is not None else None
 
+    candidate_created = False
     if candidate is None:
         candidate = Candidate(
             org_id=org_inbox.org_id,
@@ -1935,6 +1987,7 @@ async def ingest_inbound_email(
         )
         db.add(candidate)
         await db.flush()
+        candidate_created = True
     else:
         if extracted_name and (not candidate.name or candidate.name == "Unknown Candidate"):
             candidate.name = extracted_name
@@ -1987,51 +2040,123 @@ async def ingest_inbound_email(
         )
     parsed_candidate = candidate
 
+    # Create conversation ONLY for new candidates, append to existing for updates
     if conversation_ids is None:
-        conversation_result = await _route_inbound_to_conversation(
-            db,
-            org_inbox,
-            payload,
-            reply_to_conversation_id=reply_to_conv_id,
-            candidate_override=parsed_candidate,
-        )
-        if conversation_result is not None:
-            conv_id, msg_id, _, _ = conversation_result
-            conversation_ids = (conv_id, msg_id)
-
-    # ------------------------------------------------------------------
-    # Reconcile conversation ownership
-    #
-    # The conversation was routed earlier using the email *sender*
-    # (from_email).  If the resume belongs to a *different* person
-    # (e.g. a recruiter forwarded someone else's CV), we re-link the
-    # conversation to the actual candidate identified in the resume.
-    # This is safe because nothing has been committed yet — both the
-    # conversation write and the resume-candidate write are still in the
-    # same open transaction.
-    # ------------------------------------------------------------------
-    sender_email = (inbound_email.from_email or "").strip().lower()
-    resume_email = (extracted_email or "").strip().lower()
-    is_forwarded_resume = bool(resume_email and resume_email != sender_email)
-
-    if is_forwarded_resume and conversation_ids is not None:
-        conv_id_str, _ = conversation_ids
-        forwarded_conv = await db.get(Conversation, UUID(conv_id_str))
-        if forwarded_conv is not None:
-            forwarded_conv.candidate_id = parsed_candidate.id
-            logger.info(
-                "Inbound email re-linked conversation to resume candidate "
-                "conv_id=%s sender=%s resume_email=%s candidate_id=%s",
-                conv_id_str,
-                sender_email,
-                resume_email,
-                parsed_candidate.id,
+        if candidate_created:
+            # New candidate → Create new conversation
+            conversation_result = await _route_inbound_to_conversation(
+                db,
+                org_inbox,
+                payload,
+                reply_to_conversation_id=None,
+                candidate_override=parsed_candidate,
             )
+            if conversation_result is not None:
+                conv_id, msg_id, _, _ = conversation_result
+                conversation_ids = (conv_id, msg_id)
+                logger.info(
+                    "Inbound email created NEW conversation for NEW candidate "
+                    "conv_id=%s candidate_id=%s resume_email=%s",
+                    conv_id,
+                    parsed_candidate.id,
+                    extracted_email,
+                )
+        else:
+            # Existing candidate → Find existing conversation and append message
+            existing_conv_result = await db.execute(
+                select(Conversation).where(
+                    Conversation.org_id == org_inbox.org_id,
+                    Conversation.candidate_id == parsed_candidate.id,
+                )
+            )
+            existing_conv = existing_conv_result.scalar_one_or_none()
+
+            if existing_conv:
+                # Append message to existing conversation
+                from app.utils.uuid import uuid7
+
+                body_text = (payload.text_body or "").strip() or (payload.html_body or "").strip()
+                now = datetime.now(tz=timezone.utc)
+
+                inbound_msg = Message(
+                    id=uuid7(),
+                    org_id=org_inbox.org_id,
+                    conversation_id=existing_conv.id,
+                    direction="inbound",
+                    sender_type="candidate",
+                    sender_user_id=None,
+                    from_email=(payload.from_email or "").strip().lower(),
+                    to_email=org_inbox.inbox_address,
+                    body=body_text or "(empty)",
+                    html_body=payload.html_body or None,
+                    status="received",
+                    email_message_id=(payload.message_id or "").strip().strip("<>") or None,
+                    in_reply_to=None,
+                    created_at=now,
+                )
+                db.add(inbound_msg)
+
+                existing_conv.last_message_at = now
+                if existing_conv.status in ("closed", "archived"):
+                    existing_conv.status = "open"
+
+                await db.flush()
+
+                conversation_ids = (str(existing_conv.id), str(inbound_msg.id))
+
+                logger.info(
+                    "Inbound email APPENDED to existing conversation for existing candidate "
+                    "conv_id=%s candidate_id=%s resume_email=%s",
+                    existing_conv.id,
+                    parsed_candidate.id,
+                    extracted_email,
+                )
+            else:
+                # No conversation row yet for this candidate
+                conversation_result = await _route_inbound_to_conversation(
+                    db,
+                    org_inbox,
+                    payload,
+                    reply_to_conversation_id=None,
+                    candidate_override=parsed_candidate,
+                )
+                if conversation_result is not None:
+                    conv_id, msg_id, _, _ = conversation_result
+                    conversation_ids = (conv_id, msg_id)
+                    logger.info(
+                        "Inbound email created NEW conversation for existing candidate (no thread yet) "
+                        "conv_id=%s candidate_id=%s resume_email=%s",
+                        conv_id,
+                        parsed_candidate.id,
+                        extracted_email,
+                    )
 
     inbound_email.parsed_candidate_id = parsed_candidate.id
     inbound_email.parse_status = "processed"
     inbound_email.parse_error = None
     await db.commit()
+
+    # Trigger automations for email-based candidate creation
+    # Use candidate_email_received trigger for email inbound candidates
+    if candidate is not None:
+        try:
+            await execute_automations_for_trigger(
+                db=db,
+                trigger_key="candidate_email_received",
+                org_id=org_inbox.org_id,
+                candidate_id=parsed_candidate.id,
+                job_id=None,  # Email inbound candidates don't have job context initially
+                metadata={
+                    "source": "email_inbound",
+                    "stage_name": None,
+                },
+            )
+        except Exception as e:
+            # Log but don't fail the inbound email processing
+            logger.error(
+                f"Failed to trigger automation for email candidate {parsed_candidate.id}: {e}",
+                exc_info=True,
+            )
 
     response: dict = {
         "status": "ok",

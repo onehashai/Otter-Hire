@@ -28,7 +28,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { updateCandidateStage, updateCandidateStatus, type JobHiringStageResponse } from "@/api";
 
-interface ActionButtonsProps {
+export interface ActionButtonsProps {
   candidateName: string;
   jobId?: string;
   candidateId?: string;
@@ -178,20 +178,6 @@ export function ActionButtons({
             ? `Move to ${nextStage.name}`
             : "At final stage"}
       </Button>
-      <Button
-        variant="outline"
-        size="sm"
-        className="h-8 text-xs gap-1.5 hidden sm:flex"
-        onClick={() => {
-          if (onSchedule) {
-            onSchedule();
-            return;
-          }
-          toast({ title: "Interview scheduled" });
-        }}
-      >
-        <Icon name="Clock" className="h-3.5 w-3.5" /> Schedule
-      </Button>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="outline" size="sm" className="h-8 w-8 p-0">
@@ -285,7 +271,7 @@ export function ActionButtons({
                 disabled={isInHiredStage}
                 onSelect={(e) => e.preventDefault()}
               >
-                <Icon name="X" className="h-3.5 w-3.5 mr-2" /> Delete
+                <Icon name="Trash2" className="h-3.5 w-3.5 mr-2" /> Delete
               </DropdownMenuItem>
             </AlertDialogTrigger>
             <AlertDialogContent>

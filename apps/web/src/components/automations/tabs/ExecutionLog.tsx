@@ -9,6 +9,7 @@ import { useTranslation } from "react-i18next";
 export interface ExecutionLogEntry {
   id: string;
   candidateName: string;
+  candidateEmail: string;
   event: string;
   action: string;
   timestamp: string;
@@ -41,6 +42,7 @@ export function ExecutionLog({ logs, onLogSelect, isMobile }: ExecutionLogProps)
                     <User className="h-3 w-3 text-muted-foreground" />
                     <span className="text-sm font-medium truncate">{log.candidateName}</span>
                   </div>
+                  <p className="text-xs text-muted-foreground truncate">{log.candidateEmail}</p>
                   <p className="text-xs text-muted-foreground">{log.action}</p>
                   <p className="text-[11px] text-muted-foreground mt-1">{log.timestamp}</p>
                 </div>
@@ -63,9 +65,9 @@ export function ExecutionLog({ logs, onLogSelect, isMobile }: ExecutionLogProps)
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="text-xs">{t("candidate", "Candidate")}</TableHead>
+              <TableHead className="text-xs">{t("candidate_name", "Candidate Name")}</TableHead>
+              <TableHead className="text-xs">{t("candidate_email", "Candidate Email")}</TableHead>
               <TableHead className="text-xs">{t("event", "Event")}</TableHead>
-              <TableHead className="text-xs">{t("action", "Action")}</TableHead>
               <TableHead className="text-xs">{t("time", "Time")}</TableHead>
               <TableHead className="text-xs">{t("status")}</TableHead>
             </TableRow>
@@ -78,8 +80,10 @@ export function ExecutionLog({ logs, onLogSelect, isMobile }: ExecutionLogProps)
                 onClick={() => onLogSelect(log)}
               >
                 <TableCell className="text-sm font-medium">{log.candidateName}</TableCell>
+                <TableCell className="text-xs text-muted-foreground">
+                  {log.candidateEmail}
+                </TableCell>
                 <TableCell className="text-xs text-muted-foreground">{log.event}</TableCell>
-                <TableCell className="text-xs text-muted-foreground">{log.action}</TableCell>
                 <TableCell className="text-xs text-muted-foreground">{log.timestamp}</TableCell>
                 <TableCell>
                   {log.status === "success" ? (

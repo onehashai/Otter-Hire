@@ -7,48 +7,26 @@ import { Button } from "@onehash/ui/button";
 import { Badge } from "@onehash/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@onehash/ui/tabs";
 import { Icon } from "@onehash/ui/icon";
-import { InputField } from "@onehash/ui/input";
-import { SelectField } from "@onehash/ui/select";
-import { Textarea } from "@onehash/ui/textarea";
 import { DocumentUploadDialog } from "@/components/candidates/shared/dialogs/DocumentUploadDialog";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@onehash/ui/dialog";
 import { useIsMobile } from "@/hooks/use-mobile";
-import {
-  OverviewTab,
-  InterviewsTab,
-  EvaluationTab,
-  DocumentsTab,
-} from "@/components/candidates/shared/tabs";
+import { OverviewTab, DocumentsTab, CandidateMessagesTab } from "@/components/candidates/shared/tabs";
 import { SummaryPanel } from "@/components/candidates/shared/summary/SummaryPanel";
 import { ActionButtons } from "@/components/candidates/job_candidates/ActionButtons";
 import { useTranslation } from "react-i18next";
 import { useSetPageMetadata } from "@/hooks/useSetPageMetadata";
 import {
   addCandidateNote,
-  createCandidateFeedback,
-  createCandidateInterview,
   deleteCandidateDocument,
   getCandidateById,
   getJobWorkspace,
   getJobs,
   getCandidateDocuments,
-  getCandidateEvaluation,
-  getCandidateInterviews,
   getCandidateOverview,
   getOrgUsers,
   updateCandidate,
   uploadCandidateDocument,
   type CandidateDetailResponse,
   type CandidateDocumentResponse,
-  type CandidateEvaluationResponse,
-  type CandidateInterviewResponse,
   type JobListItemResponse,
   type JobHiringStageResponse,
   type CandidateOverviewResponse,
@@ -84,7 +62,7 @@ function mapHiringTimelineItem(activity: {
 }) {
   const metadata = activity.metadata ?? {};
   const actor = activity.created_by_name ?? "System";
-  const date = new Date(activity.created_at).toLocaleString();
+  const date = activity.created_at;
 
   if (activity.type === "stage_changed") {
     const stageName = String(metadata.stage_name ?? "Updated");
@@ -144,28 +122,12 @@ export function JobCandidateProfile({
   const { t } = useTranslation();
   const [candidate, setCandidate] = useState<CandidateDetailResponse | null>(null);
   const [overview, setOverview] = useState<CandidateOverviewResponse | null>(null);
-  const [interviews, setInterviews] = useState<CandidateInterviewResponse[]>([]);
-  const [evaluation, setEvaluation] = useState<CandidateEvaluationResponse | null>(null);
   const [documents, setDocuments] = useState<CandidateDocumentResponse[]>([]);
   const [jobs, setJobs] = useState<JobListItemResponse[]>([]);
   const [jobStages, setJobStages] = useState<JobHiringStageResponse[]>([]);
   const [orgUsers, setOrgUsers] = useState<OrgUserResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  const [scheduleOpen, setScheduleOpen] = useState(false);
-  const [scheduleTitle, setScheduleTitle] = useState("Technical Interview");
-  const [scheduleAt, setScheduleAt] = useState("");
-  const [scheduleDuration, setScheduleDuration] = useState("60");
-  const [scheduleLink, setScheduleLink] = useState("");
-  const [scheduleLoading, setScheduleLoading] = useState(false);
-
-  const [feedbackOpen, setFeedbackOpen] = useState(false);
-  const [feedbackInterviewId, setFeedbackInterviewId] = useState("");
-  const [feedbackDecision, setFeedbackDecision] = useState("yes");
-  const [feedbackRating, setFeedbackRating] = useState("4");
-  const [feedbackComments, setFeedbackComments] = useState("");
-  const [feedbackLoading, setFeedbackLoading] = useState(false);
 
   const [documentOpen, setDocumentOpen] = useState(false);
   const [docFile, setDocFile] = useState<File | null>(null);
@@ -178,18 +140,13 @@ export function JobCandidateProfile({
   });
 
   const loadAll = async (candidateId: string) => {
-    const [candidateData, overviewData, interviewsData, evaluationData, documentsData] =
-      await Promise.all([
-        getCandidateById(candidateId),
-        getCandidateOverview(candidateId),
-        getCandidateInterviews(candidateId),
-        getCandidateEvaluation(candidateId),
-        getCandidateDocuments(candidateId),
-      ]);
+    const [candidateData, overviewData, documentsData] = await Promise.all([
+      getCandidateById(candidateId),
+      getCandidateOverview(candidateId),
+      getCandidateDocuments(candidateId),
+    ]);
     setCandidate(candidateData);
     setOverview(overviewData);
-    setInterviews(interviewsData);
-    setEvaluation(evaluationData);
     setDocuments(documentsData);
   };
 
@@ -271,29 +228,6 @@ export function JobCandidateProfile({
       .filter((a) => HIRING_TIMELINE_TYPES.has(a.type))
       .map((a) => mapHiringTimelineItem(a));
 
-    const mappedInterviews = interviews.map((i) => {
-      const dt = new Date(i.scheduled_at);
-      const isCompleted = dt.getTime() < Date.now();
-      const feedbackForInterview = (evaluation?.feedback ?? []).find(
-        (f) => f.interview_id === i.id,
-      );
-      return {
-        id: i.id,
-        title: i.title,
-        date: dt.toLocaleDateString(),
-        time: dt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-        interviewer: `${i.interviewer_ids.length} interviewer(s)`,
-        status: isCompleted ? "Completed" : "Scheduled",
-        rating: feedbackForInterview?.rating ?? null,
-        decision: feedbackForInterview?.decision
-          ? feedbackForInterview.decision.toUpperCase()
-          : null,
-        feedback: feedbackForInterview?.comments ?? null,
-      };
-    });
-
-    const overall = evaluation?.average_rating ?? 0;
-
     return {
       name: candidate.name,
       role: candidate.job_title ?? "—",
@@ -319,13 +253,6 @@ export function JobCandidateProfile({
       coverLetter: false,
       tags: candidate.tags ?? [],
       timeline,
-      interviews: mappedInterviews,
-      scores: {
-        technical: overall,
-        communication: overall,
-        cultureFit: overall,
-        overall,
-      },
       notes: (overview?.notes ?? []).map((n) => ({
         user: n.author_name ?? "Unknown",
         date: new Date(n.created_at).toLocaleDateString(),
@@ -333,7 +260,7 @@ export function JobCandidateProfile({
         mentions: n.mentions,
       })),
     };
-  }, [candidate, overview, interviews, evaluation, documents]);
+  }, [candidate, overview, documents]);
 
   const handleAddNote = async (content: string, mentions: string[]) => {
     if (!id) return;
@@ -345,52 +272,6 @@ export function JobCandidateProfile({
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to add note");
       throw err;
-    }
-  };
-
-  const handleScheduleInterview = async () => {
-    if (!id || !scheduleTitle.trim() || !scheduleAt) return;
-    try {
-      setScheduleLoading(true);
-      await createCandidateInterview(id, {
-        title: scheduleTitle.trim(),
-        scheduled_at: new Date(scheduleAt).toISOString(),
-        duration_minutes: Number(scheduleDuration) || undefined,
-        meeting_link: scheduleLink.trim() || undefined,
-        interviewer_ids: [],
-      });
-      setScheduleOpen(false);
-      await loadAll(id);
-      toast.success("Interview scheduled");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to schedule interview");
-    } finally {
-      setScheduleLoading(false);
-    }
-  };
-
-  const openFeedbackDialog = (interviewId: string) => {
-    setFeedbackInterviewId(interviewId);
-    setFeedbackOpen(true);
-  };
-
-  const handleSubmitFeedback = async () => {
-    if (!id || !feedbackInterviewId) return;
-    try {
-      setFeedbackLoading(true);
-      await createCandidateFeedback(id, feedbackInterviewId, {
-        decision: feedbackDecision as "yes" | "no" | "maybe",
-        rating: feedbackRating ? Number(feedbackRating) : undefined,
-        comments: feedbackComments.trim() || undefined,
-      });
-      setFeedbackOpen(false);
-      setFeedbackComments("");
-      await loadAll(id);
-      toast.success("Feedback submitted");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to submit feedback");
-    } finally {
-      setFeedbackLoading(false);
     }
   };
 
@@ -496,9 +377,6 @@ export function JobCandidateProfile({
           {isStageThreePane ? (
             <div className="flex items-center gap-2 min-w-0">
               <p className="text-sm font-medium truncate">{uiCandidate.name}</p>
-              <Badge variant="outline" className="text-[10px] shrink-0">
-                {sourceBadgeLabel}
-              </Badge>
             </div>
           ) : (
             <Button variant="ghost" size="sm" className="h-8 text-xs gap-1.5" asChild>
@@ -518,15 +396,14 @@ export function JobCandidateProfile({
           )}
           <ActionButtons
             candidateName={uiCandidate.name}
+            candidateId={candidate!.id}
             jobId={jobRouteJobId ?? candidate?.job_id ?? undefined}
-            candidateId={id}
             currentStageId={candidate?.stage_id}
             stages={jobStages}
             onCandidateUpdated={async () => {
               if (id) await loadAll(id);
               if (onCandidateUpdated) await onCandidateUpdated();
             }}
-            onSchedule={() => setScheduleOpen(true)}
           />
         </div>
 
@@ -534,8 +411,7 @@ export function JobCandidateProfile({
           <TabsList className="h-9 w-full justify-start bg-transparent border-b rounded-none p-0 gap-0">
             {[
               { value: "overview", label: t("overview") },
-              { value: "interviews", label: t("interviews") },
-              { value: "evaluation", label: t("evaluation") },
+              { value: "messages", label: t("messages") },
               { value: "documents", label: t("documents") },
             ].map((tab) => (
               <TabsTrigger
@@ -560,19 +436,13 @@ export function JobCandidateProfile({
                   timelineEmptyText="No hiring status updates yet."
                 />
               </TabsContent>
-              <TabsContent value="interviews" className="mt-0">
-                <InterviewsTab
-                  interviews={uiCandidate.interviews}
-                  onScheduleInterview={() => setScheduleOpen(true)}
-                  onAddFeedback={openFeedbackDialog}
-                />
-              </TabsContent>
-              <TabsContent value="evaluation" className="mt-0">
-                <EvaluationTab
-                  scores={uiCandidate.scores}
-                  interviews={uiCandidate.interviews}
-                  decisionCounts={evaluation?.counts}
-                  feedbackItems={evaluation?.feedback}
+              <TabsContent value="messages" className="mt-0">
+                <CandidateMessagesTab
+                  candidateId={candidate!.id}
+                  candidateName={uiCandidate.name}
+                  candidateEmail={candidate!.email}
+                  jobId={jobRouteJobId ?? candidate?.job_id ?? null}
+                  jobTitle={candidate?.job_title ?? null}
                 />
               </TabsContent>
               <TabsContent value="documents" className="mt-0">
@@ -595,119 +465,6 @@ export function JobCandidateProfile({
           </div>
         </Tabs>
       </div>
-
-      <Dialog open={scheduleOpen} onOpenChange={setScheduleOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Schedule Interview</DialogTitle>
-            <DialogDescription>Create an interview for this candidate.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            <InputField
-              label="Title"
-              value={scheduleTitle}
-              onChange={(e) => setScheduleTitle(e.target.value)}
-              showAsterisk
-            />
-            <InputField
-              label="Scheduled At"
-              type="datetime-local"
-              value={scheduleAt}
-              onChange={(e) => setScheduleAt(e.target.value)}
-              showAsterisk
-            />
-            <InputField
-              label="Duration (minutes)"
-              type="number"
-              value={scheduleDuration}
-              onChange={(e) => setScheduleDuration(e.target.value)}
-            />
-            <InputField
-              label="Meeting Link"
-              value={scheduleLink}
-              onChange={(e) => setScheduleLink(e.target.value)}
-              placeholder="https://..."
-            />
-          </div>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setScheduleOpen(false)}
-              disabled={scheduleLoading}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              onClick={handleScheduleInterview}
-              disabled={scheduleLoading || !scheduleTitle.trim() || !scheduleAt}
-              pending={scheduleLoading}
-            >
-              Schedule
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={feedbackOpen} onOpenChange={setFeedbackOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Add Feedback</DialogTitle>
-            <DialogDescription>Submit interview feedback for this candidate.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            <SelectField
-              label="Decision"
-              value={feedbackDecision}
-              onValueChange={setFeedbackDecision}
-              options={[
-                { value: "yes", label: "Yes" },
-                { value: "maybe", label: "Maybe" },
-                { value: "no", label: "No" },
-              ]}
-            />
-            <SelectField
-              label="Rating"
-              value={feedbackRating}
-              onValueChange={setFeedbackRating}
-              options={[
-                { value: "5", label: "5" },
-                { value: "4", label: "4" },
-                { value: "3", label: "3" },
-                { value: "2", label: "2" },
-                { value: "1", label: "1" },
-              ]}
-            />
-            <div>
-              <p className="text-sm font-medium mb-1.5">Comments</p>
-              <Textarea
-                className="text-sm min-h-[90px]"
-                value={feedbackComments}
-                onChange={(e) => setFeedbackComments(e.target.value)}
-                placeholder="Share your evaluation"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setFeedbackOpen(false)}
-              disabled={feedbackLoading}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              onClick={handleSubmitFeedback}
-              disabled={feedbackLoading || !feedbackInterviewId}
-            >
-              {feedbackLoading ? "Submitting..." : "Submit Feedback"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <DocumentUploadDialog
         open={documentOpen}

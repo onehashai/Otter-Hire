@@ -6,8 +6,7 @@ import { Button } from "@onehash/ui/button";
 import { Textarea } from "@onehash/ui/textarea";
 import { Icon } from "@onehash/ui/icon";
 import { cn } from "@/lib/utils";
-import { formatDayMonth } from "@/lib/format-date";
-
+import { formatTimestampToDateTime } from "@/lib/format-date";
 interface TimelineItem {
   action: string;
   date: string;
@@ -50,6 +49,12 @@ const TimelineIcon = ({ type }: { type: string }) => {
   if (type === "feedback") return <Icon name="Send" className={cls} />;
   return <Icon name="Clock" className={cls} />;
 };
+
+/** Caps height so long content scrolls inside the card instead of stretching the page. */
+const scrollableTimelineClass =
+  "max-h-[min(26rem,50vh)] overflow-y-auto overflow-x-hidden overscroll-contain pr-1 min-h-0";
+const scrollableNotesListClass =
+  "max-h-[min(22rem,42vh)] overflow-y-auto overflow-x-hidden overscroll-contain pr-1 min-h-0";
 
 export function OverviewTab({
   timeline,
@@ -187,28 +192,32 @@ export function OverviewTab({
             <CardTitle className="text-xs font-medium">{timelineTitle}</CardTitle>
           </CardHeader>
           <CardContent className="p-4 pt-0">
-            {timeline.length === 0 ? (
-              <p className="text-xs text-muted-foreground">{timelineEmptyText}</p>
-            ) : (
-              <div className="space-y-3">
-                {timeline.map((item, i) => (
-                  <div key={i} className="flex gap-3">
-                    <div className="flex flex-col items-center">
-                      <div className="h-6 w-6 rounded-full bg-muted flex items-center justify-center shrink-0">
-                        <TimelineIcon type={item.icon} />
+            <div className={scrollableTimelineClass}>
+              {timeline.length === 0 ? (
+                <p className="text-xs text-muted-foreground">{timelineEmptyText}</p>
+              ) : (
+                <div className="space-y-3">
+                  {timeline.map((item, i) => (
+                    <div key={i} className="flex gap-3">
+                      <div className="flex flex-col items-center">
+                        <div className="h-6 w-6 rounded-full bg-muted flex items-center justify-center shrink-0">
+                          <TimelineIcon type={item.icon} />
+                        </div>
+                        {i < timeline.length - 1 && <div className="w-px flex-1 bg-border mt-1" />}
                       </div>
-                      {i < timeline.length - 1 && <div className="w-px flex-1 bg-border mt-1" />}
+                      <div className="flex-1 min-w-0 pb-3">
+                        <div className="min-w-0">
+                          <p className="text-xs font-medium">{item.action}</p>
+                          <p className="text-[10px] text-muted-foreground">
+                            {formatTimestampToDateTime(item.date)}
+                          </p>
+                        </div>
+                      </div>
                     </div>
-                    <div className="pb-3">
-                      <p className="text-xs font-medium">{item.action}</p>
-                      <p className="text-[10px] text-muted-foreground">
-                        {item.user} · {item.date}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+                  ))}
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
       ) : null}
@@ -227,7 +236,7 @@ export function OverviewTab({
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-medium">{note.user}</span>
                   <span className="text-[10px] text-muted-foreground">
-                    {formatDayMonth(note.date)}
+                    {formatTimestampToDateTime(note.date)}
                   </span>
                 </div>
                 <p className="text-xs text-muted-foreground">{note.text}</p>
@@ -246,7 +255,7 @@ export function OverviewTab({
               </div>
             ))
           )}
-          <div className="relative">
+          <div className="relative shrink-0">
             <Textarea
               ref={textareaRef}
               placeholder="Add a note... Use @ to tag a teammate"

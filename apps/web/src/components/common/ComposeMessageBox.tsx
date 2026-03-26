@@ -39,8 +39,7 @@ export function substituteTemplateVariables(
     .replace(/\{\{company_name\}\}/gi, organizationName || "{{company_name}}");
 }
 
-interface ComposeMessageBoxProps {
-  /** Pre-filled reply-to address (candidate email). Editable by the user. */
+export interface ComposeMessageBoxProps {
   toEmail: string;
   jobTitle?: string;
   candidateName?: string;

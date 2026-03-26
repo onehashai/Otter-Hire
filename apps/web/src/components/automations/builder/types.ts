@@ -36,20 +36,25 @@ export const triggerOptions: TriggerOption[] = [
   },
   { id: "candidate_rejected", label: "Candidate rejected", category: "candidate" },
   { id: "candidate_hired", label: "Candidate hired", category: "candidate" },
-  { id: "interview_scheduled", label: "Interview scheduled", category: "candidate" },
+  { id: "candidate_job_assigned", label: "Candidate job assigned", category: "candidate" },
+  { id: "candidate_email_received", label: "Candidate email received", category: "candidate" },
+  // TODO: Re-enable "Interview scheduled" trigger once interview automation is fully supported
+  // { id: "interview_scheduled", label: "Interview scheduled", category: "candidate" },
 ];
 
 export const actionTypes: ActionTypeDef[] = [
   { id: "send_email", label: "Send email", icon: Mail, category: "Communication" },
-  { id: "move_stage", label: "Move to stage", icon: ArrowRight, category: "Candidate" },
-  { id: "assign_recruiter", label: "Assign recruiter", icon: UserPlus, category: "Candidate" },
-  { id: "add_tag", label: "Add tag", icon: Tag, category: "Candidate" },
-  {
-    id: "schedule_interview",
-    label: "Schedule interview",
-    icon: Calendar,
-    category: "Interview",
-  },
+  // TODO: Re-enable candidate actions (Move to stage, Assign recruiter, Add tag)
+  // { id: "move_stage", label: "Move to stage", icon: ArrowRight, category: "Candidate" },
+  // { id: "assign_recruiter", label: "Assign recruiter", icon: UserPlus, category: "Candidate" },
+  // { id: "add_tag", label: "Add tag", icon: Tag, category: "Candidate" },
+  // TODO: Re-enable interview actions (Schedule interview)
+  // {
+  //   id: "schedule_interview",
+  //   label: "Schedule interview",
+  //   icon: Calendar,
+  //   category: "Interview",
+  // },
 ];
 
 export const stages = ["Applied", "Screening", "Interview", "Offer", "Hired", "Rejected"];

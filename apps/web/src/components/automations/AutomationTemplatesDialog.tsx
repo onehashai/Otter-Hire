@@ -60,6 +60,22 @@ const templates: {
     triggerConfig: { stage: "Hired", label: "Candidate moved to Hired" },
     templateName: "Send Offer Letter",
   },
+  {
+    name: "Job Assignment Email",
+    trigger: "Job assigned",
+    action: "Send Job Assignment Notification",
+    triggerKey: "candidate_job_assigned",
+    triggerConfig: { label: "Candidate job assigned" },
+    templateName: "Job Assignment Notification",
+  },
+  {
+    name: "Email Acknowledgment",
+    trigger: "Email received",
+    action: "Send Auto-Reply",
+    triggerKey: "candidate_email_received",
+    triggerConfig: { label: "Candidate email received" },
+    templateName: "Email Auto-Reply",
+  },
 ];
 
 export interface AutomationTemplatesDialogProps {

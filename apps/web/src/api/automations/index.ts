@@ -66,6 +66,8 @@ export type AutomationExecutionLogEntry = {
   id: string;
   trigger_event: string;
   candidate_id: string | null;
+  candidate_name: string | null;
+  candidate_email: string | null;
   job_id: string | null;
   status: string;
   message: string | null;

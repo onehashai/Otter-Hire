@@ -3,8 +3,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -23,8 +23,6 @@ from app.schemas.conversations import (
     CandidateSnippet,
     ConversationCreate,
     ConversationDetail,
-    ConversationListItem,
-    ConversationListResponse,
     MessageCreate,
     MessageRead,
 )
@@ -79,115 +77,7 @@ def _message_to_read(msg: Message, sender_name: str | None = None) -> MessageRea
     )
 
 
-# ---------------------------------------------------------------------------
-# Endpoints
-# ---------------------------------------------------------------------------
-
-
-@router.get("", response_model=ConversationListResponse)
-async def list_conversations(
-    page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=30, ge=1, le=100),
-    current_user: User = Depends(require_permission("candidates:read")),
-    db: AsyncSession = Depends(get_db),
-):
-    org_id = current_user.org_id
-    offset = (page - 1) * page_size
-
-    total_result = await db.execute(
-        select(func.count()).select_from(Conversation).where(Conversation.org_id == org_id)
-    )
-    total = total_result.scalar_one()
-
-    convs_result = await db.execute(
-        select(Conversation)
-        .where(Conversation.org_id == org_id)
-        .order_by(Conversation.last_message_at.desc().nullslast())
-        .offset(offset)
-        .limit(page_size)
-        .options(selectinload(Conversation.candidate))
-    )
-    convs = convs_result.scalars().all()
-
-    # Fetch last message body for each conversation in a single query
-    conv_ids = [c.id for c in convs]
-    last_msgs: dict[UUID, tuple[str, int]] = {}
-    if conv_ids:
-        subq = (
-            select(
-                Message.conversation_id,
-                Message.body,
-                func.row_number()
-                .over(
-                    partition_by=Message.conversation_id,
-                    order_by=Message.created_at.desc(),
-                )
-                .label("rn"),
-            )
-            .where(Message.conversation_id.in_(conv_ids))
-            .subquery()
-        )
-        rows = await db.execute(select(subq.c.conversation_id, subq.c.body).where(subq.c.rn == 1))
-        raw_last_msgs = {row.conversation_id: row.body for row in rows}
-        # Use only visible part (no quoted block) for list preview
-        from app.utils.email_parse import parse_email_body
-
-        last_msgs = {}
-        for cid, body in raw_last_msgs.items():
-            visible, _ = parse_email_body(body or "")
-            last_msgs[cid] = visible or body or ""
-
-        count_rows = await db.execute(
-            select(Message.conversation_id, func.count().label("cnt"))
-            .where(Message.conversation_id.in_(conv_ids))
-            .group_by(Message.conversation_id)
-        )
-        msg_counts: dict[UUID, int] = {row.conversation_id: row.cnt for row in count_rows}
-    else:
-        msg_counts = {}
-
-    items = [
-        ConversationListItem(
-            id=c.id,
-            subject=c.subject,
-            channel=c.channel,
-            status=c.status,
-            last_message_at=c.last_message_at,
-            created_at=c.created_at,
-            candidate=CandidateSnippet(
-                id=c.candidate.id,
-                name=c.candidate.name,
-                email=c.candidate.email,
-            ),
-            last_message_body=last_msgs.get(c.id),
-            message_count=msg_counts.get(c.id, 0),
-        )
-        for c in convs
-    ]
-    return ConversationListResponse(items=items, total=total, page=page, page_size=page_size)
-
-
-@router.get("/{conversation_id}", response_model=ConversationDetail)
-async def get_conversation(
-    conversation_id: UUID,
-    current_user: User = Depends(require_permission("candidates:read")),
-    db: AsyncSession = Depends(get_db),
-):
-    result = await db.execute(
-        select(Conversation)
-        .where(
-            Conversation.id == conversation_id,
-            Conversation.org_id == current_user.org_id,
-        )
-        .options(
-            selectinload(Conversation.candidate),
-            selectinload(Conversation.messages).selectinload(Message.sender_user),
-        )
-    )
-    conv = result.scalar_one_or_none()
-    if conv is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
-
+def _conversation_to_detail(conv: Conversation) -> ConversationDetail:
     messages = [
         _message_to_read(
             msg,
@@ -195,7 +85,6 @@ async def get_conversation(
         )
         for msg in conv.messages
     ]
-
     return ConversationDetail(
         id=conv.id,
         subject=conv.subject,
@@ -214,13 +103,182 @@ async def get_conversation(
     )
 
 
-@router.post("", response_model=ConversationDetail, status_code=status.HTTP_201_CREATED)
+async def _append_outbound_message(
+    db: AsyncSession,
+    conv: Conversation,
+    current_user: User,
+    body: MessageCreate,
+    *,
+    email_subject: str,
+) -> MessageRead:
+    """Persist outbound message and enqueue email send. Caller must load ``conv.candidate``."""
+    if conv.status == "archived":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Cannot send messages to an archived conversation",
+        )
+
+    org_name: str | None = None
+    inbox_result = await db.execute(select(OrgInbox).where(OrgInbox.org_id == current_user.org_id))
+    org_inbox = inbox_result.scalar_one_or_none()
+    reply_to = _reply_address_for_conversation(
+        conv.id,
+        fixed_domain=settings.inbound_email_domain,
+        inbox_address=org_inbox.inbox_address if org_inbox else None,
+    )
+    org_result = await db.execute(
+        select(Organization).where(Organization.id == current_user.org_id)
+    )
+    org = org_result.scalar_one_or_none()
+    if org:
+        org_name = org.name
+
+    last_with_id_result = await db.execute(
+        select(Message)
+        .where(
+            Message.conversation_id == conv.id,
+            Message.email_message_id.isnot(None),
+        )
+        .order_by(Message.created_at.desc())
+        .limit(1)
+    )
+    last_with_id = last_with_id_result.scalar_one_or_none()
+    in_reply_to_msg_id: str | None = (
+        (last_with_id.email_message_id or "").strip().strip("<>") or None
+        if last_with_id and last_with_id.email_message_id
+        else None
+    )
+    references_val: str | None = in_reply_to_msg_id if in_reply_to_msg_id else None
+
+    from_email = reply_to or ""
+    now = datetime.now(tz=timezone.utc)
+
+    msg_id = uuid7()
+    msg = Message(
+        id=msg_id,
+        org_id=current_user.org_id,
+        conversation_id=conv.id,
+        direction="outbound",
+        sender_type="user",
+        sender_user_id=current_user.id,
+        from_email=from_email,
+        to_email=conv.candidate.email,
+        body=body.body,
+        html_body=body.html_body,
+        status="queued",
+        in_reply_to=in_reply_to_msg_id,
+        created_at=now,
+    )
+    db.add(msg)
+
+    conv.last_message_at = now
+    if conv.status == "closed":
+        conv.status = "open"
+
+    await db.commit()
+    await db.refresh(msg)
+
+    try:
+        await enqueue_outbound_email(
+            OutboundWorkflowInput(
+                org_id=str(current_user.org_id),
+                message_id=str(msg_id),
+                to_email=conv.candidate.email,
+                subject=email_subject,
+                body=body.body,
+                html_body=body.html_body,
+                from_name=current_user.name,
+                org_name=org_name,
+                reply_to=reply_to,
+                in_reply_to=in_reply_to_msg_id,
+                references=references_val,
+            )
+        )
+    except Exception:
+        logger.exception("Failed to enqueue outbound email workflow for message %s", msg_id)
+
+    return _message_to_read(msg, sender_name=current_user.name)
+
+
+async def _load_conversation_detail(
+    db: AsyncSession, conversation_id: UUID, org_id: UUID
+) -> ConversationDetail:
+    result = await db.execute(
+        select(Conversation)
+        .where(
+            Conversation.id == conversation_id,
+            Conversation.org_id == org_id,
+        )
+        .options(
+            selectinload(Conversation.candidate),
+            selectinload(Conversation.messages).selectinload(Message.sender_user),
+        )
+    )
+    conv = result.scalar_one_or_none()
+    if conv is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+    return _conversation_to_detail(conv)
+
+
+# ---------------------------------------------------------------------------
+# Endpoints
+# ---------------------------------------------------------------------------
+
+
+@router.get("/by-candidate/{candidate_id}", response_model=ConversationDetail)
+async def get_conversation_by_candidate(
+    candidate_id: UUID,
+    current_user: User = Depends(require_permission("candidates:read")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return the single conversation for this candidate in the org, or 404 if none."""
+    cand_result = await db.execute(
+        select(Candidate).where(
+            Candidate.id == candidate_id,
+            Candidate.org_id == current_user.org_id,
+        )
+    )
+    if cand_result.scalar_one_or_none() is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Candidate not found")
+
+    conv_result = await db.execute(
+        select(Conversation)
+        .where(
+            Conversation.org_id == current_user.org_id,
+            Conversation.candidate_id == candidate_id,
+        )
+        .options(
+            selectinload(Conversation.candidate),
+            selectinload(Conversation.messages).selectinload(Message.sender_user),
+        )
+    )
+    conv = conv_result.scalar_one_or_none()
+    if conv is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No conversation for this candidate",
+        )
+
+    return _conversation_to_detail(conv)
+
+
+@router.get("/{conversation_id}", response_model=ConversationDetail)
+async def get_conversation(
+    conversation_id: UUID,
+    current_user: User = Depends(require_permission("candidates:read")),
+    db: AsyncSession = Depends(get_db),
+):
+    return await _load_conversation_detail(db, conversation_id, current_user.org_id)
+
+
+@router.post("", response_model=ConversationDetail)
 async def create_conversation(
     body: ConversationCreate,
+    response: Response,
     current_user: User = Depends(require_permission("candidates:source")),
     db: AsyncSession = Depends(get_db),
 ):
-    # Verify candidate belongs to this org
+    """Create the org's only conversation for this candidate, or append if it already exists."""
     cand_result = await db.execute(
         select(Candidate).where(
             Candidate.id == body.candidate_id,
@@ -230,6 +288,31 @@ async def create_conversation(
     candidate = cand_result.scalar_one_or_none()
     if candidate is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Candidate not found")
+
+    existing_result = await db.execute(
+        select(Conversation)
+        .where(
+            Conversation.org_id == current_user.org_id,
+            Conversation.candidate_id == body.candidate_id,
+        )
+        .options(selectinload(Conversation.candidate))
+    )
+    existing = existing_result.scalar_one_or_none()
+
+    if existing is not None:
+        if body.job_id is not None and existing.job_id is None:
+            existing.job_id = body.job_id
+            await db.flush()
+        msg_body = MessageCreate(body=body.body, html_body=body.html_body)
+        await _append_outbound_message(
+            db,
+            existing,
+            current_user,
+            msg_body,
+            email_subject=f"Re: {existing.subject}",
+        )
+        response.status_code = status.HTTP_200_OK
+        return await _load_conversation_detail(db, existing.id, current_user.org_id)
 
     now = datetime.now(tz=timezone.utc)
     conv = Conversation(
@@ -245,7 +328,6 @@ async def create_conversation(
     db.add(conv)
     await db.flush()
 
-    # Reply address: reply+conv_id@inbound.domain so replies land in this conversation
     org_name: str | None = None
     inbox_result = await db.execute(select(OrgInbox).where(OrgInbox.org_id == current_user.org_id))
     org_inbox = inbox_result.scalar_one_or_none()
@@ -281,7 +363,6 @@ async def create_conversation(
     await db.commit()
     await db.refresh(conv)
 
-    # Hand off actual sending to the Temporal worker (async, retriable)
     try:
         await enqueue_outbound_email(
             OutboundWorkflowInput(
@@ -299,22 +380,8 @@ async def create_conversation(
     except Exception:
         logger.exception("Failed to enqueue outbound email workflow for message %s", msg_id)
 
-    return ConversationDetail(
-        id=conv.id,
-        subject=conv.subject,
-        channel=conv.channel,
-        status=conv.status,
-        last_message_at=conv.last_message_at,
-        created_at=conv.created_at,
-        updated_at=conv.updated_at,
-        candidate=CandidateSnippet(
-            id=candidate.id,
-            name=candidate.name,
-            email=candidate.email,
-        ),
-        job_id=conv.job_id,
-        messages=[_message_to_read(first_msg, sender_name=current_user.name)],
-    )
+    response.status_code = status.HTTP_201_CREATED
+    return await _load_conversation_detail(db, conv.id, current_user.org_id)
 
 
 @router.post(
@@ -340,97 +407,13 @@ async def send_message(
     if conv is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
 
-    if conv.status == "archived":
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Cannot send messages to an archived conversation",
-        )
-
-    org_name: str | None = None
-    inbox_result = await db.execute(select(OrgInbox).where(OrgInbox.org_id == current_user.org_id))
-    org_inbox = inbox_result.scalar_one_or_none()
-    reply_to = _reply_address_for_conversation(
-        conv.id,
-        fixed_domain=settings.inbound_email_domain,
-        inbox_address=org_inbox.inbox_address if org_inbox else None,
+    return await _append_outbound_message(
+        db,
+        conv,
+        current_user,
+        body,
+        email_subject=f"Re: {conv.subject}",
     )
-    org_result = await db.execute(
-        select(Organization).where(Organization.id == current_user.org_id)
-    )
-    org = org_result.scalar_one_or_none()
-    if org:
-        org_name = org.name
-
-    # Threading: get the last message in the thread that has a Message-ID so we can set In-Reply-To/References
-    last_with_id_result = await db.execute(
-        select(Message)
-        .where(
-            Message.conversation_id == conv.id,
-            Message.email_message_id.isnot(None),
-        )
-        .order_by(Message.created_at.desc())
-        .limit(1)
-    )
-    last_with_id = last_with_id_result.scalar_one_or_none()
-    in_reply_to_msg_id: str | None = (
-        (last_with_id.email_message_id or "").strip().strip("<>") or None
-        if last_with_id and last_with_id.email_message_id
-        else None
-    )
-    references_val: str | None = (
-        in_reply_to_msg_id if in_reply_to_msg_id else None
-    )  # same as In-Reply-To for direct reply
-
-    from_email = reply_to or ""
-    now = datetime.now(tz=timezone.utc)
-
-    msg_id = uuid7()
-    msg = Message(
-        id=msg_id,
-        org_id=current_user.org_id,
-        conversation_id=conv.id,
-        direction="outbound",
-        sender_type="user",
-        sender_user_id=current_user.id,
-        from_email=from_email,
-        to_email=conv.candidate.email,
-        body=body.body,
-        html_body=body.html_body,
-        status="queued",
-        in_reply_to=in_reply_to_msg_id,
-        created_at=now,
-    )
-    db.add(msg)
-
-    # Update conversation's last_message_at and reopen if closed
-    conv.last_message_at = now
-    if conv.status == "closed":
-        conv.status = "open"
-
-    await db.commit()
-    await db.refresh(msg)
-
-    # Hand off actual sending to the Temporal worker (async, retriable)
-    try:
-        await enqueue_outbound_email(
-            OutboundWorkflowInput(
-                org_id=str(current_user.org_id),
-                message_id=str(msg_id),
-                to_email=conv.candidate.email,
-                subject=f"Re: {conv.subject}",
-                body=body.body,
-                html_body=body.html_body,
-                from_name=current_user.name,
-                org_name=org_name,
-                reply_to=reply_to,
-                in_reply_to=in_reply_to_msg_id,
-                references=references_val,
-            )
-        )
-    except Exception:
-        logger.exception("Failed to enqueue outbound email workflow for message %s", msg_id)
-
-    return _message_to_read(msg, sender_name=current_user.name)
 
 
 @router.patch("/{conversation_id}/status", response_model=ConversationDetail)
@@ -459,27 +442,4 @@ async def update_conversation_status(
     await db.commit()
     await db.refresh(conv)
 
-    messages = [
-        _message_to_read(
-            msg,
-            sender_name=msg.sender_user.name if msg.sender_user else None,
-        )
-        for msg in conv.messages
-    ]
-
-    return ConversationDetail(
-        id=conv.id,
-        subject=conv.subject,
-        channel=conv.channel,
-        status=conv.status,
-        last_message_at=conv.last_message_at,
-        created_at=conv.created_at,
-        updated_at=conv.updated_at,
-        candidate=CandidateSnippet(
-            id=conv.candidate.id,
-            name=conv.candidate.name,
-            email=conv.candidate.email,
-        ),
-        job_id=conv.job_id,
-        messages=messages,
-    )
+    return _conversation_to_detail(conv)

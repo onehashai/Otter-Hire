@@ -222,12 +222,7 @@ export function JobCandidateProfile({
 
   const uiCandidate = useMemo(() => {
     if (!candidate) return null;
-    const stage =
-      candidate.status === "rejected"
-        ? "Rejected"
-        : candidate.status === "hired"
-          ? "Hired"
-          : (candidate.stage_name ?? "Applied");
+    const stage = candidate.stage_name ?? "Applied";
 
     const timeline = (overview?.activities ?? [])
       .filter((a) => HIRING_TIMELINE_TYPES.has(a.type))

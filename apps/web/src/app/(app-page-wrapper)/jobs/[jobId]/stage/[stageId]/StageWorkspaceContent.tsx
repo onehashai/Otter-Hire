@@ -81,6 +81,17 @@ export default function StageWorkspaceContent() {
     }
   }, [candidateIdParam, stageForList, candidatesInStage, jobId, router]);
 
+  useEffect(() => {
+    if (!stageForList || candidateIdParam) return;
+    if (candidatesInStage.length === 0) return;
+    const firstCandidate = candidatesInStage[0];
+    if (!firstCandidate) return;
+    router.replace(
+      `/jobs/${encodeURIComponent(jobId)}/stage/${encodeURIComponent(stageForList.id)}/candidates/${encodeURIComponent(firstCandidate.id)}`,
+      { scroll: false },
+    );
+  }, [stageForList, candidateIdParam, candidatesInStage, jobId, router]);
+
   const filteredCandidates = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return candidatesInStage;

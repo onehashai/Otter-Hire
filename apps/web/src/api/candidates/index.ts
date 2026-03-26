@@ -189,6 +189,7 @@ export async function getCandidatesPaginated(params?: {
   stage_id?: string;
   status?: string;
   source?: string;
+  talent_pool_only?: boolean;
   limit?: number;
   offset?: number;
 }): Promise<CandidatesPaginatedResponse> {
@@ -198,6 +199,7 @@ export async function getCandidatesPaginated(params?: {
   if (params?.stage_id) searchParams.set("stage_id", params.stage_id);
   if (params?.status) searchParams.set("status", params.status);
   if (params?.source) searchParams.set("source", params.source);
+  if (params?.talent_pool_only) searchParams.set("talent_pool_only", "true");
   if (params?.limit !== undefined) searchParams.set("limit", String(params.limit));
   if (params?.offset !== undefined) searchParams.set("offset", String(params.offset));
   const query = searchParams.toString();

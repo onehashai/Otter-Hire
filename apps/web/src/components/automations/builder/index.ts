@@ -9,16 +9,5 @@ export type { SummaryStripProps } from "./SummaryStrip";
 export { EmailPreview } from "./EmailPreview";
 export type { EmailPreviewProps } from "./EmailPreview";
 export { FieldRow } from "./FieldRow";
-export {
-  triggerOptions,
-  actionTypes,
-  stages,
-  emailTemplates,
-} from "./types";
-export type {
-  Scope,
-  TriggerCategory,
-  TriggerOption,
-  Action,
-  ActionTypeDef,
-} from "./types";
+export { triggerOptions, actionTypes, stages, emailTemplates } from "./types";
+export type { Scope, TriggerCategory, TriggerOption, Action, ActionTypeDef } from "./types";

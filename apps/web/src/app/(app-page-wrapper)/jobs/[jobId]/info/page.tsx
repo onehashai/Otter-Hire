@@ -6,12 +6,7 @@ import { InputField } from "@onehash/ui/input";
 import { SelectField, SearchableSelectField } from "@onehash/ui/select";
 import { Country, City } from "country-state-city";
 import { useJobSetup } from "../context";
-import {
-  employmentTypes,
-  workplaceTypes,
-  CITY_VALUE_SEP,
-  getCityDisplayName,
-} from "../constants";
+import { employmentTypes, workplaceTypes, CITY_VALUE_SEP, getCityDisplayName } from "../constants";
 import { useTranslation } from "react-i18next";
 import { getBasicInfoValidation } from "../../../../../lib/validations/setupValidation";
 import { getJobCategories, type JobCategoryResponse } from "@/api";
@@ -171,9 +166,7 @@ export default function JobInfoPage() {
               showAsterisk
             />
           </div>
-          {locationHint ? (
-            <p className="text-xs text-destructive">{locationHint}</p>
-          ) : null}
+          {locationHint ? <p className="text-xs text-destructive">{locationHint}</p> : null}
         </div>
       ) : null}
     </div>

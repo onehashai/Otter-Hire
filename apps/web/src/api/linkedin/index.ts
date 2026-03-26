@@ -55,7 +55,7 @@ export async function getLinkedInOrganizations(): Promise<LinkedInOrganizationsR
 }
 
 export async function completeLinkedInSetup(
-  data: LinkedInCompleteSetupRequest
+  data: LinkedInCompleteSetupRequest,
 ): Promise<{ message: string }> {
   return apiPost("/integrations/linkedin/complete-setup", data);
 }

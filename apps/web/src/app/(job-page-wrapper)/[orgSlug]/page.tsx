@@ -55,7 +55,7 @@ export default function CareersListPage() {
     getPublicJobs(parsed.orgName, parsed.orgId)
       .then((data) => {
         setJobs(data.jobs);
-        setOrgName(data.org_name );
+        setOrgName(data.org_name);
         setOrgAvatarUrl(data.org_avatar_url);
         setLoading(false);
       })
@@ -66,9 +66,7 @@ export default function CareersListPage() {
   }, [orgSlug]);
 
   const allCategories = useMemo(() => {
-    const depts = jobs
-      .map((j) => j.category)
-      .filter((c): c is string => c != null && c !== "");
+    const depts = jobs.map((j) => j.category).filter((c): c is string => c != null && c !== "");
     return [...new Set(depts)];
   }, [jobs]);
 

@@ -423,64 +423,56 @@ export default function ApplicationFormPage() {
           )}
         />
         {showOptions && (
-            <div className="space-y-2">
-              {qOptions.map((opt, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground w-4 shrink-0">{i + 1}</span>
-                  <InputField
-                    value={opt}
-                    onChange={(e) => {
-                      const next = [...qOptions];
-                      next[i] = e.target.value;
-                      setQOptions(next);
-                    }}
-                    placeholder={`Option ${i + 1}`}
-                    className="h-8 text-sm flex-1"
-                  />
-                  {qOptions.length > 2 && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 shrink-0"
-                      onClick={() => setQOptions(qOptions.filter((_, idx) => idx !== i))}
-                    >
-                      <X className="h-3 w-3" />
-                    </Button>
-                  )}
-                </div>
-              ))}
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 text-xs gap-1"
-                onClick={() => setQOptions([...qOptions, ""])}
-              >
-                <Plus className="h-3 w-3" /> Add Option
-              </Button>
-              <div className="flex items-center gap-2 pt-1">
-                <Checkbox
-                  checked={qAllowOther}
-                  onCheckedChange={(v) => setQAllowOther(!!v)}
-                  id="allow-other"
+          <div className="space-y-2">
+            {qOptions.map((opt, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground w-4 shrink-0">{i + 1}</span>
+                <InputField
+                  value={opt}
+                  onChange={(e) => {
+                    const next = [...qOptions];
+                    next[i] = e.target.value;
+                    setQOptions(next);
+                  }}
+                  placeholder={`Option ${i + 1}`}
+                  className="h-8 text-sm flex-1"
                 />
-                <Label
-                  htmlFor="allow-other"
-                  className="text-xs text-muted-foreground cursor-pointer"
-                >
-                  Allow "Other" answer
-                </Label>
+                {qOptions.length > 2 && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 shrink-0"
+                    onClick={() => setQOptions(qOptions.filter((_, idx) => idx !== i))}
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                )}
               </div>
+            ))}
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs gap-1"
+              onClick={() => setQOptions([...qOptions, ""])}
+            >
+              <Plus className="h-3 w-3" /> Add Option
+            </Button>
+            <div className="flex items-center gap-2 pt-1">
+              <Checkbox
+                checked={qAllowOther}
+                onCheckedChange={(v) => setQAllowOther(!!v)}
+                id="allow-other"
+              />
+              <Label htmlFor="allow-other" className="text-xs text-muted-foreground cursor-pointer">
+                Allow "Other" answer
+              </Label>
             </div>
+          </div>
         )}
         <Separator />
         <div className="flex items-center justify-between py-1">
-          <Label>
-            Required Field
-          </Label>
-          <Switch
-            checked={qRequired}
-            onCheckedChange={(v) => setQRequired(!!v)}
-          />
+          <Label>Required Field</Label>
+          <Switch checked={qRequired} onCheckedChange={(v) => setQRequired(!!v)} />
         </div>
       </>
     );

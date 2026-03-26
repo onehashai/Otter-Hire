@@ -257,9 +257,7 @@ export function SummaryPanel({
                 <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">
                   {t("applied")}
                 </Label>
-                <p className="text-xs">
-                  {formatDayMonth(candidate.appliedDate)}
-                </p>
+                <p className="text-xs">{formatDayMonth(candidate.appliedDate)}</p>
               </div>
             </>
           )}

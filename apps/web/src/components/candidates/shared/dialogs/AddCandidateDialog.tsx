@@ -98,10 +98,7 @@ export function AddCandidateDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
             Cancel
           </Button>
-          <Button
-            onClick={() => void submit()}
-            disabled={loading || !name.trim() || !email.trim()}
-          >
+          <Button onClick={() => void submit()} disabled={loading || !name.trim() || !email.trim()}>
             {loading ? "Adding…" : "Add candidate"}
           </Button>
         </DialogFooter>

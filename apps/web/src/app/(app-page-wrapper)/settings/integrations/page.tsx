@@ -252,8 +252,6 @@ export default function IntegrationsSettingsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-
     </TooltipProvider>
   );
 }

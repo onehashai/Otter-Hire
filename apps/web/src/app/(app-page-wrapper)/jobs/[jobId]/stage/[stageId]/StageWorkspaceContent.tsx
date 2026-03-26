@@ -150,7 +150,10 @@ export default function StageWorkspaceContent() {
                   {s.name}
                   <Badge
                     variant={isSel ? "outline" : "secondary"}
-                    className={cn("text-[10px] h-4", isSel && "border-background/30 text-background")}
+                    className={cn(
+                      "text-[10px] h-4",
+                      isSel && "border-background/30 text-background",
+                    )}
                   >
                     {count}
                   </Badge>
@@ -188,7 +191,9 @@ export default function StageWorkspaceContent() {
                 tabIndex={0}
                 className="cursor-pointer hover:shadow-sm active:bg-muted/50 transition-all"
                 onClick={() =>
-                  router.push(`/jobs/${encodeURIComponent(jobId)}/candidates/${encodeURIComponent(c.id)}`)
+                  router.push(
+                    `/jobs/${encodeURIComponent(jobId)}/candidates/${encodeURIComponent(c.id)}`,
+                  )
                 }
                 onKeyDown={(e) => {
                   if (e.key === "Enter")
@@ -204,7 +209,9 @@ export default function StageWorkspaceContent() {
                     </Avatar>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">{c.name}</p>
-                      <p className="text-xs text-muted-foreground truncate">{c.email ?? "No email"}</p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {c.email ?? "No email"}
+                      </p>
                     </div>
                   </div>
                 </CardContent>
@@ -223,7 +230,8 @@ export default function StageWorkspaceContent() {
           <div className="min-w-0">
             <h2 className="text-sm font-semibold">{stageForList?.name ?? "Stage"}</h2>
             <p className="text-xs text-muted-foreground">
-              {candidatesInStage.length} {candidatesInStage.length === 1 ? "candidate" : "candidates"}
+              {candidatesInStage.length}{" "}
+              {candidatesInStage.length === 1 ? "candidate" : "candidates"}
             </p>
           </div>
           <Button size="sm" className="h-7 px-2.5 text-[11px]" onClick={() => setAddOpen(true)}>
@@ -302,4 +310,3 @@ export default function StageWorkspaceContent() {
     </div>
   );
 }
-

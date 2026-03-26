@@ -226,7 +226,9 @@ export function OverviewTab({
               <div key={i} className="p-3 rounded-md bg-muted/50 space-y-1">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-medium">{note.user}</span>
-                  <span className="text-[10px] text-muted-foreground">{formatDayMonth(note.date)}</span>
+                  <span className="text-[10px] text-muted-foreground">
+                    {formatDayMonth(note.date)}
+                  </span>
                 </div>
                 <p className="text-xs text-muted-foreground">{note.text}</p>
                 {note.mentions && note.mentions.length > 0 ? (

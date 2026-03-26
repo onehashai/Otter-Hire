@@ -249,7 +249,11 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
       <Separator />
       {isSaving ? (
         <div className="flex items-center justify-center py-0.5" aria-busy={true}>
-          <Icon name="Loader" className="h-3.5 w-3.5 animate-spin text-muted-foreground" aria-hidden />
+          <Icon
+            name="Loader"
+            className="h-3.5 w-3.5 animate-spin text-muted-foreground"
+            aria-hidden
+          />
         </div>
       ) : savedAt ? (
         <p className="text-[10px] text-muted-foreground text-center">Saved at {savedAt}</p>
@@ -476,7 +480,11 @@ const AI_ACTIONS: {
     desc: "Make the language more professional and inclusive",
     action: "improve_tone",
   },
-  { label: "Shorten", desc: "Condense the description while keeping key points", action: "shorten" },
+  {
+    label: "Shorten",
+    desc: "Condense the description while keeping key points",
+    action: "shorten",
+  },
   {
     label: "Expand",
     desc: "Add more detail to responsibilities and requirements",

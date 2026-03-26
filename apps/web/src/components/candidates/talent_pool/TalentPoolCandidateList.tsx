@@ -64,10 +64,7 @@ export function TalentPoolCandidateList({
   const [deleteLoading, setDeleteLoading] = useState(false);
 
   /** Jobs other than the candidate’s current job (cannot “re-assign” to the same job). */
-  const assignableJobs = useMemo(
-    () => jobs.filter((j) => j.id !== c.job_id),
-    [jobs, c.job_id],
-  );
+  const assignableJobs = useMemo(() => jobs.filter((j) => j.id !== c.job_id), [jobs, c.job_id]);
 
   const openAssignDialog = () => {
     setAssignJobId(assignableJobs[0]?.id ?? "");
@@ -88,7 +85,9 @@ export function TalentPoolCandidateList({
       setAssignOpen(false);
       toast.success(t("assigned_to_job"));
       await onListChange();
-      router.push(`/jobs/${encodeURIComponent(assignJobId)}/candidates/${encodeURIComponent(c.id)}`);
+      router.push(
+        `/jobs/${encodeURIComponent(assignJobId)}/candidates/${encodeURIComponent(c.id)}`,
+      );
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("error"));
     } finally {
@@ -218,9 +217,7 @@ export function TalentPoolCandidateList({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel  disabled={deleteLoading}>
-              {t("cancel")}
-            </AlertDialogCancel>
+            <AlertDialogCancel disabled={deleteLoading}>{t("cancel")}</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground"
               disabled={deleteLoading}

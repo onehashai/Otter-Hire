@@ -80,7 +80,9 @@ export function getAutomationById(id: string): Promise<AutomationDetailResponse>
   return apiFetch<AutomationDetailResponse>(`/automations/${id}`, { method: "GET" });
 }
 
-export function createAutomation(payload: AutomationCreatePayload): Promise<AutomationDetailResponse> {
+export function createAutomation(
+  payload: AutomationCreatePayload,
+): Promise<AutomationDetailResponse> {
   return apiFetch<AutomationDetailResponse>("/automations", {
     method: "POST",
     body: payload,
@@ -101,11 +103,8 @@ export function deleteAutomation(id: string): Promise<void> {
   return apiFetch<void>(`/automations/${id}`, { method: "DELETE" });
 }
 
-export function getAutomationExecutions(
-  id: string,
-): Promise<AutomationExecutionLogEntry[]> {
+export function getAutomationExecutions(id: string): Promise<AutomationExecutionLogEntry[]> {
   return apiFetch<AutomationExecutionLogEntry[]>(`/automations/${id}/executions`, {
     method: "GET",
   });
 }
-

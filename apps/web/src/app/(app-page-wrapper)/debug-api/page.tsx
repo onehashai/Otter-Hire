@@ -24,10 +24,7 @@ export default function DebugApiPage() {
         meResult.status === "fulfilled"
           ? meResult.value
           : {
-              error:
-                meResult.reason instanceof Error
-                  ? meResult.reason.message
-                  : "Unknown error",
+              error: meResult.reason instanceof Error ? meResult.reason.message : "Unknown error",
             },
       );
       setLoading(false);

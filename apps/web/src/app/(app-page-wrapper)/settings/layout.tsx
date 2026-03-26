@@ -25,7 +25,10 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
 
   const tabRoutes =
     user?.role === "admin"
-      ? [...baseTabRoutes, { label: "Admin", path: "/settings/admin", icon: "ShieldCheck" as const }]
+      ? [
+          ...baseTabRoutes,
+          { label: "Admin", path: "/settings/admin", icon: "ShieldCheck" as const },
+        ]
       : baseTabRoutes;
 
   useSetPageMetadata({

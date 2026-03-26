@@ -6,7 +6,12 @@ import { Icon } from "@onehash/ui/icon";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@onehash/ui/tabs";
 import { toast } from "@onehash/ui/sonner";
 import { ActionButtons } from "./ActionButtons";
-import { OverviewTab, InterviewsTab, EvaluationTab, DocumentsTab } from "@/components/candidates/shared/tabs";
+import {
+  OverviewTab,
+  InterviewsTab,
+  EvaluationTab,
+  DocumentsTab,
+} from "@/components/candidates/shared/tabs";
 import {
   addCandidateNote,
   deleteCandidateDocument,
@@ -149,7 +154,9 @@ export function WorkspaceCandidatePanes({
     const mappedInterviews = interviews.map((i) => {
       const dt = new Date(i.scheduled_at);
       const isCompleted = dt.getTime() < Date.now();
-      const feedbackForInterview = (evaluation?.feedback ?? []).find((f) => f.interview_id === i.id);
+      const feedbackForInterview = (evaluation?.feedback ?? []).find(
+        (f) => f.interview_id === i.id,
+      );
       return {
         id: i.id,
         title: i.title,
@@ -201,7 +208,11 @@ export function WorkspaceCandidatePanes({
   };
 
   if (loading || !uiCandidate) {
-    return <section className="flex-1 grid place-items-center text-sm text-muted-foreground">Loading...</section>;
+    return (
+      <section className="flex-1 grid place-items-center text-sm text-muted-foreground">
+        Loading...
+      </section>
+    );
   }
 
   return (
@@ -276,7 +287,9 @@ export function WorkspaceCandidatePanes({
             <TabsContent value="interviews" className="mt-0">
               <InterviewsTab
                 interviews={uiCandidate.interviews}
-                onScheduleInterview={() => toast.message("Use candidate page to schedule interview")}
+                onScheduleInterview={() =>
+                  toast.message("Use candidate page to schedule interview")
+                }
                 onAddFeedback={() => toast.message("Use candidate page to add feedback")}
               />
             </TabsContent>
@@ -305,4 +318,3 @@ export function WorkspaceCandidatePanes({
     </>
   );
 }
-

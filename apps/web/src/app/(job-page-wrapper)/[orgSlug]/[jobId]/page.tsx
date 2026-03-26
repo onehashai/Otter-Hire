@@ -251,8 +251,7 @@ export default function CareerJobDetailPage() {
 
   const showWorkplacePill =
     Boolean(job.workplace_type) &&
-    (locationLabel != null ||
-      String(job.workplace_type).toLowerCase() !== "onsite");
+    (locationLabel != null || String(job.workplace_type).toLowerCase() !== "onsite");
 
   const metaItems = [
     locationLabel && { iconName: "MapPin", label: locationLabel },
@@ -296,9 +295,7 @@ export default function CareerJobDetailPage() {
               imageClassName="rounded-md object-cover"
               fallbackClassName="rounded-md bg-foreground text-background text-[10px] font-bold"
             />
-            <span className="text-sm font-semibold truncate">
-              {job.org_name}
-            </span>
+            <span className="text-sm font-semibold truncate">{job.org_name}</span>
           </div>
         </div>
       </header>

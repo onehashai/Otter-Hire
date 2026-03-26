@@ -90,7 +90,7 @@ export function AdminUserEditDialog({ row, onOpenChange, onSaved }: AdminUserEdi
         ? "Invited"
         : row?.status === "disabled"
           ? "Disabled"
-          : row?.status ?? "—";
+          : (row?.status ?? "—");
 
   return (
     <Dialog open={open} onOpenChange={(open) => !open && handleClose()}>
@@ -130,7 +130,13 @@ export function AdminUserEditDialog({ row, onOpenChange, onSaved }: AdminUserEdi
         </div>
 
         <DialogFooter>
-          <Button variant="outline" size="sm" className="text-xs h-8" onClick={handleClose} disabled={saving}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-xs h-8"
+            onClick={handleClose}
+            disabled={saving}
+          >
             Cancel
           </Button>
           <Button

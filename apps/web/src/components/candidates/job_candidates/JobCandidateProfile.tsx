@@ -9,7 +9,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@onehash/ui/tabs";
 import { Icon } from "@onehash/ui/icon";
 import { DocumentUploadDialog } from "@/components/candidates/shared/dialogs/DocumentUploadDialog";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { OverviewTab, DocumentsTab, CandidateMessagesTab } from "@/components/candidates/shared/tabs";
+import {
+  OverviewTab,
+  DocumentsTab,
+  CandidateMessagesTab,
+} from "@/components/candidates/shared/tabs";
 import { SummaryPanel } from "@/components/candidates/shared/summary/SummaryPanel";
 import { ActionButtons } from "@/components/candidates/job_candidates/ActionButtons";
 import { useTranslation } from "react-i18next";
@@ -107,6 +111,7 @@ export function JobCandidateProfile({
   jobRouteJobId,
   isStageThreePane = false,
   onCandidateUpdated,
+  onStageMoved,
 }: {
   candidateId: string | undefined;
   /** When set, URL is under `/jobs/[jobId]/candidates/...` and redirects sync to `candidate.job_id`. */
@@ -115,6 +120,8 @@ export function JobCandidateProfile({
   isStageThreePane?: boolean;
   /** Optional callback for parent containers (e.g., stage workspace list refresh). */
   onCandidateUpdated?: () => void | Promise<void>;
+  /** Optional callback fired after moving candidate to a new stage. */
+  onStageMoved?: (stageId: string) => void | Promise<void>;
 }) {
   const router = useRouter();
   const isMobile = useIsMobile();
@@ -404,6 +411,7 @@ export function JobCandidateProfile({
               if (id) await loadAll(id);
               if (onCandidateUpdated) await onCandidateUpdated();
             }}
+            onStageMoved={onStageMoved}
           />
         </div>
 

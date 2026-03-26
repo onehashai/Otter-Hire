@@ -83,8 +83,25 @@ class CandidateBulkStatusUpdateRequest(BaseModel):
     status: str = Field(pattern=r"^(active|rejected|hired)$")
 
 
+class CandidateBulkAssignJobRequest(BaseModel):
+    candidate_ids: list[UUID] = Field(min_length=1)
+    job_id: UUID
+
+
 class CandidateBulkUpdateResponse(BaseModel):
     updated_count: int
+
+
+class CandidateCsvImportError(BaseModel):
+    row: int
+    reason: str
+
+
+class CandidateCsvImportResponse(BaseModel):
+    total_rows: int
+    created_count: int
+    failed_count: int
+    errors: list[CandidateCsvImportError] = []
 
 
 class CandidateNoteRequest(BaseModel):

@@ -212,13 +212,20 @@ export function AutomationsList({
 
   if (showEmptyState) {
     return (
-      <EmptyCard
-        icon="Briefcase"
-        title={t("automations_title")}
-        description={t("automations_subtitle")}
-        actionLabel={t("create")}
-        onAction={onCreateClick}
-      />
+      <>
+        <EmptyCard
+          icon="Briefcase"
+          title={t("automations_title")}
+          description={t("automations_subtitle")}
+          actionLabel={t("create")}
+          onAction={onCreateClick}
+        />
+        <AutomationTemplatesDialog
+          open={templatesOpen}
+          onOpenChange={setTemplatesOpen}
+          onSelectTemplate={onSelectTemplate}
+        />
+      </>
     );
   }
 

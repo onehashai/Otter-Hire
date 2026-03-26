@@ -7,12 +7,18 @@ import { Button } from "@onehash/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@onehash/ui/tabs";
 import { Icon } from "@onehash/ui/icon";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { OverviewTab, DocumentsTab, CandidateMessagesTab } from "@/components/candidates/shared/tabs";
+import {
+  OverviewTab,
+  DocumentsTab,
+  CandidateMessagesTab,
+  ResumeTab,
+} from "@/components/candidates/shared/tabs";
 import { SummaryPanel } from "@/components/candidates/shared/summary/SummaryPanel";
 import { DocumentUploadDialog } from "@/components/candidates/shared/dialogs/DocumentUploadDialog";
 import { useTranslation } from "react-i18next";
 import { useSetPageMetadata } from "@/hooks/useSetPageMetadata";
 import {
+  getApiBase,
   addCandidateNote,
   deleteCandidateDocument,
   getCandidateById,
@@ -37,7 +43,7 @@ export function TalentPoolCandidateProfile({
 }) {
   const router = useRouter();
   const isMobile = useIsMobile();
-  const [activeTab, setActiveTab] = useState("notes");
+  const [activeTab, setActiveTab] = useState("overview");
   const { t } = useTranslation();
   const [candidate, setCandidate] = useState<CandidateDetailResponse | null>(null);
   const [overview, setOverview] = useState<CandidateOverviewResponse | null>(null);
@@ -143,6 +149,17 @@ export function TalentPoolCandidateProfile({
       })),
     };
   }, [candidate, overview, documents]);
+
+  const resumeDoc = useMemo(() => {
+    if (!uiCandidate) return null;
+    const docs = uiCandidate.documents ?? [];
+    return (
+      docs.find((d) => d.type?.toLowerCase?.() === "resume") ??
+      docs.find((d) => d.name?.toLowerCase?.().includes("resume")) ??
+      docs[0] ??
+      null
+    );
+  }, [uiCandidate]);
 
   const handleAddNote = async (content: string, mentions: string[]) => {
     if (!id) return;
@@ -253,7 +270,7 @@ export function TalentPoolCandidateProfile({
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="h-9 w-full justify-start bg-transparent border-b rounded-none p-0 gap-0">
             {[
-              { value: "notes", label: t("notes") },
+              { value: "overview", label: t("overview") },
               { value: "messages", label: t("messages") },
               { value: "documents", label: t("documents") },
             ].map((tab) => (
@@ -269,7 +286,22 @@ export function TalentPoolCandidateProfile({
 
           <div className={`mt-4 ${isMobile ? "space-y-4" : "grid grid-cols-[1fr_320px] gap-4"}`}>
             <div>
-              <TabsContent value="notes" className={`mt-0 ${isMobile ? "space-y-4" : ""}`}>
+              <TabsContent
+                value="overview"
+                className={`mt-0 space-y-4 ${isMobile ? "space-y-4" : ""}`}
+              >
+                <ResumeTab
+                  resumeUrl={resumeDoc?.url ?? null}
+                  previewUrl={
+                    id && resumeDoc?.id
+                      ? `${getApiBase()}/v1/internal/candidates/${encodeURIComponent(id)}/documents/${encodeURIComponent(
+                          resumeDoc.id,
+                        )}/preview`
+                      : null
+                  }
+                  resumeName={resumeDoc?.name ?? null}
+                  onUploadDocument={() => setDocumentOpen(true)}
+                />
                 <OverviewTab
                   timeline={[]}
                   notes={uiCandidate.notes}

@@ -35,6 +35,8 @@ export type CandidateBulkUpdateResponse = {
   updated_count: number;
 };
 
+export type CandidateBulkAssignJobResponse = CandidateBulkUpdateResponse;
+
 export type CreateCandidatePayload = {
   job_id?: string | null;
   name: string;
@@ -112,6 +114,18 @@ export type CandidateDocumentResponse = {
   created_by_user_id: string | null;
   created_by_name: string | null;
   created_at: string;
+};
+
+export type CandidateCsvImportError = {
+  row: number;
+  reason: string;
+};
+
+export type CandidateCsvImportResponse = {
+  total_rows: number;
+  created_count: number;
+  failed_count: number;
+  errors: CandidateCsvImportError[];
 };
 
 export async function getCandidates(params?: {
@@ -229,6 +243,16 @@ export async function bulkUpdateCandidateStage(
   return apiFetch<CandidateBulkUpdateResponse>("/candidates/actions/bulk/stage", {
     method: "PATCH",
     body: { candidate_ids: candidateIds, stage_id: stageId },
+  });
+}
+
+export async function bulkAssignCandidatesToJob(
+  candidateIds: string[],
+  jobId: string,
+): Promise<CandidateBulkAssignJobResponse> {
+  return apiFetch<CandidateBulkAssignJobResponse>("/candidates/actions/bulk/assign-job", {
+    method: "PATCH",
+    body: { candidate_ids: candidateIds, job_id: jobId },
   });
 }
 
@@ -352,4 +376,32 @@ export async function deleteCandidateDocument(
   await apiFetch<void>(`/candidates/${candidateId}/documents/${documentId}`, {
     method: "DELETE",
   });
+}
+
+export async function importCandidatesCsv(file: File): Promise<CandidateCsvImportResponse> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch(`${API_BASE_URL}/candidates/import-csv`, {
+    method: "POST",
+    credentials: "include",
+    body: formData,
+  });
+
+  if (!res.ok) {
+    let message = `Request failed: ${res.status} ${res.statusText}`;
+    try {
+      const data = (await res.json()) as { detail?: string; error?: string };
+      const msg =
+        typeof data.detail === "string"
+          ? data.detail
+          : typeof data.error === "string"
+            ? data.error
+            : "";
+      if (msg.trim()) message = msg;
+    } catch {}
+    throw new Error(message);
+  }
+
+  return (await res.json()) as CandidateCsvImportResponse;
 }

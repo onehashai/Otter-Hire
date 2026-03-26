@@ -35,6 +35,7 @@ export interface ActionButtonsProps {
   currentStageId?: string | null;
   stages?: JobHiringStageResponse[];
   onCandidateUpdated?: () => void | Promise<void>;
+  onStageMoved?: (stageId: string) => void | Promise<void>;
   onSchedule?: () => void;
 }
 
@@ -45,6 +46,7 @@ export function ActionButtons({
   currentStageId,
   stages,
   onCandidateUpdated,
+  onStageMoved,
   onSchedule,
 }: ActionButtonsProps) {
   const router = useRouter();
@@ -97,6 +99,9 @@ export function ActionButtons({
       if (onCandidateUpdated) {
         await onCandidateUpdated();
       }
+      if (onStageMoved) {
+        await onStageMoved(stageId);
+      }
     } catch (err) {
       toast({
         title: err instanceof Error ? err.message : "Failed to move candidate",
@@ -124,6 +129,9 @@ export function ActionButtons({
       if (onCandidateUpdated) {
         await onCandidateUpdated();
       }
+      if (onStageMoved) {
+        await onStageMoved(rejectedStage.id);
+      }
     } catch (err) {
       toast({
         title: err instanceof Error ? err.message : "Failed to reject candidate",
@@ -146,6 +154,9 @@ export function ActionButtons({
       toast({ title: `Reconsidered to ${stageName}` });
       if (onCandidateUpdated) {
         await onCandidateUpdated();
+      }
+      if (onStageMoved) {
+        await onStageMoved(stageId);
       }
     } catch (err) {
       toast({

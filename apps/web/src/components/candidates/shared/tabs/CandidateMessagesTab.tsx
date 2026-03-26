@@ -283,7 +283,7 @@ export function CandidateMessagesTab({
               const when = formatThreadMessageTime(msg.created_at);
               const subject = detail?.subject?.trim() || "(no subject)";
               const fromLabel = outbound
-                ? msg.sender_name ?? msg.from_email
+                ? (msg.sender_name ?? msg.from_email)
                 : candidateName || msg.from_email;
               return (
                 <div
@@ -317,12 +317,10 @@ export function CandidateMessagesTab({
                           </span>
                         </div>
                         <p className="text-muted-foreground leading-snug">
-                          <span className="font-medium text-foreground/90">To:</span>{" "}
-                          {msg.to_email}
+                          <span className="font-medium text-foreground/90">To:</span> {msg.to_email}
                         </p>
                         <p className="text-muted-foreground leading-snug">
-                          <span className="font-medium text-foreground/90">Subject:</span>{" "}
-                          {subject}
+                          <span className="font-medium text-foreground/90">Subject:</span> {subject}
                         </p>
                       </div>
                       <div className="bg-background px-3 py-2.5 text-xs">

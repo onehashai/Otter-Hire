@@ -17,8 +17,8 @@ import { createCandidate } from "@/api";
 export type AddCandidateDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  jobId: string;
-  jobTitle: string;
+  jobId?: string | null;
+  jobTitle?: string | null;
   stageId?: string | null;
   onAdded?: () => void | Promise<void>;
 };
@@ -41,13 +41,13 @@ export function AddCandidateDialog({
     try {
       setLoading(true);
       await createCandidate({
-        job_id: jobId,
+        ...(jobId ? { job_id: jobId } : {}),
         name: name.trim(),
         email: email.trim(),
         phone: phone.trim() || null,
         source: "manual",
         status: "active",
-        stage_id: stageId ?? undefined,
+        stage_id: jobId ? (stageId ?? undefined) : undefined,
       });
       toast.success("Candidate added");
       onOpenChange(false);
@@ -68,7 +68,9 @@ export function AddCandidateDialog({
         <DialogHeader>
           <DialogTitle>Add candidate</DialogTitle>
           <DialogDescription>
-            Add a candidate to {jobTitle}. They will appear in the current stage when possible.
+            {jobId && jobTitle
+              ? `Add a candidate to ${jobTitle}. They will appear in the current stage when possible.`
+              : "Add a candidate to Talent Pool. You can assign a job later."}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">

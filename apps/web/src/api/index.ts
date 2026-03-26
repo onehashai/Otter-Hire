@@ -1,6 +1,7 @@
 // Client
 export {
   API_BASE_URL,
+  getApiBase,
   handle429Error,
   parseErrorResponse,
   type ApiGetOptions,

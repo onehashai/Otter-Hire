@@ -62,9 +62,7 @@ export function formatTimestampToDateTime(isoString: string | null, locale = "en
   const hour12 = hours % 12 || 12;
   const ampm = hours >= 12 ? "pm" : "am";
   const timePart =
-    minutes === 0
-      ? `${hour12}${ampm}`
-      : `${hour12}:${minutes.toString().padStart(2, "0")}${ampm}`;
+    minutes === 0 ? `${hour12}${ampm}` : `${hour12}:${minutes.toString().padStart(2, "0")}${ampm}`;
   return `${day} ${month} ${year}, ${timePart}`;
 }
 

@@ -57,6 +57,10 @@ class Settings(BaseSettings):
     google_client_id: str | None = Field(default=None, validation_alias="GOOGLE_CLIENT_ID")
     google_client_secret: str | None = Field(default=None, validation_alias="GOOGLE_CLIENT_SECRET")
 
+    # LinkedIn OAuth
+    linkedin_client_id: str | None = Field(default=None, validation_alias="LINKEDIN_CLIENT_ID")
+    linkedin_client_secret: str | None = Field(default=None, validation_alias="LINKEDIN_CLIENT_SECRET")
+
     # SMTP credential encryption (Fernet key, base64-encoded 32 bytes)
     # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
     smtp_encryption_key: str | None = Field(default=None, validation_alias="SMTP_ENCRYPTION_KEY")
@@ -199,6 +203,21 @@ class Settings(BaseSettings):
     @property
     def google_oauth_enabled(self) -> bool:
         return bool(self.google_client_id and self.google_client_secret)
+
+    @property
+    def effective_linkedin_redirect_uri(self) -> str | None:
+        """Returns LinkedIn OAuth callback URL."""
+        if self.api_base_url:
+            base = self.api_base_url.rstrip("/")
+            return f"{base}/v1/internal/integrations/linkedin/callback"
+        if self.app_domain:
+            port = "" if self.is_production else ":8000"
+            return f"{self._scheme}://{self.app_subdomain}.{self.app_domain}{port}/v1/internal/integrations/linkedin/callback"
+        return None
+
+    @property
+    def linkedin_oauth_enabled(self) -> bool:
+        return bool(self.linkedin_client_id and self.linkedin_client_secret)
 
     @property
     def cors_origins(self) -> list[str]:

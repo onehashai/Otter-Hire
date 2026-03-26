@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronsLeft, ChevronLeft, Search, Sun, Moon } from "lucide-react";
 import { Button } from "@onehash/ui/button";
+import { Icon } from "@onehash/ui/icon";
 import { Separator } from "@onehash/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@onehash/ui/tooltip";
 import { PRODUCT_LOGO_LETTER, PLATFORM_NAME } from "@/lib/constants";
@@ -45,7 +46,7 @@ export function JobWorkspaceSidebar({
     return () => {
       cancelled = true;
     };
-  }, [jobId]);
+  }, [jobId, pathname]);
 
   const stages = workspace?.stages ?? [];
   const sortedStages = [...stages].sort((a, b) => a.position - b.position);
@@ -57,6 +58,14 @@ export function JobWorkspaceSidebar({
       : null;
   const onCandidateProfile =
     pathSegments.length >= 4 && pathSegments[0] === "jobs" && pathSegments[2] === "candidates";
+  const isJobSetupRoute =
+    pathSegments[0] === "jobs" &&
+    pathSegments[1] === jobId &&
+    !(
+      pathSegments.length === 2 ||
+      (pathSegments[2] === "stage" && Boolean(pathSegments[3])) ||
+      (pathSegments[2] === "candidates" && Boolean(pathSegments[3]))
+    );
   const activeStageId = onCandidateProfile ? null : (stageIdFromPath ?? defaultStageId);
 
   const candidateCountByStage = (stageId: string) =>
@@ -172,6 +181,41 @@ export function JobWorkspaceSidebar({
 
           return item;
         })}
+
+        {!collapsed && <Separator className="my-2" />}
+
+        {collapsed ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Link
+                href={`/jobs/${encodeURIComponent(jobId)}/info`}
+                className={cn(
+                  "flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm transition-colors",
+                  "text-sidebar-foreground hover:bg-sidebar-accent",
+                  isJobSetupRoute && "bg-sidebar-accent text-sidebar-accent-foreground font-medium",
+                  "justify-center px-0",
+                )}
+              >
+                <Icon name="PenLine" className="h-3.5 w-3.5" />
+              </Link>
+            </TooltipTrigger>
+            <TooltipContent side="right" className="text-xs">
+              Edit job
+            </TooltipContent>
+          </Tooltip>
+        ) : (
+          <Link
+            href={`/jobs/${encodeURIComponent(jobId)}/info`}
+            className={cn(
+              "flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm transition-colors",
+              "text-sidebar-foreground hover:bg-sidebar-accent",
+              isJobSetupRoute && "bg-sidebar-accent text-sidebar-accent-foreground font-medium",
+            )}
+          >
+            <Icon name="PenLine" className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">Edit job</span>
+          </Link>
+        )}
       </nav>
 
       <Separator />

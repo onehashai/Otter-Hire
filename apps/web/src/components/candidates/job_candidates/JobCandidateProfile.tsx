@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@onehash/ui/button";
+import { Badge } from "@onehash/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@onehash/ui/tabs";
 import { Icon } from "@onehash/ui/icon";
 import { InputField } from "@onehash/ui/input";
@@ -35,6 +36,7 @@ import {
   createCandidateInterview,
   deleteCandidateDocument,
   getCandidateById,
+  getJobWorkspace,
   getJobs,
   getCandidateDocuments,
   getCandidateEvaluation,
@@ -48,6 +50,7 @@ import {
   type CandidateEvaluationResponse,
   type CandidateInterviewResponse,
   type JobListItemResponse,
+  type JobHiringStageResponse,
   type CandidateOverviewResponse,
   type OrgUserResponse,
 } from "@/api";
@@ -124,10 +127,16 @@ function mapHiringTimelineItem(activity: {
 export function JobCandidateProfile({
   candidateId: id,
   jobRouteJobId,
+  isStageThreePane = false,
+  onCandidateUpdated,
 }: {
   candidateId: string | undefined;
   /** When set, URL is under `/jobs/[jobId]/candidates/...` and redirects sync to `candidate.job_id`. */
   jobRouteJobId?: string;
+  /** True when rendered inside the stage workspace 3-pane right panel. */
+  isStageThreePane?: boolean;
+  /** Optional callback for parent containers (e.g., stage workspace list refresh). */
+  onCandidateUpdated?: () => void | Promise<void>;
 }) {
   const router = useRouter();
   const isMobile = useIsMobile();
@@ -139,6 +148,7 @@ export function JobCandidateProfile({
   const [evaluation, setEvaluation] = useState<CandidateEvaluationResponse | null>(null);
   const [documents, setDocuments] = useState<CandidateDocumentResponse[]>([]);
   const [jobs, setJobs] = useState<JobListItemResponse[]>([]);
+  const [jobStages, setJobStages] = useState<JobHiringStageResponse[]>([]);
   const [orgUsers, setOrgUsers] = useState<OrgUserResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -231,6 +241,27 @@ export function JobCandidateProfile({
       cancelled = true;
     };
   }, []);
+
+  const currentJobId = jobRouteJobId ?? candidate?.job_id ?? null;
+
+  useEffect(() => {
+    if (!currentJobId) {
+      setJobStages([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const workspace = await getJobWorkspace(currentJobId);
+        if (!cancelled) setJobStages(workspace.stages ?? []);
+      } catch {
+        if (!cancelled) setJobStages([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentJobId]);
 
   const uiCandidate = useMemo(() => {
     if (!candidate) return null;
@@ -454,27 +485,53 @@ export function JobCandidateProfile({
     );
   }
 
+  const sourceBadgeLabel =
+    uiCandidate.source === "manual"
+      ? "Manually Added"
+      : uiCandidate.source === "email_automation"
+        ? "Email Automation"
+        : uiCandidate.source === "job_board"
+          ? "Job Portal"
+          : toTitle(uiCandidate.source).replaceAll("_", " ");
+
   return (
     <>
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <Button variant="ghost" size="sm" className="h-8 text-xs gap-1.5" asChild>
-            <Link
-              href={
-                jobRouteJobId && candidate?.stage_id
-                  ? `/jobs/${encodeURIComponent(jobRouteJobId)}/stage/${encodeURIComponent(candidate.stage_id)}`
-                  : jobRouteJobId
-                    ? `/jobs/${encodeURIComponent(jobRouteJobId)}`
-                    : "/talent-pool"
-              }
-            >
-              <Icon name="ChevronLeft" className="h-3.5 w-3.5" />{" "}
-              {jobRouteJobId ? "Job" : t("talent_pool_title")}
-            </Link>
-          </Button>
+          {isStageThreePane ? (
+            <div className="flex items-center gap-2 min-w-0">
+              <p className="text-sm font-medium truncate">{uiCandidate.name}</p>
+              <Badge variant="outline" className="text-[10px] shrink-0">
+                {sourceBadgeLabel}
+              </Badge>
+            </div>
+          ) : (
+            <Button variant="ghost" size="sm" className="h-8 text-xs gap-1.5" asChild>
+              <Link
+                href={
+                  jobRouteJobId && candidate?.stage_id
+                    ? `/jobs/${encodeURIComponent(jobRouteJobId)}/stage/${encodeURIComponent(candidate.stage_id)}`
+                    : jobRouteJobId
+                      ? `/jobs/${encodeURIComponent(jobRouteJobId)}`
+                      : "/talent-pool"
+                }
+              >
+                <Icon name="ChevronLeft" className="h-3.5 w-3.5" />{" "}
+                {jobRouteJobId ? "Job" : t("talent_pool_title")}
+              </Link>
+            </Button>
+          )}
           <ActionButtons
             candidateName={uiCandidate.name}
             jobId={jobRouteJobId ?? candidate?.job_id ?? undefined}
+            candidateId={id}
+            currentStageId={candidate?.stage_id}
+            stages={jobStages}
+            onCandidateUpdated={async () => {
+              if (id) await loadAll(id);
+              if (onCandidateUpdated) await onCandidateUpdated();
+            }}
+            onSchedule={() => setScheduleOpen(true)}
           />
         </div>
 

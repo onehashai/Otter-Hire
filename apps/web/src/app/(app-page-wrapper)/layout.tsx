@@ -16,16 +16,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const isMobile = useIsMobile();
   const pathname = usePathname();
   const segments = pathname.split("/").filter(Boolean);
-  const jobWorkspaceId =
-    segments[0] === "jobs" && segments[1]
-      ? segments.length === 2
-        ? segments[1]
-        : segments.length === 4 && segments[2] === "stage" && segments[3]
-          ? segments[1]
-          : segments.length === 4 && segments[2] === "candidates" && segments[3]
-            ? segments[1]
-            : null
-      : null;
+  const jobWorkspaceId = segments[0] === "jobs" && segments[1] ? segments[1] : null;
+  const isJobStageWorkspaceRoute =
+    segments[0] === "jobs" &&
+    Boolean(segments[1]) &&
+    segments[2] === "stage" &&
+    Boolean(segments[3]);
 
   return (
     <PageMetadataProvider>
@@ -49,7 +45,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <div className="flex flex-col flex-1 min-w-0">
           <TopBar />
           <main className="flex-1 overflow-auto">
-            <div className="mx-auto max-w-6xl px-4 md:px-6 py-4 md:py-6 pb-20 md:pb-6">
+            <div
+              className={
+                isJobStageWorkspaceRoute
+                  ? "py-0 pb-20 md:pb-0"
+                  : "mx-auto max-w-6xl px-4 md:px-6 py-4 md:py-6 pb-20 md:pb-6"
+              }
+            >
               {children}
             </div>
           </main>

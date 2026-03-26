@@ -4,6 +4,7 @@ from app.models.candidate_document import CandidateDocument
 from app.models.conversation import Conversation
 from app.models.email import Email, InboundEmail, InboundEmailAttachment
 from app.models.feedback import Feedback
+from app.models.integration import Integration
 from app.models.integration_credential import IntegrationCredential
 from app.models.interview import Interview
 from app.models.job import Job
@@ -37,6 +38,7 @@ __all__ = [
     "JobApplication",
     "CandidateDocument",
     "OrgInbox",
+    "Integration",
     "IntegrationCredential",
     "InboundEmail",
     "InboundEmailAttachment",

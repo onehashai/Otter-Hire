@@ -8,6 +8,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.models.integration import Integration
+from app.models.integration_credential import IntegrationCredential
 from app.models.organization import OrgInbox
 from app.schemas.integrations import (
     IntegrationAppDescriptor,
@@ -76,6 +78,47 @@ def to_org_inbox_response(inbox: OrgInbox) -> OrgInboxResponse:
     )
 
 
+async def _sync_to_integration_credentials(
+    db: AsyncSession,
+    org_id,
+    inbox_address: str,
+    provider: str,
+    status: str,
+) -> None:
+    """Sync org_inboxes data to integration_credentials table for tracking."""
+    # Get Email integration ID
+    result = await db.execute(select(Integration).where(Integration.slug == "email"))
+    email_integration = result.scalar_one_or_none()
+    if not email_integration:
+        return  # Email integration not found, skip sync
+
+    # Upsert integration_credentials
+    cred_result = await db.execute(
+        select(IntegrationCredential).where(
+            IntegrationCredential.org_id == org_id,
+            IntegrationCredential.integration_id == email_integration.id,
+        )
+    )
+    cred = cred_result.scalar_one_or_none()
+
+    config = {
+        "inbound_address": inbox_address,
+        "provider": provider,
+    }
+
+    if cred is None:
+        cred = IntegrationCredential(
+            org_id=org_id,
+            integration_id=email_integration.id,
+            config=config,
+            status=status,
+        )
+        db.add(cred)
+    else:
+        cred.config = config
+        cred.status = status
+
+
 async def get_org_inbox(db: AsyncSession, owner: IntegrationOwnerContext) -> OrgInbox | None:
     result = await db.execute(select(OrgInbox).where(OrgInbox.org_id == owner.org_id))
     return result.scalar_one_or_none()
@@ -137,6 +180,17 @@ async def upsert_email_config(
 
     await db.commit()
     await db.refresh(inbox)
+    
+    # Sync to integration_credentials table
+    await _sync_to_integration_credentials(
+        db,
+        inbox.org_id,
+        inbox.inbox_address,
+        inbox.provider,
+        inbox.status,
+    )
+    await db.commit()
+    
     return to_org_inbox_response(inbox)
 
 
@@ -181,6 +235,17 @@ async def activate(db: AsyncSession, owner: IntegrationOwnerContext) -> OrgInbox
     inbox.verification_error = None
     inbox.verified_at = datetime.now(timezone.utc)
     await db.commit()
+    
+    # Sync status to integration_credentials
+    await _sync_to_integration_credentials(
+        db,
+        inbox.org_id,
+        inbox.inbox_address,
+        inbox.provider,
+        inbox.status,
+    )
+    await db.commit()
+    
     return OrgInboxActionResponse(status="active", message="Inbox is active")
 
 
@@ -232,6 +297,17 @@ async def verify_complete(
     inbox.status = "active"
     inbox.verified_at = datetime.now(timezone.utc)
     await db.commit()
+    
+    # Sync status to integration_credentials
+    await _sync_to_integration_credentials(
+        db,
+        inbox.org_id,
+        inbox.inbox_address,
+        inbox.provider,
+        inbox.status,
+    )
+    await db.commit()
+    
     return OrgInboxActionResponse(status="active", message="Inbox verified and active")
 
 
@@ -239,7 +315,24 @@ async def disconnect(db: AsyncSession, owner: IntegrationOwnerContext) -> None:
     inbox = await get_org_inbox(db, owner)
     if inbox is None:
         raise HTTPException(status_code=404, detail="No email integration configured")
+    
+    # Delete from both tables
     await db.delete(inbox)
+    
+    # Delete from integration_credentials
+    result = await db.execute(select(Integration).where(Integration.slug == "email"))
+    email_integration = result.scalar_one_or_none()
+    if email_integration:
+        cred_result = await db.execute(
+            select(IntegrationCredential).where(
+                IntegrationCredential.org_id == owner.org_id,
+                IntegrationCredential.integration_id == email_integration.id,
+            )
+        )
+        cred = cred_result.scalar_one_or_none()
+        if cred:
+            await db.delete(cred)
+    
     await db.commit()
 
 

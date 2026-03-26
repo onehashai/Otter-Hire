@@ -579,6 +579,11 @@ function JobBranchLayout({ children }: { children: React.ReactNode }) {
     segments[1] === jobId &&
     (segments.length === 2 ||
       (segments.length === 4 && segments[2] === "stage" && Boolean(segments[3])) ||
+      (segments.length === 6 &&
+        segments[2] === "stage" &&
+        Boolean(segments[3]) &&
+        segments[4] === "candidates" &&
+        Boolean(segments[5])) ||
       (segments.length === 4 && segments[2] === "candidates" && Boolean(segments[3])));
 
   if (isJobWorkspaceRoot) {

@@ -5,7 +5,7 @@ One row per (org_id, integration_id). Stores config, status, and optional encryp
 Each org can connect to integrations defined in the integrations table.
 """
 
-from sqlalchemy import Column, DateTime, ForeignKey, String, UniqueConstraint, Index
+from sqlalchemy import Column, DateTime, ForeignKey, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -20,7 +20,7 @@ class IntegrationCredential(Base):
 
     One row per (org_id, integration_id). Holds config (JSONB), status,
     and optionally encrypted_credentials for integrations that need secrets.
-    
+
     Examples:
     - Email integration: stores inbound_address in config
     - LinkedIn integration: stores OAuth tokens in encrypted_credentials
@@ -30,7 +30,10 @@ class IntegrationCredential(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid7)
     org_id = Column(
-        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     integration_id = Column(
         UUID(as_uuid=True), ForeignKey("integrations.id"), nullable=False, index=True
@@ -44,7 +47,9 @@ class IntegrationCredential(Base):
     )
 
     __table_args__ = (
-        UniqueConstraint('org_id', 'integration_id', name='uq_integration_credentials_org_integration'),
+        UniqueConstraint(
+            "org_id", "integration_id", name="uq_integration_credentials_org_integration"
+        ),
     )
 
     organization = relationship("Organization", back_populates="integration_credentials")

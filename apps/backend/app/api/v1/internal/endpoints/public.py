@@ -774,7 +774,9 @@ async def get_public_jobs(
     request: Request,
     response: Response,
     org_id: str,
-    org_slug: str = Query(..., min_length=1, description="Careers URL name segment before org UUID"),
+    org_slug: str = Query(
+        ..., min_length=1, description="Careers URL name segment before org UUID"
+    ),
     authorization: Optional[str] = Header(None),
     db: AsyncSession = Depends(get_db),
 ):
@@ -879,7 +881,9 @@ async def get_public_job_detail(
     response: Response,
     org_id: str,
     job_id: str,
-    org_slug: str = Query(..., min_length=1, description="Careers URL name segment before org UUID"),
+    org_slug: str = Query(
+        ..., min_length=1, description="Careers URL name segment before org UUID"
+    ),
     authorization: Optional[str] = Header(None),
     db: AsyncSession = Depends(get_db),
 ):
@@ -973,7 +977,9 @@ async def apply_public_job(
     org_id: str,
     job_id: str,
     body: PublicJobApplyRequest,
-    org_slug: str = Query(..., min_length=1, description="Careers URL name segment before org UUID"),
+    org_slug: str = Query(
+        ..., min_length=1, description="Careers URL name segment before org UUID"
+    ),
     db: AsyncSession = Depends(get_db),
 ):
     try:

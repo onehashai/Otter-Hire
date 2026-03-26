@@ -59,7 +59,9 @@ class Settings(BaseSettings):
 
     # LinkedIn OAuth
     linkedin_client_id: str | None = Field(default=None, validation_alias="LINKEDIN_CLIENT_ID")
-    linkedin_client_secret: str | None = Field(default=None, validation_alias="LINKEDIN_CLIENT_SECRET")
+    linkedin_client_secret: str | None = Field(
+        default=None, validation_alias="LINKEDIN_CLIENT_SECRET"
+    )
 
     # SMTP credential encryption (Fernet key, base64-encoded 32 bytes)
     # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"

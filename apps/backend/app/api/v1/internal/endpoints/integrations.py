@@ -21,9 +21,7 @@ router = APIRouter(prefix="/integrations", tags=["integrations"])
 
 
 def _owner_ctx(current_user: User) -> IntegrationOwnerContext:
-    return IntegrationOwnerContext(
-        org_id=current_user.org_id, role=current_user.membership_role
-    )
+    return IntegrationOwnerContext(org_id=current_user.org_id, role=current_user.membership_role)
 
 
 @router.get("/apps", response_model=IntegrationAppsResponse)

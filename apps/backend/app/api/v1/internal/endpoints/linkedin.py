@@ -30,13 +30,13 @@ async def get_linkedin_organizations(
     cred = await linkedin_service.get_linkedin_credential(db, current_user.org_id)
     if not cred:
         raise HTTPException(status_code=404, detail="LinkedIn not connected")
-    
+
     access_token = cred.encrypted_credentials
     if not access_token:
         raise HTTPException(status_code=400, detail="No access token found")
-    
+
     organizations = await linkedin_service.get_linkedin_organizations(access_token)
-    
+
     return {"organizations": organizations}
 
 
@@ -55,7 +55,7 @@ async def complete_linkedin_setup(
         request.organization_vanity_name,
         request.organization_logo_url,
     )
-    
+
     return {"message": "LinkedIn setup completed successfully"}
 
 
@@ -76,13 +76,13 @@ async def connect_linkedin(
     """Initiate LinkedIn OAuth flow."""
     # Generate state and store it (in production, store in Redis/session)
     state = linkedin_service.generate_oauth_state()
-    
+
     # TODO: Store state in session/Redis for validation in callback
     # For now, we'll pass org_id in state (not secure for production)
     state_with_org = f"{state}:{current_user.org_id}"
-    
+
     authorization_url = linkedin_service.get_authorization_url(state_with_org)
-    
+
     return {
         "authorization_url": authorization_url,
         "state": state_with_org,
@@ -100,6 +100,7 @@ async def linkedin_callback(
     """Handle LinkedIn OAuth callback."""
     if error:
         from app.core.config import settings
+
         frontend_url = settings.effective_frontend_base_url
         return Response(
             content=f"""
@@ -117,7 +118,7 @@ async def linkedin_callback(
             """,
             media_type="text/html",
         )
-    
+
     if not code or not state:
         raise HTTPException(status_code=400, detail="Missing code or state parameter")
 
@@ -140,15 +141,14 @@ async def linkedin_callback(
         user_id=None,
         role="owner",
     )
-    
-    await linkedin_service.save_linkedin_credential(
-        db, owner, access_token, expires_in, profile
-    )
+
+    await linkedin_service.save_linkedin_credential(db, owner, access_token, expires_in, profile)
 
     from app.core.config import settings
+
     frontend_url = settings.effective_frontend_base_url
     redirect_url = f"{frontend_url}/settings/integrations?linkedin=setup_required"
-    
+
     return Response(
         content=f"""
         <html>
@@ -181,5 +181,5 @@ async def disconnect_linkedin(
 ):
     """Disconnect LinkedIn integration."""
     await linkedin_service.disconnect_linkedin(db, _owner_ctx(current_user))
-    
+
     return {"message": "LinkedIn integration disconnected successfully"}

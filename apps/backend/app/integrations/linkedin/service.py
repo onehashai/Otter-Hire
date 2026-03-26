@@ -14,7 +14,6 @@ from app.models.integration import Integration
 from app.models.integration_credential import IntegrationCredential
 from app.schemas.integrations import IntegrationOwnerContext
 
-
 # LinkedIn OAuth endpoints
 LINKEDIN_AUTH_URL = "https://www.linkedin.com/oauth/v2/authorization"
 LINKEDIN_TOKEN_URL = "https://www.linkedin.com/oauth/v2/accessToken"
@@ -30,9 +29,7 @@ async def get_linkedin_integration(db: AsyncSession) -> Integration | None:
     return result.scalar_one_or_none()
 
 
-async def get_linkedin_credential(
-    db: AsyncSession, org_id: str
-) -> IntegrationCredential | None:
+async def get_linkedin_credential(db: AsyncSession, org_id: str) -> IntegrationCredential | None:
     """Get LinkedIn credential for an organization."""
     linkedin_integration = await get_linkedin_integration(db)
     if not linkedin_integration:
@@ -55,15 +52,11 @@ def generate_oauth_state() -> str:
 def get_authorization_url(state: str) -> str:
     """Generate LinkedIn OAuth authorization URL."""
     if not settings.linkedin_oauth_enabled:
-        raise HTTPException(
-            status_code=500, detail="LinkedIn OAuth is not configured"
-        )
+        raise HTTPException(status_code=500, detail="LinkedIn OAuth is not configured")
 
     redirect_uri = settings.effective_linkedin_redirect_uri
     if not redirect_uri:
-        raise HTTPException(
-            status_code=500, detail="LinkedIn redirect URI is not configured"
-        )
+        raise HTTPException(status_code=500, detail="LinkedIn redirect URI is not configured")
 
     params = {
         "response_type": "code",
@@ -80,15 +73,11 @@ def get_authorization_url(state: str) -> str:
 async def exchange_code_for_token(code: str) -> dict[str, Any]:
     """Exchange authorization code for access token."""
     if not settings.linkedin_oauth_enabled:
-        raise HTTPException(
-            status_code=500, detail="LinkedIn OAuth is not configured"
-        )
+        raise HTTPException(status_code=500, detail="LinkedIn OAuth is not configured")
 
     redirect_uri = settings.effective_linkedin_redirect_uri
     if not redirect_uri:
-        raise HTTPException(
-            status_code=500, detail="LinkedIn redirect URI is not configured"
-        )
+        raise HTTPException(status_code=500, detail="LinkedIn redirect URI is not configured")
 
     async with httpx.AsyncClient() as client:
         response = await client.post(
@@ -178,9 +167,7 @@ async def save_linkedin_credential(
         return new_cred
 
 
-async def disconnect_linkedin(
-    db: AsyncSession, owner: IntegrationOwnerContext
-) -> None:
+async def disconnect_linkedin(db: AsyncSession, owner: IntegrationOwnerContext) -> None:
     """Disconnect LinkedIn integration for an organization."""
     cred = await get_linkedin_credential(db, owner.org_id)
     if not cred:
@@ -190,9 +177,7 @@ async def disconnect_linkedin(
     await db.commit()
 
 
-async def get_linkedin_status(
-    db: AsyncSession, owner: IntegrationOwnerContext
-) -> dict[str, Any]:
+async def get_linkedin_status(db: AsyncSession, owner: IntegrationOwnerContext) -> dict[str, Any]:
     """Get LinkedIn integration status for an organization."""
     cred = await get_linkedin_credential(db, owner.org_id)
 
@@ -222,10 +207,11 @@ async def get_linkedin_status(
             "name": organization.get("name"),
             "vanity_name": organization.get("vanity_name"),
             "logo_url": organization.get("logo_url"),
-        } if organization else None,
+        }
+        if organization
+        else None,
         "connected_at": config.get("connected_at"),
     }
-
 
 
 async def get_linkedin_organizations(access_token: str) -> list[dict[str, Any]]:
@@ -248,7 +234,7 @@ async def get_linkedin_organizations(access_token: str) -> list[dict[str, Any]]:
 
         data = response.json()
         elements = data.get("elements", [])
-        
+
         # Filter for admin roles
         admin_orgs = []
         for element in elements:
@@ -259,7 +245,7 @@ async def get_linkedin_organizations(access_token: str) -> list[dict[str, Any]]:
                     # Extract organization ID from URN (urn:li:organization:123456)
                     org_id = org_urn.split(":")[-1]
                     admin_orgs.append({"id": org_id, "urn": org_urn})
-        
+
         # Fetch organization details for each admin org
         organizations = []
         for org in admin_orgs:
@@ -269,7 +255,7 @@ async def get_linkedin_organizations(access_token: str) -> list[dict[str, Any]]:
             except Exception:
                 # Skip organizations that fail to fetch
                 continue
-        
+
         return organizations
 
 
@@ -291,7 +277,7 @@ async def get_organization_details(access_token: str, org_id: str) -> dict[str, 
             )
 
         data = response.json()
-        
+
         # Extract logo URL if available
         logo_url = None
         logo_v2 = data.get("logoV2", {})
@@ -335,5 +321,5 @@ async def complete_linkedin_setup(
     cred.status = "active"
     await db.commit()
     await db.refresh(cred)
-    
+
     return cred

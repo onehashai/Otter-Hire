@@ -39,11 +39,11 @@ from app.schemas.candidates import (
     CandidateInterviewResponse,
     CandidateListItemResponse,
     CandidateListResponse,
-    CandidateStageFilterOptionsResponse,
     CandidateNoteMentionResponse,
     CandidateNoteRequest,
     CandidateNoteResponse,
     CandidateOverviewResponse,
+    CandidateStageFilterOptionsResponse,
     CandidateStageUpdateRequest,
     CandidateStatusUpdateRequest,
     CandidateUpdateRequest,
@@ -613,7 +613,12 @@ async def delete_candidate(
             try:
                 await storage_service.delete_object(doc.object_key)
             except Exception as exc:  # noqa: BLE001
-                logger.warning("delete_object failed candidate_id=%s key=%s err=%s", candidate_id, doc.object_key, exc)
+                logger.warning(
+                    "delete_object failed candidate_id=%s key=%s err=%s",
+                    candidate_id,
+                    doc.object_key,
+                    exc,
+                )
 
     await db.execute(
         delete(CandidateDocument).where(

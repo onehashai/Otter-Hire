@@ -11,8 +11,9 @@ existing rows are migrated to org admin.
 from typing import Sequence, Union
 
 import sqlalchemy as sa
-from alembic import op
 from sqlalchemy import inspect
+
+from alembic import op
 
 revision: str = "y2z3a4b5c6d7"
 down_revision: Union[str, Sequence[str], None] = "x1y2z3a4b5c6"

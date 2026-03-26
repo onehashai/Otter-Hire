@@ -101,11 +101,11 @@ class LinkedInIntegrationModule(AppStoreIntegration):
         integration = await linkedin_service.get_linkedin_integration(db)
         if not integration:
             return []
-        
+
         cred = await linkedin_service.get_linkedin_credential(db, owner.org_id)
         status = cred.status if cred else "not_installed"
         installed = cred is not None and cred.status == "active"
-        
+
         return [
             IntegrationAppDescriptor(
                 app_id=self.app_id,
@@ -124,7 +124,7 @@ class LinkedInIntegrationModule(AppStoreIntegration):
         cred = await linkedin_service.get_linkedin_credential(db, owner.org_id)
         if not cred:
             return []
-        
+
         return [
             IntegrationInstalledApp(
                 app_id=self.app_id,

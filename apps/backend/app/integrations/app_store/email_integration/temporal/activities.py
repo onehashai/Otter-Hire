@@ -18,6 +18,7 @@ from app.integrations.app_store.email_integration.temporal.types import (
 
 logger = logging.getLogger("ats_worker")
 
+
 def _get_redis_client():
     import redis
 
@@ -25,6 +26,7 @@ def _get_redis_client():
         settings.redis_url,
         decode_responses=True,
     )
+
 
 @activity.defn(name="download_email_activity")
 async def download_email_activity(input_data: InboundWorkflowInput) -> str:
@@ -43,6 +45,7 @@ async def download_email_activity(input_data: InboundWorkflowInput) -> str:
         lambda: s3_client.get_object(Bucket=input_data.bucket, Key=input_data.key)["Body"].read()
     )
     return base64.b64encode(raw_email).decode("ascii")
+
 
 @activity.defn(name="extract_resume_activity")
 async def extract_resume_activity(raw_email_b64: str) -> dict:
@@ -86,10 +89,10 @@ async def extract_resume_activity(raw_email_b64: str) -> dict:
     }
 
 
-
 @activity.defn(name="download_and_extract_resume_activity")
 async def download_and_extract_resume_activity(input_data: InboundWorkflowInput) -> dict:
     import boto3
+
     from app.integrations.app_store.email_integration.ses_bridge import (
         _extract_text_and_attachments,
         _resolve_inbox_context,
@@ -135,6 +138,7 @@ async def download_and_extract_resume_activity(input_data: InboundWorkflowInput)
         "payload": payload,
     }
 
+
 @activity.defn(name="process_s3_inbound_email_activity")
 async def process_s3_inbound_email_activity(input_data: InboundWorkflowInput) -> dict:
     ctx = activity.info()
@@ -146,7 +150,9 @@ async def process_s3_inbound_email_activity(input_data: InboundWorkflowInput) ->
     )
     try:
         extracted = await download_and_extract_resume_activity(input_data)
-        result = await parse_and_create_candidate_activity({"data": extracted, "key": input_data.key})
+        result = await parse_and_create_candidate_activity(
+            {"data": extracted, "key": input_data.key}
+        )
         logger.info(
             "Activity completed: process_s3_inbound_email key=%s status=%s workflow_id=%s",
             input_data.key,
@@ -162,6 +168,7 @@ async def process_s3_inbound_email_activity(input_data: InboundWorkflowInput) ->
             e,
         )
         raise
+
 
 @activity.defn(name="parse_and_create_candidate_activity")
 async def parse_and_create_candidate_activity(input_data: dict) -> dict:
@@ -218,6 +225,7 @@ async def parse_and_create_candidate_activity(input_data: dict) -> dict:
 
     return result
 
+
 @activity.defn(name="publish_update_activity")
 async def publish_update_activity(event_payload: dict) -> None:
     try:
@@ -248,6 +256,7 @@ async def publish_update_activity(event_payload: dict) -> None:
             event_payload.get("workflow_id"),
         )
         raise
+
 
 @activity.defn(name="send_outbound_email_activity")
 async def send_outbound_email_activity(input_data: OutboundWorkflowInput) -> dict:
@@ -336,6 +345,7 @@ async def send_outbound_email_activity(input_data: OutboundWorkflowInput) -> dic
         "message_id": input_data.message_id,
         "provider_message_id": provider_message_id,
     }
+
 
 @activity.defn(name="mark_message_failed_activity")
 async def mark_message_failed_activity(message_id: str) -> None:

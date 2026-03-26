@@ -2,6 +2,7 @@
 Default automations created for every organization on signup or when creating a new org.
 Links to default email templates (Application Received, Interview Invitation, etc.).
 """
+
 from __future__ import annotations
 
 from sqlalchemy import select

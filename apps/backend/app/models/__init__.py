@@ -1,4 +1,5 @@
 from app.models.activity import Activity
+from app.models.automation import Automation, AutomationExecution
 from app.models.candidate import Candidate
 from app.models.candidate_document import CandidateDocument
 from app.models.conversation import Conversation
@@ -15,7 +16,6 @@ from app.models.message import Message
 from app.models.note import Note
 from app.models.org_membership import OrgMembership
 from app.models.organization import Organization, OrgInbox
-from app.models.automation import Automation, AutomationExecution
 from app.models.stage import Stage
 from app.models.template import Template
 from app.models.user import User

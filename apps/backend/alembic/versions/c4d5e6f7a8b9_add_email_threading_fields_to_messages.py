@@ -11,6 +11,7 @@ inbound email threading (matching candidate replies to existing conversations).
 from typing import Sequence, Union
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision: str = "c4d5e6f7a8b9"

@@ -180,7 +180,7 @@ async def upsert_email_config(
 
     await db.commit()
     await db.refresh(inbox)
-    
+
     # Sync to integration_credentials table
     await _sync_to_integration_credentials(
         db,
@@ -190,7 +190,7 @@ async def upsert_email_config(
         inbox.status,
     )
     await db.commit()
-    
+
     return to_org_inbox_response(inbox)
 
 
@@ -235,7 +235,7 @@ async def activate(db: AsyncSession, owner: IntegrationOwnerContext) -> OrgInbox
     inbox.verification_error = None
     inbox.verified_at = datetime.now(timezone.utc)
     await db.commit()
-    
+
     # Sync status to integration_credentials
     await _sync_to_integration_credentials(
         db,
@@ -245,7 +245,7 @@ async def activate(db: AsyncSession, owner: IntegrationOwnerContext) -> OrgInbox
         inbox.status,
     )
     await db.commit()
-    
+
     return OrgInboxActionResponse(status="active", message="Inbox is active")
 
 
@@ -297,7 +297,7 @@ async def verify_complete(
     inbox.status = "active"
     inbox.verified_at = datetime.now(timezone.utc)
     await db.commit()
-    
+
     # Sync status to integration_credentials
     await _sync_to_integration_credentials(
         db,
@@ -307,7 +307,7 @@ async def verify_complete(
         inbox.status,
     )
     await db.commit()
-    
+
     return OrgInboxActionResponse(status="active", message="Inbox verified and active")
 
 
@@ -315,10 +315,10 @@ async def disconnect(db: AsyncSession, owner: IntegrationOwnerContext) -> None:
     inbox = await get_org_inbox(db, owner)
     if inbox is None:
         raise HTTPException(status_code=404, detail="No email integration configured")
-    
+
     # Delete from both tables
     await db.delete(inbox)
-    
+
     # Delete from integration_credentials
     result = await db.execute(select(Integration).where(Integration.slug == "email"))
     email_integration = result.scalar_one_or_none()
@@ -332,7 +332,7 @@ async def disconnect(db: AsyncSession, owner: IntegrationOwnerContext) -> None:
         cred = cred_result.scalar_one_or_none()
         if cred:
             await db.delete(cred)
-    
+
     await db.commit()
 
 

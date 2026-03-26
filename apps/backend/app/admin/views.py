@@ -27,7 +27,15 @@ class UserAdmin(ModelView, model=User):
     name_plural = "Users"
     icon = "fa-solid fa-user"
 
-    column_list = [User.id, User.email, User.name, User.role, User.status, User.is_verified, User.created_at]
+    column_list = [
+        User.id,
+        User.email,
+        User.name,
+        User.role,
+        User.status,
+        User.is_verified,
+        User.created_at,
+    ]
     column_searchable_list = [User.email, User.name]
     column_sortable_list = [User.email, User.name, User.role, User.status, User.created_at]
     column_default_sort = [(User.created_at, True)]

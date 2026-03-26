@@ -11,7 +11,9 @@ from app.templates.email.base_email_template import (
 )
 
 
-def build_verification_email(platform_name: str, expiry_hours: int, verify_url: str) -> EmailContent:
+def build_verification_email(
+    platform_name: str, expiry_hours: int, verify_url: str
+) -> EmailContent:
     hour_word = "hour" if expiry_hours == 1 else "hours"
     inner = f"""
                 <h1 style="{STYLE_HEADING}">Welcome to {esc(platform_name)}</h1>

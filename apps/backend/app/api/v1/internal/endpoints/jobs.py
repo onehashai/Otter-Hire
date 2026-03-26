@@ -7,6 +7,7 @@ from sqlalchemy import func as sa_func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.config import settings
 from app.core.permissions import require_permission
 from app.db.session import get_db
 from app.deps.job_scope import ASSIGNED_ONLY_ROLES, require_job_access
@@ -15,7 +16,6 @@ from app.models.job import Job
 from app.models.job_team_member import JobTeamMember
 from app.models.stage import Stage
 from app.models.user import User
-from app.core.config import settings
 from app.schemas.jobs import (
     HiringStageResponse,
     JobCreateRequest,

@@ -120,7 +120,11 @@ export default function TalentPoolPage() {
           ))}
         </div>
       ) : items.length === 0 ? (
-        <EmptyCard icon="Mail" title={t("talent_pool_title")} description={t("talent_pool_empty")} />
+        <EmptyCard
+          icon="Mail"
+          title={t("talent_pool_title")}
+          description={t("talent_pool_empty")}
+        />
       ) : (
         <>
           <div className="space-y-2">

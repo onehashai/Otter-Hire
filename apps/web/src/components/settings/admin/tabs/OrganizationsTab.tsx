@@ -89,7 +89,9 @@ export function OrganizationsAdminTab() {
                       </span>
                     </TableCell>
                     <TableCell className="py-3">
-                      <span className="text-xs text-muted-foreground">{formatCreated(row.created_at)}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {formatCreated(row.created_at)}
+                      </span>
                     </TableCell>
                   </TableRow>
                 ))}

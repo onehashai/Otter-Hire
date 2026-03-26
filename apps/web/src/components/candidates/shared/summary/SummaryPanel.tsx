@@ -9,7 +9,7 @@ import { Separator } from "@onehash/ui/separator";
 import { Icon } from "@onehash/ui/icon";
 import { InputField, PhoneNumberField, isValidPhoneNumber } from "@onehash/ui/input";
 import { SelectField } from "@onehash/ui/select";
-import { formatDayMonth } from "@/lib/format-date";
+import { formatTimestampToDateTime } from "@/lib/format-date";
 import { Label } from "@onehash/ui/label";
 import { formatPhoneForDisplay, parseStoredPhone } from "@/lib/phone";
 import { getInitialsFromName } from "@/lib/name-initials";
@@ -257,9 +257,7 @@ export function SummaryPanel({
                 <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">
                   {t("applied")}
                 </Label>
-                <p className="text-xs">
-                  {formatDayMonth(candidate.appliedDate)}
-                </p>
+                <p className="text-xs">{formatTimestampToDateTime(candidate.appliedDate)}</p>
               </div>
             </>
           )}

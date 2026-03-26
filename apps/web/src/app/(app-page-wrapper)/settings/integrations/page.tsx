@@ -10,6 +10,8 @@ import {
 } from "@/api";
 import { EmailIntegrationAppIcon } from "@/features/integrations/email-integration/EmailIntegrationAppIcon";
 import { EmailIntegrationManager } from "@/features/integrations/email-integration/EmailIntegrationManager";
+import { LinkedInIntegrationAppIcon } from "@/features/integrations/linkedin-integration/LinkedInIntegrationAppIcon";
+import { LinkedInIntegrationManager } from "@/features/integrations/linkedin-integration/LinkedInIntegrationManager";
 import { Card, CardContent, CardHeader, CardTitle } from "@onehash/ui/card";
 import { Button } from "@onehash/ui/button";
 import {
@@ -29,6 +31,10 @@ function IntegrationAppIcon({ slug, name }: { slug: string; name: string }) {
 
   if (slug === "email-integration") {
     return <EmailIntegrationAppIcon />;
+  }
+
+  if (slug === "linkedin") {
+    return <LinkedInIntegrationAppIcon />;
   }
 
   return (
@@ -92,6 +98,9 @@ export default function IntegrationsSettingsPage() {
   useEffect(() => {
     if (searchParams.get("app") === "email-integration") {
       setManageDialogOpen(true);
+    }
+    if (searchParams.get("linkedin") === "success") {
+      toast.success("LinkedIn connected successfully!");
     }
   }, [searchParams]);
 
@@ -174,6 +183,8 @@ export default function IntegrationsSettingsPage() {
                       </Button>
                     )}
                   </div>
+                ) : app.slug === "linkedin" ? (
+                  <LinkedInIntegrationManager onChanged={loadCatalog} />
                 ) : (
                   <Button size="sm" variant="outline" className="text-xs h-8 w-full" disabled>
                     Coming Soon

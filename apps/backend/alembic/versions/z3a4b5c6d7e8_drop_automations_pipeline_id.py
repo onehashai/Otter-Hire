@@ -10,8 +10,9 @@ Removes unused pipeline_id (never had a FK). Normalizes legacy scope value.
 from typing import Sequence, Union
 
 import sqlalchemy as sa
-from alembic import op
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 revision: str = "z3a4b5c6d7e8"
 down_revision: Union[str, Sequence[str], None] = "y2z3a4b5c6d7"

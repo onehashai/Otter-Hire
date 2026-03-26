@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@onehash/ui/button";
+import { Badge } from "@onehash/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@onehash/ui/tabs";
 import { Icon } from "@onehash/ui/icon";
 import { DocumentUploadDialog } from "@/components/candidates/shared/dialogs/DocumentUploadDialog";
@@ -11,13 +12,13 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { OverviewTab, DocumentsTab, CandidateMessagesTab } from "@/components/candidates/shared/tabs";
 import { SummaryPanel } from "@/components/candidates/shared/summary/SummaryPanel";
 import { ActionButtons } from "@/components/candidates/job_candidates/ActionButtons";
-import { MoveStageDialog } from "@/components/candidates/job_candidates/MoveStageDialog";
 import { useTranslation } from "react-i18next";
 import { useSetPageMetadata } from "@/hooks/useSetPageMetadata";
 import {
   addCandidateNote,
   deleteCandidateDocument,
   getCandidateById,
+  getJobWorkspace,
   getJobs,
   getCandidateDocuments,
   getCandidateOverview,
@@ -27,6 +28,7 @@ import {
   type CandidateDetailResponse,
   type CandidateDocumentResponse,
   type JobListItemResponse,
+  type JobHiringStageResponse,
   type CandidateOverviewResponse,
   type OrgUserResponse,
 } from "@/api";
@@ -103,10 +105,16 @@ function mapHiringTimelineItem(activity: {
 export function JobCandidateProfile({
   candidateId: id,
   jobRouteJobId,
+  isStageThreePane = false,
+  onCandidateUpdated,
 }: {
   candidateId: string | undefined;
   /** When set, URL is under `/jobs/[jobId]/candidates/...` and redirects sync to `candidate.job_id`. */
   jobRouteJobId?: string;
+  /** True when rendered inside the stage workspace 3-pane right panel. */
+  isStageThreePane?: boolean;
+  /** Optional callback for parent containers (e.g., stage workspace list refresh). */
+  onCandidateUpdated?: () => void | Promise<void>;
 }) {
   const router = useRouter();
   const isMobile = useIsMobile();
@@ -116,11 +124,11 @@ export function JobCandidateProfile({
   const [overview, setOverview] = useState<CandidateOverviewResponse | null>(null);
   const [documents, setDocuments] = useState<CandidateDocumentResponse[]>([]);
   const [jobs, setJobs] = useState<JobListItemResponse[]>([]);
+  const [jobStages, setJobStages] = useState<JobHiringStageResponse[]>([]);
   const [orgUsers, setOrgUsers] = useState<OrgUserResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [moveStageOpen, setMoveStageOpen] = useState(false);
   const [documentOpen, setDocumentOpen] = useState(false);
   const [docFile, setDocFile] = useState<File | null>(null);
   const [docType, setDocType] = useState("attachment");
@@ -190,6 +198,27 @@ export function JobCandidateProfile({
       cancelled = true;
     };
   }, []);
+
+  const currentJobId = jobRouteJobId ?? candidate?.job_id ?? null;
+
+  useEffect(() => {
+    if (!currentJobId) {
+      setJobStages([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const workspace = await getJobWorkspace(currentJobId);
+        if (!cancelled) setJobStages(workspace.stages ?? []);
+      } catch {
+        if (!cancelled) setJobStages([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentJobId]);
 
   const uiCandidate = useMemo(() => {
     if (!candidate) return null;
@@ -296,15 +325,6 @@ export function JobCandidateProfile({
     }
   };
 
-  const handleOpenMoveStage = () => {
-    const jid = jobRouteJobId ?? candidate?.job_id;
-    if (!jid) {
-      toast.error("This candidate is not assigned to a job. Please assign a job first.");
-      return;
-    }
-    setMoveStageOpen(true);
-  };
-
   const handleSaveSummaryLinks = async (payload: { linkedin?: string; portfolio?: string }) => {
     if (!id || !candidate) return;
     try {
@@ -346,31 +366,48 @@ export function JobCandidateProfile({
     );
   }
 
+  const sourceBadgeLabel =
+    uiCandidate.source === "manual"
+      ? "Manually Added"
+      : uiCandidate.source === "email_automation"
+        ? "Email Automation"
+        : uiCandidate.source === "job_board"
+          ? "Job Portal"
+          : toTitle(uiCandidate.source).replaceAll("_", " ");
+
   return (
     <>
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <Button variant="ghost" size="sm" className="h-8 text-xs gap-1.5" asChild>
-            <Link
-              href={
-                jobRouteJobId && candidate?.stage_id
-                  ? `/jobs/${encodeURIComponent(jobRouteJobId)}/stage/${encodeURIComponent(candidate.stage_id)}`
-                  : jobRouteJobId
-                    ? `/jobs/${encodeURIComponent(jobRouteJobId)}`
-                    : "/talent-pool"
-              }
-            >
-              <Icon name="ChevronLeft" className="h-3.5 w-3.5" />{" "}
-              {jobRouteJobId ? "Job" : t("talent_pool_title")}
-            </Link>
-          </Button>
+          {isStageThreePane ? (
+            <div className="flex items-center gap-2 min-w-0">
+              <p className="text-sm font-medium truncate">{uiCandidate.name}</p>
+            </div>
+          ) : (
+            <Button variant="ghost" size="sm" className="h-8 text-xs gap-1.5" asChild>
+              <Link
+                href={
+                  jobRouteJobId && candidate?.stage_id
+                    ? `/jobs/${encodeURIComponent(jobRouteJobId)}/stage/${encodeURIComponent(candidate.stage_id)}`
+                    : jobRouteJobId
+                      ? `/jobs/${encodeURIComponent(jobRouteJobId)}`
+                      : "/talent-pool"
+                }
+              >
+                <Icon name="ChevronLeft" className="h-3.5 w-3.5" />{" "}
+                {jobRouteJobId ? "Job" : t("talent_pool_title")}
+              </Link>
+            </Button>
+          )}
           <ActionButtons
             candidateName={uiCandidate.name}
             candidateId={candidate!.id}
-            candidateStatus={candidate!.status}
             jobId={jobRouteJobId ?? candidate?.job_id ?? undefined}
-            onStageUpdated={() => {
-              if (id) void loadAll(id);
+            currentStageId={candidate?.stage_id}
+            stages={jobStages}
+            onCandidateUpdated={async () => {
+              if (id) await loadAll(id);
+              if (onCandidateUpdated) await onCandidateUpdated();
             }}
           />
         </div>
@@ -402,16 +439,6 @@ export function JobCandidateProfile({
                   onAddNote={handleAddNote}
                   timelineTitle="Hiring Status Timeline"
                   timelineEmptyText="No hiring status updates yet."
-                  timelineFirstRowAction={
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="h-7 text-xs gap-1.5"
-                      onClick={handleOpenMoveStage}
-                    >
-                      <Icon name="UserCheck" className="h-3 w-3" /> Move Stage
-                    </Button>
-                  }
                 />
               </TabsContent>
               <TabsContent value="messages" className="mt-0">
@@ -443,18 +470,6 @@ export function JobCandidateProfile({
           </div>
         </Tabs>
       </div>
-
-      <MoveStageDialog
-        open={moveStageOpen}
-        onOpenChange={setMoveStageOpen}
-        candidateId={candidate!.id}
-        candidateName={uiCandidate.name}
-        jobId={jobRouteJobId ?? candidate?.job_id ?? null}
-        currentStageId={candidate?.stage_id ?? null}
-        onSuccess={() => {
-          if (id) void loadAll(id);
-        }}
-      />
 
       <DocumentUploadDialog
         open={documentOpen}

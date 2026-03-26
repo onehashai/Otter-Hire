@@ -73,7 +73,10 @@ export function AppSidebar({ collapsed, onToggle, onOpenCommandPalette }: AppSid
             <div className="h-6 w-6 rounded-md bg-foreground flex items-center justify-center">
               <span className="text-background text-xs font-bold">{PRODUCT_LOGO_LETTER}</span>
             </div>
-            <span className="text-sm font-semibold text-foreground truncate max-w-[10rem]" title={PLATFORM_NAME}>
+            <span
+              className="text-sm font-semibold text-foreground truncate max-w-[10rem]"
+              title={PLATFORM_NAME}
+            >
               {PLATFORM_NAME}
             </span>
           </Link>

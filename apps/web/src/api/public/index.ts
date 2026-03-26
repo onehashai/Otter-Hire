@@ -77,7 +77,9 @@ export async function getPublicJobDetail(
   jobId: string,
   orgSlugPrefix: string,
 ): Promise<PublicJobDetail> {
-  const data = await apiGet<PublicJobDetail>(`/orgs/${orgId}/jobs/${jobId}${publicCareersQuery(orgSlugPrefix)}`);
+  const data = await apiGet<PublicJobDetail>(
+    `/orgs/${orgId}/jobs/${jobId}${publicCareersQuery(orgSlugPrefix)}`,
+  );
   return { ...data, org_avatar_url: normalizeApiUrl(data.org_avatar_url) };
 }
 

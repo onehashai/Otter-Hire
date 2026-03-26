@@ -30,7 +30,11 @@ import {
 } from "@/api";
 import { toast } from "@onehash/ui/sonner";
 
-export function TalentPoolCandidateProfile({ candidateId: id }: { candidateId: string | undefined }) {
+export function TalentPoolCandidateProfile({
+  candidateId: id,
+}: {
+  candidateId: string | undefined;
+}) {
   const router = useRouter();
   const isMobile = useIsMobile();
   const [activeTab, setActiveTab] = useState("notes");
@@ -199,7 +203,9 @@ export function TalentPoolCandidateProfile({ candidateId: id }: { candidateId: s
       await loadCore(id);
       toast.success("Candidate updated");
       if (payload.job_id && !payload.clear_job) {
-        router.push(`/jobs/${encodeURIComponent(payload.job_id)}/candidates/${encodeURIComponent(id)}`);
+        router.push(
+          `/jobs/${encodeURIComponent(payload.job_id)}/candidates/${encodeURIComponent(id)}`,
+        );
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to update candidate");

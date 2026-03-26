@@ -84,7 +84,11 @@ export function JobsList({ jobs, onJobArchived }: JobsListProps) {
                       <Icon name="MoreHorizontal" className="h-4 w-4" />
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-40" onClick={(e) => e.stopPropagation()}>
+                  <DropdownMenuContent
+                    align="end"
+                    className="w-40"
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     <DropdownMenuItem
                       className="text-sm"
                       onClick={(e) => {
@@ -107,7 +111,9 @@ export function JobsList({ jobs, onJobArchived }: JobsListProps) {
                             toast.success(t("job_archived"));
                             onJobArchived?.();
                           } catch (err) {
-                            toast.error(err instanceof Error ? err.message : "Failed to archive job");
+                            toast.error(
+                              err instanceof Error ? err.message : "Failed to archive job",
+                            );
                           } finally {
                             setArchivingId(null);
                           }

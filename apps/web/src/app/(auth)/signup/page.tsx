@@ -109,8 +109,8 @@ export default function Signup() {
             smarter today.
           </h1>
           <p className="text-muted-foreground text-sm leading-relaxed">
-            Join modern teams using {PLATFORM_NAME} to streamline recruiting, collaborate effortlessly,
-            and find the best talent faster.
+            Join modern teams using {PLATFORM_NAME} to streamline recruiting, collaborate
+            effortlessly, and find the best talent faster.
           </p>
         </div>
       </div>

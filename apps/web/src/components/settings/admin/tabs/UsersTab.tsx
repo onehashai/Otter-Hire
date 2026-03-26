@@ -48,7 +48,7 @@ function formatProductRole(role: string): string {
   return role;
 }
 
-function formatMembershipStatus(status: string): { label: string;} {
+function formatMembershipStatus(status: string): { label: string } {
   if (status === "active") return { label: "Active" };
   if (status === "invited") return { label: "Invited" };
   if (status === "disabled") return { label: "Disabled" };
@@ -192,14 +192,12 @@ export function UsersAdminTab() {
                         </Badge>
                       </TableCell>
                       <TableCell className="py-3">
-                        <span
-                          className="text-xs text-muted-foreground"
-                        >
-                          {st.label}
-                        </span>
+                        <span className="text-xs text-muted-foreground">{st.label}</span>
                       </TableCell>
                       <TableCell className="py-3">
-                        <span className="text-xs text-muted-foreground">{formatLastActive(row.last_active_at, row.status)}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {formatLastActive(row.last_active_at, row.status)}
+                        </span>
                       </TableCell>
                       <TableCell className="py-3">
                         <DropdownMenu>
@@ -209,7 +207,9 @@ export function UsersAdminTab() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-48">
-                            <DropdownMenuItem onClick={() => setEditRow(row)}>Edit</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setEditRow(row)}>
+                              Edit
+                            </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>

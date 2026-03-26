@@ -6,6 +6,7 @@ from app.models.candidate_document import CandidateDocument
 from app.models.conversation import Conversation
 from app.models.email import Email, InboundEmail, InboundEmailAttachment
 from app.models.feedback import Feedback
+from app.models.integration import Integration
 from app.models.integration_credential import IntegrationCredential
 from app.models.interview import Interview
 from app.models.job import Job
@@ -26,7 +27,15 @@ class UserAdmin(ModelView, model=User):
     name_plural = "Users"
     icon = "fa-solid fa-user"
 
-    column_list = [User.id, User.email, User.name, User.role, User.status, User.is_verified, User.created_at]
+    column_list = [
+        User.id,
+        User.email,
+        User.name,
+        User.role,
+        User.status,
+        User.is_verified,
+        User.created_at,
+    ]
     column_searchable_list = [User.email, User.name]
     column_sortable_list = [User.email, User.name, User.role, User.status, User.created_at]
     column_default_sort = [(User.created_at, True)]
@@ -102,22 +111,44 @@ class OrgMembershipAdmin(ModelView, model=OrgMembership):
     column_details_exclude_list = [OrgMembership.invite_token_hash]
 
 
-class IntegrationCredentialAdmin(ModelView, model=IntegrationCredential):
+class IntegrationAdmin(ModelView, model=Integration):
     name = "Integration"
     name_plural = "Integrations"
     icon = "fa-solid fa-plug"
 
     column_list = [
+        Integration.id,
+        Integration.name,
+        Integration.slug,
+        Integration.category,
+        Integration.is_active,
+        Integration.created_at,
+    ]
+    column_searchable_list = [Integration.name, Integration.slug]
+    column_sortable_list = [
+        Integration.name,
+        Integration.slug,
+        Integration.category,
+        Integration.is_active,
+        Integration.created_at,
+    ]
+    column_default_sort = [(Integration.name, False)]
+
+
+class IntegrationCredentialAdmin(ModelView, model=IntegrationCredential):
+    name = "Integration Credential"
+    name_plural = "Integration Credentials"
+    icon = "fa-solid fa-key"
+    category = "People"
+
+    column_list = [
         IntegrationCredential.id,
         IntegrationCredential.org_id,
-        IntegrationCredential.integration_type,
+        IntegrationCredential.integration_id,
         IntegrationCredential.status,
-        IntegrationCredential.last_tested_at,
         IntegrationCredential.created_at,
     ]
-    column_searchable_list = [IntegrationCredential.integration_type]
     column_sortable_list = [
-        IntegrationCredential.integration_type,
         IntegrationCredential.status,
         IntegrationCredential.created_at,
     ]

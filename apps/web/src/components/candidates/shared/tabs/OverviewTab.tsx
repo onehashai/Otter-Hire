@@ -1,12 +1,12 @@
 "use client";
 
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@onehash/ui/card";
 import { Button } from "@onehash/ui/button";
 import { Textarea } from "@onehash/ui/textarea";
 import { Icon } from "@onehash/ui/icon";
 import { cn } from "@/lib/utils";
-import { formatDayMonth, formatTimestampToDateTime } from "@/lib/format-date";
+import { formatTimestampToDateTime } from "@/lib/format-date";
 interface TimelineItem {
   action: string;
   date: string;
@@ -40,8 +40,6 @@ interface OverviewTabProps {
   timelineTitle?: string;
   timelineEmptyText?: string;
   showTimeline?: boolean;
-  /** Shown to the right of the most recent timeline row (first item; API returns newest first). */
-  timelineFirstRowAction?: ReactNode;
 }
 
 const TimelineIcon = ({ type }: { type: string }) => {
@@ -66,7 +64,6 @@ export function OverviewTab({
   timelineTitle = "Timeline",
   timelineEmptyText = "No timeline events yet.",
   showTimeline = true,
-  timelineFirstRowAction,
 }: OverviewTabProps) {
   const [noteText, setNoteText] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -197,12 +194,7 @@ export function OverviewTab({
           <CardContent className="p-4 pt-0">
             <div className={scrollableTimelineClass}>
               {timeline.length === 0 ? (
-                <div className="flex items-start justify-between gap-3">
-                  <p className="text-xs text-muted-foreground min-w-0 flex-1">{timelineEmptyText}</p>
-                  {timelineFirstRowAction ? (
-                    <div className="shrink-0 pt-0.5">{timelineFirstRowAction}</div>
-                  ) : null}
-                </div>
+                <p className="text-xs text-muted-foreground">{timelineEmptyText}</p>
               ) : (
                 <div className="space-y-3">
                   {timeline.map((item, i) => (
@@ -213,16 +205,13 @@ export function OverviewTab({
                         </div>
                         {i < timeline.length - 1 && <div className="w-px flex-1 bg-border mt-1" />}
                       </div>
-                      <div className="flex-1 min-w-0 flex items-start justify-between gap-3 pb-3">
+                      <div className="flex-1 min-w-0 pb-3">
                         <div className="min-w-0">
                           <p className="text-xs font-medium">{item.action}</p>
                           <p className="text-[10px] text-muted-foreground">
                             {formatTimestampToDateTime(item.date)}
                           </p>
                         </div>
-                        {i === 0 && timelineFirstRowAction ? (
-                          <div className="shrink-0 pt-0.5">{timelineFirstRowAction}</div>
-                        ) : null}
                       </div>
                     </div>
                   ))}
@@ -238,34 +227,34 @@ export function OverviewTab({
         <CardHeader className="p-4 pb-2">
           <CardTitle className="text-xs font-medium">Notes</CardTitle>
         </CardHeader>
-        <CardContent className="p-4 pt-0 flex flex-col gap-3">
-          <div className={`${scrollableNotesListClass} space-y-3`}>
-            {notes.length === 0 ? (
-              <p className="text-xs text-muted-foreground">No notes yet.</p>
-            ) : (
-              notes.map((note, i) => (
-                <div key={i} className="p-3 rounded-md bg-muted/50 space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-medium">{note.user}</span>
-                    <span className="text-[10px] text-muted-foreground">{formatDayMonth(note.date)}</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground">{note.text}</p>
-                  {note.mentions && note.mentions.length > 0 ? (
-                    <div className="flex flex-wrap gap-1 pt-1">
-                      {note.mentions.map((mention) => (
-                        <span
-                          key={mention.user_id}
-                          className="rounded-full bg-background px-2 py-0.5 text-[10px] text-muted-foreground"
-                        >
-                          @{mention.name || mention.email}
-                        </span>
-                      ))}
-                    </div>
-                  ) : null}
+        <CardContent className="p-4 pt-0 space-y-3">
+          {notes.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No notes yet.</p>
+          ) : (
+            notes.map((note, i) => (
+              <div key={i} className="p-3 rounded-md bg-muted/50 space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium">{note.user}</span>
+                  <span className="text-[10px] text-muted-foreground">
+                    {formatTimestampToDateTime(note.date)}
+                  </span>
                 </div>
-              ))
-            )}
-          </div>
+                <p className="text-xs text-muted-foreground">{note.text}</p>
+                {note.mentions && note.mentions.length > 0 ? (
+                  <div className="flex flex-wrap gap-1 pt-1">
+                    {note.mentions.map((mention) => (
+                      <span
+                        key={mention.user_id}
+                        className="rounded-full bg-background px-2 py-0.5 text-[10px] text-muted-foreground"
+                      >
+                        @{mention.name || mention.email}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ))
+          )}
           <div className="relative shrink-0">
             <Textarea
               ref={textareaRef}

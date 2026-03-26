@@ -166,9 +166,7 @@ export default function JobInfoPage() {
               showAsterisk
             />
           </div>
-          {locationHint ? (
-            <p className="text-xs text-destructive">{locationHint}</p>
-          ) : null}
+          {locationHint ? <p className="text-xs text-destructive">{locationHint}</p> : null}
         </div>
       ) : null}
     </div>

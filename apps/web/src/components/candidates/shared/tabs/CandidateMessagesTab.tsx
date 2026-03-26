@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Mail } from "lucide-react";
+import { Check, CheckCheck, ChevronDown, Mail } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getWebSocketBaseUrl } from "@/api/client/client";
 import {
@@ -12,7 +12,7 @@ import {
   type ConversationDetail,
   type MessageRead,
 } from "@/api/conversations";
-import { formatTimestampToDateTime } from "@/lib/format-date";
+import { formatThreadMessageTime } from "@/lib/format-date";
 import { toast } from "@onehash/ui/sonner";
 import { ComposeMessageBox } from "@/components/common/ComposeMessageBox";
 
@@ -37,8 +37,48 @@ function OutboundStatus({ status }: { status: MessageRead["status"] | undefined 
               ? "Failed"
               : null;
   if (!label) return null;
+  const done =
+    status === "delivered" || status === "read" ? (
+      <CheckCheck className="h-3 w-3 shrink-0 text-blue-600" aria-hidden />
+    ) : status === "sent" ? (
+      <Check className="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden />
+    ) : null;
   return (
-    <p className="text-[10px] text-muted-foreground mt-1 text-right">{label}</p>
+    <p
+      className={cn(
+        "text-[10px] mt-1.5 flex items-center justify-end gap-1",
+        status === "read" || status === "delivered" ? "text-blue-600" : "text-muted-foreground",
+      )}
+    >
+      {done}
+      <span>{label}</span>
+    </p>
+  );
+}
+
+function QuotedBodyToggle({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  return (
+    <div className="mt-2 pt-2 border-t border-border/70">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <ChevronDown
+          className={cn("h-3.5 w-3.5 transition-transform shrink-0", open && "rotate-180")}
+          aria-hidden
+        />
+        Show quoted text
+      </button>
+      {open ? (
+        <p className="mt-2 text-[11px] text-muted-foreground whitespace-pre-wrap break-words leading-relaxed max-h-48 overflow-y-auto">
+          {trimmed}
+        </p>
+      ) : null}
+    </div>
   );
 }
 
@@ -240,30 +280,59 @@ export function CandidateMessagesTab({
             {(detail?.messages ?? []).map((msg) => {
               const outbound = msg.direction === "outbound";
               const preview = (msg.body_visible ?? msg.body ?? "").trim();
-              const when = formatTimestampToDateTime(msg.created_at);
-              const label =
-                outbound
-                  ? msg.sender_name ?? "You"
-                  : candidateName || msg.from_email;
+              const when = formatThreadMessageTime(msg.created_at);
+              const subject = detail?.subject?.trim() || "(no subject)";
+              const fromLabel = outbound
+                ? msg.sender_name ?? msg.from_email
+                : candidateName || msg.from_email;
               return (
                 <div
                   key={msg.id}
-                  className={cn("flex", outbound ? "justify-end" : "justify-start")}
+                  className={cn("flex w-full", outbound ? "justify-end" : "justify-start")}
                 >
                   <div
                     className={cn(
-                      "max-w-[90%] rounded-lg border px-3 py-2 text-xs",
-                      outbound ? "border-primary/20 bg-primary/5" : "border-border bg-muted/20",
+                      "flex flex-col w-full max-w-[min(100%,560px)]",
+                      outbound ? "items-end" : "items-start",
                     )}
                   >
-                    <div className="flex items-center justify-between gap-2 mb-1">
-                      <span className="font-medium text-foreground truncate">{label}</span>
-                      <span className="text-[10px] text-muted-foreground shrink-0">{when}</span>
+                    <div
+                      className={cn(
+                        "w-full rounded-xl border overflow-hidden shadow-sm",
+                        outbound ? "border-primary/25" : "border-border",
+                      )}
+                    >
+                      <div
+                        className={cn(
+                          "px-3 py-2 text-[11px] space-y-1 border-b border-border/80",
+                          outbound ? "bg-primary/[0.06]" : "bg-muted/50",
+                        )}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <span className="font-medium text-foreground break-all leading-snug">
+                            {fromLabel}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground shrink-0 pt-0.5">
+                            {when}
+                          </span>
+                        </div>
+                        <p className="text-muted-foreground leading-snug">
+                          <span className="font-medium text-foreground/90">To:</span>{" "}
+                          {msg.to_email}
+                        </p>
+                        <p className="text-muted-foreground leading-snug">
+                          <span className="font-medium text-foreground/90">Subject:</span>{" "}
+                          {subject}
+                        </p>
+                      </div>
+                      <div className="bg-background px-3 py-2.5 text-xs">
+                        <p className="whitespace-pre-wrap break-words text-foreground leading-relaxed">
+                          {preview}
+                        </p>
+                        {msg.body_quoted ? <QuotedBodyToggle text={msg.body_quoted} /> : null}
+                      </div>
                     </div>
-                    <p className="whitespace-pre-wrap break-words text-foreground leading-relaxed">
-                      {preview}
-                    </p>
-                    {outbound && <OutboundStatus status={msg.status} />}
+                    {outbound ? <OutboundStatus status={msg.status} /> : null}
                   </div>
                 </div>
               );

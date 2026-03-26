@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@onehash/ui/button";
 import { Icon } from "@onehash/ui/icon";
@@ -9,6 +9,9 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@onehash/ui/dropdown-menu";
 import {
@@ -20,151 +23,154 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  AlertDialogTrigger,
 } from "@onehash/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { deleteCandidate } from "@/api";
-import { RejectCandidateDialog } from "./RejectCandidateDialog";
+import { updateCandidateStage, type JobHiringStageResponse } from "@/api";
 
 export interface ActionButtonsProps {
   candidateName: string;
-  candidateId: string;
-  candidateStatus: string;
-  jobId: string | null | undefined;
-  onStageUpdated: () => void;
+  jobId?: string;
+  candidateId?: string;
+  currentStageId?: string | null;
+  stages?: JobHiringStageResponse[];
+  onCandidateUpdated?: () => void | Promise<void>;
+  onSchedule?: () => void;
 }
 
 export function ActionButtons({
   candidateName,
-  candidateId,
-  candidateStatus,
   jobId,
-  onStageUpdated,
+  candidateId,
+  currentStageId,
+  stages,
+  onCandidateUpdated,
+  onSchedule,
 }: ActionButtonsProps) {
   const router = useRouter();
   const { toast } = useToast();
-  const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
-  const [deleteOpen, setDeleteOpen] = useState(false);
-  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [movingToStageId, setMovingToStageId] = useState<string | null>(null);
 
-  const isRejected = candidateStatus === "rejected";
-  const isHired = candidateStatus === "hired";
+  const sortedStages = useMemo(
+    () => [...(stages ?? [])].sort((a, b) => a.position - b.position),
+    [stages],
+  );
+  const currentStageIndex = useMemo(
+    () => sortedStages.findIndex((s) => s.id === currentStageId),
+    [sortedStages, currentStageId],
+  );
+  const nextStage =
+    currentStageIndex >= 0 && currentStageIndex < sortedStages.length - 1
+      ? sortedStages[currentStageIndex + 1]
+      : null;
+  const moveTargets = sortedStages.filter((s) => s.id !== currentStageId);
 
-  const handleRejectClick = () => {
-    if (!jobId) {
-      toast({
-        title: "Cannot reject candidate",
-        description:
-          "Candidate must be assigned to a job before rejection. Rejection is per-job basis.",
-        variant: "destructive",
-      });
+  const handleMove = async (stageId: string, stageName: string) => {
+    if (!candidateId) {
+      toast({ title: "Candidate not found", variant: "destructive" });
       return;
     }
-    if (isRejected) {
-      toast({
-        title: "Already rejected",
-        description: "This candidate has already been rejected.",
-        variant: "destructive",
-      });
-      return;
-    }
-    if (isHired) {
-      toast({
-        title: "Cannot reject",
-        description: "This candidate is already marked as hired.",
-        variant: "destructive",
-      });
-      return;
-    }
-    setRejectDialogOpen(true);
-  };
-
-  const handleDeleteConfirm = async () => {
     try {
-      setDeleteLoading(true);
-      await deleteCandidate(candidateId);
-      setDeleteOpen(false);
-      toast({ title: "Candidate deleted" });
-      router.push(jobId ? `/jobs/${encodeURIComponent(jobId)}` : "/talent-pool");
+      setMovingToStageId(stageId);
+      await updateCandidateStage(candidateId, stageId);
+      toast({ title: `Moved to ${stageName}` });
+      if (onCandidateUpdated) {
+        await onCandidateUpdated();
+      }
     } catch (err) {
       toast({
-        title: "Failed to delete",
-        description: err instanceof Error ? err.message : "Unknown error",
+        title: err instanceof Error ? err.message : "Failed to move candidate",
         variant: "destructive",
       });
     } finally {
-      setDeleteLoading(false);
+      setMovingToStageId(null);
     }
   };
 
   return (
-    <>
-      <div className="flex items-center gap-1.5">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" className="h-8 w-8 p-0">
-              <Icon name="MoreHorizontal" className="h-3.5 w-3.5" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48">
-            <DropdownMenuItem className="text-xs" onClick={() => toast({ title: "Email composed" })}>
-              <Icon name="Send" className="h-3.5 w-3.5 mr-2" /> Send Email
-            </DropdownMenuItem>
-            <DropdownMenuItem className="text-xs" onClick={() => toast({ title: "Offer created" })}>
-              <Icon name="ScrollText" className="h-3.5 w-3.5 mr-2" /> Create Offer
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              className="text-xs text-destructive focus:text-destructive"
-              onClick={handleRejectClick}
-            >
-              <Icon name="X" className="h-3.5 w-3.5 mr-2" /> Reject
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              className="text-xs text-destructive focus:text-destructive"
-              onSelect={(e) => {
-                e.preventDefault();
-                setDeleteOpen(true);
-              }}
-            >
-              <Icon name="Trash2" className="h-3.5 w-3.5 mr-2" /> Delete
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-
-      <RejectCandidateDialog
-        open={rejectDialogOpen}
-        onOpenChange={setRejectDialogOpen}
-        candidateId={candidateId}
-        candidateName={candidateName}
-        onSuccess={onStageUpdated}
-      />
-
-      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete candidate?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently remove {candidateName} and all associated data.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel className="text-xs" disabled={deleteLoading}>
-              Cancel
-            </AlertDialogCancel>
-            <AlertDialogAction
-              className="text-xs bg-destructive text-destructive-foreground"
-              disabled={deleteLoading}
-              onClick={(e) => {
-                e.preventDefault();
-                void handleDeleteConfirm();
-              }}
-            >
-              {deleteLoading ? "Deleting…" : "Delete"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </>
+    <div className="flex items-center gap-1.5">
+      <Button
+        size="sm"
+        className="h-8 text-xs gap-1.5"
+        onClick={() => nextStage && void handleMove(nextStage.id, nextStage.name)}
+        disabled={!nextStage || !candidateId || Boolean(movingToStageId)}
+        pending={movingToStageId === nextStage?.id}
+      >
+        <Icon name="UserCheck" className="h-3.5 w-3.5" />{" "}
+        {nextStage ? `Move to ${nextStage.name}` : "At final stage"}
+      </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline" size="sm" className="h-8 w-8 p-0">
+            <Icon name="MoreHorizontal" className="h-3.5 w-3.5" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-48">
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger className="text-xs cursor-pointer">
+              <Icon name="ArrowLeftRight" className="h-3.5 w-3.5 mr-2" /> Move to stage
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className="w-48">
+              {moveTargets.length === 0 ? (
+                <DropdownMenuItem disabled className="text-xs">
+                  No other stages
+                </DropdownMenuItem>
+              ) : (
+                moveTargets.map((stage) => (
+                  <DropdownMenuItem
+                    key={stage.id}
+                    className="text-xs"
+                    disabled={Boolean(movingToStageId)}
+                    onClick={() => void handleMove(stage.id, stage.name)}
+                  >
+                    {movingToStageId === stage.id ? (
+                      <Icon name="Loader" className="h-3.5 w-3.5 mr-2 animate-spin" />
+                    ) : null}
+                    {stage.name}
+                  </DropdownMenuItem>
+                ))
+              )}
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            className="text-xs text-destructive focus:text-destructive"
+            onClick={() => toast({ title: "Candidate rejected", variant: "destructive" })}
+          >
+            <Icon name="X" className="h-3.5 w-3.5 mr-2" /> Reject
+          </DropdownMenuItem>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <DropdownMenuItem
+                className="text-xs text-destructive focus:text-destructive"
+                onSelect={(e) => e.preventDefault()}
+              >
+                <Icon name="Trash2" className="h-3.5 w-3.5 mr-2" /> Delete
+              </DropdownMenuItem>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete candidate?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will permanently remove {candidateName} and all associated data.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel className="text-xs">Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  className="text-xs bg-destructive text-destructive-foreground"
+                  onClick={() => {
+                    toast({ title: "Candidate deleted" });
+                    router.push(jobId ? `/jobs/${encodeURIComponent(jobId)}` : "/talent-pool");
+                  }}
+                >
+                  Delete
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
   );
 }

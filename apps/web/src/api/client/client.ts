@@ -1,5 +1,4 @@
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
 
 /** Full internal API base — all frontend calls use /v1/internal/* (JWT/session auth) */
 export const API_BASE_URL = `${API_BASE.replace(/\/$/, "")}/v1/internal`;
@@ -20,10 +19,7 @@ export function normalizeApiUrl(url: string | null | undefined): string | null {
   const path = url.startsWith("/") ? url : `/${url}`;
 
   // File URLs (served from backend)
-  if (
-    path.startsWith("/v1/internal/files/") ||
-    path.startsWith("/files/")
-  ) {
+  if (path.startsWith("/v1/internal/files/") || path.startsWith("/files/")) {
     return `${API_BASE.replace(/\/$/, "")}${path}`;
   }
 

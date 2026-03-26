@@ -2,15 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import {
-  Plus,
-  FileText,
-  MoreHorizontal,
-  Eye,
-  Copy,
-  Trash2,
-  Pencil,
-} from "lucide-react";
+import { Plus, FileText, MoreHorizontal, Eye, Copy, Trash2, Pencil } from "lucide-react";
 import { Button } from "@onehash/ui/button";
 import { Badge } from "@onehash/ui/badge";
 import { Card, CardContent } from "@onehash/ui/card";
@@ -193,7 +185,9 @@ export default function TemplatesList({ searchValue, onSearchChange }: Templates
   if (filtered.length === 0) {
     return (
       <>
-        <p className="text-sm text-muted-foreground text-center py-8">No templates match your filters.</p>
+        <p className="text-sm text-muted-foreground text-center py-8">
+          No templates match your filters.
+        </p>
         {modals}
       </>
     );
@@ -218,7 +212,10 @@ export default function TemplatesList({ searchValue, onSearchChange }: Templates
                     </Badge>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+                <div
+                  className="flex items-center gap-2 shrink-0"
+                  onClick={(e) => e.stopPropagation()}
+                >
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button variant="outline" size="icon" className="h-8 w-8">

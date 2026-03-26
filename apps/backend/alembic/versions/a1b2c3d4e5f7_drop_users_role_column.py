@@ -5,12 +5,13 @@ Revises: b0c1d2e3f4a5
 Create Date: 2026-03-18 00:00:00.000000
 
 """
+
 from typing import Sequence, Union
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy import inspect
 
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "a1b2c3d4e5f7"

@@ -40,7 +40,13 @@ export default function AutomationsPage() {
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [createInitialTemplate, setCreateInitialTemplate] = useState<
-    { name: string; triggerKey: string; triggerConfig?: Record<string, unknown>; templateId?: string } | undefined
+    | {
+        name: string;
+        triggerKey: string;
+        triggerConfig?: Record<string, unknown>;
+        templateId?: string;
+      }
+    | undefined
   >(undefined);
 
   const refreshAutomations = useCallback(async () => {

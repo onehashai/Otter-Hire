@@ -130,7 +130,8 @@ export function ActionsStep({
                   </FieldRow>
                 </div>
               )}
-              {a.type === "move_stage" && (
+              {/* TODO: Re-enable candidate actions (Move to stage, Assign recruiter, Add tag) */}
+              {/* {a.type === "move_stage" && (
                 <FieldRow label="Move to">
                   {moveToStageDisabled && moveToStageDisabledReason ? (
                     <p className="text-xs text-amber-600 dark:text-amber-500">
@@ -155,8 +156,8 @@ export function ActionsStep({
                     </Select>
                   )}
                 </FieldRow>
-              )}
-              {a.type === "assign_recruiter" && (
+              )} */}
+              {/* {a.type === "assign_recruiter" && (
                 <FieldRow label="Assign to">
                   <Select
                     value={a.config.recruiter ?? ""}
@@ -178,8 +179,8 @@ export function ActionsStep({
                     </SelectContent>
                   </Select>
                 </FieldRow>
-              )}
-              {a.type === "add_tag" && (
+              )} */}
+              {/* {a.type === "add_tag" && (
                 <FieldRow label="Tag name">
                   <InputField
                     value={a.config.tag ?? ""}
@@ -188,7 +189,7 @@ export function ActionsStep({
                     placeholder="e.g. Senior"
                   />
                 </FieldRow>
-              )}
+              )} */}
             </CardContent>
           </Card>
         );
@@ -196,7 +197,60 @@ export function ActionsStep({
 
       <div className="space-y-2">
         <Label className="text-xs font-medium text-muted-foreground">Add an action</Label>
-        {["Communication", "Candidate", "Interview"].map((cat) => {
+        {["Communication"].map((cat) => {
+          const items = actionTypes.filter((at) => at.category === cat);
+          return (
+            <div key={cat} className="space-y-1">
+              <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                {cat}
+              </span>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                {items.map((at) => {
+                  const ActionIcon = at.icon;
+                  const isAlreadyAdded = actions.some((a) => a.type === at.id);
+                  const isMoveStageDisabled = at.id === "move_stage" && moveToStageDisabled;
+                  const isDisabled = isAlreadyAdded || isMoveStageDisabled;
+                  const tooltipReason = isAlreadyAdded
+                    ? "Already added"
+                    : isMoveStageDisabled
+                      ? moveToStageDisabledReason
+                      : null;
+                  const button = (
+                    <Button
+                      key={at.id}
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-9 text-xs justify-start gap-1.5"
+                      disabled={isDisabled}
+                      onClick={() => {
+                        if (isDisabled) return;
+                        onAddAction(at.id);
+                      }}
+                    >
+                      <ActionIcon className="h-3 w-3" /> {at.label}
+                    </Button>
+                  );
+                  if (isDisabled && tooltipReason) {
+                    return (
+                      <Tooltip key={at.id}>
+                        <TooltipTrigger asChild>
+                          <span className="inline-block cursor-not-allowed">{button}</span>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-xs">
+                          {tooltipReason}
+                        </TooltipContent>
+                      </Tooltip>
+                    );
+                  }
+                  return button;
+                })}
+              </div>
+            </div>
+          );
+        })}
+        {/* TODO: Re-enable candidate actions section */}
+        {/* {["Candidate"].map((cat) => {
           const items = actionTypes.filter((at) => at.category === cat);
           return (
             <div key={cat} className="space-y-1">
@@ -250,7 +304,63 @@ export function ActionsStep({
               </div>
             </div>
           );
-        })}
+        })} */}
+        {/* TODO: Re-enable interview actions section */}
+        {/* {["Interview"].map((cat) => {
+          const items = actionTypes.filter((at) => at.category === cat);
+          return (
+            <div key={cat} className="space-y-1">
+              <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                {cat}
+              </span>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                {items.map((at) => {
+                  const ActionIcon = at.icon;
+                  const isAlreadyAdded = actions.some((a) => a.type === at.id);
+                  const isMoveStageDisabled =
+                    at.id === "move_stage" && moveToStageDisabled;
+                  const isDisabled = isAlreadyAdded || isMoveStageDisabled;
+                  const tooltipReason = isAlreadyAdded
+                    ? "Already added"
+                    : isMoveStageDisabled
+                      ? moveToStageDisabledReason
+                      : null;
+                  const button = (
+                    <Button
+                      key={at.id}
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-9 text-xs justify-start gap-1.5"
+                      disabled={isDisabled}
+                      onClick={() => {
+                        if (isDisabled) return;
+                        onAddAction(at.id);
+                      }}
+                    >
+                      <ActionIcon className="h-3 w-3" /> {at.label}
+                    </Button>
+                  );
+                  if (isDisabled && tooltipReason) {
+                    return (
+                      <Tooltip key={at.id}>
+                        <TooltipTrigger asChild>
+                          <span className="inline-block cursor-not-allowed">
+                            {button}
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-xs">
+                          {tooltipReason}
+                        </TooltipContent>
+                      </Tooltip>
+                    );
+                  }
+                  return button;
+                })}
+              </div>
+            </div>
+          );
+        })} */}
       </div>
     </div>
   );

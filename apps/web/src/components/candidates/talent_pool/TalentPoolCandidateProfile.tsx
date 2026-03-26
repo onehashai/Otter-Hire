@@ -7,7 +7,7 @@ import { Button } from "@onehash/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@onehash/ui/tabs";
 import { Icon } from "@onehash/ui/icon";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { OverviewTab, DocumentsTab } from "@/components/candidates/shared/tabs";
+import { OverviewTab, DocumentsTab, CandidateMessagesTab } from "@/components/candidates/shared/tabs";
 import { SummaryPanel } from "@/components/candidates/shared/summary/SummaryPanel";
 import { DocumentUploadDialog } from "@/components/candidates/shared/dialogs/DocumentUploadDialog";
 import { useTranslation } from "react-i18next";
@@ -253,6 +253,7 @@ export function TalentPoolCandidateProfile({ candidateId: id }: { candidateId: s
           <TabsList className="h-9 w-full justify-start bg-transparent border-b rounded-none p-0 gap-0">
             {[
               { value: "notes", label: t("notes") },
+              { value: "messages", label: t("messages") },
               { value: "documents", label: t("documents") },
             ].map((tab) => (
               <TabsTrigger
@@ -274,6 +275,15 @@ export function TalentPoolCandidateProfile({ candidateId: id }: { candidateId: s
                   mentionableUsers={orgUsers}
                   onAddNote={handleAddNote}
                   showTimeline={false}
+                />
+              </TabsContent>
+              <TabsContent value="messages" className="mt-0">
+                <CandidateMessagesTab
+                  candidateId={candidate!.id}
+                  candidateName={uiCandidate.name}
+                  candidateEmail={candidate!.email}
+                  jobId={candidate?.job_id ?? null}
+                  jobTitle={candidate?.job_title ?? null}
                 />
               </TabsContent>
               <TabsContent value="documents" className="mt-0">

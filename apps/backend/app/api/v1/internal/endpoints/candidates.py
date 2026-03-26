@@ -39,15 +39,16 @@ from app.schemas.candidates import (
     CandidateInterviewResponse,
     CandidateListItemResponse,
     CandidateListResponse,
-    CandidateStageFilterOptionsResponse,
     CandidateNoteMentionResponse,
     CandidateNoteRequest,
     CandidateNoteResponse,
     CandidateOverviewResponse,
+    CandidateStageFilterOptionsResponse,
     CandidateStageUpdateRequest,
     CandidateStatusUpdateRequest,
     CandidateUpdateRequest,
 )
+from app.services.automation import execute_automations_for_trigger
 from app.services.email import send_candidate_note_mention_email
 from app.services.media import ensure_pdf_type, read_upload_with_size_check
 from app.services.storage import storage_service
@@ -242,6 +243,27 @@ async def create_candidate(
         },
     )
     await db.commit()
+
+    # Fetch stage name for automation metadata
+    stage_name = None
+    if candidate.stage_id:
+        stage_result = await db.execute(select(Stage.name).where(Stage.id == candidate.stage_id))
+        stage_name = stage_result.scalar_one_or_none()
+
+    # Trigger automations for candidate_applied ONLY if job is assigned
+    # Talent pool candidates (no job) should NOT trigger application emails
+    if candidate.job_id is not None:
+        await execute_automations_for_trigger(
+            db=db,
+            trigger_key="candidate_applied",
+            org_id=current_user.org_id,
+            candidate_id=candidate.id,
+            job_id=candidate.job_id,
+            metadata={
+                "source": candidate.source,
+                "stage_name": stage_name,
+            },
+        )
 
     return await get_candidate(candidate.id, db, current_user)
 
@@ -524,6 +546,10 @@ async def update_candidate(
     if candidate is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Candidate not found")
 
+    # Track if job was assigned (from None to a job_id)
+    old_job_id = candidate.job_id
+    job_was_assigned = False
+
     if body.name is not None:
         candidate.name = body.name.strip()
     if body.email is not None:
@@ -552,6 +578,10 @@ async def update_candidate(
         if job is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
         if candidate.job_id != body.job_id:
+            # Job is being assigned or changed
+            if old_job_id is None and body.job_id is not None:
+                job_was_assigned = True  # Talent pool candidate assigned to job
+
             candidate.job_id = body.job_id
             first_stage_result = await db.execute(
                 select(Stage)
@@ -571,6 +601,42 @@ async def update_candidate(
         metadata={"job_id": str(candidate.job_id) if candidate.job_id else None},
     )
     await db.commit()
+
+    # Trigger candidate_job_assigned automation when talent pool candidate gets a job
+    if job_was_assigned:
+        # Fetch job and stage details for metadata
+        job_result = await db.execute(select(Job).where(Job.id == candidate.job_id))
+        job = job_result.scalar_one_or_none()
+
+        stage_name = None
+        if candidate.stage_id:
+            stage_result = await db.execute(
+                select(Stage.name).where(Stage.id == candidate.stage_id)
+            )
+            stage_name = stage_result.scalar_one_or_none()
+
+        try:
+            await execute_automations_for_trigger(
+                db=db,
+                trigger_key="candidate_job_assigned",
+                org_id=current_user.org_id,
+                candidate_id=candidate.id,
+                job_id=candidate.job_id,
+                metadata={
+                    "job_title": job.title if job else None,
+                    "stage_name": stage_name,
+                    "source": candidate.source,
+                },
+            )
+            logger.info(
+                f"Triggered candidate_job_assigned automation: candidate_id={candidate.id}, job_id={candidate.job_id}"
+            )
+        except Exception as e:
+            logger.error(
+                f"Failed to trigger candidate_job_assigned automation: {e}",
+                exc_info=True,
+            )
+
     return await get_candidate(candidate.id, db, current_user)
 
 
@@ -677,6 +743,19 @@ async def update_candidate_stage(
     )
     await db.commit()
 
+    # Trigger automations for candidate_moved
+    await execute_automations_for_trigger(
+        db=db,
+        trigger_key="candidate_moved",
+        org_id=current_user.org_id,
+        candidate_id=candidate.id,
+        job_id=candidate.job_id,
+        metadata={
+            "stage_id": str(stage.id),
+            "stage_name": stage.name,
+        },
+    )
+
     return await get_candidate(candidate_id, db, current_user)
 
 
@@ -696,6 +775,20 @@ async def update_candidate_status(
     if candidate is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Candidate not found")
 
+    # Idempotency check: prevent duplicate status updates and automation triggers
+    if candidate.status == body.status:
+        logger.info(f"Candidate {candidate_id} already has status '{body.status}', skipping update")
+        return await get_candidate(candidate_id, db, current_user)
+
+    # Validation: Cannot reject candidate without job assignment
+    if body.status == "rejected" and candidate.job_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot reject candidate without job assignment. Rejection is per-job basis.",
+        )
+
+    # Store old status for logging
+    old_status = candidate.status
     candidate.status = body.status
     await _log_activity(
         db,
@@ -703,9 +796,29 @@ async def update_candidate_status(
         candidate_id=candidate.id,
         created_by_user_id=current_user.id,
         activity_type="status_changed",
-        metadata={"status": body.status},
+        metadata={"old_status": old_status, "new_status": body.status},
     )
     await db.commit()
+
+    # Trigger automations only when status actually changes
+    if body.status == "rejected":
+        await execute_automations_for_trigger(
+            db=db,
+            trigger_key="candidate_rejected",
+            org_id=current_user.org_id,
+            candidate_id=candidate.id,
+            job_id=candidate.job_id,
+            metadata={"status": "rejected"},
+        )
+    elif body.status == "hired":
+        await execute_automations_for_trigger(
+            db=db,
+            trigger_key="candidate_hired",
+            org_id=current_user.org_id,
+            candidate_id=candidate.id,
+            job_id=candidate.job_id,
+            metadata={"status": "hired"},
+        )
 
     return await get_candidate(candidate_id, db, current_user)
 

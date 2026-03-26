@@ -3,13 +3,15 @@ from typing import Sequence
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func as sa_func, select
+from sqlalchemy import func as sa_func
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from app.core.permissions import require_permission
 from app.db.session import get_db
 from app.models.automation import Automation, AutomationExecution
+from app.models.candidate import Candidate
 from app.models.user import User
 from app.schemas.automations import (
     AutomationCreateRequest,
@@ -18,7 +20,6 @@ from app.schemas.automations import (
     AutomationListItemResponse,
     AutomationUpdateRequest,
 )
-
 
 router = APIRouter(prefix="/automations", tags=["automations"])
 
@@ -70,9 +71,7 @@ def _build_detail(automation: Automation, created_by_name: str | None) -> Automa
     )
 
 
-async def _get_automation_or_404(
-    db: AsyncSession, automation_id: UUID, org_id: UUID
-) -> Automation:
+async def _get_automation_or_404(db: AsyncSession, automation_id: UUID, org_id: UUID) -> Automation:
     stmt = (
         select(Automation)
         .where(Automation.id == automation_id, Automation.org_id == org_id)
@@ -204,7 +203,8 @@ async def list_automation_executions(
     current_user: User = Depends(require_permission("automations:read")),
 ):
     stmt = (
-        select(AutomationExecution)
+        select(AutomationExecution, Candidate.name, Candidate.email)
+        .outerjoin(Candidate, AutomationExecution.candidate_id == Candidate.id)
         .where(
             AutomationExecution.org_id == current_user.org_id,
             AutomationExecution.automation_id == automation_id,
@@ -213,17 +213,18 @@ async def list_automation_executions(
         .limit(100)
     )
     result = await db.execute(stmt)
-    rows: Sequence[AutomationExecution] = result.scalars().all()
+    rows = result.all()
     return [
         AutomationExecutionLogEntry(
-            id=str(row.id),
-            trigger_event=row.trigger_event,
-            candidate_id=str(row.candidate_id) if row.candidate_id else None,
-            job_id=str(row.job_id) if row.job_id else None,
-            status=row.status,
-            message=row.message,
-            created_at=row.created_at,
+            id=str(row[0].id),
+            trigger_event=row[0].trigger_event,
+            candidate_id=str(row[0].candidate_id) if row[0].candidate_id else None,
+            candidate_name=row[1] if row[1] else None,
+            candidate_email=row[2] if row[2] else None,
+            job_id=str(row[0].job_id) if row[0].job_id else None,
+            status=row[0].status,
+            message=row[0].message,
+            created_at=row[0].created_at,
         )
         for row in rows
     ]
-

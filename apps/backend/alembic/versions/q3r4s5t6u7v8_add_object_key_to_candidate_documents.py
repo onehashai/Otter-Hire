@@ -7,9 +7,9 @@ Create Date: 2026-02-25 20:10:00.000000
 
 from typing import Sequence, Union
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 revision: str = "q3r4s5t6u7v8"
 down_revision: Union[str, None] = "p2q3r4s5t6u7"
@@ -18,9 +18,10 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column("candidate_documents", sa.Column("object_key", sa.String(length=2048), nullable=True))
+    op.add_column(
+        "candidate_documents", sa.Column("object_key", sa.String(length=2048), nullable=True)
+    )
 
 
 def downgrade() -> None:
     op.drop_column("candidate_documents", "object_key")
-

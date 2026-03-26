@@ -5,9 +5,8 @@ Revises: a9b8c7d6e5f4, c8d9e0f1a2b3, h4d5e6f7a8b9
 Create Date: 2026-03-16 12:00:00.000000
 
 """
-from typing import Sequence, Union
 
-from alembic import op
+from typing import Sequence, Union
 
 revision: str = "b0c1d2e3f4a5"
 down_revision: Union[str, Sequence[str], None] = (

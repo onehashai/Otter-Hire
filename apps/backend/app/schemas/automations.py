@@ -89,8 +89,9 @@ class AutomationExecutionLogEntry(BaseModel):
     id: str
     trigger_event: str
     candidate_id: str | None = None
+    candidate_name: str | None = None
+    candidate_email: str | None = None
     job_id: str | None = None
     status: str
     message: str | None = None
     created_at: datetime
-

@@ -14,6 +14,7 @@ from app.schemas.job_categories import JobCategoryCreateRequest, JobCategoryResp
 
 router = APIRouter(prefix="/organizations/categories", tags=["job-categories"])
 
+
 @router.get("", response_model=list[JobCategoryResponse])
 async def list_categories(
     db: AsyncSession = Depends(get_db),

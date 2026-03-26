@@ -48,27 +48,6 @@ class CandidateSnippet(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class ConversationListItem(BaseModel):
-    id: UUID
-    subject: str
-    channel: str
-    status: str
-    last_message_at: datetime | None = None
-    created_at: datetime
-    candidate: CandidateSnippet
-    last_message_body: str | None = None
-    message_count: int = 0
-
-    model_config = {"from_attributes": True}
-
-
-class ConversationListResponse(BaseModel):
-    items: list[ConversationListItem]
-    total: int
-    page: int
-    page_size: int
-
-
 class ConversationDetail(BaseModel):
     id: UUID
     subject: str

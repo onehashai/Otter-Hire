@@ -46,3 +46,24 @@ export function formatTimestamp(isoString: string | null): string {
 
   return formatShortDayMonth(date, now);
 }
+
+/**
+ * Full local date and time, e.g. `13 Mar 2026, 3pm` (on the hour) or `13 Mar 2026, 3:05pm`.
+ */
+export function formatTimestampToDateTime(isoString: string | null, locale = "en-GB"): string {
+  if (!isoString) return "";
+  const date = new Date(isoString);
+  if (Number.isNaN(date.getTime())) return "";
+  const day = date.getDate();
+  const month = date.toLocaleString(locale, { month: "short" });
+  const year = date.getFullYear();
+  const hours = date.getHours();
+  const minutes = date.getMinutes();
+  const hour12 = hours % 12 || 12;
+  const ampm = hours >= 12 ? "pm" : "am";
+  const timePart =
+    minutes === 0
+      ? `${hour12}${ampm}`
+      : `${hour12}:${minutes.toString().padStart(2, "0")}${ampm}`;
+  return `${day} ${month} ${year}, ${timePart}`;
+}

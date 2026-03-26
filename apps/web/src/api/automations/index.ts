@@ -66,6 +66,8 @@ export type AutomationExecutionLogEntry = {
   id: string;
   trigger_event: string;
   candidate_id: string | null;
+  candidate_name: string | null;
+  candidate_email: string | null;
   job_id: string | null;
   status: string;
   message: string | null;
@@ -80,7 +82,9 @@ export function getAutomationById(id: string): Promise<AutomationDetailResponse>
   return apiFetch<AutomationDetailResponse>(`/automations/${id}`, { method: "GET" });
 }
 
-export function createAutomation(payload: AutomationCreatePayload): Promise<AutomationDetailResponse> {
+export function createAutomation(
+  payload: AutomationCreatePayload,
+): Promise<AutomationDetailResponse> {
   return apiFetch<AutomationDetailResponse>("/automations", {
     method: "POST",
     body: payload,
@@ -101,11 +105,8 @@ export function deleteAutomation(id: string): Promise<void> {
   return apiFetch<void>(`/automations/${id}`, { method: "DELETE" });
 }
 
-export function getAutomationExecutions(
-  id: string,
-): Promise<AutomationExecutionLogEntry[]> {
+export function getAutomationExecutions(id: string): Promise<AutomationExecutionLogEntry[]> {
   return apiFetch<AutomationExecutionLogEntry[]>(`/automations/${id}/executions`, {
     method: "GET",
   });
 }
-

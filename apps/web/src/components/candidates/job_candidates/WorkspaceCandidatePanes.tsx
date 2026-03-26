@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@onehash/ui/button";
-import { Icon } from "@onehash/ui/icon";
+import { Icon, type IconName } from "@onehash/ui/icon";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@onehash/ui/tabs";
 import { toast } from "@onehash/ui/sonner";
 import { ActionButtons } from "./ActionButtons";
@@ -215,6 +215,17 @@ export function WorkspaceCandidatePanes({
     );
   }
 
+  const navItems: Array<{
+    id: "overview" | "interviews" | "evaluation" | "documents";
+    label: string;
+    icon: IconName;
+  }> = [
+    { id: "overview", label: "Overview", icon: "Clock" },
+    { id: "interviews", label: "Interviews", icon: "CalendarPlus" },
+    { id: "evaluation", label: "Evaluation", icon: "Check" },
+    { id: "documents", label: "Files", icon: "Archive" },
+  ];
+
   return (
     <>
       <section className="w-[320px] border-r border-border flex flex-col">
@@ -229,12 +240,7 @@ export function WorkspaceCandidatePanes({
         </div>
         <div className="p-3 border-b border-border">
           <div className="space-y-1.5">
-            {[
-              { id: "overview", label: "Overview", icon: "ClipboardList" },
-              { id: "interviews", label: "Interviews", icon: "CalendarClock" },
-              { id: "evaluation", label: "Evaluation", icon: "BadgeCheck" },
-              { id: "documents", label: "Files", icon: "FileText" },
-            ].map((item) => (
+            {navItems.map((item) => (
               <button
                 key={item.id}
                 type="button"

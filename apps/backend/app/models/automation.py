@@ -39,9 +39,7 @@ class Automation(Base):
 
     __table_args__ = (
         CheckConstraint("status IN ('draft', 'active', 'paused')", name="ck_automations_status"),
-        CheckConstraint(
-            "scope IN ('all', 'specific_job')", name="ck_automations_scope"
-        ),
+        CheckConstraint("scope IN ('all', 'specific_job')", name="ck_automations_scope"),
         CheckConstraint("condition_logic IN ('and', 'or')", name="ck_automations_condition_logic"),
         Index("ix_automations_org_id", "org_id"),
         Index("ix_automations_org_status", "org_id", "status"),

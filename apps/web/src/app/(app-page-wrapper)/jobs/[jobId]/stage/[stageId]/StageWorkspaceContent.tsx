@@ -31,6 +31,7 @@ export default function StageWorkspaceContent() {
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [mobileStageIndex, setMobileStageIndex] = useState(0);
+  const [movingToStageId, setMovingToStageId] = useState<string | null>(null);
 
   const sortedStages = useMemo(() => {
     if (!workspace?.stages.length) return [];
@@ -71,7 +72,7 @@ export default function StageWorkspaceContent() {
   }, [workspace?.candidates, stageForList]);
 
   useEffect(() => {
-    if (!candidateIdParam || !stageForList) return;
+    if (!candidateIdParam || !stageForList || movingToStageId) return;
     const stillInCurrentStage = candidatesInStage.some((c) => c.id === candidateIdParam);
     if (!stillInCurrentStage) {
       router.replace(
@@ -79,7 +80,14 @@ export default function StageWorkspaceContent() {
         { scroll: false },
       );
     }
-  }, [candidateIdParam, stageForList, candidatesInStage, jobId, router]);
+  }, [candidateIdParam, stageForList, candidatesInStage, jobId, router, movingToStageId]);
+
+  useEffect(() => {
+    if (!movingToStageId) return;
+    if (stageIdParam === movingToStageId) {
+      setMovingToStageId(null);
+    }
+  }, [movingToStageId, stageIdParam]);
 
   useEffect(() => {
     if (!stageForList || candidateIdParam) return;
@@ -299,7 +307,17 @@ export default function StageWorkspaceContent() {
             candidateId={candidateIdParam}
             jobRouteJobId={jobId}
             isStageThreePane={true}
-            onCandidateUpdated={reload}
+            onCandidateUpdated={async () => {
+              await reload();
+            }}
+            onStageMoved={async (destinationStageId) => {
+              setMovingToStageId(destinationStageId);
+              router.replace(
+                `/jobs/${encodeURIComponent(jobId)}/stage/${encodeURIComponent(destinationStageId)}/candidates/${encodeURIComponent(candidateIdParam)}`,
+                { scroll: false },
+              );
+              await reload();
+            }}
           />
         </section>
       ) : (

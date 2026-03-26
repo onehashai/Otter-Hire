@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import csv
 from datetime import datetime, timezone
+from pathlib import Path
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from fastapi.responses import FileResponse, Response
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
@@ -26,10 +29,13 @@ from app.models.stage import Stage
 from app.models.user import User
 from app.schemas.candidates import (
     CandidateActivityResponse,
+    CandidateBulkAssignJobRequest,
     CandidateBulkStageUpdateRequest,
     CandidateBulkStatusUpdateRequest,
     CandidateBulkUpdateResponse,
     CandidateCreateRequest,
+    CandidateCsvImportError,
+    CandidateCsvImportResponse,
     CandidateDetailResponse,
     CandidateDocumentResponse,
     CandidateEvaluationResponse,
@@ -55,6 +61,40 @@ from app.services.storage import storage_service
 from app.utils.uuid import uuid7
 
 router = APIRouter(prefix="/candidates", tags=["candidates"])
+
+
+def _object_key_from_stored_file_url(url: str) -> str | None:
+    """Extract storage object key from URLs produced by storage_service.resolve_url."""
+    clean = (url or "").strip()
+    for prefix in ("/v1/internal/files/local/", "/api/files/local/", "/files/local/"):
+        if clean.startswith(prefix):
+            return clean[len(prefix) :].lstrip("/")
+    return None
+
+
+async def _stream_candidate_pdf_inline(
+    *, normalized_key: str, filename: str
+) -> Response | FileResponse:
+    headers = {"Content-Disposition": f'inline; filename="{(filename or "document.pdf").strip()}"'}
+
+    if settings.s3_enabled and storage_service.use_s3 and storage_service.s3_client:
+        try:
+            s3_response = storage_service.s3_client.get_object(
+                Bucket=storage_service.bucket,
+                Key=storage_service._s3_key(normalized_key),
+            )
+        except Exception:
+            raise HTTPException(status_code=404, detail="File not found")
+
+        content = s3_response["Body"].read()
+        return Response(content=content, media_type="application/pdf", headers=headers)
+
+    root = Path(settings.local_storage_root).resolve()
+    full_path = (root / normalized_key).resolve()
+    if not str(full_path).startswith(str(root)) or not full_path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+
+    return FileResponse(full_path, media_type="application/pdf", headers=headers)
 
 
 async def _resolve_candidate_document_url(doc: CandidateDocument) -> str:
@@ -266,6 +306,99 @@ async def create_candidate(
         )
 
     return await get_candidate(candidate.id, db, current_user)
+
+
+@router.post("/import-csv", response_model=CandidateCsvImportResponse)
+async def import_candidates_csv(
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("candidates:source")),
+):
+    if not file.filename or not file.filename.lower().endswith(".csv"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Please upload a CSV file"
+        )
+
+    raw = await file.read()
+    try:
+        content = raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="CSV must be UTF-8 encoded",
+        )
+
+    reader = csv.DictReader(content.splitlines())
+    required = {"name", "email"}
+    if not reader.fieldnames:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="CSV header is missing")
+    normalized_headers = {h.strip().lower() for h in reader.fieldnames if h}
+    if not required.issubset(normalized_headers):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="CSV must include required columns: name,email",
+        )
+
+    created_count = 0
+    total_rows = 0
+    errors: list[CandidateCsvImportError] = []
+
+    for idx, row in enumerate(reader, start=2):
+        total_rows += 1
+        name = (row.get("name") or row.get("Name") or "").strip()
+        email = (row.get("email") or row.get("Email") or "").strip().lower()
+        phone = (row.get("phone") or row.get("Phone") or "").strip() or None
+        source = (row.get("source") or row.get("Source") or "manual").strip() or "manual"
+
+        if not name or not email:
+            errors.append(CandidateCsvImportError(row=idx, reason="Missing required name/email"))
+            continue
+
+        existing_result = await db.execute(
+            select(Candidate.id).where(
+                Candidate.org_id == current_user.org_id,
+                Candidate.job_id.is_(None),
+                func.lower(Candidate.email) == email,
+            )
+        )
+        if existing_result.scalar_one_or_none() is not None:
+            errors.append(
+                CandidateCsvImportError(row=idx, reason="Candidate already exists in talent pool")
+            )
+            continue
+
+        candidate = Candidate(
+            org_id=current_user.org_id,
+            job_id=None,
+            stage_id=None,
+            status="active",
+            name=name,
+            email=email,
+            phone=phone,
+            location=None,
+            profile_links={},
+            source=source,
+            tags=[],
+        )
+        db.add(candidate)
+        await db.flush()
+        await _log_activity(
+            db,
+            org_id=current_user.org_id,
+            candidate_id=candidate.id,
+            created_by_user_id=current_user.id,
+            activity_type="candidate_created",
+            metadata={"job_id": None, "source": candidate.source},
+        )
+        created_count += 1
+
+    await db.commit()
+    return CandidateCsvImportResponse(
+        total_rows=total_rows,
+        created_count=created_count,
+        failed_count=len(errors),
+        errors=errors,
+    )
 
 
 @router.get("", response_model=list[CandidateListItemResponse])
@@ -906,6 +1039,91 @@ async def bulk_update_candidate_status(
     return CandidateBulkUpdateResponse(updated_count=len(candidates))
 
 
+@router.patch("/actions/bulk/assign-job", response_model=CandidateBulkUpdateResponse)
+async def bulk_assign_candidates_to_job(
+    body: CandidateBulkAssignJobRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("candidates:source")),
+):
+    ids = list(dict.fromkeys(body.candidate_ids))
+
+    job_result = await db.execute(
+        select(Job).where(Job.id == body.job_id, Job.org_id == current_user.org_id)
+    )
+    job = job_result.scalar_one_or_none()
+    if job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+
+    first_stage_result = await db.execute(
+        select(Stage)
+        .where(Stage.org_id == current_user.org_id, Stage.job_id == body.job_id)
+        .order_by(Stage.position.asc())
+        .limit(1)
+    )
+    first_stage = first_stage_result.scalar_one_or_none()
+
+    result = await db.execute(
+        select(Candidate).where(
+            Candidate.org_id == current_user.org_id,
+            Candidate.id.in_(ids),
+        )
+    )
+    candidates = result.scalars().all()
+    if not candidates:
+        return CandidateBulkUpdateResponse(updated_count=0)
+
+    # Track which candidates are “newly assigned” (Talent Pool -> Job) to trigger automation.
+    newly_assigned: list[UUID] = []
+
+    for candidate in candidates:
+        old_job_id = candidate.job_id
+        if old_job_id != body.job_id:
+            if old_job_id is None:
+                newly_assigned.append(candidate.id)
+            candidate.job_id = body.job_id
+            candidate.stage_id = first_stage.id if first_stage else None
+            await _log_activity(
+                db,
+                org_id=current_user.org_id,
+                candidate_id=candidate.id,
+                created_by_user_id=current_user.id,
+                activity_type="bulk_job_assigned",
+                metadata={
+                    "job_id": str(body.job_id),
+                    "job_title": job.title,
+                    "stage_id": str(candidate.stage_id) if candidate.stage_id else None,
+                    "stage_name": first_stage.name if first_stage else None,
+                },
+            )
+
+    await db.commit()
+
+    # Trigger automations for candidates assigned from talent pool.
+    if newly_assigned:
+        for candidate_id in newly_assigned:
+            try:
+                await execute_automations_for_trigger(
+                    db=db,
+                    trigger_key="candidate_job_assigned",
+                    org_id=current_user.org_id,
+                    candidate_id=candidate_id,
+                    job_id=body.job_id,
+                    metadata={
+                        "job_title": job.title,
+                        "stage_name": first_stage.name if first_stage else None,
+                    },
+                )
+            except Exception as e:
+                logger.error(
+                    "Failed to trigger candidate_job_assigned automation bulk candidate_id=%s err=%s",
+                    candidate_id,
+                    e,
+                    exc_info=True,
+                )
+
+    return CandidateBulkUpdateResponse(updated_count=len(candidates))
+
+
 @router.get("/{candidate_id}/overview", response_model=CandidateOverviewResponse)
 async def get_candidate_overview(
     candidate_id: UUID,
@@ -1295,6 +1513,57 @@ async def list_candidate_documents(
             )
         )
     return items
+
+
+@router.get("/{candidate_id}/documents/{document_id}/preview")
+async def preview_candidate_document_inline(
+    candidate_id: UUID,
+    document_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("candidates:read")),
+):
+    candidate_result = await db.execute(
+        select(Candidate.id).where(
+            Candidate.id == candidate_id, Candidate.org_id == current_user.org_id
+        )
+    )
+    if candidate_result.scalar_one_or_none() is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Candidate not found")
+
+    doc_result = await db.execute(
+        select(CandidateDocument).where(
+            CandidateDocument.id == document_id,
+            CandidateDocument.org_id == current_user.org_id,
+            CandidateDocument.candidate_id == candidate_id,
+            CandidateDocument.is_deleted.is_(False),
+        )
+    )
+    doc = doc_result.scalar_one_or_none()
+    if doc is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+
+    # Inline preview is only supported for PDFs. We intentionally accept common cases where
+    # the stored MIME type is inaccurate (e.g., application/octet-stream) but the filename
+    # indicates a PDF.
+    mime = (doc.mime_type or "").strip().lower()
+    name = (doc.name or "").strip().lower()
+    is_pdf = mime == "application/pdf" or name.endswith(".pdf")
+    if not is_pdf:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="Preview is only available for PDF documents",
+        )
+
+    normalized_key = (doc.object_key or "").strip() or _object_key_from_stored_file_url(doc.url)
+    if not normalized_key:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
+
+    normalized_key = normalized_key.lstrip("/")
+    org_prefix = f"orgs/{current_user.org_id}/"
+    if not normalized_key.startswith(org_prefix):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+
+    return await _stream_candidate_pdf_inline(normalized_key=normalized_key, filename=doc.name)
 
 
 @router.post(

@@ -23,6 +23,7 @@ interface MainPagesLayoutProps {
   hasActiveFilters?: boolean;
   activeChips?: { label: string; clear: () => void }[];
   onClearAllFilters?: () => void;
+  rightActions?: ReactNode;
 
   children: ReactNode;
 }
@@ -41,6 +42,7 @@ export const MainPagesLayout = ({
   hasActiveFilters = false,
   activeChips,
   onClearAllFilters,
+  rightActions,
   children,
 }: MainPagesLayoutProps) => {
   const { t } = useTranslation();
@@ -115,6 +117,7 @@ export const MainPagesLayout = ({
             <Icon name={actionIcon} className="h-3.5 w-3.5" /> {actionLabel}
           </Button>
         ) : null}
+        {rightActions}
       </div>
 
       {activeChips && activeChips.length > 0 && (

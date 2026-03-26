@@ -62,6 +62,7 @@ from app.utils.uuid import uuid7
 
 router = APIRouter(prefix="/candidates", tags=["candidates"])
 
+
 def _object_key_from_stored_file_url(url: str) -> str | None:
     """Extract storage object key from URLs produced by storage_service.resolve_url."""
     clean = (url or "").strip()
@@ -71,7 +72,9 @@ def _object_key_from_stored_file_url(url: str) -> str | None:
     return None
 
 
-async def _stream_candidate_pdf_inline(*, normalized_key: str, filename: str) -> Response | FileResponse:
+async def _stream_candidate_pdf_inline(
+    *, normalized_key: str, filename: str
+) -> Response | FileResponse:
     headers = {"Content-Disposition": f'inline; filename="{(filename or "document.pdf").strip()}"'}
 
     if settings.s3_enabled and storage_service.use_s3 and storage_service.s3_client:
@@ -312,7 +315,9 @@ async def import_candidates_csv(
     current_user: User = Depends(require_permission("candidates:source")),
 ):
     if not file.filename or not file.filename.lower().endswith(".csv"):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Please upload a CSV file")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Please upload a CSV file"
+        )
 
     raw = await file.read()
     try:
@@ -357,7 +362,9 @@ async def import_candidates_csv(
             )
         )
         if existing_result.scalar_one_or_none() is not None:
-            errors.append(CandidateCsvImportError(row=idx, reason="Candidate already exists in talent pool"))
+            errors.append(
+                CandidateCsvImportError(row=idx, reason="Candidate already exists in talent pool")
+            )
             continue
 
         candidate = Candidate(
@@ -1516,7 +1523,9 @@ async def preview_candidate_document_inline(
     current_user: User = Depends(require_permission("candidates:read")),
 ):
     candidate_result = await db.execute(
-        select(Candidate.id).where(Candidate.id == candidate_id, Candidate.org_id == current_user.org_id)
+        select(Candidate.id).where(
+            Candidate.id == candidate_id, Candidate.org_id == current_user.org_id
+        )
     )
     if candidate_result.scalar_one_or_none() is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Candidate not found")

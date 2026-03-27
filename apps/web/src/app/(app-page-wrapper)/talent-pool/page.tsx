@@ -304,7 +304,7 @@ export default function TalentPoolPage() {
       rightActions={
         <div className="flex items-center gap-2">
           <Button size="sm" className="h-9 md:h-8 text-xs gap-1.5" onClick={() => setAddOpen(true)}>
-            <Icon name="Plus" className="h-3.5 w-3.5" /> Create Candidate
+            <Icon name="Plus" className="h-3.5 w-3.5" /> Create
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

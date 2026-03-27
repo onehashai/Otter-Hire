@@ -37,7 +37,7 @@ class CandidateCreateRequest(BaseModel):
     location: Optional[str] = None
     profile_links: dict[str, str] = {}
     stage_id: Optional[UUID] = None
-    source: Optional[str] = Field(default="manual", max_length=100)
+    source: Optional[str] = Field(default="Manual", max_length=100)
     tags: list[str] = []
     status: str = Field(default="active", pattern=r"^(active|rejected|hired)$")
 

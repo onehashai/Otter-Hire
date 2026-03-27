@@ -45,7 +45,7 @@ export function AddCandidateDialog({
         name: name.trim(),
         email: email.trim(),
         phone: phone.trim() || null,
-        source: "manual",
+        source: "Manual",
         status: "active",
         stage_id: jobId ? (stageId ?? undefined) : undefined,
       });

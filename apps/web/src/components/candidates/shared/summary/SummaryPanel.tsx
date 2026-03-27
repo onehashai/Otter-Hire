@@ -8,7 +8,6 @@ import { Avatar } from "@onehash/ui/avatar";
 import { Separator } from "@onehash/ui/separator";
 import { Icon } from "@onehash/ui/icon";
 import { InputField, PhoneNumberField, isValidPhoneNumber } from "@onehash/ui/input";
-import { SelectField } from "@onehash/ui/select";
 import { formatTimestampToDateTime } from "@/lib/format-date";
 import { Label } from "@onehash/ui/label";
 import { formatPhoneForDisplay, parseStoredPhone } from "@/lib/phone";
@@ -37,12 +36,10 @@ interface CandidateSummary {
   linkedin?: string;
   portfolio?: string;
   tags: string[];
-  jobId?: string | null;
 }
 
 interface SummaryPanelProps {
   candidate: CandidateSummary;
-  jobs: Array<{ id: string; title: string }>;
   /** Talent pool hides pipeline stage; job shows full hiring summary. */
   variant?: "job" | "talent_pool";
   onSaveProfile: (payload: {
@@ -50,8 +47,6 @@ interface SummaryPanelProps {
     email: string;
     phone: string | null;
     location: string | null;
-    job_id?: string | null;
-    clear_job?: boolean;
   }) => Promise<void>;
   onSaveLinks: (payload: { linkedin?: string; portfolio?: string }) => Promise<void>;
   onUploadDocument?: () => void;
@@ -66,7 +61,6 @@ const stageVariant = (stage: string) => {
 
 export function SummaryPanel({
   candidate,
-  jobs,
   variant = "job",
   onSaveProfile,
   onSaveLinks,
@@ -85,7 +79,6 @@ export function SummaryPanel({
   const [phone, setPhone] = useState<string | undefined>(() => parseStoredPhone(candidate.phone));
   const [phoneError, setPhoneError] = useState<string | null>(null);
   const [location, setLocation] = useState(candidate.location === "—" ? "" : candidate.location);
-  const [jobId, setJobId] = useState(candidate.jobId ?? "__no_job__");
 
   const [linkedin, setLinkedin] = useState(candidate.linkedin ?? "");
   const [portfolio, setPortfolio] = useState(candidate.portfolio ?? "");
@@ -96,7 +89,6 @@ export function SummaryPanel({
     setPhone(parseStoredPhone(candidate.phone));
     setPhoneError(null);
     setLocation(candidate.location === "—" ? "" : candidate.location);
-    setJobId(candidate.jobId ?? "__no_job__");
     setLinkedin(candidate.linkedin ?? "");
     setPortfolio(candidate.portfolio ?? "");
   }, [candidate]);
@@ -133,27 +125,6 @@ export function SummaryPanel({
           {profileEdit ? (
             <div className="space-y-3">
               <InputField label="Name" value={name} onChange={(e) => setName(e.target.value)} />
-              {jobId === "__no_job__" ? (
-                <SelectField
-                  label="Job"
-                  value={jobId}
-                  onValueChange={setJobId}
-                  options={[
-                    { value: "__no_job__", label: "+ Add Job" },
-                    ...jobs.map((j) => ({ value: j.id, label: j.title })),
-                  ]}
-                />
-              ) : (
-                <SelectField
-                  label="Job"
-                  value={jobId}
-                  onValueChange={setJobId}
-                  options={[
-                    { value: "__no_job__", label: "No job (Talent Pool)" },
-                    ...jobs.map((j) => ({ value: j.id, label: j.title })),
-                  ]}
-                />
-              )}
               <InputField label="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
               <PhoneNumberField
                 value={phone}
@@ -191,7 +162,6 @@ export function SummaryPanel({
                         email: email.trim(),
                         phone: phone ?? null,
                         location: location.trim() || null,
-                        ...(jobId === "__no_job__" ? { clear_job: true } : { job_id: jobId }),
                       });
                       setProfileEdit(false);
                     } finally {
@@ -213,7 +183,6 @@ export function SummaryPanel({
                     setPhone(parseStoredPhone(candidate.phone));
                     setPhoneError(null);
                     setLocation(candidate.location === "—" ? "" : candidate.location);
-                    setJobId(candidate.jobId ?? "__no_job__");
                   }}
                 >
                   Cancel

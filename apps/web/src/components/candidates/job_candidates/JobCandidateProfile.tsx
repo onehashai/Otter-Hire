@@ -23,7 +23,6 @@ import {
   deleteCandidateDocument,
   getCandidateById,
   getJobWorkspace,
-  getJobs,
   getCandidateDocuments,
   getCandidateOverview,
   getOrgUsers,
@@ -31,7 +30,6 @@ import {
   uploadCandidateDocument,
   type CandidateDetailResponse,
   type CandidateDocumentResponse,
-  type JobListItemResponse,
   type JobHiringStageResponse,
   type CandidateOverviewResponse,
   type OrgUserResponse,
@@ -77,7 +75,7 @@ function mapHiringTimelineItem(activity: {
     return { action: `Status changed to ${status}`, user: actor, date, icon: "feedback" };
   }
   if (activity.type === "candidate_created") {
-    const source = String(metadata.source ?? "manual");
+    const source = String(metadata.source ?? "Manual");
     return {
       action: source === "job_board" ? "Applied from job board" : "Candidate added",
       user: actor,
@@ -130,7 +128,6 @@ export function JobCandidateProfile({
   const [candidate, setCandidate] = useState<CandidateDetailResponse | null>(null);
   const [overview, setOverview] = useState<CandidateOverviewResponse | null>(null);
   const [documents, setDocuments] = useState<CandidateDocumentResponse[]>([]);
-  const [jobs, setJobs] = useState<JobListItemResponse[]>([]);
   const [jobStages, setJobStages] = useState<JobHiringStageResponse[]>([]);
   const [orgUsers, setOrgUsers] = useState<OrgUserResponse[]>([]);
   const [loading, setLoading] = useState(true);
@@ -192,9 +189,8 @@ export function JobCandidateProfile({
     let cancelled = false;
     (async () => {
       try {
-        const [jobsList, usersList] = await Promise.all([getJobs(), getOrgUsers()]);
+        const usersList = await getOrgUsers();
         if (!cancelled) {
-          setJobs(jobsList);
           setOrgUsers(usersList);
         }
       } catch {
@@ -238,7 +234,6 @@ export function JobCandidateProfile({
     return {
       name: candidate.name,
       role: candidate.job_title ?? "—",
-      jobId: candidate.job_id,
       email: candidate.email,
       phone: candidate.phone ?? "—",
       location: candidate.location ?? "—",
@@ -262,7 +257,7 @@ export function JobCandidateProfile({
       timeline,
       notes: (overview?.notes ?? []).map((n) => ({
         user: n.author_name ?? "Unknown",
-        date: new Date(n.created_at).toLocaleDateString(),
+        date: n.created_at,
         text: n.content,
         mentions: n.mentions,
       })),
@@ -314,8 +309,6 @@ export function JobCandidateProfile({
     email: string;
     phone: string | null;
     location: string | null;
-    job_id?: string | null;
-    clear_job?: boolean;
   }) => {
     if (!id) return;
     try {
@@ -369,7 +362,7 @@ export function JobCandidateProfile({
   }
 
   const sourceBadgeLabel =
-    uiCandidate.source === "manual"
+    uiCandidate.source === "Manual"
       ? "Manually Added"
       : uiCandidate.source === "email_automation"
         ? "Email Automation"
@@ -464,7 +457,6 @@ export function JobCandidateProfile({
             <SummaryPanel
               variant="job"
               candidate={uiCandidate}
-              jobs={jobs.map((j) => ({ id: j.id, title: j.title }))}
               onSaveProfile={handleSaveSummaryProfile}
               onSaveLinks={handleSaveSummaryLinks}
               onUploadDocument={() => setDocumentOpen(true)}

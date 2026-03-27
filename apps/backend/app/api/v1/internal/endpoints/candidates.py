@@ -266,7 +266,7 @@ async def create_candidate(
         phone=(body.phone or "").strip() or None,
         location=(body.location or "").strip() or None,
         profile_links=dict(body.profile_links or {}),
-        source=(body.source or "manual").strip() or "manual",
+        source=(body.source or "Manual").strip() or "Manual",
         tags=list(body.tags or []),
     )
     db.add(candidate)
@@ -348,7 +348,7 @@ async def import_candidates_csv(
         name = (row.get("name") or row.get("Name") or "").strip()
         email = (row.get("email") or row.get("Email") or "").strip().lower()
         phone = (row.get("phone") or row.get("Phone") or "").strip() or None
-        source = (row.get("source") or row.get("Source") or "manual").strip() or "manual"
+        source = (row.get("source") or row.get("Source") or "Manual").strip() or "Manual"
 
         if not name or not email:
             errors.append(CandidateCsvImportError(row=idx, reason="Missing required name/email"))

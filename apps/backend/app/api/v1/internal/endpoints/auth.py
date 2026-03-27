@@ -129,7 +129,7 @@ async def signup(
     await db.refresh(user)
     await db.refresh(membership)
 
-    verify_url = f"{settings.effective_frontend_base_url}/verify?token={raw_token}"
+    verify_url = f"{settings.frontend_base_url}/verify?token={raw_token}"
     await send_verification_email(user.email, verify_url)
 
     token = _create_session_token(user, membership)
@@ -277,7 +277,7 @@ async def resend_verification(
         user.verification_token_expires_at = token_expires_at
         await db.commit()
 
-        verify_url = f"{settings.effective_frontend_base_url}/verify?token={raw_token}"
+        verify_url = f"{settings.frontend_base_url}/verify?token={raw_token}"
         await send_verification_email(user.email, verify_url)
 
     return VerifyEmailResponse(ok=True)
@@ -379,7 +379,7 @@ async def accept_invite(
     await db.commit()
     await db.refresh(user)
     await db.refresh(membership)
-    verify_url = f"{settings.effective_frontend_base_url}/verify?token={raw_token}"
+    verify_url = f"{settings.frontend_base_url}/verify?token={raw_token}"
     await send_verification_email(
         to_email=user.email,
         verify_url=verify_url,
@@ -529,7 +529,7 @@ async def google_oauth_redirect(request: Request, response: Response) -> Redirec
     state_token = secrets.token_urlsafe(32)
     state_hash = sha256(state_token.encode()).hexdigest()
 
-    callback_uri = settings.effective_google_redirect_uri
+    callback_uri = f"{settings.api_base_url}/v1/internal/auth/google/callback"
     params = {
         "client_id": settings.google_client_id,
         "redirect_uri": callback_uri,
@@ -560,7 +560,7 @@ async def google_oauth_callback(
     response: Response,
     db: AsyncSession = Depends(get_db),
 ) -> RedirectResponse:
-    error_base = f"{settings.effective_frontend_base_url}/login"
+    error_base = f"{settings.frontend_base_url}/login"
 
     def _error_redirect(message: str) -> RedirectResponse:
         params = urllib.parse.urlencode({"oauth_error": message})
@@ -588,7 +588,7 @@ async def google_oauth_callback(
         return _error_redirect("OAuth state mismatch. Please try signing in again.")
 
     # Exchange code for tokens — must match exactly what was sent to Google
-    callback_uri = settings.effective_google_redirect_uri
+    callback_uri = f"{settings.api_base_url}/v1/internal/auth/google/callback"
     try:
         async with httpx.AsyncClient() as client:
             token_resp = await client.post(
@@ -688,7 +688,7 @@ async def google_oauth_callback(
 
             session_token = _create_session_token(user, membership)
             redir = RedirectResponse(
-                url=f"{settings.effective_frontend_base_url}/onboarding",
+                url=f"{settings.frontend_base_url}/onboarding",
                 status_code=status.HTTP_302_FOUND,
             )
             _set_access_cookie(redir, session_token)
@@ -710,9 +710,9 @@ async def google_oauth_callback(
         return _error_redirect("No active organization membership found for this account.")
 
     dest = (
-        f"{settings.effective_frontend_base_url}/onboarding"
+        f"{settings.frontend_base_url}/onboarding"
         if not user.is_onboarded
-        else settings.effective_frontend_base_url
+        else settings.frontend_base_url
     )
     session_token = _create_session_token(user, membership)
     redir = RedirectResponse(url=dest, status_code=status.HTTP_302_FOUND)

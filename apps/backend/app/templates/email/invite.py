@@ -5,7 +5,6 @@ from app.templates.email.base_email_template import (
     STYLE_TEXT_SMALL,
     base_email_template,
     block_button,
-    copy_paste_link_block,
     esc,
     hr,
 )
@@ -27,7 +26,6 @@ def build_invite_email(
                 </p>
                 <p style="{STYLE_TEXT}">Click the button below to set up your account.</p>
                 {block_button(invite_url, "Accept invitation")}
-                {copy_paste_link_block(invite_url)}
                 {hr()}
                 <p style="{STYLE_TEXT_SMALL}">
                 This link will expire in {expiry_days} {day_word}. If you weren&apos;t expecting this
@@ -43,9 +41,7 @@ def build_invite_email(
 
                 {inviter_name} has invited you to join {org_name} on {platform_name}.
 
-                Click the link in this email to accept your invitation.
-
-                Or copy and paste this link:
+                Open this link to accept your invitation:
                 {invite_url}
 
                 This link will expire in {expiry_days} {day_word}.

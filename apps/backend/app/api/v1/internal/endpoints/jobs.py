@@ -628,6 +628,33 @@ async def archive_job(
     return _build_detail_response(await _get_job_or_404(db, job.id, current_user.org_id))
 
 
+@router.post("/{job_id}/unarchive", response_model=JobDetailResponse)
+async def unarchive_job(
+    job_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("jobs:close")),
+):
+    """Restore an archived job to draft so it can be edited and published again."""
+    job = await _get_job_or_404(db, job_id, current_user.org_id)
+
+    if job.status != "archived":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Cannot restore a job with status '{job.status}'. "
+                "Only archived jobs can be restored to draft."
+            ),
+        )
+
+    job.status = "draft"
+    job.visibility = "internal"
+    job.published_at = None
+    job.closed_at = None
+    await db.commit()
+
+    return _build_detail_response(await _get_job_or_404(db, job.id, current_user.org_id))
+
+
 @router.post("/{job_id}/unpublish", response_model=JobDetailResponse)
 async def unpublish_job(
     job_id: UUID,

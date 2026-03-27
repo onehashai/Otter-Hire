@@ -6,6 +6,15 @@ import Link from "next/link";
 import { Button } from "@onehash/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@onehash/ui/tabs";
 import { Icon } from "@onehash/ui/icon";
+import { SelectField } from "@onehash/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@onehash/ui/dialog";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
   OverviewTab,
@@ -57,6 +66,10 @@ export function TalentPoolCandidateProfile({
   const [docFile, setDocFile] = useState<File | null>(null);
   const [docType, setDocType] = useState("attachment");
   const [documentLoading, setDocumentLoading] = useState(false);
+
+  const [assignOpen, setAssignOpen] = useState(false);
+  const [assignJobId, setAssignJobId] = useState("");
+  const [assignLoading, setAssignLoading] = useState(false);
 
   useSetPageMetadata({
     title: t("talent_pool_candidate_edit_title"),
@@ -122,7 +135,6 @@ export function TalentPoolCandidateProfile({
     return {
       name: candidate.name,
       role: candidate.job_title ?? "—",
-      jobId: candidate.job_id,
       email: candidate.email,
       phone: candidate.phone ?? "—",
       location: candidate.location ?? "—",
@@ -143,7 +155,7 @@ export function TalentPoolCandidateProfile({
       tags: candidate.tags ?? [],
       notes: (overview?.notes ?? []).map((n) => ({
         user: n.author_name ?? "Unknown",
-        date: new Date(n.created_at).toLocaleDateString(),
+        date: n.created_at,
         text: n.content,
         mentions: n.mentions,
       })),
@@ -160,6 +172,11 @@ export function TalentPoolCandidateProfile({
       null
     );
   }, [uiCandidate]);
+
+  const assignableJobs = useMemo(
+    () => jobs.filter((j) => j.id !== candidate?.job_id),
+    [jobs, candidate?.job_id],
+  );
 
   const handleAddNote = async (content: string, mentions: string[]) => {
     if (!id) return;
@@ -206,19 +223,12 @@ export function TalentPoolCandidateProfile({
     email: string;
     phone: string | null;
     location: string | null;
-    job_id?: string | null;
-    clear_job?: boolean;
   }) => {
     if (!id) return;
     try {
       await updateCandidate(id, payload);
       await loadCore(id);
       toast.success("Candidate updated");
-      if (payload.job_id && !payload.clear_job) {
-        router.push(
-          `/jobs/${encodeURIComponent(payload.job_id)}/candidates/${encodeURIComponent(id)}`,
-        );
-      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to update candidate");
     }
@@ -259,12 +269,26 @@ export function TalentPoolCandidateProfile({
   return (
     <>
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <Button variant="ghost" size="sm" className="h-8 text-xs gap-1.5" asChild>
+        <div className="flex w-full min-w-0 items-center justify-between gap-3">
+          <Button variant="ghost" size="sm" className="h-8 shrink-0 text-xs gap-1.5" asChild>
             <Link href="/talent-pool">
               <Icon name="ChevronLeft" className="h-3.5 w-3.5" /> {t("talent_pool_title")}
             </Link>
           </Button>
+          {assignableJobs.length > 0 ? (
+            <Button
+              type="button"
+              size="sm"
+              className="h-9 md:h-8 shrink-0 gap-2 rounded-md px-4 text-xs font-medium"
+              onClick={() => {
+                setAssignJobId(assignableJobs[0]?.id ?? "");
+                setAssignOpen(true);
+              }}
+            >
+              <Icon name="UserCheck" className="h-4 w-4" />
+              {t("assign_job")}
+            </Button>
+          ) : null}
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -330,7 +354,6 @@ export function TalentPoolCandidateProfile({
             <SummaryPanel
               variant="talent_pool"
               candidate={uiCandidate}
-              jobs={jobs.map((j) => ({ id: j.id, title: j.title }))}
               onSaveProfile={handleSaveSummaryProfile}
               onSaveLinks={handleSaveSummaryLinks}
               onUploadDocument={() => setDocumentOpen(true)}
@@ -339,6 +362,57 @@ export function TalentPoolCandidateProfile({
           </div>
         </Tabs>
       </div>
+
+      <Dialog open={assignOpen} onOpenChange={setAssignOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("assign_job")}</DialogTitle>
+            <DialogDescription>{t("assign_job_description")}</DialogDescription>
+          </DialogHeader>
+          <SelectField
+            label={t("jobs_title")}
+            value={assignJobId}
+            onValueChange={setAssignJobId}
+            options={assignableJobs.map((j) => ({ value: j.id, label: j.title }))}
+          />
+          <DialogFooter>
+            <Button type="button" variant="outline" size="sm" onClick={() => setAssignOpen(false)}>
+              {t("cancel")}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              disabled={assignLoading || !assignJobId}
+              pending={assignLoading}
+              onClick={async () => {
+                if (!id) return;
+                if (!assignJobId) {
+                  toast.error(t("select_a_job"));
+                  return;
+                }
+                if (assignJobId === candidate?.job_id) {
+                  return;
+                }
+                try {
+                  setAssignLoading(true);
+                  await updateCandidate(id, { job_id: assignJobId });
+                  setAssignOpen(false);
+                  toast.success(t("assigned_to_job"));
+                  router.push(
+                    `/jobs/${encodeURIComponent(assignJobId)}/candidates/${encodeURIComponent(id)}`,
+                  );
+                } catch (err) {
+                  toast.error(err instanceof Error ? err.message : t("error"));
+                } finally {
+                  setAssignLoading(false);
+                }
+              }}
+            >
+              {t("assign")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <DocumentUploadDialog
         open={documentOpen}

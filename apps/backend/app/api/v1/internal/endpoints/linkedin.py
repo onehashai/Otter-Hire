@@ -101,7 +101,7 @@ async def linkedin_callback(
     if error:
         from app.core.config import settings
 
-        frontend_url = settings.effective_frontend_base_url
+        frontend_url = settings.frontend_base_url
         return Response(
             content=f"""
             <html>
@@ -146,7 +146,7 @@ async def linkedin_callback(
 
     from app.core.config import settings
 
-    frontend_url = settings.effective_frontend_base_url
+    frontend_url = settings.frontend_base_url
     redirect_url = f"{frontend_url}/settings/integrations?linkedin=setup_required"
 
     return Response(

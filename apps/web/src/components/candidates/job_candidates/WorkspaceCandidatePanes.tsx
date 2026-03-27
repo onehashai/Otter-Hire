@@ -62,7 +62,7 @@ function mapHiringTimelineItem(activity: {
     return { action: `Status changed to ${status}`, user: actor, date, icon: "feedback" };
   }
   if (activity.type === "candidate_created") {
-    const source = String(metadata.source ?? "manual");
+    const source = String(metadata.source ?? "Manual");
     return {
       action: source === "job_board" ? "Applied from job board" : "Candidate added",
       user: actor,
@@ -179,7 +179,7 @@ export function WorkspaceCandidatePanes({
       interviews: mappedInterviews,
       notes: (overview?.notes ?? []).map((n) => ({
         user: n.author_name ?? "Unknown",
-        date: new Date(n.created_at).toLocaleDateString(),
+        date: n.created_at,
         text: n.content,
         mentions: n.mentions,
       })),

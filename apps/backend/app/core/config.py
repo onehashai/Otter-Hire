@@ -46,11 +46,12 @@ class Settings(BaseSettings):
     app_subdomain: str = Field(default="app", validation_alias="APP_SUBDOMAIN")
     jobs_subdomain: str = Field(default="jobs", validation_alias="JOBS_SUBDOMAIN")
 
-    # Frontend URL — defaults to http://{APP_SUBDOMAIN}.{APP_DOMAIN}:3000 if not set explicitly
+    # Frontend URL — if FRONTEND_BASE_URL is unset/empty, derived at load time from
+    # APP_SUBDOMAIN, APP_DOMAIN, and IS_PRODUCTION.
     frontend_base_url: str = Field(default="", validation_alias="FRONTEND_BASE_URL")
 
-    # API base URL — prod https://api.smartats.in, local http://localhost:8000
-    # Used for OAuth redirect_uri when API is on dedicated subdomain
+    # Public API base URL (OAuth callbacks, etc.). If API_BASE_URL is unset/empty, derived at
+    # load time from APP_SUBDOMAIN, APP_DOMAIN, and IS_PRODUCTION (port :8000 in non-prod).
     api_base_url: str = Field(default="", validation_alias="API_BASE_URL")
 
     # Google OAuth
@@ -185,37 +186,8 @@ class Settings(BaseSettings):
         return "https" if self.is_production else "http"
 
     @property
-    def effective_frontend_base_url(self) -> str:
-        if self.frontend_base_url:
-            return self.frontend_base_url.rstrip("/")
-        port = "" if self.is_production else ":3000"
-        return f"{self._scheme}://{self.app_subdomain}.{self.app_domain}{port}"
-
-    @property
-    def effective_google_redirect_uri(self) -> str | None:
-        """Returns the explicit override if set, otherwise derives from API_BASE_URL or APP_DOMAIN."""
-        if self.api_base_url:
-            base = self.api_base_url.rstrip("/")
-            return f"{base}/v1/internal/auth/google/callback"
-        if self.app_domain:
-            port = "" if self.is_production else ":8000"
-            return f"{self._scheme}://{self.app_subdomain}.{self.app_domain}{port}/v1/internal/auth/google/callback"
-        return None
-
-    @property
     def google_oauth_enabled(self) -> bool:
         return bool(self.google_client_id and self.google_client_secret)
-
-    @property
-    def effective_linkedin_redirect_uri(self) -> str | None:
-        """Returns LinkedIn OAuth callback URL."""
-        if self.api_base_url:
-            base = self.api_base_url.rstrip("/")
-            return f"{base}/v1/internal/integrations/linkedin/callback"
-        if self.app_domain:
-            port = "" if self.is_production else ":8000"
-            return f"{self._scheme}://{self.app_subdomain}.{self.app_domain}{port}/v1/internal/integrations/linkedin/callback"
-        return None
 
     @property
     def linkedin_oauth_enabled(self) -> bool:
@@ -252,20 +224,5 @@ class Settings(BaseSettings):
         if value:
             return value
         return "ats-production" if self.is_production else "ats-staging"
-
-    @property
-    def effective_ses_raw_bridge_bucket(self) -> str:
-        value = (self.ses_raw_bridge_bucket or "").strip()
-        if value:
-            return value
-        return (self.aws_s3_bucket or "").strip()
-
-    @property
-    def effective_ses_raw_bridge_prefix(self) -> str:
-        value = (self.ses_raw_bridge_prefix or "").strip().lstrip("/")
-        if value:
-            return value
-        return f"{self.s3_root_prefix}/ses-inbound/raw/"
-
 
 settings = Settings()

@@ -26,10 +26,7 @@ interface Note {
 }
 
 /** Inline @mentions styled once (no duplicate chips below). */
-function renderNoteBodyWithMentions(
-  text: string,
-  mentions: Note["mentions"],
-): ReactNode[] {
+function renderNoteBodyWithMentions(text: string, mentions: Note["mentions"]): ReactNode[] {
   if (!text) return [];
   const sorted = [...(mentions ?? [])]
     .map((m) => ({ label: (m.name || m.email).trim() }))

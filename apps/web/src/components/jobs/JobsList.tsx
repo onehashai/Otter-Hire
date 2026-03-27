@@ -192,10 +192,7 @@ export function JobsList({ jobs, onJobArchived }: JobsListProps) {
                                 })();
                               }}
                             >
-                              <Icon
-                                name={statusOptionIcon(target)}
-                                className="h-4 w-4 mr-2"
-                              />
+                              <Icon name={statusOptionIcon(target)} className="h-4 w-4 mr-2" />
                               {t(statusKey[target])}
                             </DropdownMenuItem>
                           ))}

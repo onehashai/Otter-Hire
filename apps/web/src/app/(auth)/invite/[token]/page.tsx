@@ -126,7 +126,9 @@ export default function InvitePage() {
       await declineInvite(token);
       const refreshedUser = await refreshSession(true);
       const isMatchingLoggedInUser = Boolean(
-        refreshedUser && details && refreshedUser.email.toLowerCase() === details.email.toLowerCase(),
+        refreshedUser &&
+        details &&
+        refreshedUser.email.toLowerCase() === details.email.toLowerCase(),
       );
       if (isMatchingLoggedInUser && refreshedUser && !refreshedUser.is_onboarded) {
         router.replace("/onboarding?invite_declined=1");
@@ -274,11 +276,7 @@ export default function InvitePage() {
                   "Accept invite"
                 )}
               </Button>
-              <Button
-                variant="outline"
-                className="w-full h-10 text-sm"
-                onClick={handleDecline}
-              >
+              <Button variant="outline" className="w-full h-10 text-sm" onClick={handleDecline}>
                 {declining ? <Icon name="Loader" className="h-4 w-4 animate-spin" /> : "Decline"}
               </Button>
             </div>

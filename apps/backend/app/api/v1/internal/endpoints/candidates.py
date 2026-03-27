@@ -190,8 +190,13 @@ async def _resolve_note_mentions(
     return resolved
 
 
-def _candidate_note_url(candidate_id: UUID) -> str:
-    return f"{settings.frontend_base_url.rstrip('/')}/candidates/{candidate_id}"
+def _candidate_note_url(candidate: Candidate) -> str:
+    """App routes: talent pool vs job workspace (there is no top-level /candidates/[id] page)."""
+    base = settings.frontend_base_url.rstrip("/")
+    cid = candidate.id
+    if candidate.job_id is not None:
+        return f"{base}/jobs/{candidate.job_id}/candidates/{cid}"
+    return f"{base}/talent-pool/{cid}"
 
 
 def _candidate_note_excerpt(content: str, limit: int = 280) -> str:
@@ -1499,7 +1504,7 @@ async def create_candidate_note(
         },
     )
     await db.commit()
-    candidate_url = _candidate_note_url(candidate.id)
+    candidate_url = _candidate_note_url(candidate)
     note_excerpt = _candidate_note_excerpt(note.content)
     for mention in resolved_mentions:
         if mention.user_id == current_user.id:

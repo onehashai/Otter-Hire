@@ -7,8 +7,7 @@ export function getInviteDetails(token: string): Promise<InviteDetailsResponse> 
 
 export type AcceptInvitePayload = {
   token: string;
-  name?: string;
-  password: string;
+  name: string;
 };
 
 export function acceptInvite(payload: AcceptInvitePayload): Promise<void> {

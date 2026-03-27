@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getJobs, getJobPipeline } from "@/api/job";
+import { getJobs, getJobWorkspace } from "@/api/job";
 import type { Scope } from "@/components/automations/builder/types";
 
 export interface MoveToStageAvailability {
@@ -12,7 +12,7 @@ export interface MoveToStageAvailability {
 
 /**
  * When scope is "all", Move to stage should be disabled if the org has multiple
- * jobs and those jobs do not all have the same pipeline stages.
+ * jobs and those jobs do not all have the same hiring stages.
  */
 export function useMoveToStageAvailability(
   scope: Scope,
@@ -46,20 +46,20 @@ export function useMoveToStageAvailability(
           return;
         }
 
-        const pipelines = await Promise.all(
-          jobs.map((j) => getJobPipeline(j.id).catch(() => null)),
+        const workspaces = await Promise.all(
+          jobs.map((j) => getJobWorkspace(j.id).catch(() => null)),
         );
         if (cancelled) return;
 
-        const validPipelines = pipelines.filter(
+        const validWorkspaces = workspaces.filter(
           (p): p is NonNullable<typeof p> => p != null && p.stages?.length > 0,
         );
-        if (validPipelines.length === 0) {
+        if (validWorkspaces.length === 0) {
           setDisabled(false);
           return;
         }
 
-        const stageKeys = validPipelines.map((p) =>
+        const stageKeys = validWorkspaces.map((p) =>
           p.stages
             .sort((a, b) => a.position - b.position)
             .map((s) => s.name)
@@ -70,7 +70,7 @@ export function useMoveToStageAvailability(
 
         if (!allSame) {
           setDisabled(true);
-          setReason("Move to stage is unavailable when jobs have different pipeline stages.");
+          setReason("Move to stage is unavailable when jobs have different hiring stages.");
         } else {
           setDisabled(false);
           setReason(null);

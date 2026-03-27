@@ -32,7 +32,6 @@ export type AutomationDetailResponse = {
   status: string;
   scope: string;
   job_id: string | null;
-  pipeline_id: string | null;
   trigger_type: string;
   trigger_key: string;
   trigger_config: Record<string, unknown>;
@@ -52,7 +51,6 @@ export type AutomationCreatePayload = {
   status?: string;
   scope?: string;
   job_id?: string | null;
-  pipeline_id?: string | null;
   trigger_type: string;
   trigger_key: string;
   trigger_config?: Record<string, unknown>;

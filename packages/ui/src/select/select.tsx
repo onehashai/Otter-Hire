@@ -104,6 +104,7 @@ type SelectFieldProps = {
   options?: SelectOption[];
   placeholder?: string;
   disabled?: boolean;
+  showAsterisk?: boolean;
 };
 
 function SelectField({
@@ -116,12 +117,15 @@ function SelectField({
   options,
   placeholder = "Select",
   disabled,
+  showAsterisk,
 }: SelectFieldProps) {
   const useOptions = options != null && value !== undefined && onValueChange != null;
 
   return (
     <div className={cn("space-y-1.5", className)}>
-      {label ? <Label className="text-xs font-medium text-muted-foreground">{label}</Label> : null}
+      {label ? <Label className="text-xs font-medium text-muted-foreground">{label}
+        {showAsterisk && <span className="text-destructive ml-0.5">*</span>}
+      </Label> : null}
       {useOptions ? (
         <Select value={value} onValueChange={onValueChange} disabled={disabled}>
           <SelectTrigger className="h-9 text-sm">
@@ -159,6 +163,7 @@ export type SearchableSelectFieldProps = {
   noResultsText?: string;
   typeToNarrowText?: string;
   maxOptions?: number;
+  showAsterisk?: boolean;
 };
 
 function SearchableSelectField({
@@ -177,6 +182,7 @@ function SearchableSelectField({
   noResultsText = "No results.",
   typeToNarrowText,
   maxOptions = 500,
+  showAsterisk,
 }: SearchableSelectFieldProps) {
   const selectedOption = options.find((o) => o.value === value);
   const displayValue = value
@@ -189,7 +195,7 @@ function SearchableSelectField({
   const showTypeToNarrow = maxOptions != null && options.length > maxOptions && typeToNarrowText;
 
   return (
-    <SelectField label={label} hint={hint} className={className}>
+    <SelectField label={label} hint={hint} className={className} showAsterisk={showAsterisk}>
       <Select value={value} onValueChange={onValueChange} disabled={disabled}>
         <SelectTrigger >
           <SelectValue placeholder={placeholder}>{displayValue ?? null}</SelectValue>

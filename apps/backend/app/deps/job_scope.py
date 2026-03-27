@@ -23,7 +23,9 @@ async def require_job_access(
     if load_relations:
         stmt = stmt.options(
             selectinload(Job.stages),
-            selectinload(Job.team_members).selectinload(JobTeamMember.user),
+            selectinload(Job.team_members)
+            .selectinload(JobTeamMember.user)
+            .selectinload(User.memberships),
         )
     result = await db.execute(stmt)
     job = result.scalar_one_or_none()
@@ -34,7 +36,7 @@ async def require_job_access(
             detail="Job not found",
         )
 
-    if current_user.role in ASSIGNED_ONLY_ROLES:
+    if current_user.membership_role in ASSIGNED_ONLY_ROLES:
         assigned = await db.execute(
             select(
                 exists().where(

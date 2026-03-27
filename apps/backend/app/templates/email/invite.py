@@ -5,7 +5,6 @@ from app.templates.email.base_email_template import (
     STYLE_TEXT_SMALL,
     base_email_template,
     block_button,
-    copy_paste_link_block,
     esc,
     hr,
 )
@@ -13,7 +12,7 @@ from app.templates.email.base_email_template import (
 
 def build_invite_email(
     invite_url: str,
-    product_name: str,
+    platform_name: str,
     org_name: str,
     inviter_name: str,
     expiry_days: int,
@@ -23,11 +22,10 @@ def build_invite_email(
                 <h1 style="{STYLE_HEADING}">You&apos;re invited</h1>
                 <p style="{STYLE_TEXT}">
                 <strong>{esc(inviter_name)}</strong> has invited you to join <strong>{esc(org_name)}</strong>
-                on {esc(product_name)}.
+                on {esc(platform_name)}.
                 </p>
                 <p style="{STYLE_TEXT}">Click the button below to set up your account.</p>
                 {block_button(invite_url, "Accept invitation")}
-                {copy_paste_link_block(invite_url)}
                 {hr()}
                 <p style="{STYLE_TEXT_SMALL}">
                 This link will expire in {expiry_days} {day_word}. If you weren&apos;t expecting this
@@ -36,16 +34,14 @@ def build_invite_email(
             """
     html_body = base_email_template(inner)
     return EmailContent(
-        subject=f"You've been invited to join {org_name} on {product_name}",
+        subject=f"You've been invited to join {org_name} on {platform_name}",
         html=html_body,
         text=f"""
                 You're invited!
 
-                {inviter_name} has invited you to join {org_name} on {product_name}.
+                {inviter_name} has invited you to join {org_name} on {platform_name}.
 
-                Click the link in this email to accept your invitation.
-
-                Or copy and paste this link:
+                Open this link to accept your invitation:
                 {invite_url}
 
                 This link will expire in {expiry_days} {day_word}.

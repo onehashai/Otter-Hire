@@ -3,7 +3,7 @@
 import { Card, CardContent } from "@onehash/ui/card";
 import { Button } from "@onehash/ui/button";
 import { Badge } from "@onehash/ui/badge";
-import { Avatar, AvatarFallback, AvatarImage } from "@onehash/ui/avatar";
+import { Avatar } from "@onehash/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,6 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@onehash/ui/tooltip";
 import { Icon } from "@onehash/ui/icon";
 import { cn } from "@/lib/utils";
+import { getInitialsFromName } from "@/lib/name-initials";
 import { type BackendRole, formatRole } from "@/components/settings/team/lib/permissonMatrix";
 
 export interface TeamMember {
@@ -28,26 +29,21 @@ export interface TeamMember {
 const roleBadgeClass: Record<BackendRole, string> = {
   owner: "bg-foreground text-background",
   admin: "bg-foreground/80 text-background",
-  super_admin: "bg-foreground text-background",
   recruiter: "bg-muted text-foreground",
   hiring_manager: "bg-muted text-foreground",
   interviewer: "bg-muted text-muted-foreground",
   employee: "bg-muted text-muted-foreground",
 };
 
-function getInitials(name: string) {
-  if (!name) return "?";
-  return name
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .toUpperCase()
-    .slice(0, 2);
+function roleBadgeClassFor(role: string): string {
+  if (role in roleBadgeClass) return roleBadgeClass[role as BackendRole];
+  return "bg-muted text-foreground";
 }
 
 function formatStatus(status: string): { label: string; active: boolean } {
   if (status === "active") return { label: "Active", active: true };
-  if (status === "invited") return { label: "Pending", active: false };
+  if (status === "pending") return { label: "Pending", active: false };
+  if (status === "declined") return { label: "Declined", active: false };
   return { label: status, active: false };
 }
 
@@ -72,8 +68,6 @@ function canChangeRole(
   if (target.id === currentUserId)
     return { allowed: false, reason: "You cannot change your own role." };
   if (target.role === "owner") return { allowed: false, reason: "Owner role cannot be changed." };
-  if (target.role === "super_admin")
-    return { allowed: false, reason: "Super Admin role cannot be changed." };
   if (target.role === "admin" && !isOwner)
     return { allowed: false, reason: "Only the Owner can modify Admin roles." };
   if (!isOwner && !isAdmin)
@@ -89,8 +83,6 @@ function canRemove(
 ): { allowed: boolean; reason?: string } {
   if (target.id === currentUserId) return { allowed: false, reason: "You cannot remove yourself." };
   if (target.role === "owner") return { allowed: false, reason: "The Owner cannot be removed." };
-  if (target.role === "super_admin")
-    return { allowed: false, reason: "Super Admin cannot be removed." };
   if (target.role === "admin" && !isOwner)
     return { allowed: false, reason: "Only the Owner can remove Admins." };
   if (!isOwner && !isAdmin)
@@ -112,7 +104,7 @@ export function TeamMembersList({
   const MemberActions = ({ member }: { member: TeamMember }) => {
     const roleCheck = canChangeRole(member, currentUserId, isOwner, isAdmin);
     const removeCheck = canRemove(member, currentUserId, isOwner, isAdmin);
-    const isPending = member.status === "invited";
+    const isPending = member.status === "pending";
 
     return (
       <TooltipProvider delayDuration={200}>
@@ -191,13 +183,13 @@ export function TeamMembersList({
               const st = formatStatus(m.status);
               return (
                 <div key={m.id} className="p-4 flex items-start gap-3">
-                  <Avatar className="h-9 w-9 shrink-0">
-                    {m.avatar_url ? (
-                      <AvatarImage src={m.avatar_url} alt={m.name || m.email} />
-                    ) : null}
-                    <AvatarFallback className="text-xs bg-muted">
-                      {getInitials(m.name)}
-                    </AvatarFallback>
+                  <Avatar
+                    className="h-9 w-9 shrink-0"
+                    src={m.avatar_url}
+                    alt={m.name || m.email}
+                    fallbackClassName="text-xs bg-muted"
+                  >
+                    {getInitialsFromName(m.name)}
                   </Avatar>
                   <div className="flex-1 min-w-0 space-y-1">
                     <div className="flex items-center justify-between gap-2">
@@ -210,7 +202,7 @@ export function TeamMembersList({
                         variant="secondary"
                         className={cn(
                           "text-[10px] px-2 py-0 h-5 font-medium border-0",
-                          roleBadgeClass[m.role],
+                          roleBadgeClassFor(m.role),
                         )}
                         title={formatRole(m.role)}
                       >
@@ -242,13 +234,13 @@ export function TeamMembersList({
                   <TableRow key={m.id} className="group">
                     <TableCell className="py-3">
                       <div className="flex items-center gap-3">
-                        <Avatar className="h-8 w-8">
-                          {m.avatar_url ? (
-                            <AvatarImage src={m.avatar_url} alt={m.name || m.email} />
-                          ) : null}
-                          <AvatarFallback className="text-xs bg-muted">
-                            {getInitials(m.name)}
-                          </AvatarFallback>
+                        <Avatar
+                          className="h-8 w-8"
+                          src={m.avatar_url}
+                          alt={m.name || m.email}
+                          fallbackClassName="text-xs bg-muted"
+                        >
+                          {getInitialsFromName(m.name)}
                         </Avatar>
                         <div className="min-w-0">
                           <p className="text-sm font-medium truncate">{m.name || m.email}</p>
@@ -261,7 +253,7 @@ export function TeamMembersList({
                         variant="secondary"
                         className={cn(
                           "text-[10px] px-2 py-0 h-5 font-medium border-0 truncate max-w-full min-w-0",
-                          roleBadgeClass[m.role],
+                          roleBadgeClassFor(m.role),
                         )}
                         title={formatRole(m.role)}
                       >

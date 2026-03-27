@@ -19,7 +19,6 @@ class Automation(Base):
 
     scope = Column(String(32), nullable=False, server_default="all")
     job_id = Column(UUID(as_uuid=True), ForeignKey("jobs.id"), nullable=True)
-    pipeline_id = Column(UUID(as_uuid=True), nullable=True)
 
     trigger_type = Column(String(16), nullable=False)
     trigger_key = Column(String(64), nullable=False)
@@ -40,9 +39,7 @@ class Automation(Base):
 
     __table_args__ = (
         CheckConstraint("status IN ('draft', 'active', 'paused')", name="ck_automations_status"),
-        CheckConstraint(
-            "scope IN ('all', 'specific_job', 'specific_pipeline')", name="ck_automations_scope"
-        ),
+        CheckConstraint("scope IN ('all', 'specific_job')", name="ck_automations_scope"),
         CheckConstraint("condition_logic IN ('and', 'or')", name="ck_automations_condition_logic"),
         Index("ix_automations_org_id", "org_id"),
         Index("ix_automations_org_status", "org_id", "status"),

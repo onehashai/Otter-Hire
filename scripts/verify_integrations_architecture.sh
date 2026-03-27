@@ -17,7 +17,7 @@ search_cmd() {
 }
 
 echo "[1/5] verify legacy org inbox backend routes are removed"
-if search_cmd '@router\.(get|post|put|patch|delete)\("/me/inbox' apps/backend/app/api/v1/endpoints/organizations.py >/dev/null; then
+if search_cmd '@router\.(get|post|put|patch|delete)\("/me/inbox' apps/backend/app/api/v1/internal/endpoints/organizations.py >/dev/null; then
   fail "legacy /organizations/me/inbox routes still present"
 fi
 

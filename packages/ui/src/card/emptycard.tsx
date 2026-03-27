@@ -18,7 +18,7 @@ const EmptyCard = React.forwardRef<HTMLDivElement, EmptyCardProps>(
     <div
       ref={ref}
       className={cn(
-        "flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-muted-foreground/25 bg-muted/10 p-12 text-center",
+        "flex flex-col items-center justify-center rounded-lg border border-input bg-muted/10 p-12 text-center",
         className
       )}
       {...props}

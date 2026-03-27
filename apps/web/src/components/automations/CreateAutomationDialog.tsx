@@ -6,7 +6,7 @@ import { Card } from "@onehash/ui/card";
 import { Button } from "@onehash/ui/button";
 import { Separator } from "@onehash/ui/separator";
 import { AlertCircle, ChevronDown, ChevronUp, FileText, Play, Zap } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@onehash/ui/sonner";
 import {
   Dialog,
   DialogContent,
@@ -30,7 +30,6 @@ import { createAutomation } from "@/api/automations";
 import { ApiError } from "@/api/client/client";
 import { useMoveToStageAvailability } from "@/hooks/useMoveToStageAvailability";
 import { generateId } from "@/lib/utils";
-
 export interface CreateAutomationDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -146,7 +145,7 @@ export function CreateAutomationDialog({
     }
     if (moveToStageDisabled && actions.some((a) => a.type === "move_stage")) {
       const msg =
-        "Remove the Move to stage action or switch to a specific job. Jobs have different pipeline stages.";
+        "Remove the Move to stage action or switch to a specific job. Jobs have different hiring stages.";
       setValidationError(msg);
       setActiveStep(2);
       toast.error(msg);
@@ -330,7 +329,7 @@ export function CreateAutomationDialog({
           <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button size="sm" onClick={() => handleCreate(false)} disabled={saving}>
+          <Button size="sm" onClick={() => handleCreate(false)} disabled={saving} pending={saving}>
             Create
           </Button>
         </DialogFooter>

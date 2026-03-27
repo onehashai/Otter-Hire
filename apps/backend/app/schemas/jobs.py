@@ -1,10 +1,28 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field
+
+JobDescriptionAiAction = Literal[
+    "generate_full",
+    "improve_tone",
+    "shorten",
+    "expand",
+    "add_responsibilities",
+    "add_requirements",
+]
+
+
+class JobDescriptionAiRequest(BaseModel):
+    action: JobDescriptionAiAction
+    current_html: str = ""
+
+
+class JobDescriptionAiResponse(BaseModel):
+    html: str
 
 
 class HiringStageRequest(BaseModel):
@@ -56,6 +74,7 @@ class JobUpdateRequest(BaseModel):
     salary_timeframe: Optional[str] = Field(
         default=None, pattern=r"^(per_year|per_month|per_week|per_day|per_hour)$"
     )
+    post_to_linkedin: Optional[bool] = None
     description: Optional[str] = None
     collect_resume: Optional[bool] = None
     collect_cover: Optional[bool] = None
@@ -91,6 +110,11 @@ class JobDetailResponse(BaseModel):
     salary_fixed: Optional[int] = None
     currency: Optional[str] = None
     salary_timeframe: Optional[str] = None
+    post_to_linkedin: bool = False
+    linkedin_sync_status: Optional[str] = None
+    linkedin_external_job_id: Optional[str] = None
+    linkedin_last_synced_at: Optional[datetime] = None
+    linkedin_last_error: Optional[str] = None
     description: Optional[str] = None
     status: str
     visibility: str
@@ -107,7 +131,7 @@ class JobDetailResponse(BaseModel):
     updated_at: datetime
 
 
-class PipelineCandidateResponse(BaseModel):
+class JobWorkspaceCandidateResponse(BaseModel):
     id: UUID
     name: str
     email: Optional[str] = None
@@ -116,9 +140,9 @@ class PipelineCandidateResponse(BaseModel):
     updated_at: datetime
 
 
-class JobPipelineResponse(BaseModel):
+class JobWorkspaceResponse(BaseModel):
     id: UUID
     title: str
     status: str
     stages: list[HiringStageResponse] = []
-    candidates: list[PipelineCandidateResponse] = []
+    candidates: list[JobWorkspaceCandidateResponse] = []

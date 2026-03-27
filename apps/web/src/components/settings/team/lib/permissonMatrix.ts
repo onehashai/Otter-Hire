@@ -1,7 +1,6 @@
 export type BackendRole =
   | "owner"
   | "admin"
-  | "super_admin"
   | "recruiter"
   | "hiring_manager"
   | "interviewer"
@@ -12,7 +11,6 @@ export type Role = BackendRole;
 export const ROLE_LABELS: Record<BackendRole, string> = {
   owner: "Owner",
   admin: "Admin",
-  super_admin: "Super Admin",
   recruiter: "Recruiter",
   hiring_manager: "Hiring Manager",
   interviewer: "Interviewer",

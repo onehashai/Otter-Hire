@@ -1,12 +1,32 @@
 "use client";
 
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Card, CardContent } from "@onehash/ui/card";
+import { Card, CardContent, EmptyCard } from "@onehash/ui/card";
 import { Badge } from "@onehash/ui/badge";
 import { Button } from "@onehash/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from "@onehash/ui/dropdown-menu";
 import { useRouter } from "next/navigation";
-import type { JobListItemResponse } from "@/api";
+import { Icon } from "@onehash/ui/icon";
+import type { IconName } from "@onehash/ui/icon";
+import {
+  archiveJob,
+  publishJob,
+  unarchiveJob,
+  unpublishJob,
+  type JobListItemResponse,
+} from "@/api";
 import { JobStatusType } from "@/app/(app-page-wrapper)/jobs/[jobId]/constants";
+import { toast } from "@onehash/ui/sonner";
+import { CreateJobModal } from "./CreateJobModal";
 
 const statusKey: Record<JobStatusType, string> = {
   open: "open",
@@ -17,29 +37,43 @@ const statusKey: Record<JobStatusType, string> = {
 const statusVariant = (s: JobStatusType) =>
   s === "open" ? "default" : s === "draft" ? "secondary" : "outline";
 
-const formatTimeAgo = (dateStr: string) => {
-  const date = new Date(dateStr);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  if (diffMins < 1) return "just now";
-  if (diffMins < 60) return `${diffMins}m ago`;
-  const diffHrs = Math.floor(diffMins / 60);
-  if (diffHrs < 24) return `${diffHrs}h ago`;
-  const diffDays = Math.floor(diffHrs / 24);
-  return `${diffDays}d ago`;
-};
+/** Target statuses available from the API for the jobs list (excludes current). */
+function statusTransitionOptions(current: JobStatusType): JobStatusType[] {
+  if (current === "draft") return ["open", "archived"];
+  if (current === "open") return ["draft", "archived"];
+  if (current === "archived") return ["draft"];
+  return [];
+}
+
+function statusOptionIcon(target: JobStatusType): IconName {
+  if (target === "open") return "Eye";
+  if (target === "draft") return "ScrollText";
+  return "Archive";
+}
 
 interface JobsListProps {
   jobs: JobListItemResponse[];
+  onJobArchived?: () => void;
 }
 
-export function JobsList({ jobs }: JobsListProps) {
+export function JobsList({ jobs, onJobArchived }: JobsListProps) {
   const { t } = useTranslation();
   const router = useRouter();
-
+  const [statusChangingId, setStatusChangingId] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
   if (jobs.length === 0) {
-    return <p className="text-sm text-muted-foreground text-center py-8">{t("no_results")}</p>;
+    return (
+      <>
+        <EmptyCard
+          icon="Briefcase"
+          title={t("jobs_title")}
+          description={t("jobs_subtitle")}
+          actionLabel={t("create")}
+          onAction={() => setCreateOpen(true)}
+        />
+        <CreateJobModal open={createOpen} onOpenChange={setCreateOpen} />
+      </>
+    );
   }
 
   return (
@@ -48,7 +82,7 @@ export function JobsList({ jobs }: JobsListProps) {
         <Card
           key={job.id}
           className="cursor-pointer hover:shadow-sm active:bg-muted/50 transition-all"
-          onClick={() => router.push(`/jobs/${job.id}/info`)}
+          onClick={() => router.push(`/jobs/${job.id}`)}
         >
           <CardContent className="p-4 py-3">
             <div className="flex items-center gap-4">
@@ -68,22 +102,105 @@ export function JobsList({ jobs }: JobsListProps) {
                   </span>
                 </div>
               </div>
-              <div className="flex items-center gap-3 shrink-0">
+              <div className="flex items-center gap-2 shrink-0">
                 <div className="text-xs">
                   {job.candidate_count}{" "}
                   {job.candidate_count === 1 ? t("candidate") : t("candidates")}
                 </div>
-                <Button
-                  variant="default"
-                  size="sm"
-                  className="h-8 text-xs text-primary-foreground"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    router.push(`/pipeline/${job.id}`);
-                  }}
-                >
-                  View Pipeline
-                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground border-border"
+                      onClick={(e) => e.stopPropagation()}
+                      onPointerDown={(e) => e.stopPropagation()}
+                    >
+                      <Icon name="MoreHorizontal" className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="end"
+                    className="w-40"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <DropdownMenuItem
+                      className="text-xs"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        router.push(`/jobs/${job.id}/info`);
+                      }}
+                    >
+                      <Icon name="PenLine" className="h-4 w-4 mr-2" />
+                      {t("edit")}
+                    </DropdownMenuItem>
+                    {statusTransitionOptions(job.status as JobStatusType).length === 0 ? (
+                      <DropdownMenuItem className="text-xs" disabled>
+                        <Icon name="ArrowLeftRight" className="h-4 w-4 mr-2" />
+                        {t("change_status")}
+                      </DropdownMenuItem>
+                    ) : (
+                      <DropdownMenuSub>
+                        <DropdownMenuSubTrigger
+                          className="text-xs"
+                          disabled={statusChangingId === job.id}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Icon name="ArrowLeftRight" className="h-4 w-4 mr-2" />
+                          {t("change_status")}
+                        </DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent
+                          className="w-40"
+                          onPointerDown={(e) => e.stopPropagation()}
+                        >
+                          {statusTransitionOptions(job.status as JobStatusType).map((target) => (
+                            <DropdownMenuItem
+                              key={target}
+                              className="text-xs"
+                              disabled={statusChangingId === job.id}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void (async () => {
+                                  try {
+                                    setStatusChangingId(job.id);
+                                    if (target === "open") {
+                                      await publishJob(job.id);
+                                      toast.success(t("job_published"));
+                                    } else if (target === "draft") {
+                                      if (job.status === "archived") {
+                                        await unarchiveJob(job.id);
+                                        toast.success(t("job_restored_to_draft"));
+                                      } else {
+                                        await unpublishJob(job.id);
+                                        toast.success(t("job_unpublished"));
+                                      }
+                                    } else {
+                                      await archiveJob(job.id);
+                                      toast.success(t("job_archived"));
+                                    }
+                                    onJobArchived?.();
+                                  } catch (err) {
+                                    toast.error(
+                                      err instanceof Error
+                                        ? err.message
+                                        : "Failed to update job status",
+                                    );
+                                  } finally {
+                                    setStatusChangingId(null);
+                                  }
+                                })();
+                              }}
+                            >
+                              <Icon name={statusOptionIcon(target)} className="h-4 w-4 mr-2" />
+                              {t(statusKey[target])}
+                            </DropdownMenuItem>
+                          ))}
+                        </DropdownMenuSubContent>
+                      </DropdownMenuSub>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </div>
           </CardContent>

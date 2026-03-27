@@ -43,12 +43,8 @@ async def handle_send_email_action(
         from datetime import datetime, timezone
 
         from app.core.config import settings
-        from app.integrations.app_store.email_integration.temporal.queue import (
-            enqueue_outbound_email,
-        )
-        from app.integrations.app_store.email_integration.temporal.types import (
-            OutboundWorkflowInput,
-        )
+        from app.temporal.email.queue import enqueue_outbound_email
+        from app.temporal.email.types import OutboundWorkflowInput
         from app.models.candidate import Candidate
         from app.models.conversation import Conversation
         from app.models.message import Message
@@ -100,15 +96,14 @@ async def handle_send_email_action(
         rendered_subject = render_template(template.subject or "", context)
         rendered_body = render_template(template.body or "", context)
 
-        # Get or create conversation for this candidate
+        # One canonical conversation per candidate (org-scoped); limit(1) safe before dedupe migration
         conv_stmt = (
             select(Conversation)
             .where(
                 Conversation.org_id == org_id,
                 Conversation.candidate_id == candidate_id,
-                Conversation.status.in_(["open", "closed"]),
             )
-            .order_by(Conversation.last_message_at.desc())
+            .order_by(Conversation.last_message_at.desc().nullslast())
             .limit(1)
         )
         conv_result = await db.execute(conv_stmt)
@@ -136,7 +131,7 @@ async def handle_send_email_action(
         else:
             # Update existing conversation
             conversation.last_message_at = now
-            if conversation.status == "closed":
+            if conversation.status in ("closed", "archived"):
                 conversation.status = "open"
             logger.info(
                 f"Automation using existing conversation: conv_id={conversation.id} candidate_id={candidate_id}"

@@ -100,6 +100,9 @@ function mapErrorCodeToMessage(status: number, code?: string, fallback?: string)
   if (status === 403) {
     return "You don't have permission to perform this action.";
   }
+  if (status === 502 || status === 503) {
+    if (fallback && fallback.trim()) return fallback;
+  }
   if (status >= 500) {
     return "Something went wrong. Please try again.";
   }
@@ -189,9 +192,12 @@ export async function apiPost<T>(
 
 export async function apiFetch<T>(
   path: string,
-  options: { method: string; body?: unknown },
+  options: { method: string; body?: unknown; headers?: Record<string, string> },
 ): Promise<T> {
   const headers: Record<string, string> = { Accept: "application/json" };
+  if (options.headers) {
+    Object.assign(headers, options.headers);
+  }
 
   if (options.body !== undefined) {
     headers["Content-Type"] = "application/json";

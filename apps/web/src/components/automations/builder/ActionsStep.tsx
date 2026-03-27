@@ -261,8 +261,7 @@ export function ActionsStep({
                 {items.map((at) => {
                   const ActionIcon = at.icon;
                   const isAlreadyAdded = actions.some((a) => a.type === at.id);
-                  const isMoveStageDisabled =
-                    at.id === "move_stage" && moveToStageDisabled;
+                  const isMoveStageDisabled = at.id === "move_stage" && moveToStageDisabled;
                   const isDisabled = isAlreadyAdded || isMoveStageDisabled;
                   const tooltipReason = isAlreadyAdded
                     ? "Already added"
@@ -289,9 +288,7 @@ export function ActionsStep({
                     return (
                       <Tooltip key={at.id}>
                         <TooltipTrigger asChild>
-                          <span className="inline-block cursor-not-allowed">
-                            {button}
-                          </span>
+                          <span className="inline-block cursor-not-allowed">{button}</span>
                         </TooltipTrigger>
                         <TooltipContent side="top" className="max-w-xs">
                           {tooltipReason}

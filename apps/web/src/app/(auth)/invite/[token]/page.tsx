@@ -6,12 +6,12 @@ import Link from "next/link";
 import { Button } from "@onehash/ui/button";
 import { Icon } from "@onehash/ui/icon";
 import {
-  acceptExistingInvite,
+  acceptInvite,
   getInviteDetails,
   declineInvite,
   type InviteDetailsResponse,
 } from "@/api/index";
-import { PRODUCT_LOGO_LETTER, PRODUCT_NAME } from "@/lib/constants";
+import { PRODUCT_LOGO_LETTER, PLATFORM_NAME } from "@/lib/constants";
 import { useAuthSession } from "@/app/providers";
 
 export default function InvitePage() {
@@ -22,8 +22,10 @@ export default function InvitePage() {
   const [details, setDetails] = useState<InviteDetailsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [routingAccept, setRoutingAccept] = useState(false);
+  const [accepting, setAccepting] = useState(false);
   const [declining, setDeclining] = useState(false);
+  const [name, setName] = useState("");
+  const [redirecting, setRedirecting] = useState(false);
 
   useEffect(() => {
     if (!token) {
@@ -37,6 +39,7 @@ export default function InvitePage() {
       .then((data) => {
         if (!cancelled) {
           setDetails(data);
+          setName(data.suggested_name ?? "");
           setError(null);
         }
       })
@@ -55,22 +58,51 @@ export default function InvitePage() {
     };
   }, [token]);
 
+  useEffect(() => {
+    if (sessionLoading || loading || !details || !token) return;
+
+    const inviteEmail = details.email.toLowerCase();
+    const currentEmail = user?.email?.toLowerCase();
+    const isMatchingLoggedInUser = Boolean(currentEmail && currentEmail === inviteEmail);
+
+    // Final flow:
+    // 1) New invited user opens email link -> go directly to signup first.
+    // 2) Existing invited user opens email link while logged out -> go to login first.
+    // 3) Show accept page only when user is logged in with invited email.
+    if (!isMatchingLoggedInUser) {
+      setRedirecting(true);
+      if (details.account_exists) {
+        const inviteRedirect = `/invite/${encodeURIComponent(token)}`;
+        router.replace(
+          `/login?redirect=${encodeURIComponent(inviteRedirect)}&invite_email=${encodeURIComponent(details.email)}`,
+        );
+      } else {
+        router.replace(
+          `/signup?invite=${encodeURIComponent(token)}&invite_email=${encodeURIComponent(details.email)}`,
+        );
+      }
+    }
+  }, [details, loading, router, sessionLoading, token, user]);
+
   const handleAccept = async () => {
     if (!token || !details) return;
-    setRoutingAccept(true);
-    if (user && user.email.toLowerCase() === details.email.toLowerCase()) {
+    const trimmedName = name.trim();
+    if (!trimmedName) return;
+    setAccepting(true);
+    const isMatchingLoggedInUser = Boolean(
+      user && user.email.toLowerCase() === details.email.toLowerCase(),
+    );
+    if (isMatchingLoggedInUser) {
       try {
-        await acceptExistingInvite(token);
+        await acceptInvite({ token, name: trimmedName });
         await refreshSession(true);
         localStorage.setItem("session_updated", Date.now().toString());
-        // TODO(mvp-nav): Restore dashboard redirect after MVP launch.
-        // router.replace("/dashboard");
         router.replace("/");
         router.refresh();
         return;
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to accept invite.");
-        setRoutingAccept(false);
+        setAccepting(false);
         return;
       }
     }
@@ -83,6 +115,7 @@ export default function InvitePage() {
     } else {
       router.push(`/signup?invite=${encodeURIComponent(token)}&invite_email=${inviteEmail}`);
     }
+    setAccepting(false);
   };
 
   const handleDecline = async () => {
@@ -91,7 +124,19 @@ export default function InvitePage() {
     setError(null);
     try {
       await declineInvite(token);
-      router.replace("/login");
+      const refreshedUser = await refreshSession(true);
+      const isMatchingLoggedInUser = Boolean(
+        refreshedUser &&
+        details &&
+        refreshedUser.email.toLowerCase() === details.email.toLowerCase(),
+      );
+      if (isMatchingLoggedInUser && refreshedUser && !refreshedUser.is_onboarded) {
+        router.replace("/onboarding?invite_declined=1");
+      } else if (isMatchingLoggedInUser) {
+        router.replace("/");
+      } else {
+        router.replace("/login");
+      }
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to decline invite.");
@@ -100,12 +145,14 @@ export default function InvitePage() {
     }
   };
 
-  if (sessionLoading || loading) {
+  if (sessionLoading || loading || redirecting) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12">
         <div className="w-full max-w-[420px] text-center">
           <Icon name="Loader" className="h-8 w-8 animate-spin mx-auto text-muted-foreground" />
-          <p className="text-sm text-muted-foreground mt-4">Loading invite...</p>
+          <p className="text-sm text-muted-foreground mt-4">
+            {redirecting ? "Redirecting..." : "Loading invite..."}
+          </p>
         </div>
       </div>
     );
@@ -120,7 +167,7 @@ export default function InvitePage() {
               <div className="h-9 w-9 rounded-lg bg-foreground flex items-center justify-center">
                 <span className="text-background text-sm font-bold">{PRODUCT_LOGO_LETTER}</span>
               </div>
-              <span className="text-lg font-semibold tracking-tight">{PRODUCT_NAME}</span>
+              <span className="text-lg font-semibold tracking-tight">{PLATFORM_NAME}</span>
             </div>
             <div className="rounded-xl border border-border bg-card p-8 shadow-sm text-center">
               <div className="mx-auto h-12 w-12 rounded-full bg-destructive/10 flex items-center justify-center mb-5">
@@ -157,7 +204,7 @@ export default function InvitePage() {
             <div className="h-9 w-9 rounded-lg bg-foreground flex items-center justify-center">
               <span className="text-background text-sm font-bold">{PRODUCT_LOGO_LETTER}</span>
             </div>
-            <span className="text-lg font-semibold tracking-tight">{PRODUCT_NAME}</span>
+            <span className="text-lg font-semibold tracking-tight">{PLATFORM_NAME}</span>
           </div>
           <h1 className="text-3xl font-semibold tracking-tight leading-tight mb-3">
             You&apos;re invited
@@ -177,7 +224,7 @@ export default function InvitePage() {
             <div className="h-9 w-9 rounded-lg bg-foreground flex items-center justify-center">
               <span className="text-background text-sm font-bold">{PRODUCT_LOGO_LETTER}</span>
             </div>
-            <span className="text-lg font-semibold tracking-tight">{PRODUCT_NAME}</span>
+            <span className="text-lg font-semibold tracking-tight">{PLATFORM_NAME}</span>
           </div>
 
           <div className="lg:rounded-xl lg:border lg:border-border lg:bg-card lg:p-8 lg:shadow-sm">
@@ -197,24 +244,39 @@ export default function InvitePage() {
                 {error}
               </div>
             )}
-            <div className="space-y-3">
+            <div className="space-y-4">
+              <div className="space-y-3">
+                <label className="text-sm font-medium block">Organization</label>
+                <input
+                  value={details?.org_name ?? ""}
+                  disabled
+                  className="h-10 w-full rounded-md border border-input bg-muted px-3 text-sm text-muted-foreground"
+                />
+              </div>
+              <div className="space-y-3">
+                <label className="text-sm font-medium block">Full name</label>
+                <input
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  placeholder="Jane Doe"
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  autoComplete="name"
+                />
+              </div>
+            </div>
+            <div className="space-y-3 mt-6">
               <Button
                 className="w-full h-10 text-sm font-medium"
-                disabled={routingAccept || declining}
+                disabled={accepting || !name.trim()}
                 onClick={handleAccept}
               >
-                {routingAccept ? (
+                {accepting ? (
                   <Icon name="Loader" className="h-4 w-4 animate-spin" />
                 ) : (
                   "Accept invite"
                 )}
               </Button>
-              <Button
-                variant="outline"
-                className="w-full h-10 text-sm"
-                disabled={routingAccept || declining}
-                onClick={handleDecline}
-              >
+              <Button variant="outline" className="w-full h-10 text-sm" onClick={handleDecline}>
                 {declining ? <Icon name="Loader" className="h-4 w-4 animate-spin" /> : "Decline"}
               </Button>
             </div>

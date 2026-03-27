@@ -1,4 +1,4 @@
-import { apiFetch } from "../client/client";
+import { ApiError, apiFetch, apiGet } from "../client/client";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -11,25 +11,6 @@ export type CandidateSnippet = {
 };
 
 export type ConversationStatus = "open" | "closed" | "archived";
-
-export type ConversationListItem = {
-  id: string;
-  subject: string;
-  channel: string;
-  status: ConversationStatus;
-  last_message_at: string | null;
-  created_at: string;
-  candidate: CandidateSnippet;
-  last_message_body: string | null;
-  message_count: number;
-};
-
-export type ConversationListResponse = {
-  items: ConversationListItem[];
-  total: number;
-  page: number;
-  page_size: number;
-};
 
 export type MessageDirection = "inbound" | "outbound";
 export type MessageStatus = "queued" | "sent" | "delivered" | "read" | "failed" | "received";
@@ -82,14 +63,22 @@ export type MessageCreateRequest = {
 // API functions
 // ---------------------------------------------------------------------------
 
-export function listConversations(page = 1, pageSize = 30): Promise<ConversationListResponse> {
-  return apiFetch<ConversationListResponse>(`/conversations?page=${page}&page_size=${pageSize}`, {
-    method: "GET",
-  });
-}
-
 export function getConversation(conversationId: string): Promise<ConversationDetail> {
   return apiFetch<ConversationDetail>(`/conversations/${conversationId}`, { method: "GET" });
+}
+
+/** Single thread for this candidate, or `null` if none (404 from API). */
+export async function getConversationByCandidateId(
+  candidateId: string,
+): Promise<ConversationDetail | null> {
+  try {
+    return await apiGet<ConversationDetail>(
+      `/conversations/by-candidate/${encodeURIComponent(candidateId)}`,
+    );
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 404) return null;
+    throw e;
+  }
 }
 
 export function createConversation(data: ConversationCreateRequest): Promise<ConversationDetail> {
@@ -104,14 +93,4 @@ export function sendMessage(
     method: "POST",
     body: data,
   });
-}
-
-export function updateConversationStatus(
-  conversationId: string,
-  newStatus: ConversationStatus,
-): Promise<ConversationDetail> {
-  return apiFetch<ConversationDetail>(
-    `/conversations/${conversationId}/status?new_status=${newStatus}`,
-    { method: "PATCH" },
-  );
 }

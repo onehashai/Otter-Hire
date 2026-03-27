@@ -1,4 +1,12 @@
-from sqlalchemy import CheckConstraint, Column, DateTime, ForeignKey, Index, String
+from sqlalchemy import (
+    CheckConstraint,
+    Column,
+    DateTime,
+    ForeignKey,
+    Index,
+    String,
+    UniqueConstraint,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -47,7 +55,7 @@ class Conversation(Base):
             "status IN ('open', 'closed', 'archived')",
             name="ck_conversations_status",
         ),
-        Index("ix_conversations_org_candidate", "org_id", "candidate_id"),
+        UniqueConstraint("org_id", "candidate_id", name="uq_conversations_org_candidate"),
         Index("ix_conversations_org_last_message_at", "org_id", "last_message_at"),
     )
 

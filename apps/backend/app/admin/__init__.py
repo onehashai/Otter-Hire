@@ -35,6 +35,7 @@ def setup_admin(app: FastAPI) -> Admin:
         FeedbackAdmin,
         InboundEmailAdmin,
         InboundEmailAttachmentAdmin,
+        IntegrationAdmin,
         IntegrationCredentialAdmin,
         InterviewAdmin,
         JobAdmin,
@@ -56,13 +57,14 @@ def setup_admin(app: FastAPI) -> Admin:
         app,
         engine=engine,
         authentication_backend=authentication_backend,
-        title=f"{settings.product_name} Admin",
+        title=f"{settings.platform_name} Admin",
     )
 
     admin.add_view(UserAdmin)
     admin.add_view(OrganizationAdmin)
     admin.add_view(OrgInboxAdmin)
     admin.add_view(OrgMembershipAdmin)
+    admin.add_view(IntegrationAdmin)
     admin.add_view(IntegrationCredentialAdmin)
     admin.add_view(JobAdmin)
     admin.add_view(JobCategoryAdmin)

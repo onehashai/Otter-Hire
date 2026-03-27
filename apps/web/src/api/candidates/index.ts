@@ -5,8 +5,9 @@ export type CandidateListItemResponse = {
   name: string;
   email: string;
   phone: string | null;
-  location: string | null;
+  address: string | null;
   profile_links: Record<string, string>;
+  parsed_resume?: Record<string, unknown> | null;
   source: string | null;
   tags: string[];
   status: "active" | "rejected" | "hired";
@@ -35,12 +36,14 @@ export type CandidateBulkUpdateResponse = {
   updated_count: number;
 };
 
+export type CandidateBulkAssignJobResponse = CandidateBulkUpdateResponse;
+
 export type CreateCandidatePayload = {
   job_id?: string | null;
   name: string;
   email: string;
   phone?: string | null;
-  location?: string | null;
+  address?: string | null;
   profile_links?: Record<string, string>;
   stage_id?: string | null;
   source?: string | null;
@@ -114,11 +117,44 @@ export type CandidateDocumentResponse = {
   created_at: string;
 };
 
+export type CandidateCsvImportError = {
+  row: number;
+  reason: string;
+};
+
+export type CandidateCsvImportResponse = {
+  total_rows: number;
+  created_count: number;
+  failed_count: number;
+  errors: CandidateCsvImportError[];
+};
+
+export type CandidateApplicationResponseFile = {
+  name: string;
+  url: string;
+};
+
+export type CandidateApplicationResponseItem = {
+  key: string;
+  label: string;
+  type: string;
+  required: boolean;
+  response: string | number | boolean | string[] | null;
+  files: CandidateApplicationResponseFile[];
+};
+
+export type CandidateApplicationResponsesResponse = {
+  submitted_at: string | null;
+  has_additional_questions: boolean;
+  items: CandidateApplicationResponseItem[];
+};
+
 export async function getCandidates(params?: {
   search?: string;
   job_id?: string;
   stage_id?: string;
   status?: string;
+  source?: string;
   limit?: number;
   offset?: number;
 }): Promise<CandidateListItemResponse[]> {
@@ -127,6 +163,7 @@ export async function getCandidates(params?: {
   if (params?.job_id) searchParams.set("job_id", params.job_id);
   if (params?.stage_id) searchParams.set("stage_id", params.stage_id);
   if (params?.status) searchParams.set("status", params.status);
+  if (params?.source) searchParams.set("source", params.source);
   if (params?.limit !== undefined) searchParams.set("limit", String(params.limit));
   if (params?.offset !== undefined) searchParams.set("offset", String(params.offset));
   const query = searchParams.toString();
@@ -145,7 +182,7 @@ export async function updateCandidate(
     name?: string;
     email?: string;
     phone?: string | null;
-    location?: string | null;
+    address?: string | null;
     profile_links?: Record<string, string>;
     job_id?: string | null;
     clear_job?: boolean;
@@ -155,6 +192,10 @@ export async function updateCandidate(
     method: "PATCH",
     body: payload,
   });
+}
+
+export async function deleteCandidate(id: string): Promise<void> {
+  await apiFetch<void>(`/candidates/${id}`, { method: "DELETE" });
 }
 
 export async function getCandidateStageFilterOptions(): Promise<CandidateStageFilterOptionsResponse> {
@@ -168,6 +209,8 @@ export async function getCandidatesPaginated(params?: {
   job_id?: string;
   stage_id?: string;
   status?: string;
+  source?: string;
+  talent_pool_only?: boolean;
   limit?: number;
   offset?: number;
 }): Promise<CandidatesPaginatedResponse> {
@@ -176,6 +219,8 @@ export async function getCandidatesPaginated(params?: {
   if (params?.job_id) searchParams.set("job_id", params.job_id);
   if (params?.stage_id) searchParams.set("stage_id", params.stage_id);
   if (params?.status) searchParams.set("status", params.status);
+  if (params?.source) searchParams.set("source", params.source);
+  if (params?.talent_pool_only) searchParams.set("talent_pool_only", "true");
   if (params?.limit !== undefined) searchParams.set("limit", String(params.limit));
   if (params?.offset !== undefined) searchParams.set("offset", String(params.offset));
   const query = searchParams.toString();
@@ -224,6 +269,16 @@ export async function bulkUpdateCandidateStage(
   });
 }
 
+export async function bulkAssignCandidatesToJob(
+  candidateIds: string[],
+  jobId: string,
+): Promise<CandidateBulkAssignJobResponse> {
+  return apiFetch<CandidateBulkAssignJobResponse>("/candidates/actions/bulk/assign-job", {
+    method: "PATCH",
+    body: { candidate_ids: candidateIds, job_id: jobId },
+  });
+}
+
 export async function createCandidate(
   payload: CreateCandidatePayload,
 ): Promise<CandidateDetailResponse> {
@@ -235,6 +290,25 @@ export async function createCandidate(
 
 export async function getCandidateOverview(id: string): Promise<CandidateOverviewResponse> {
   return apiFetch<CandidateOverviewResponse>(`/candidates/${id}/overview`, { method: "GET" });
+}
+
+export async function getCandidateApplicationResponses(
+  id: string,
+): Promise<CandidateApplicationResponsesResponse> {
+  const data = await apiFetch<CandidateApplicationResponsesResponse>(
+    `/candidates/${id}/application-responses`,
+    { method: "GET" },
+  );
+  return {
+    ...data,
+    items: (data.items || []).map((item) => ({
+      ...item,
+      files: (item.files || []).map((file) => ({
+        ...file,
+        url: normalizeApiUrl(file.url) ?? file.url,
+      })),
+    })),
+  };
 }
 
 export async function addCandidateNote(
@@ -344,4 +418,32 @@ export async function deleteCandidateDocument(
   await apiFetch<void>(`/candidates/${candidateId}/documents/${documentId}`, {
     method: "DELETE",
   });
+}
+
+export async function importCandidatesCsv(file: File): Promise<CandidateCsvImportResponse> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch(`${API_BASE_URL}/candidates/import-csv`, {
+    method: "POST",
+    credentials: "include",
+    body: formData,
+  });
+
+  if (!res.ok) {
+    let message = `Request failed: ${res.status} ${res.statusText}`;
+    try {
+      const data = (await res.json()) as { detail?: string; error?: string };
+      const msg =
+        typeof data.detail === "string"
+          ? data.detail
+          : typeof data.error === "string"
+            ? data.error
+            : "";
+      if (msg.trim()) message = msg;
+    } catch {}
+    throw new Error(message);
+  }
+
+  return (await res.json()) as CandidateCsvImportResponse;
 }

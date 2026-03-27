@@ -5,12 +5,10 @@ import {
   // LayoutDashboard,
   Briefcase,
   Users,
-  MessageSquare,
   FileText,
-  // TODO(mvp-nav): Re-enable Reports/AI Assistant icons after MVP launch.
-  // BarChart3,
+  BarChart3,
   Zap,
-  // Bot,
+  Bot,
   Settings,
   Sun,
   Moon,
@@ -24,23 +22,21 @@ import { useTheme } from "@/components/common/ThemeProvider";
 import { Button } from "@onehash/ui/button";
 import { Separator } from "@onehash/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@onehash/ui/tooltip";
-import { PRODUCT_LOGO_LETTER, PRODUCT_NAME } from "@/lib/constants";
+import { PRODUCT_LOGO_LETTER, PLATFORM_NAME } from "@/lib/constants";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
 
 const navItems = [
   // TODO(mvp-nav): Re-enable Dashboard in sidebar after MVP launch.
   // { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Jobs", url: "/jobs", icon: Briefcase },
-  { title: "Candidates", url: "/candidates", icon: Users },
-  { title: "Conversations", url: "/conversations", icon: MessageSquare },
+  { title: "Talent Pool", url: "/talent-pool", icon: Users },
   { title: "Templates", url: "/templates", icon: FileText },
   // TODO(mvp-nav): Re-enable Interviews in sidebar post-messaging launch.
   // { title: "Interviews", url: "/interviews", icon: Calendar },
-  // TODO(mvp-nav): Re-enable Reports in sidebar after MVP launch.
-  // { title: "Reports", url: "/reports", icon: BarChart3 },
+  { title: "Reports", url: "/reports", icon: BarChart3 },
   { title: "Automations", url: "/automations", icon: Zap },
-  // TODO(mvp-nav): Re-enable AI Assistant in sidebar after MVP launch.
-  // { title: "AI Assistant", url: "/ai-assistant", icon: Bot },
+  { title: "AI Assistant", url: "/ai-assistant", icon: Bot },
   { title: "Settings", url: "/settings/profile", icon: Settings },
 ];
 
@@ -53,6 +49,7 @@ interface AppSidebarProps {
 export function AppSidebar({ collapsed, onToggle, onOpenCommandPalette }: AppSidebarProps) {
   const pathname = usePathname();
   const { theme, setTheme } = useTheme();
+  const { t } = useTranslation();
 
   return (
     <aside
@@ -75,9 +72,9 @@ export function AppSidebar({ collapsed, onToggle, onOpenCommandPalette }: AppSid
             </div>
             <span
               className="text-sm font-semibold text-foreground truncate max-w-[10rem]"
-              title={PRODUCT_NAME}
+              title={PLATFORM_NAME}
             >
-              {PRODUCT_NAME}
+              {PLATFORM_NAME}
             </span>
           </Link>
         )}
@@ -166,7 +163,7 @@ export function AppSidebar({ collapsed, onToggle, onOpenCommandPalette }: AppSid
             <Search className="h-3.5 w-3.5 shrink-0" />
             {!collapsed && (
               <>
-                <span>Search...</span>
+                <span>{t("search")}</span>
                 <kbd className="pointer-events-none inline-flex h-5 select-none items-center rounded border border-border bg-muted px-1.5 text-[10px] font-medium text-muted-foreground ml-auto">
                   ⌘K
                 </kbd>

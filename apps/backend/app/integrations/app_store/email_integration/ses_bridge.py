@@ -469,8 +469,10 @@ async def run_ses_raw_bridge_loop(stop_event: asyncio.Event) -> None:
     if not settings.s3_enabled:
         logger.info("SES bridge disabled because S3 is not enabled")
         return
-    bucket = settings.effective_ses_raw_bridge_bucket
-    prefix = settings.effective_ses_raw_bridge_prefix
+    raw_bucket = (settings.ses_raw_bridge_bucket or "").strip()
+    bucket = raw_bucket or (settings.aws_s3_bucket or "").strip()
+    raw_prefix = (settings.ses_raw_bridge_prefix or "").strip().lstrip("/")
+    prefix = raw_prefix or f"{settings.s3_root_prefix}/ses-inbound/raw/"
     if not bucket:
         logger.warning("SES bridge disabled because bucket is missing")
         return

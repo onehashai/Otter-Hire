@@ -28,7 +28,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { SelectField } from "@onehash/ui/select";
-import { toast } from "sonner";
+import { toast } from "@onehash/ui/sonner";
 import { generateId } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { useJobSetup } from "../context";

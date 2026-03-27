@@ -25,4 +25,4 @@ const SonnerToaster = ({ ...props }: ToasterProps) => {
   );
 };
 
-export { SonnerToaster, toast as sonnerToast };
+export { SonnerToaster, toast, toast as sonnerToast };

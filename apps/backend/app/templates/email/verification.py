@@ -11,10 +11,12 @@ from app.templates.email.base_email_template import (
 )
 
 
-def build_verification_email(product_name: str, expiry_hours: int, verify_url: str) -> EmailContent:
+def build_verification_email(
+    platform_name: str, expiry_hours: int, verify_url: str
+) -> EmailContent:
     hour_word = "hour" if expiry_hours == 1 else "hours"
     inner = f"""
-                <h1 style="{STYLE_HEADING}">Welcome to {esc(product_name)}</h1>
+                <h1 style="{STYLE_HEADING}">Welcome to {esc(platform_name)}</h1>
                 <p style="{STYLE_TEXT}">Please verify your email address by clicking the button below.</p>
                 {block_button(verify_url, "Verify email")}
                 {copy_paste_link_block(verify_url)}
@@ -26,10 +28,10 @@ def build_verification_email(product_name: str, expiry_hours: int, verify_url: s
             """
     html_body = base_email_template(inner)
     return EmailContent(
-        subject=f"Verify your {product_name} account",
+        subject=f"Verify your {platform_name} account",
         html=html_body,
         text=f"""
-                Welcome to {product_name}!
+                Welcome to {platform_name}!
 
                 Please verify your email address by clicking the link in this email.
 

@@ -18,7 +18,7 @@ import { Form, FormField, FormItem, FormControl } from "@onehash/ui/form";
 import { useRouter } from "next/navigation";
 import { jobNameSchema, type JobNameFormValues } from "@/lib/schemas/zodResolver";
 import { createJob } from "@/api";
-import { toast } from "sonner";
+import { toast } from "@onehash/ui/sonner";
 
 interface CreateJobModalProps {
   open: boolean;

@@ -16,27 +16,35 @@ import {
 } from "@onehash/ui/dialog";
 import { InputField } from "@onehash/ui/input";
 import { Label } from "@onehash/ui/label";
+import { Avatar } from "@onehash/ui/avatar";
 import { Icon } from "@onehash/ui/icon";
 import type { IconName } from "@onehash/ui/icon";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
-import { toast } from "sonner";
-import { applyToPublicJob, getPublicJobDetail, type PublicJobDetail } from "@/api";
+import { toast } from "@onehash/ui/sonner";
+import {
+  applyToPublicJob,
+  getPublicJobDetail,
+  uploadPublicApplicationFile,
+  type PublicJobDetail,
+} from "@/api";
+import { PLATFORM_NAME } from "@/lib/constants";
+import { parseOrgSlug } from "@/lib/public-careers-org";
 
-type ApplyFile = { name: string; size: number; type: string };
+type ApplyFile = {
+  name: string;
+  size: number;
+  type: string;
+  url?: string;
+  uploading?: boolean;
+};
 
-function parseOrgSlug(orgSlug: string): { orgName: string; orgId: string } | null {
-  const parts = orgSlug.split("-");
-  if (parts.length < 6) return null;
-
-  const uuidParts = parts.slice(-5);
-  const orgId = uuidParts.join("-");
-  const orgName = parts.slice(0, -5).join("-");
-
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  if (!uuidRegex.test(orgId)) return null;
-
-  return { orgName, orgId };
+function newIdempotencyKey(): string {
+  const c = typeof globalThis !== "undefined" ? globalThis.crypto : undefined;
+  if (c && typeof c.randomUUID === "function") {
+    return c.randomUUID();
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 11)}`;
 }
 
 function formatSalary(job: PublicJobDetail): string | null {
@@ -59,11 +67,11 @@ function formatSalary(job: PublicJobDetail): string | null {
   return null;
 }
 
-function formatLocation(job: PublicJobDetail): string {
+function formatLocation(job: PublicJobDetail): string | null {
   if (job.city && job.country) return `${job.city}, ${job.country}`;
   if (job.city) return job.city;
   if (job.country) return job.country;
-  return job.workplace_type || "Remote";
+  return null;
 }
 
 function formatEmploymentType(type: string): string {
@@ -152,6 +160,49 @@ export default function CareerJobDetailPage() {
   const isRequired = (visibility: string) => visibility === "required";
   const isVisible = (visibility: string) => visibility !== "hidden";
 
+  const anyFileUploading = Object.values(applyForm.files).some((f) => f?.uploading);
+
+  const handleSelectAndUploadFile = async (key: string, file: File | null) => {
+    if (!file) return;
+    const parsedOrg = parseOrgSlug(orgSlug);
+    if (!parsedOrg) {
+      toast.error("Invalid organization");
+      return;
+    }
+    setApplyForm((s) => ({
+      ...s,
+      files: {
+        ...s.files,
+        [key]: { name: file.name, size: file.size, type: file.type, uploading: true },
+      },
+    }));
+    try {
+      const uploaded = await uploadPublicApplicationFile(
+        parsedOrg.orgId,
+        jobId,
+        parsedOrg.orgName,
+        key,
+        file,
+      );
+      setApplyForm((s) => ({
+        ...s,
+        files: {
+          ...s.files,
+          [key]: {
+            name: uploaded.name,
+            size: uploaded.size_bytes,
+            type: uploaded.content_type ?? file.type,
+            url: uploaded.url,
+            uploading: false,
+          },
+        },
+      }));
+    } catch (err) {
+      setApplyForm((s) => ({ ...s, files: { ...s.files, [key]: undefined } }));
+      toast.error(err instanceof Error ? err.message : "Failed to upload file");
+    }
+  };
+
   const handleApplySubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const fullNameVisibility = fieldVisibility("full_name", "required");
@@ -171,16 +222,27 @@ export default function CareerJobDetailPage() {
     if (isRequired(coverVisibility) && !applyForm.files.cover_letter) {
       return toast.error("Cover letter is required.");
     }
+    if (Object.values(applyForm.files).some((f) => f?.uploading)) {
+      return toast.error("Please wait for files to finish uploading.");
+    }
 
     for (const field of [...profileLinkFields, ...customFields]) {
       const key = String(field.key ?? field.id ?? "");
       const label = String(field.label ?? key);
       const visibility = String(field.visibility ?? "hidden");
+      const type = String(field.type ?? "short_text");
       if (!key || visibility === "hidden") continue;
       if (visibility === "required") {
-        const val = applyForm.answers[key];
-        if (val == null || (typeof val === "string" && !val.trim())) {
-          return toast.error(`${label} is required.`);
+        if (type === "file_upload") {
+          const fileMeta = applyForm.files[key];
+          if (!fileMeta || (!fileMeta.url && !fileMeta.name)) {
+            return toast.error(`${label} is required.`);
+          }
+        } else {
+          const val = applyForm.answers[key];
+          if (val == null || (typeof val === "string" && !val.trim())) {
+            return toast.error(`${label} is required.`);
+          }
         }
       }
     }
@@ -209,7 +271,7 @@ export default function CareerJobDetailPage() {
         const payloadFiles: Record<string, unknown> = {};
         for (const [key, fileMeta] of Object.entries(applyForm.files)) {
           if (!fileMeta) continue;
-          payloadFiles[key] = fileMeta.name;
+          payloadFiles[key] = fileMeta.url ?? fileMeta.name;
         }
 
         const parsedOrg = parseOrgSlug(orgSlug);
@@ -218,13 +280,19 @@ export default function CareerJobDetailPage() {
           setApplySubmitting(false);
           return;
         }
-        await applyToPublicJob(parsedOrg.orgId, jobId, parsedOrg.orgName, {
-          full_name: applyForm.fullName,
-          email: applyForm.email,
-          phone: applyForm.phone || null,
-          answers: payloadAnswers,
-          files: Object.keys(payloadFiles).length ? payloadFiles : undefined,
-        });
+        await applyToPublicJob(
+          parsedOrg.orgId,
+          jobId,
+          parsedOrg.orgName,
+          {
+            full_name: applyForm.fullName,
+            email: applyForm.email,
+            phone: applyForm.phone || null,
+            answers: payloadAnswers,
+            files: Object.keys(payloadFiles).length ? payloadFiles : undefined,
+          },
+          { idempotencyKey: newIdempotencyKey() },
+        );
         setApplySubmitting(false);
         closeApplyDialog();
         toast.success("Application submitted. We'll be in touch!");
@@ -265,14 +333,18 @@ export default function CareerJobDetailPage() {
   }
 
   const salary = formatSalary(job);
-  const location = formatLocation(job);
+  const locationLabel = formatLocation(job);
   const employmentType = formatEmploymentType(job.employment_type);
 
+  const showWorkplacePill =
+    Boolean(job.workplace_type) &&
+    (locationLabel != null || String(job.workplace_type).toLowerCase() !== "onsite");
+
   const metaItems = [
-    { iconName: "MapPin", label: location },
+    locationLabel && { iconName: "MapPin", label: locationLabel },
+    showWorkplacePill && { iconName: "Clock", label: job.workplace_type },
     { iconName: "Briefcase", label: employmentType },
-    { iconName: "Clock", label: job.workplace_type },
-    salary && { iconName: "Wallet", label: salary },
+    salary && { iconName: "DollarSign", label: salary },
     job.category && { iconName: "Building2", label: job.category },
   ].filter(Boolean) as { iconName: IconName; label: string }[];
 
@@ -303,14 +375,14 @@ export default function CareerJobDetailPage() {
             <Icon name="ChevronLeft" className="h-4 w-4" />
           </Button>
           <div className="flex items-center gap-2.5 flex-1 min-w-0">
-            <div className="h-7 w-7 rounded-md bg-foreground flex items-center justify-center shrink-0">
-              <span className="text-background text-[10px] font-bold">
-                {orgName.charAt(0).toUpperCase()}
-              </span>
-            </div>
-            <span className="text-xs text-muted-foreground truncate capitalize">
-              {job.org_name}
-            </span>
+            <Avatar
+              className="h-7 w-7 shrink-0 rounded-md"
+              src={job.org_avatar_url}
+              alt={job.org_name || orgName}
+              imageClassName="rounded-md object-cover"
+              fallbackClassName="rounded-md bg-foreground text-background text-[10px] font-bold"
+            />
+            <span className="text-sm font-semibold truncate">{job.org_name}</span>
           </div>
         </div>
       </header>
@@ -318,7 +390,6 @@ export default function CareerJobDetailPage() {
       <div className="mx-auto max-w-3xl px-4 pt-8 md:pt-12 pb-6 md:pb-8">
         <div className="space-y-4">
           <div className="space-y-2">
-            <p className="text-xs font-medium text-muted-foreground capitalize">{job.org_name}</p>
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">{job.title}</h1>
               {job.status === "draft" && (
@@ -336,7 +407,7 @@ export default function CareerJobDetailPage() {
                 className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs text-muted-foreground"
               >
                 <Icon name={item.iconName} className="h-3 w-3 shrink-0" />
-                <span>{item.label}</span>
+                <span className="capitalize">{item.label}</span>
               </div>
             ))}
           </div>
@@ -396,15 +467,15 @@ export default function CareerJobDetailPage() {
           if (!open) setApplyForm({ fullName: "", email: "", phone: "", answers: {}, files: {} });
         }}
       >
-        <DialogContent className="sm:max-w-md max-h-[85vh] overflow-hidden flex flex-col">
-          <DialogHeader className="shrink-0">
+        <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
             <DialogTitle>Apply for {job.title}</DialogTitle>
             <DialogDescription>
               Submit your application to {job.org_name}. We'll review it and get back to you.
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleApplySubmit} className="mt-2 flex min-h-0 flex-1 flex-col">
-            <div className="space-y-4 overflow-y-auto pr-1">
+          <form onSubmit={handleApplySubmit} className="mt-2 space-y-4">
+            <div className="space-y-4">
               {isVisible(fieldVisibility("full_name", "required")) && (
                 <div>
                   <Label className="text-xs">
@@ -459,24 +530,37 @@ export default function CareerJobDetailPage() {
                     {isRequired(fieldVisibility("resume", "hidden")) ? "*" : "(optional)"}
                   </Label>
                   <div className="mt-1.5 flex items-center gap-2">
-                    <label className="flex-1 flex items-center justify-center gap-2 rounded-lg border border-border border-dashed px-4 py-3 text-xs text-muted-foreground hover:bg-muted/50 cursor-pointer transition-colors">
+                    <label
+                      className={cn(
+                        "flex-1 flex items-center justify-center gap-2 rounded-lg border border-border border-dashed px-4 py-3 text-xs text-muted-foreground transition-colors",
+                        applyForm.files.resume?.uploading
+                          ? "cursor-wait opacity-80"
+                          : "hover:bg-muted/50 cursor-pointer",
+                      )}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const file = e.dataTransfer.files?.[0];
+                        if (file) void handleSelectAndUploadFile("resume", file);
+                      }}
+                    >
                       <Icon name="Upload" className="h-4 w-4 shrink-0" />
-                      <span>{applyForm.files.resume?.name ?? "Choose file or drag and drop"}</span>
+                      <span>
+                        {applyForm.files.resume?.uploading
+                          ? "Uploading…"
+                          : (applyForm.files.resume?.name ?? "Choose file or drag and drop")}
+                      </span>
                       <input
                         type="file"
                         accept=".pdf,.doc,.docx"
                         className="sr-only"
+                        disabled={applyForm.files.resume?.uploading}
                         onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          setApplyForm((f) => ({
-                            ...f,
-                            files: {
-                              ...f.files,
-                              resume: file
-                                ? { name: file.name, size: file.size, type: file.type }
-                                : undefined,
-                            },
-                          }));
+                          void handleSelectAndUploadFile("resume", e.target.files?.[0] || null);
                         }}
                       />
                     </label>
@@ -490,26 +574,40 @@ export default function CareerJobDetailPage() {
                     {isRequired(fieldVisibility("cover_letter", "hidden")) ? "*" : "(optional)"}
                   </Label>
                   <div className="mt-1.5 flex items-center gap-2">
-                    <label className="flex-1 flex items-center justify-center gap-2 rounded-lg border border-border border-dashed px-4 py-3 text-xs text-muted-foreground hover:bg-muted/50 cursor-pointer transition-colors">
+                    <label
+                      className={cn(
+                        "flex-1 flex items-center justify-center gap-2 rounded-lg border border-border border-dashed px-4 py-3 text-xs text-muted-foreground transition-colors",
+                        applyForm.files.cover_letter?.uploading
+                          ? "cursor-wait opacity-80"
+                          : "hover:bg-muted/50 cursor-pointer",
+                      )}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const file = e.dataTransfer.files?.[0];
+                        if (file) void handleSelectAndUploadFile("cover_letter", file);
+                      }}
+                    >
                       <Icon name="Upload" className="h-4 w-4 shrink-0" />
                       <span>
-                        {applyForm.files.cover_letter?.name ?? "Choose file or drag and drop"}
+                        {applyForm.files.cover_letter?.uploading
+                          ? "Uploading…"
+                          : (applyForm.files.cover_letter?.name ?? "Choose file or drag and drop")}
                       </span>
                       <input
                         type="file"
-                        accept=".pdf,.doc,.docx,.txt"
+                        accept=".pdf,.docx,.txt"
                         className="sr-only"
+                        disabled={applyForm.files.cover_letter?.uploading}
                         onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          setApplyForm((f) => ({
-                            ...f,
-                            files: {
-                              ...f.files,
-                              cover_letter: file
-                                ? { name: file.name, size: file.size, type: file.type }
-                                : undefined,
-                            },
-                          }));
+                          void handleSelectAndUploadFile(
+                            "cover_letter",
+                            e.target.files?.[0] || null,
+                          );
                         }}
                       />
                     </label>
@@ -646,28 +744,42 @@ export default function CareerJobDetailPage() {
                           <option value="no">No</option>
                         </select>
                       ) : type === "file_upload" ? (
-                        <label className="mt-1.5 flex-1 flex items-center justify-center gap-2 rounded-lg border border-border border-dashed px-4 py-3 text-xs text-muted-foreground hover:bg-muted/50 cursor-pointer transition-colors">
-                          <Icon name="Upload" className="h-4 w-4 shrink-0" />
-                          <span>
-                            {applyForm.files[key]?.name ?? "Choose file or drag and drop"}
-                          </span>
-                          <input
-                            type="file"
-                            className="sr-only"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              setApplyForm((f) => ({
-                                ...f,
-                                files: {
-                                  ...f.files,
-                                  [key]: file
-                                    ? { name: file.name, size: file.size, type: file.type }
-                                    : undefined,
-                                },
-                              }));
+                        <div className="mt-1.5 flex items-center gap-2">
+                          <label
+                            className={cn(
+                              "flex-1 flex items-center justify-center gap-2 rounded-lg border border-border border-dashed px-4 py-3 text-xs text-muted-foreground transition-colors",
+                              applyForm.files[key]?.uploading
+                                ? "cursor-wait opacity-80"
+                                : "hover:bg-muted/50 cursor-pointer",
+                            )}
+                            onDragOver={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
                             }}
-                          />
-                        </label>
+                            onDrop={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              const file = e.dataTransfer.files?.[0];
+                              if (file) void handleSelectAndUploadFile(key, file);
+                            }}
+                          >
+                            <Icon name="Upload" className="h-4 w-4 shrink-0" />
+                            <span>
+                              {applyForm.files[key]?.uploading
+                                ? "Uploading…"
+                                : (applyForm.files[key]?.name ?? "Choose file or drag and drop")}
+                            </span>
+                            <input
+                              type="file"
+                              accept=".pdf,.docx,.txt"
+                              className="sr-only"
+                              disabled={applyForm.files[key]?.uploading}
+                              onChange={(e) => {
+                                void handleSelectAndUploadFile(key, e.target.files?.[0] || null);
+                              }}
+                            />
+                          </label>
+                        </div>
                       ) : (
                         <InputField
                           type={
@@ -693,12 +805,12 @@ export default function CareerJobDetailPage() {
                   );
                 })}
             </div>
-            <DialogFooter className="mt-4 shrink-0 border-t pt-3 gap-2 sm:gap-0">
+            <DialogFooter className="mt-4">
               <Button type="button" variant="outline" size="sm" onClick={closeApplyDialog}>
                 Cancel
               </Button>
-              <Button type="submit" size="sm" disabled={applySubmitting}>
-                {applySubmitting ? "Submitting…" : "Submit application"}
+              <Button type="submit" size="sm" disabled={applySubmitting || anyFileUploading}>
+                {applySubmitting ? "Submitting" : "Submit application"}
               </Button>
             </DialogFooter>
           </form>
@@ -708,7 +820,7 @@ export default function CareerJobDetailPage() {
       <footer className="border-t border-border">
         <div className="mx-auto max-w-3xl px-4 py-6">
           <p className="text-xs text-muted-foreground capitalize text-center">
-            © {new Date().getFullYear()} {job.org_name}
+            © {new Date().getFullYear()} {PLATFORM_NAME}.
           </p>
         </div>
       </footer>

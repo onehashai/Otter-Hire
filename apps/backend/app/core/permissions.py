@@ -37,7 +37,6 @@ PERMISSIONS = {
 
 ROLE_PERMISSIONS: dict[str, set[str]] = {
     "owner": set(PERMISSIONS),
-    "super_admin": set(PERMISSIONS),
     "admin": {
         "users:read",
         "users:invite",
@@ -107,7 +106,7 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
 
 
 def has_permission(user: User, perm: str) -> bool:
-    role_perms = ROLE_PERMISSIONS.get(user.role, set())
+    role_perms = ROLE_PERMISSIONS.get(user.membership_role, set())
     return perm in role_perms
 
 

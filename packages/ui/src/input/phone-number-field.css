@@ -1,0 +1,17 @@
+/* Theme alignment (uses app :root tokens when present); base styles from react-phone-number-input imported in input.tsx */
+.phone-number-field {
+  --PhoneInput-color--focus: hsl(var(--ring));
+}
+
+.phone-number-field .PhoneInputCountry {
+  margin-right: 0;
+  align-self: stretch;
+  padding-left: 0.5rem;
+  padding-right: 0.35rem;
+  border-right: 1px solid hsl(var(--border));
+  background-color: hsl(var(--muted) / 0.45);
+}
+
+.phone-number-field .PhoneInputCountrySelectArrow {
+  opacity: 0.55;
+}

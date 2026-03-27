@@ -1,6 +1,7 @@
 // Client
 export {
   API_BASE_URL,
+  getApiBase,
   handle429Error,
   parseErrorResponse,
   type ApiGetOptions,
@@ -54,6 +55,9 @@ export * from "./candidates/index";
 
 // Users
 export * from "./users/index";
+
+// Platform admin
+export * from "./admin/index";
 
 // Integrations
 export * from "./integrations/index";

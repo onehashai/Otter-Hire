@@ -5,7 +5,7 @@ import { Button } from "@onehash/ui/button";
 import { InputField } from "@onehash/ui/input";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@onehash/ui/dialog";
 import { GripVertical, Plus, Trash2, Settings } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@onehash/ui/sonner";
 import { cn } from "@/lib/utils";
 import { useJobSetup } from "../context";
 
@@ -33,7 +33,7 @@ export default function HiringStagesPage() {
 
   const handleRemoveStage = async (id: string, isRequired?: boolean) => {
     if (isRequired) {
-      toast.error("Applied and Hired stages cannot be deleted");
+      toast.error("Required stages cannot be deleted");
       return;
     }
     if (hiringStages.length <= 2) {
@@ -73,7 +73,7 @@ export default function HiringStagesPage() {
     <div className="space-y-5">
       <div>
         <p className="text-xs text-muted-foreground mb-1">
-          Define the interview pipeline for this job. Stages can be reordered by dragging.
+          Define hiring stages for this job. Stages can be reordered by dragging.
         </p>
       </div>
 

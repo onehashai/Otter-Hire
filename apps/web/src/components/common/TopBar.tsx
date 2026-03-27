@@ -13,7 +13,7 @@ import {
 } from "@/api/index";
 import { useAuthSession } from "@/app/providers";
 import { usePageMetadata } from "@/contexts/PageMetadataContext";
-import { Avatar, AvatarFallback, AvatarImage } from "@onehash/ui/avatar";
+import { Avatar } from "@onehash/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -35,6 +35,7 @@ import {
   DialogTitle,
 } from "@onehash/ui/dialog";
 import { InputField } from "@onehash/ui/input";
+import { getInitialsFromName } from "@/lib/name-initials";
 
 export function TopBar() {
   const router = useRouter();
@@ -151,32 +152,27 @@ export function TopBar() {
     }
   };
 
-  const initials =
-    user?.org_name
-      .split(" ")
-      .map((n) => n[0])
-      .join("")
-      .toUpperCase() || "U";
+  const initials = getInitialsFromName(user?.org_name, 2, "U");
 
   return (
     <header className="h-12 border-b border-border flex items-center justify-between px-4 md:px-6 bg-background shrink-0">
       <div className="flex flex-col justify-center">
         <h1 className="text-sm font-semibold text-foreground leading-tight">{metadata.title}</h1>
         {metadata.subtitle && (
-          <p className="text-[10px] text-muted-foreground leading-tight">{metadata.subtitle}</p>
+          <p className="text-xs text-muted-foreground leading-tight">{metadata.subtitle}</p>
         )}
       </div>
 
       <DropdownMenu onOpenChange={handleMenuOpenChange}>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" className="h-8 w-32">
-            <Avatar className="h-6 w-6 border border-border">
-              {orgAvatarUrl ? (
-                <AvatarImage src={orgAvatarUrl} alt={user?.org_name || "Organization"} />
-              ) : null}
-              <AvatarFallback className="text-[10px] bg-muted text-muted-foreground">
-                {initials}
-              </AvatarFallback>
+            <Avatar
+              className="h-6 w-6 border border-border"
+              src={orgAvatarUrl}
+              alt={user?.org_name || "Organization"}
+              fallbackClassName="text-[10px] bg-muted text-muted-foreground"
+            >
+              {initials}
             </Avatar>
             <div className="flex flex-col items-start min-w-0 flex-1">
               <span className="text-[10px] text-muted-foreground truncate max-w-full">

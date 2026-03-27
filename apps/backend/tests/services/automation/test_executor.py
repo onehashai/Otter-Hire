@@ -42,6 +42,7 @@ async def test_user(db: AsyncSession, test_org: Organization) -> User:
         email="test@example.com",
         hashed_password="dummy",
         status="active",
+        role="user",
     )
     db.add(user)
     await db.commit()
@@ -139,7 +140,7 @@ async def test_automation_candidate_applied_trigger(
         created_by_user_id=test_user.id,
         candidate_id=test_candidate.id,
         job_id=test_job.id,
-        metadata={"source": "job_board"},
+        metadata={"source": "Job Board"},
     )
 
     # Verify execution was logged

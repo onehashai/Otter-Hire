@@ -3,6 +3,7 @@
  * Run: npm run generate:icons
  */
 import {
+  Archive,
   ArrowLeft,
   ArrowLeftRight,
   Bold,
@@ -19,6 +20,7 @@ import {
   Eye,
   EyeOff,
   Filter,
+  House,
   Heading1,
   Heading2,
   Heading3,
@@ -35,6 +37,7 @@ import {
   Mic,
   MoreHorizontal,
   PenLine,
+  Phone,
   Plus,
   RefreshCw,
   ScrollText,
@@ -47,6 +50,7 @@ import {
   Trash2,
   Underline,
   Upload,
+  User,
   UserCheck,
   UserPlus,
   Users,
@@ -54,6 +58,7 @@ import {
 } from "lucide-react";
 
 const icons = {
+  Archive,
   ArrowLeft,
   ArrowLeftRight,
   Bold,
@@ -73,6 +78,7 @@ const icons = {
   Heading1,
   Heading2,
   Heading3,
+  House,
   Italic,
   LayoutTemplate,
   Link,
@@ -86,6 +92,7 @@ const icons = {
   Mic,
   MoreHorizontal,
   PenLine,
+  Phone,
   Plus,
   RefreshCw,
   ScrollText,
@@ -98,6 +105,7 @@ const icons = {
   Trash2,
   Underline,
   Upload,
+  User,
   UserCheck,
   UserPlus,
   Users,

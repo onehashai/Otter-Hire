@@ -1,0 +1,2277 @@
+import asyncio
+import base64
+import binascii
+import hashlib
+import hmac
+import html
+import json
+import logging
+import re
+from datetime import datetime, timezone
+from typing import Optional
+from urllib.request import urlopen
+from uuid import UUID
+
+import pycountry
+import redis.asyncio as aioredis
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric.padding import PKCS1v15
+from cryptography.x509 import load_pem_x509_certificate
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    Header,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    UploadFile,
+    WebSocket,
+    WebSocketDisconnect,
+)
+from redis.exceptions import ConnectionError as RedisConnectionError
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from sqlalchemy import func, or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.config import settings
+from app.core.security import verify_access_token
+from app.db.session import get_db
+from app.temporal.email.queue import enqueue_ses_raw_key
+from app.temporal.resume_parsing.queue import enqueue_job_apply_resume_parse
+from app.temporal.resume_parsing.types import JobApplyResumeParseInput
+from app.models.candidate import Candidate
+from app.models.candidate_document import CandidateDocument
+from app.models.conversation import Conversation
+from app.models.email import InboundEmail, InboundEmailAttachment
+from app.models.job import Job
+from app.models.job_application import JobApplication
+from app.models.message import Message
+from app.models.org_membership import OrgMembership
+from app.models.organization import Organization, OrgInbox
+from app.models.stage import Stage
+from app.schemas.public_jobs import (
+    InboundEmailPayload,
+    PublicApplyFileUploadResponse,
+    PublicJobApplyRequest,
+    PublicJobApplyResponse,
+    PublicJobDetail,
+    PublicJobListItem,
+    PublicJobsListResponse,
+)
+from app.services.automation import execute_automations_for_trigger
+from app.services.public_job_application_files import (
+    PublicJobFileValidationError,
+    file_ref_to_object_key,
+    is_object_key_allowed_for_public_job,
+    public_job_upload_prefix,
+    validate_upload_bytes,
+)
+from app.services.resume.heuristics import (
+    extract_email as _extract_email,
+    extract_location as _extract_location,
+    extract_name as _extract_name,
+    extract_phone as _extract_phone,
+    normalize_phone as _normalize_phone,
+    resume_confidence_score as _resume_confidence_score,
+    should_replace_location as _should_replace_location,
+    should_replace_phone as _should_replace_phone,
+)
+from app.services.resume.pipeline import run_resume_pipeline
+from app.services.resume_links import resolve_resume_from_body
+from app.services.storage import storage_service
+from app.utils.uuid import uuid7
+
+router = APIRouter()
+limiter = Limiter(key_func=get_remote_address)
+logger = logging.getLogger(__name__)
+
+
+def _careers_public_org_slug_prefix(org_name: str) -> str:
+    """Match apps/web job board: lowercase, each run of whitespace -> single hyphen."""
+    return re.sub(r"\s+", "-", (org_name or "").strip().lower())
+
+
+def _require_public_org_slug(org: Organization, org_slug: str) -> None:
+    """Reject careers URLs whose name prefix does not match the organization (404 = not found)."""
+    expected = _careers_public_org_slug_prefix(org.name)
+    if (org_slug or "").strip().lower() != expected:
+        raise HTTPException(status_code=404, detail="Organization not found")
+
+
+def get_country_name(iso_code: str) -> str:
+    """Convert ISO country code to full name."""
+    try:
+        country = pycountry.countries.get(alpha_2=iso_code.upper())
+        return country.name if country else iso_code
+    except Exception:
+        return iso_code
+
+
+def _default_application_form_schema(job: Job) -> dict:
+    profile_links = [
+        {
+            "id": "profile_link_linkedin",
+            "key": "profile_link_linkedin",
+            "label": "LinkedIn",
+            "type": "url",
+            "visibility": "optional",
+        },
+        {
+            "id": "profile_link_github",
+            "key": "profile_link_github",
+            "label": "GitHub",
+            "type": "url",
+            "visibility": "optional",
+        },
+        {
+            "id": "profile_link_portfolio",
+            "key": "profile_link_portfolio",
+            "label": "Portfolio / Personal Website",
+            "type": "url",
+            "visibility": "optional",
+        },
+        {
+            "id": "profile_link_twitter_x",
+            "key": "profile_link_twitter_x",
+            "label": "Twitter / X",
+            "type": "url",
+            "visibility": "hidden",
+        },
+        {
+            "id": "profile_link_dribbble",
+            "key": "profile_link_dribbble",
+            "label": "Dribbble",
+            "type": "url",
+            "visibility": "hidden",
+        },
+        {
+            "id": "profile_link_behance",
+            "key": "profile_link_behance",
+            "label": "Behance",
+            "type": "url",
+            "visibility": "hidden",
+        },
+    ]
+    return {
+        "version": 1,
+        "default_fields": {
+            "full_name": {"visibility": "required", "label": "Full Name"},
+            "email": {"visibility": "required", "label": "Email"},
+            "phone": {"visibility": "optional", "label": "Phone Number"},
+            "resume": {
+                "visibility": "required" if job.collect_resume else "hidden",
+                "label": "Resume",
+            },
+            "cover_letter": {
+                "visibility": "optional" if job.collect_cover else "hidden",
+                "label": "Cover Letter",
+            },
+        },
+        "profile_links": profile_links,
+        "custom_fields": [
+            {
+                "id": f"screening_{idx}",
+                "key": f"screening_{idx}",
+                "label": q,
+                "type": "short_text",
+                "visibility": "optional",
+            }
+            for idx, q in enumerate((job.screening_questions or []), start=1)
+        ],
+    }
+
+
+def _normalized_application_form_schema(job: Job) -> dict:
+    schema = dict(job.application_form_schema or _default_application_form_schema(job))
+    defaults = _default_application_form_schema(job)
+    schema.setdefault("version", 1)
+    schema.setdefault("default_fields", defaults["default_fields"])
+    schema.setdefault("custom_fields", [])
+    schema.setdefault("profile_links", defaults["profile_links"])
+    return schema
+
+
+def _guess_file_name(file_ref: str, fallback: str) -> str:
+    value = (file_ref or "").strip()
+    if not value:
+        return fallback
+    cleaned = value.split("?")[0].rstrip("/")
+    if "/" in cleaned:
+        name = cleaned.rsplit("/", 1)[-1]
+        return name or fallback
+    return cleaned
+
+
+def _redis_idempotency_client():
+    try:
+        import redis as redis_lib
+
+        return redis_lib.Redis.from_url(settings.redis_url, decode_responses=True)
+    except Exception:
+        return None
+
+
+def _canonical_profile_link_key(field_key: str) -> str:
+    key = (field_key or "").strip()
+    if key.startswith("profile_link_"):
+        suffix = key.removeprefix("profile_link_").strip()
+        if suffix:
+            return suffix
+    return key
+
+
+def _extract_profile_links_from_answers(
+    profile_link_fields: list, answers: dict[str, object]
+) -> dict[str, str]:
+    normalized: dict[str, str] = {}
+    for field in profile_link_fields or []:
+        if not isinstance(field, dict):
+            continue
+        visibility = str(field.get("visibility") or "hidden").strip().lower()
+        if visibility == "hidden":
+            continue
+        key = str(field.get("key") or field.get("id") or "").strip()
+        if not key:
+            continue
+        raw_value = answers.get(key)
+        if raw_value is None:
+            continue
+        value = str(raw_value).strip()
+        if not value:
+            continue
+        normalized[_canonical_profile_link_key(key)] = value
+    return normalized
+
+
+def _is_resume_attachment(filename: str, content_type: str) -> bool:
+    lower_name = (filename or "").lower()
+    lower_type = (content_type or "").lower()
+    if lower_name.endswith(".pdf") or lower_type in {"application/pdf"}:
+        return True
+    if lower_name.endswith(".docx") or lower_type in {
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    }:
+        return True
+    if lower_name.endswith(".doc") or lower_type in {"application/msword"}:
+        return True
+    return False
+
+
+def _verify_hmac_signature(signature_header: str, secret: str, raw_body: bytes) -> bool:
+    if not signature_header.startswith("sha256="):
+        return False
+    provided = signature_header.split("=", 1)[1].strip()
+    expected = hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(provided, expected)
+
+
+def _email_domain(value: str) -> str:
+    parts = (value or "").strip().lower().rsplit("@", 1)
+    return parts[1] if len(parts) == 2 else ""
+
+
+def _detect_verification_provider(from_email: str, subject: str, body_text: str) -> str | None:
+    source = " ".join([subject.lower(), body_text.lower()])
+    domain = _email_domain(from_email)
+    gmail_domains = {"google.com", "accounts.google.com", "gmail.com", "googlemail.com"}
+    outlook_domains = {"outlook.com", "office.com", "microsoft.com", "live.com"}
+
+    if domain in gmail_domains or any(domain.endswith(f".{item}") for item in gmail_domains):
+        if any(
+            token in source
+            for token in [
+                "forwarding",
+                "gmail forwarding",
+                "confirm forwarding",
+                "forward mail",
+            ]
+        ):
+            return "gmail"
+
+    if domain in outlook_domains or any(domain.endswith(f".{item}") for item in outlook_domains):
+        if any(
+            token in source
+            for token in [
+                "forwarding",
+                "outlook forwarding",
+                "confirm forwarding",
+                "forward mail",
+            ]
+        ):
+            return "outlook"
+    return None
+
+
+def _is_allowed_verification_url(value: str) -> bool:
+    match = re.match(r"^https://([^/\s]+)", (value or "").strip(), re.IGNORECASE)
+    if not match:
+        return False
+    host = match.group(1).lower()
+    allowed_suffixes = (
+        "google.com",
+        "mail.google.com",
+        "support.google.com",
+        "outlook.com",
+        "office.com",
+        "microsoft.com",
+        "live.com",
+    )
+    return any(host == suffix or host.endswith(f".{suffix}") for suffix in allowed_suffixes)
+
+
+def _extract_verification_action(body_text: str) -> dict:
+    # Most providers include a confirmation link for forwarding verification.
+    for candidate in re.findall(r"https://[^\s<>\"]+", body_text):
+        if _is_allowed_verification_url(candidate):
+            return {"type": "link", "url": candidate}
+    code_match = re.search(r"\b(\d{6,8})\b", body_text)
+    if code_match:
+        return {"type": "code", "code": code_match.group(1)}
+    return {"type": "manual"}
+
+
+def _is_verification_email(from_email: str, subject: str, body_text: str) -> bool:
+    provider = _detect_verification_provider(from_email, subject, body_text)
+    if provider is None:
+        return False
+    source = " ".join([subject.lower(), body_text.lower()])
+    forwarding_markers = [
+        "forwarding",
+        "confirm forwarding",
+        "forward mail",
+        "forwarded to",
+    ]
+    return any(token in source for token in forwarding_markers)
+
+
+def _extract_request_token(request: Request, authorization: Optional[str]) -> Optional[str]:
+    if authorization and authorization.startswith("Bearer "):
+        return authorization.replace("Bearer ", "", 1).strip()
+    cookie_token = request.cookies.get("access_token")
+    if cookie_token:
+        return cookie_token.strip()
+    return None
+
+
+def _topic_allowed(topic_arn: str) -> bool:
+    allowed = [item.strip() for item in settings.inbound_sns_topic_arns.split(",") if item.strip()]
+    if not allowed:
+        return True
+    return topic_arn in allowed
+
+
+def _confirm_sns_subscription(subscribe_url: str) -> bool:
+    value = (subscribe_url or "").strip()
+    if not value:
+        return False
+    if not value.startswith("https://"):
+        return False
+    try:
+        with urlopen(value, timeout=10) as response:
+            return 200 <= int(response.status) < 300
+    except Exception:
+        return False
+
+
+# ---------------------------------------------------------------------------
+# SNS message signature verification
+# ---------------------------------------------------------------------------
+
+_SNS_CERT_URL_RE = re.compile(r"^https://sns\.[a-z0-9-]+\.amazonaws\.com/")
+_sns_cert_cache: dict[str, bytes] = {}
+
+
+def _fetch_sns_cert(cert_url: str) -> bytes:
+    """Download and cache the PEM certificate SNS uses to sign messages."""
+    if cert_url in _sns_cert_cache:
+        return _sns_cert_cache[cert_url]
+    with urlopen(cert_url, timeout=10) as resp:
+        pem = resp.read()
+    _sns_cert_cache[cert_url] = pem
+    return pem
+
+
+def _build_sns_string_to_sign(payload: dict) -> bytes:
+    """Reconstruct the canonical string SNS signed, per AWS documentation."""
+    msg_type = payload.get("Type", "")
+    if msg_type == "Notification":
+        # Subject is optional — only include it when present in the payload
+        field_order = ["Message", "MessageId", "Subject", "Timestamp", "TopicArn", "Type"]
+    elif msg_type in ("SubscriptionConfirmation", "UnsubscribeConfirmation"):
+        field_order = [
+            "Message",
+            "MessageId",
+            "SubscribeURL",
+            "Timestamp",
+            "Token",
+            "TopicArn",
+            "Type",
+        ]
+    else:
+        return b""
+    parts = []
+    for field in field_order:
+        value = payload.get(field)
+        if value is not None:
+            parts.append(f"{field}\n{value}\n")
+    return "".join(parts).encode("utf-8")
+
+
+def _verify_sns_signature(payload: dict) -> bool:
+    """Verify the RSA signature SNS attaches to every notification.
+
+    Supports SignatureVersion 1 (SHA1) and 2 (SHA256).
+    Returns True only when the signature is cryptographically valid.
+    Returns False on missing fields, a non-AWS cert URL, or any error.
+    """
+    cert_url = str(payload.get("SigningCertURL") or "").strip()
+    signature_b64 = str(payload.get("Signature") or "").strip()
+    sig_version = str(payload.get("SignatureVersion") or "1").strip()
+
+    if not cert_url or not signature_b64:
+        logger.warning("SNS verify skipped: missing SigningCertURL or Signature")
+        return False
+
+    if not _SNS_CERT_URL_RE.match(cert_url):
+        logger.warning("SNS verify rejected: cert URL not from sns.*.amazonaws.com: %s", cert_url)
+        return False
+
+    try:
+        pem = _fetch_sns_cert(cert_url)
+        cert = load_pem_x509_certificate(pem)
+        public_key = cert.public_key()
+        string_to_sign = _build_sns_string_to_sign(payload)
+        signature = base64.b64decode(signature_b64)
+        hash_algo: hashes.HashAlgorithm = hashes.SHA256() if sig_version == "2" else hashes.SHA1()
+        public_key.verify(signature, string_to_sign, PKCS1v15(), hash_algo)
+        return True
+    except Exception:
+        logger.exception("SNS signature verification failed")
+        return False
+
+
+async def get_org_member_id(
+    request: Request,
+    authorization: Optional[str] = Header(None),
+    db: AsyncSession = None,
+    org_uuid: UUID = None,
+) -> Optional[UUID]:
+    """Check if request is from org member. Returns user_id if org member, None otherwise."""
+    token = _extract_request_token(request, authorization)
+
+    if not token:
+        return None
+
+    try:
+        payload = verify_access_token(token)
+        user_id = payload.get("user_id")
+        if not user_id:
+            return None
+
+        # Verify active membership in org
+        result = await db.execute(
+            select(OrgMembership).where(
+                OrgMembership.user_id == UUID(user_id),
+                OrgMembership.org_id == org_uuid,
+                OrgMembership.status == "active",
+            )
+        )
+        membership = result.scalar_one_or_none()
+        return UUID(user_id) if membership else None
+    except Exception:
+        return None
+
+
+@router.get("/orgs/{org_id}/jobs", response_model=PublicJobsListResponse)
+@limiter.limit("60/minute")
+async def get_public_jobs(
+    request: Request,
+    response: Response,
+    org_id: str,
+    org_slug: str = Query(
+        ..., min_length=1, description="Careers URL name segment before org UUID"
+    ),
+    org_slug: str = Query(
+        ..., min_length=1, description="Careers URL name segment before org UUID"
+    ),
+    authorization: Optional[str] = Header(None),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get all public jobs for an organization."""
+    try:
+        org_uuid = UUID(org_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Organization not found")
+
+    # Verify org exists
+    org_result = await db.execute(select(Organization).where(Organization.id == org_uuid))
+    org = org_result.scalar_one_or_none()
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+
+    _require_public_org_slug(org, org_slug)
+
+    # Check if user is org member
+    is_org_member = await get_org_member_id(request, authorization, db, org_uuid) is not None
+
+    # Get jobs based on membership
+    if is_org_member:
+        # Org members see draft + open jobs
+        result = await db.execute(
+            select(Job)
+            .where(
+                Job.org_id == org_uuid,
+                or_(Job.status == "draft", Job.status == "open"),
+            )
+            .order_by(Job.created_at.desc())
+        )
+    else:
+        # Public sees only open + public jobs
+        result = await db.execute(
+            select(Job)
+            .where(
+                Job.org_id == org_uuid,
+                Job.status == "open",
+                Job.visibility == "public",
+            )
+            .order_by(Job.published_at.desc())
+        )
+    jobs = result.scalars().all()
+
+    # Set cache headers
+    response.headers["Cache-Control"] = "public, max-age=60"
+
+    def format_location(job):
+        """Format location as 'City (State), Country Name'"""
+        if job.city and job.country:
+            # Parse city: "Indore|MP" -> "Indore (MP)"
+            if "|" in job.city:
+                city_name, state = job.city.split("|", 1)
+                formatted_city = f"{city_name} ({state})"
+            else:
+                formatted_city = job.city
+
+            # Convert country code to name: "IN" -> "India"
+            country_name = get_country_name(job.country)
+            return f"{formatted_city}, {country_name}"
+        if job.city:
+            # Handle city with state but no country
+            if "|" in job.city:
+                city_name, state = job.city.split("|", 1)
+                return f"{city_name} ({state})"
+            return job.city
+        if job.country:
+            return get_country_name(job.country)
+        return job.workplace_type or "Remote"
+
+    items = [
+        PublicJobListItem(
+            id=str(job.id),
+            title=job.title,
+            description=job.description,
+            category=job.category,
+            employment_type=job.employment_type,
+            workplace_type=job.workplace_type,
+            location=format_location(job),
+            salary_min=job.salary_min if job.salary_type == "range" else None,
+            salary_max=job.salary_max if job.salary_type == "range" else None,
+            salary_fixed=job.salary_fixed if job.salary_type == "fixed" else None,
+            currency=job.currency,
+            salary_timeframe=job.salary_timeframe,
+            published_at=job.published_at or job.created_at,
+            status=job.status,
+        )
+        for job in jobs
+    ]
+
+    return PublicJobsListResponse(
+        jobs=items,
+        org_name=org.name,
+        org_avatar_url=org.avatar_url,
+    )
+
+
+@router.get("/orgs/{org_id}/jobs/{job_id}", response_model=PublicJobDetail)
+@limiter.limit("120/minute")
+async def get_public_job_detail(
+    request: Request,
+    response: Response,
+    org_id: str,
+    job_id: str,
+    org_slug: str = Query(
+        ..., min_length=1, description="Careers URL name segment before org UUID"
+    ),
+    org_slug: str = Query(
+        ..., min_length=1, description="Careers URL name segment before org UUID"
+    ),
+    authorization: Optional[str] = Header(None),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get public job detail."""
+    try:
+        org_uuid = UUID(org_id)
+        job_uuid = UUID(job_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    org_row = await db.execute(select(Organization).where(Organization.id == org_uuid))
+    org_for_slug = org_row.scalar_one_or_none()
+    if not org_for_slug:
+        raise HTTPException(status_code=404, detail="Job not found")
+    _require_public_org_slug(org_for_slug, org_slug)
+
+    # Check if user is org member
+    is_org_member = await get_org_member_id(request, authorization, db, org_uuid) is not None
+
+    # Get job based on membership
+    if is_org_member:
+        # Org members see draft + open jobs
+        result = await db.execute(
+            select(Job, Organization)
+            .join(Organization, Job.org_id == Organization.id)
+            .where(
+                Job.id == job_uuid,
+                Job.org_id == org_uuid,
+                or_(Job.status == "draft", Job.status == "open"),
+            )
+        )
+    else:
+        # Public sees only open + public jobs
+        result = await db.execute(
+            select(Job, Organization)
+            .join(Organization, Job.org_id == Organization.id)
+            .where(
+                Job.id == job_uuid,
+                Job.org_id == org_uuid,
+                Job.status == "open",
+                Job.visibility == "public",
+            )
+        )
+    row = result.first()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    job, org = row
+
+    # Set cache headers
+    response.headers["Cache-Control"] = "public, max-age=60"
+
+    # Format city: "Indore|MP" -> "Indore (MP)"
+    formatted_city = job.city
+    if job.city and "|" in job.city:
+        city_name, state = job.city.split("|", 1)
+        formatted_city = f"{city_name} ({state})"
+
+    # Convert country code to name
+    formatted_country = get_country_name(job.country) if job.country else None
+
+    return PublicJobDetail(
+        id=str(job.id),
+        title=job.title,
+        description=job.description,
+        category=job.category,
+        employment_type=job.employment_type,
+        workplace_type=job.workplace_type,
+        country=formatted_country,
+        city=formatted_city,
+        salary_min=job.salary_min if job.salary_type == "range" else None,
+        salary_max=job.salary_max if job.salary_type == "range" else None,
+        salary_fixed=job.salary_fixed if job.salary_type == "fixed" else None,
+        currency=job.currency,
+        salary_timeframe=job.salary_timeframe,
+        published_at=job.published_at or job.created_at,
+        org_name=org.name,
+        org_avatar_url=org.avatar_url,
+        status=job.status,
+        application_form_schema=_normalized_application_form_schema(job),
+    )
+
+
+@router.post(
+    "/orgs/{org_id}/jobs/{job_id}/apply/upload",
+    response_model=PublicApplyFileUploadResponse,
+    status_code=201,
+)
+@limiter.limit("60/minute")
+async def upload_public_job_application_file(
+    request: Request,
+    org_id: str,
+    job_id: str,
+    org_slug: str = Query(
+        ..., min_length=1, description="Careers URL name segment before org UUID"
+    ),
+    field_key: str = Form(...),
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        org_uuid = UUID(org_id)
+        job_uuid = UUID(job_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    org_row = await db.execute(select(Organization).where(Organization.id == org_uuid))
+    org_for_slug = org_row.scalar_one_or_none()
+    if not org_for_slug:
+        raise HTTPException(status_code=404, detail="Job not found")
+    _require_public_org_slug(org_for_slug, org_slug)
+
+    result = await db.execute(
+        select(Job).where(
+            Job.id == job_uuid,
+            Job.org_id == org_uuid,
+            Job.status == "open",
+            Job.visibility == "public",
+        )
+    )
+    job = result.scalar_one_or_none()
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    field_key_clean = (field_key or "").strip()
+    if not field_key_clean:
+        raise HTTPException(status_code=422, detail="field_key is required")
+
+    safe_name_raw = (file.filename or "attachment.bin").strip() or "attachment.bin"
+    content = await file.read()
+    max_bytes = settings.public_job_apply_max_upload_bytes
+    if len(content) > max_bytes:
+        mb = max(max_bytes // (1024 * 1024), 1)
+        raise HTTPException(
+            status_code=422,
+            detail=f"File size must be <= {mb}MB",
+        )
+
+    try:
+        mime, safe_display_name = validate_upload_bytes(
+            field_key=field_key_clean,
+            filename=safe_name_raw,
+            content=content,
+        )
+    except PublicJobFileValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    prefix = public_job_upload_prefix(org_uuid, job_uuid)
+    if "." in safe_display_name:
+        stem, ext_part = safe_display_name.rsplit(".", 1)
+        ext_norm = f".{ext_part.lower()}"
+    else:
+        stem, ext_norm = safe_display_name, ""
+    stem_key = re.sub(r"[^a-zA-Z0-9_-]+", "_", stem)[:80] or "file"
+    object_key = f"{prefix}{uuid7()}_{field_key_clean}_{stem_key}{ext_norm}"
+
+    await storage_service.write_bytes(object_key, content, mime)
+    resolved_url = await storage_service.resolve_url(object_key)
+    return PublicApplyFileUploadResponse(
+        key=field_key_clean,
+        name=safe_display_name,
+        content_type=mime.split(";")[0].strip() if mime else None,
+        size_bytes=len(content),
+        url=resolved_url,
+    )
+
+
+@router.post(
+    "/orgs/{org_id}/jobs/{job_id}/apply", response_model=PublicJobApplyResponse, status_code=201
+)
+@limiter.limit("30/minute")
+async def apply_public_job(
+    request: Request,
+    org_id: str,
+    job_id: str,
+    body: PublicJobApplyRequest,
+    org_slug: str = Query(
+        ..., min_length=1, description="Careers URL name segment before org UUID"
+    ),
+    org_slug: str = Query(
+        ..., min_length=1, description="Careers URL name segment before org UUID"
+    ),
+    db: AsyncSession = Depends(get_db),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+):
+    try:
+        org_uuid = UUID(org_id)
+        job_uuid = UUID(job_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    org_row = await db.execute(select(Organization).where(Organization.id == org_uuid))
+    org_for_slug = org_row.scalar_one_or_none()
+    if not org_for_slug:
+        raise HTTPException(status_code=404, detail="Job not found")
+    _require_public_org_slug(org_for_slug, org_slug)
+
+    result = await db.execute(
+        select(Job).where(
+            Job.id == job_uuid,
+            Job.org_id == org_uuid,
+            Job.status == "open",
+            Job.visibility == "public",
+        )
+    )
+    job = result.scalar_one_or_none()
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    schema = _normalized_application_form_schema(job)
+    default_fields = schema.get("default_fields", {})
+    profile_links = schema.get("profile_links", [])
+    custom_fields = schema.get("custom_fields", [])
+    custom_fields_by_key: dict[str, dict] = {}
+    for field in custom_fields:
+        field_key = field.get("key") or field.get("id")
+        if field_key:
+            custom_fields_by_key[str(field_key)] = field
+
+    def visibility(key: str) -> str:
+        field_cfg = default_fields.get(key, {})
+        return str(field_cfg.get("visibility", "hidden"))
+
+    if visibility("full_name") == "required" and not body.full_name.strip():
+        raise HTTPException(status_code=422, detail="Full name is required")
+    if visibility("email") == "required" and not body.email.strip():
+        raise HTTPException(status_code=422, detail="Email is required")
+    if visibility("phone") == "required" and not (body.phone or "").strip():
+        raise HTTPException(status_code=422, detail="Phone is required")
+
+    files = body.files or {}
+    if visibility("resume") == "required" and not files.get("resume"):
+        raise HTTPException(status_code=422, detail="Resume is required")
+    if visibility("cover_letter") == "required":
+        has_cover_text = bool(str(body.answers.get("cover_letter", "")).strip())
+        has_cover_file = bool(files.get("cover_letter"))
+        if not has_cover_text and not has_cover_file:
+            raise HTTPException(status_code=422, detail="Cover letter is required")
+
+    allowed_answer_keys = set()
+    allowed_file_keys = set()
+    if visibility("resume") != "hidden":
+        allowed_file_keys.add("resume")
+    if visibility("cover_letter") != "hidden":
+        allowed_file_keys.add("cover_letter")
+    if visibility("cover_letter") != "hidden":
+        allowed_answer_keys.add("cover_letter")
+    for field in list(profile_links) + list(custom_fields):
+        field_visibility = field.get("visibility", "hidden")
+        field_key = field.get("key") or field.get("id")
+        if not field_key:
+            continue
+        field_key = str(field_key)
+        field_type = str(field.get("type") or "short_text")
+        if field_type == "file_upload":
+            allowed_file_keys.add(field_key)
+        else:
+            allowed_answer_keys.add(field_key)
+        if field_visibility == "required" and field_type == "file_upload":
+            if not files.get(field_key):
+                raise HTTPException(
+                    status_code=422, detail=f"{field.get('label', field_key)} is required"
+                )
+        elif field_visibility == "required":
+            val = body.answers.get(field_key)
+            if val is None or (isinstance(val, str) and not val.strip()):
+                raise HTTPException(
+                    status_code=422, detail=f"{field.get('label', field_key)} is required"
+                )
+
+    extra_keys = set(body.answers.keys()) - allowed_answer_keys
+    if extra_keys:
+        raise HTTPException(status_code=422, detail="Unexpected custom field answers provided")
+    extra_file_keys = set(files.keys()) - allowed_file_keys
+    if extra_file_keys:
+        raise HTTPException(status_code=422, detail="Unexpected file fields provided")
+
+    idem_redis = None
+    idem_key = None
+    if idempotency_key and idempotency_key.strip():
+        idem_redis = _redis_idempotency_client()
+        if idem_redis:
+            idem_key = f"public_apply:idem:{org_uuid}:{job_uuid}:{idempotency_key.strip()[:200]}"
+            try:
+                existing_id = idem_redis.get(idem_key)
+            except Exception:
+                existing_id = None
+                logger.exception("public apply idempotency redis get failed")
+            if existing_id:
+                return PublicJobApplyResponse(id=existing_id, status="submitted")
+
+    application = JobApplication(
+        org_id=org_uuid,
+        job_id=job_uuid,
+        full_name=body.full_name.strip(),
+        email=body.email.strip().lower(),
+        phone=(body.phone or "").strip() or None,
+        answers=body.answers,
+        files=files or None,
+        schema_snapshot=schema,
+        schema_version=int(schema.get("version", 1)),
+        status="submitted",
+    )
+    db.add(application)
+
+    # Upsert into org candidates for recruiter workflows.
+    existing_candidate_result = await db.execute(
+        select(Candidate).where(
+            Candidate.org_id == org_uuid,
+            Candidate.job_id == job_uuid,
+            func.lower(Candidate.email) == body.email.strip().lower(),
+        )
+    )
+    candidate = existing_candidate_result.scalar_one_or_none()
+
+    if candidate is None:
+        first_stage_result = await db.execute(
+            select(Stage)
+            .where(Stage.org_id == org_uuid, Stage.job_id == job_uuid)
+            .order_by(Stage.position.asc())
+            .limit(1)
+        )
+        first_stage = first_stage_result.scalar_one_or_none()
+
+        candidate = Candidate(
+            org_id=org_uuid,
+            job_id=job_uuid,
+            stage_id=first_stage.id if first_stage else None,
+            status="active",
+            name=body.full_name.strip(),
+            email=body.email.strip().lower(),
+            phone=(body.phone or "").strip() or None,
+            source="Job Board",
+            tags=[],
+        )
+        db.add(candidate)
+    else:
+        candidate.name = body.full_name.strip() or candidate.name
+        candidate.phone = (body.phone or "").strip() or candidate.phone
+
+    submitted_profile_links = _extract_profile_links_from_answers(profile_links, body.answers)
+    if submitted_profile_links:
+        existing_profile_links = dict(candidate.profile_links or {})
+        existing_profile_links.update(submitted_profile_links)
+        candidate.profile_links = existing_profile_links
+
+    # Ensure candidate has an ID for document linkage and application linkage.
+    await db.flush()
+    application.candidate_id = candidate.id
+
+    resume_parse_payload: tuple[str, str, str] | None = None
+    if isinstance(files, dict):
+        for field_key, file_ref in files.items():
+            if not isinstance(file_ref, str) or not file_ref.strip():
+                continue
+            file_url = file_ref.strip()
+            object_key = file_ref_to_object_key(file_url)
+            if not object_key or not is_object_key_allowed_for_public_job(
+                org_uuid, job_uuid, object_key
+            ):
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Invalid or untrusted file reference for field {field_key}",
+                )
+            try:
+                content = await storage_service.read_bytes(object_key)
+            except FileNotFoundError:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Uploaded file not found for field {field_key}",
+                ) from None
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Could not read file for field {field_key}",
+                ) from exc
+
+            display_name = _guess_file_name(file_url, f"{field_key}.bin")
+            try:
+                mime, safe_display_name = validate_upload_bytes(
+                    field_key=field_key,
+                    filename=display_name,
+                    content=content,
+                )
+            except PublicJobFileValidationError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+            label = field_key.replace("_", " ").title()
+            doc_type = "custom_field_attachment"
+            if field_key == "resume":
+                label = default_fields.get("resume", {}).get("label", "Resume")
+                doc_type = "resume"
+                resume_parse_payload = (object_key, safe_display_name, mime)
+            elif field_key == "cover_letter":
+                label = default_fields.get("cover_letter", {}).get("label", "Cover Letter")
+                doc_type = "cover_letter"
+            elif field_key in custom_fields_by_key:
+                label = custom_fields_by_key[field_key].get("label", label)
+
+            existing_version_result = await db.execute(
+                select(func.max(CandidateDocument.version)).where(
+                    CandidateDocument.org_id == org_uuid,
+                    CandidateDocument.candidate_id == candidate.id,
+                    CandidateDocument.field_key == field_key,
+                )
+            )
+            latest_version = existing_version_result.scalar_one_or_none() or 0
+
+            mime_stored = (mime.split(";")[0].strip() if mime else "application/octet-stream")[:120]
+
+            db.add(
+                CandidateDocument(
+                    org_id=org_uuid,
+                    candidate_id=candidate.id,
+                    job_id=job_uuid,
+                    field_key=field_key,
+                    field_label_snapshot=str(label) if label else None,
+                    doc_type=doc_type,
+                    name=safe_display_name,
+                    url=file_url,
+                    object_key=object_key,
+                    mime_type=mime_stored,
+                    size_bytes=len(content),
+                    uploaded_by_user_id=None,
+                    version=int(latest_version) + 1,
+                )
+            )
+
+    await db.commit()
+    if idem_redis and idem_key:
+        try:
+            idem_redis.setex(idem_key, 86400, str(application.id))
+        except Exception:
+            logger.exception("public apply idempotency redis set failed")
+    await db.refresh(application)
+
+    if resume_parse_payload:
+        obj_key, disp_n, mime_p = resume_parse_payload
+        try:
+            await enqueue_job_apply_resume_parse(
+                application_id=str(application.id),
+                input_data=JobApplyResumeParseInput(
+                    org_id=str(org_uuid),
+                    candidate_id=str(candidate.id),
+                    object_key=obj_key,
+                    resume_display_name=disp_n,
+                    mime=mime_p,
+                    fallback_email=body.email.strip().lower(),
+                ),
+            )
+        except Exception:
+            logger.exception(
+                "public apply: failed to start resume parse workflow application_id=%s",
+                application.id,
+            )
+
+    # Fetch stage name for automation metadata
+    stage_name = None
+    if candidate.stage_id:
+        stage_result = await db.execute(select(Stage.name).where(Stage.id == candidate.stage_id))
+        stage_name = stage_result.scalar_one_or_none()
+
+    # Trigger automations for candidate_applied
+    await execute_automations_for_trigger(
+        db=db,
+        trigger_key="candidate_applied",
+        org_id=org_uuid,
+        candidate_id=candidate.id,
+        job_id=job_uuid,
+        metadata={
+            "source": "Job Board",
+            "stage_name": stage_name,
+        },
+    )
+
+    return PublicJobApplyResponse(
+        id=str(application.id),
+        status=application.status,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Inbound email helpers
+# ---------------------------------------------------------------------------
+
+# Sender address substrings that indicate non-human / automated senders
+_NO_REPLY_PATTERNS = frozenset(
+    [
+        "noreply",
+        "no-reply",
+        "no_reply",
+        "donotreply",
+        "do-not-reply",
+        "mailer-daemon",
+        "postmaster",
+        "bounce",
+        "notifications",
+        "alerts",
+        "daemon",
+    ]
+)
+
+# For new conversations only: require content to look like a real candidate / job inquiry
+_JOB_APPLICATION_SUBJECT_KEYWORDS = frozenset(
+    [
+        "application",
+        "applying",
+        "apply",
+        "job",
+        "position",
+        "role",
+        "vacancy",
+        "opening",
+        "opportunity",
+        "resume",
+        "cv",
+        "curriculum vitae",
+        "candidacy",
+        "candidate",
+        "hiring",
+        "interest in",
+        "interested in",
+        "cover letter",
+    ]
+)
+_JOB_APPLICATION_BODY_KEYWORDS = frozenset(
+    [
+        "i am applying",
+        "i am interested",
+        "i would like to apply",
+        "please find my",
+        "please find attached",
+        "my resume",
+        "my cv",
+        "my application",
+        "years of experience",
+        "work experience",
+        "i have experience",
+        "i am a",
+        "currently working",
+        "looking for",
+        "job application",
+        "open position",
+        "open role",
+        "cover letter",
+        "dear hiring",
+        "dear recruiter",
+        "to whom it may concern",
+    ]
+)
+
+
+def _looks_like_job_inquiry(payload: "InboundEmailPayload") -> bool:
+    """True if subject/body suggest a real candidate or job inquiry. Used to gate new conversations only."""
+    subject = (payload.subject or "").lower()
+    body = (payload.text_body or "").lower()
+
+    if any(kw in subject for kw in _JOB_APPLICATION_SUBJECT_KEYWORDS):
+        return True
+    if any(kw in body for kw in _JOB_APPLICATION_BODY_KEYWORDS):
+        return True
+    combined = subject + " " + body
+    if sum(1 for kw in _JOB_APPLICATION_SUBJECT_KEYWORDS if kw in combined) >= 2:
+        return True
+    return False
+
+
+def _is_automated_email(payload: "InboundEmailPayload") -> str | None:
+    """Return a reason string if the email should be discarded, else None."""
+    auto_submitted = (payload.auto_submitted or "no").lower()
+    if auto_submitted not in ("no", ""):
+        return f"Auto-Submitted: {payload.auto_submitted}"
+
+    if payload.list_unsubscribe:
+        return "Bulk / mailing-list email (List-Unsubscribe present)"
+
+    if (payload.precedence or "").lower() in ("bulk", "junk", "list"):
+        return f"Bulk mail (Precedence: {payload.precedence})"
+
+    suppress = (payload.x_auto_response_suppress or "").lower()
+    if suppress and suppress != "none":
+        return f"X-Auto-Response-Suppress: {payload.x_auto_response_suppress}"
+
+    from_addr = (payload.from_email or "").lower()
+    if any(p in from_addr for p in _NO_REPLY_PATTERNS):
+        return f"No-reply sender address: {payload.from_email}"
+
+    return None
+
+
+async def _process_resume_link_fallback(
+    body_text: str,
+    org_id: UUID,
+    inbound_email_id: UUID,
+    db: "AsyncSession",
+) -> tuple["InboundEmailAttachment", bytes] | None:
+    """Try to resolve and store resume from links in email body.
+
+    Returns (attachment_row, content) if successful, None otherwise.
+    """
+    try:
+        link_result = await resolve_resume_from_body(
+            body_text,
+            max_bytes=settings.inbound_max_attachment_bytes,
+            timeout=10.0,
+        )
+    except Exception:
+        return None
+
+    if link_result is None:
+        return None
+
+    filename, content_type, content = link_result
+    safe_name = _guess_file_name(filename, "resume_from_link.bin")
+
+    # Validate file extension
+    allowed_extensions = {".pdf", ".doc", ".docx"}
+    lower_name = safe_name.lower()
+    ext = ""
+    if "." in lower_name:
+        ext = "." + lower_name.rsplit(".", 1)[-1]
+    if ext not in allowed_extensions:
+        logger.warning(
+            "Resume link has invalid extension: %s (allowed: %s)",
+            ext,
+            allowed_extensions,
+        )
+        return None
+
+    # Store to S3
+    storage_key = f"orgs/{org_id}/inbox/attachments/{inbound_email_id}/link_{safe_name}"
+    await storage_service.write_bytes(
+        storage_key, content, content_type or "application/octet-stream"
+    )
+
+    # Create attachment record
+    resume_attachment = InboundEmailAttachment(
+        inbound_email_id=inbound_email_id,
+        filename=safe_name,
+        content_type=content_type or "application/octet-stream",
+        storage_key=storage_key,
+        size_bytes=len(content),
+        sha256=hashlib.sha256(content).hexdigest(),
+    )
+    db.add(resume_attachment)
+
+    return (resume_attachment, content)
+
+
+async def _process_resume_link_fallback(
+    body_text: str,
+    org_id: UUID,
+    inbound_email_id: UUID,
+    db: "AsyncSession",
+) -> tuple["InboundEmailAttachment", bytes] | None:
+    """Try to resolve and store resume from links in email body.
+
+    Returns (attachment_row, content) if successful, None otherwise.
+    """
+    try:
+        link_result = await resolve_resume_from_body(
+            body_text,
+            max_bytes=settings.inbound_max_attachment_bytes,
+            timeout=10.0,
+        )
+    except Exception:
+        return None
+
+    if link_result is None:
+        return None
+
+    filename, content_type, content = link_result
+    safe_name = _guess_file_name(filename, "resume_from_link.bin")
+
+    # Validate file extension
+    allowed_extensions = {".pdf", ".doc", ".docx"}
+    lower_name = safe_name.lower()
+    ext = ""
+    if "." in lower_name:
+        ext = "." + lower_name.rsplit(".", 1)[-1]
+    if ext not in allowed_extensions:
+        logger.warning(
+            "Resume link has invalid extension: %s (allowed: %s)",
+            ext,
+            allowed_extensions,
+        )
+        return None
+
+    # Store to S3
+    storage_key = f"orgs/{org_id}/inbox/attachments/{inbound_email_id}/link_{safe_name}"
+    await storage_service.write_bytes(
+        storage_key, content, content_type or "application/octet-stream"
+    )
+
+    # Create attachment record
+    resume_attachment = InboundEmailAttachment(
+        inbound_email_id=inbound_email_id,
+        filename=safe_name,
+        content_type=content_type or "application/octet-stream",
+        storage_key=storage_key,
+        size_bytes=len(content),
+        sha256=hashlib.sha256(content).hexdigest(),
+    )
+    db.add(resume_attachment)
+
+    return (resume_attachment, content)
+
+
+# Matches To/Reply-To addresses like reply+<conversation_id>@inbound.domain
+_REPLY_CONVERSATION_PATTERN = re.compile(
+    r"^reply\+([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})@",
+    re.IGNORECASE,
+)
+
+
+def _parse_reply_conversation_id(inbox_address: str) -> UUID | None:
+    """If inbox_address is reply+<conversation_id>@..., return that UUID else None."""
+    if not inbox_address:
+        return None
+    addr = inbox_address.strip().lower()
+    m = _REPLY_CONVERSATION_PATTERN.match(addr)
+    if not m:
+        return None
+    try:
+        return UUID(m.group(1))
+    except (ValueError, TypeError):
+        return None
+
+
+async def _resolve_org_inbox_for_reply_address(
+    db: "AsyncSession", inbox_address: str
+) -> tuple["OrgInbox", UUID] | None:
+    """When inbox_address is reply+<conv_id>@..., resolve OrgInbox via conversation lookup."""
+    conv_id = _parse_reply_conversation_id(inbox_address)
+    if conv_id is None:
+        return None
+    conv_result = await db.execute(select(Conversation).where(Conversation.id == conv_id))
+    conv = conv_result.scalar_one_or_none()
+    if conv is None:
+        return None
+    inbox_result = await db.execute(select(OrgInbox).where(OrgInbox.org_id == conv.org_id))
+    org_inbox = inbox_result.scalar_one_or_none()
+    if org_inbox is None:
+        return None
+    return org_inbox, conv_id
+
+
+async def _route_inbound_to_conversation(
+    db: "AsyncSession",
+    org_inbox: "OrgInbox",
+    payload: "InboundEmailPayload",
+    reply_to_conversation_id: UUID | None = None,
+    candidate_override: Optional["Candidate"] = None,
+) -> tuple[str, str, UUID | None, bool] | None:
+    """Attach the inbound email to an existing or new conversation.
+
+    - If reply_to_conversation_id is set (from To: reply+<conv_id>@... or payload): append to that conversation.
+    - Otherwise: create a new conversation (and candidate if new sender).
+
+    Returns ``(conversation_id, message_id, candidate_id, candidate_created)`` if a
+    message was created, else None.
+    Does **not** commit — callers are responsible for flushing/committing.
+    """
+    from app.utils.uuid import uuid7
+
+    org_id: UUID = org_inbox.org_id
+    from_email = (payload.from_email or "").strip().lower()
+    body_text = (payload.text_body or "").strip() or (payload.html_body or "").strip()
+    subject = (payload.subject or "").strip() or "(no subject)"
+    inbox_address = org_inbox.inbox_address
+
+    if not from_email:
+        return None
+
+    conv: Conversation | None = None
+    candidate: Candidate | None = None
+    candidate_created = False
+
+    if reply_to_conversation_id is not None:
+        conv_result = await db.execute(
+            select(Conversation).where(
+                Conversation.id == reply_to_conversation_id,
+                Conversation.org_id == org_id,
+            )
+        )
+        conv = conv_result.scalar_one_or_none()
+        if conv is not None:
+            cand_result = await db.execute(
+                select(Candidate).where(Candidate.id == conv.candidate_id)
+            )
+            candidate = cand_result.scalar_one_or_none()
+            if candidate is not None:
+                logger.info(
+                    "Inbound email appended via reply_to_conversation_id=%s from=%s",
+                    conv.id,
+                    from_email,
+                )
+            else:
+                conv = None
+
+    # New conversation path: ONLY accept if candidate_override is provided (from resume parsing)
+    # New conversation path: ONLY accept if candidate_override is provided (from resume parsing)
+    if conv is None:
+        # Only create conversation if candidate was already created from resume
+        candidate = candidate_override
+        if candidate is None:
+            # No candidate override means no resume was parsed - reject
+            logger.info(
+                "Inbound email skipped (no resume-based candidate) from=%s org_id=%s subject=%r",
+                from_email,
+                org_id,
+                payload.subject,
+            )
+            return None
+        # One canonical thread per candidate: reuse existing row when present
+        existing_for_cand = await db.execute(
+            select(Conversation).where(
+                Conversation.org_id == org_id,
+                Conversation.candidate_id == candidate.id,
+            )
+        )
+        conv = existing_for_cand.scalar_one_or_none()
+        if conv is not None:
+            logger.info(
+                "Inbound email using canonical conversation_id=%s candidate_id=%s from=%s",
+                conv.id,
+                candidate.id,
+                from_email,
+            )
+        else:
+            now = datetime.now(tz=timezone.utc)
+            conv = Conversation(
+                id=uuid7(),
+                org_id=org_id,
+                candidate_id=candidate.id,
+                job_id=None,
+                subject=subject,
+                channel="email",
+                status="open",
+                last_message_at=now,
+            )
+            db.add(conv)
+            await db.flush()
+            logger.info(
+                "Inbound email created new conversation conversation_id=%s from=%s",
+                conv.id,
+                from_email,
+            )
+    if conv.status in ("closed", "archived"):
+        conv.status = "open"
+
+    now = datetime.now(tz=timezone.utc)
+    inbound_msg = Message(
+        id=uuid7(),
+        org_id=org_id,
+        conversation_id=conv.id,
+        direction="inbound",
+        sender_type="candidate",
+        sender_user_id=None,
+        from_email=from_email or candidate.email,
+        to_email=inbox_address,
+        body=body_text or "(empty)",
+        html_body=payload.html_body or None,
+        status="received",
+        email_message_id=(payload.message_id or "").strip().strip("<>") or None,
+        in_reply_to=None,
+        created_at=now,
+    )
+    db.add(inbound_msg)
+
+    conv.last_message_at = now
+    await db.flush()
+
+    # Publish a lightweight event so connected WebSocket clients can refresh
+    try:
+        import redis as _sync_redis
+
+        _r = _sync_redis.Redis.from_url(settings.redis_url, decode_responses=True, socket_timeout=1)
+        _r.publish(
+            settings.inbound_events_channel,
+            json.dumps(
+                {
+                    "event_version": 1,
+                    "event": "inbound_message",
+                    "org_id": str(org_id),
+                    "conversation_id": str(conv.id),
+                    "message_id": str(inbound_msg.id),
+                }
+            ),
+        )
+    except Exception:
+        pass  # Non-critical; frontend will refresh on next poll
+
+    logger.info(
+        "Inbound email routed conversation_id=%s message_id=%s org_id=%s from=%s",
+        conv.id,
+        inbound_msg.id,
+        org_id,
+        from_email,
+    )
+    return (
+        str(conv.id),
+        str(inbound_msg.id),
+        candidate.id if candidate is not None else None,
+        candidate_created,
+    )
+
+
+@router.post("/inbound/s3-event", status_code=200)
+async def inbound_s3_event(request: Request) -> str:
+    """Accept SNS notifications for S3 bucket events (inbound email raw objects).
+
+    When SNS is subscribed to the SES-inbound S3 bucket, AWS POSTs here.
+    - SubscriptionConfirmation: confirm by GETting SubscribeURL.
+    - Notification: Message body is S3 event JSON; enqueue each object to the inbound workflow.
+    Set INBOUND_SNS_TOPIC_ARNS to restrict which topic ARNs are accepted (comma-separated).
+    """
+    try:
+        body = await request.body()
+        payload = json.loads(body)
+    except (json.JSONDecodeError, TypeError):
+        return "ok"
+
+    msg_type = payload.get("Type", "")
+    topic_arn = (payload.get("TopicArn") or "").strip()
+
+    if settings.inbound_sns_topic_arns and not _topic_allowed(topic_arn):
+        logger.warning(
+            "Inbound S3 event webhook: rejected message from unknown topic %s", topic_arn
+        )
+        return "ok"
+
+    if settings.inbound_sns_verify_signature and not _verify_sns_signature(payload):
+        logger.warning("Inbound S3 event webhook: SNS signature verification failed")
+        return "ok"
+
+    if msg_type == "SubscriptionConfirmation":
+        subscribe_url = payload.get("SubscribeURL")
+        if subscribe_url and _confirm_sns_subscription(subscribe_url):
+            logger.info("Inbound S3 event: confirmed SNS subscription")
+        return "ok"
+
+    if msg_type != "Notification":
+        return "ok"
+
+    try:
+        message = json.loads(payload.get("Message") or "{}")
+    except json.JSONDecodeError:
+        return "ok"
+
+    records = message.get("Records") or []
+    for record in records:
+        s3 = (record.get("s3") or {}) if isinstance(record, dict) else {}
+        b = s3.get("bucket")
+        bucket = b.get("name") if isinstance(b, dict) else (b if isinstance(b, str) else None)
+        obj = s3.get("object")
+        key = obj.get("key") if isinstance(obj, dict) else None
+        if not bucket or not key:
+            continue
+        try:
+            await enqueue_ses_raw_key(bucket, key)
+        except Exception:
+            logger.exception("Inbound S3 event: failed to enqueue bucket=%s key=%s", bucket, key)
+
+    return "ok"
+
+
+@router.post("/inbound/email")
+@limiter.limit("30/minute")
+async def ingest_inbound_email(
+    request: Request,
+    signature: str = Header(default="", alias="X-OneHash-Signature"),
+    db: AsyncSession = Depends(get_db),
+):
+    raw_body = await request.body()
+    try:
+        payload = InboundEmailPayload.model_validate_json(raw_body)
+    except Exception:
+        raise HTTPException(status_code=422, detail="Invalid inbound payload")
+
+    logger.info(
+        "Inbound email received: subject=%r from=%s inbox=%s",
+        (payload.subject or "")[:80],
+        (payload.from_email or "").strip() or "(none)",
+        (payload.inbox_address or "").strip() or "(none)",
+    )
+
+    inbox_address = payload.inbox_address.strip().lower()
+    inbox_result = await db.execute(select(OrgInbox).where(OrgInbox.inbox_address == inbox_address))
+    org_inbox = inbox_result.scalar_one_or_none()
+    reply_to_conv_id: UUID | None = None
+
+    if org_inbox is None:
+        # To: reply+<conversation_id>@... → resolve org_inbox via conversation lookup
+        resolved = await _resolve_org_inbox_for_reply_address(db, inbox_address)
+        if resolved is not None:
+            org_inbox, reply_to_conv_id = resolved
+        else:
+            raise HTTPException(status_code=404, detail="Inbox configuration not found")
+    else:
+        # Exact match: still use reply+ conversation id from address or payload
+        reply_to_conv_id = _parse_reply_conversation_id(inbox_address)
+        if reply_to_conv_id is None and getattr(payload, "reply_to_conversation_id", None):
+            try:
+                reply_to_conv_id = UUID(payload.reply_to_conversation_id)
+            except (ValueError, TypeError):
+                pass
+
+    secret = org_inbox.secret_hash or settings.inbound_webhook_secret
+    if not secret:
+        raise HTTPException(status_code=503, detail="Inbound webhook secret is not configured")
+    if not _verify_hmac_signature(signature, secret, raw_body):
+        raise HTTPException(status_code=401, detail="Invalid signature")
+    if payload.message_id:
+        existing_result = await db.execute(
+            select(InboundEmail).where(
+                InboundEmail.org_id == org_inbox.org_id,
+                InboundEmail.message_id == payload.message_id,
+            )
+        )
+        existing = existing_result.scalar_one_or_none()
+        if existing is not None:
+            return {
+                "status": "ok",
+                "message": "Already processed",
+                "inbound_email_id": str(existing.id),
+                "org_id": str(org_inbox.org_id),
+            }
+
+    has_resume = any(
+        _is_resume_attachment(att.filename, att.content_type) for att in (payload.attachments or [])
+    )
+    inbound_email = InboundEmail(
+        org_id=org_inbox.org_id,
+        inbox_address=inbox_address,
+        from_email=(payload.from_email or "").strip().lower() or None,
+        from_name=(payload.from_name or "").strip() or None,
+        subject=(payload.subject or "").strip() or None,
+        message_id=(payload.message_id or "").strip() or None,
+        received_at=payload.received_at or datetime.now(timezone.utc),
+        raw_storage_key=(payload.raw_storage_key or "").strip() or None,
+        email_kind="candidate",
+        has_resume_attachment=has_resume,
+        parse_status="ignored",
+        parse_error=None,
+    )
+    db.add(inbound_email)
+    await db.flush()
+
+    body_text = "\n".join(
+        [
+            payload.subject or "",
+            payload.text_body or "",
+            html.unescape(re.sub(r"<[^>]+>", " ", payload.html_body or "")),
+        ]
+    ).strip()
+
+    # Store attachments but DON'T parse yet (optimization: parse only after validation)
+    stored_attachments: list[tuple[InboundEmailAttachment, bytes]] = []
+    # Store attachments but DON'T parse yet (optimization: parse only after validation)
+    stored_attachments: list[tuple[InboundEmailAttachment, bytes]] = []
+    for idx, att in enumerate(payload.attachments or []):
+        if not att.content_base64:
+            continue
+        try:
+            content = base64.b64decode(att.content_base64, validate=True)
+        except (ValueError, binascii.Error):
+            continue
+        if len(content) > settings.inbound_max_attachment_bytes:
+            continue
+        safe_name = _guess_file_name(att.filename, f"attachment_{idx + 1}.bin")
+        storage_key = (
+            f"orgs/{org_inbox.org_id}/inbox/attachments/{inbound_email.id}/{idx + 1}_{safe_name}"
+        )
+        await storage_service.write_bytes(
+            storage_key, content, att.content_type or "application/octet-stream"
+        )
+        attachment_row = InboundEmailAttachment(
+            inbound_email_id=inbound_email.id,
+            filename=safe_name,
+            content_type=att.content_type or "application/octet-stream",
+            storage_key=storage_key,
+            size_bytes=len(content),
+            sha256=hashlib.sha256(content).hexdigest(),
+        )
+        db.add(attachment_row)
+        stored_attachments.append((attachment_row, content))
+
+        # Mark if resume attachment exists (but don't parse yet)
+        if _is_resume_attachment(safe_name, att.content_type):
+            has_resume = True
+        stored_attachments.append((attachment_row, content))
+
+        # Mark if resume attachment exists (but don't parse yet)
+        if _is_resume_attachment(safe_name, att.content_type):
+            has_resume = True
+
+    inbound_from_email = (inbound_email.from_email or "").strip()
+    inbound_subject = (inbound_email.subject or "").strip()
+    if _is_verification_email(inbound_from_email, inbound_subject, body_text):
+        provider = _detect_verification_provider(inbound_from_email, inbound_subject, body_text)
+        action = _extract_verification_action(body_text)
+        if provider is None or action.get("type") == "manual":
+            logger.info(
+                (
+                    "Skipping weak verification match "
+                    "inbox=%s from=%s subject=%s provider=%s action_type=%s"
+                ),
+                org_inbox.inbox_address,
+                inbound_from_email,
+                inbound_subject,
+                provider,
+                action.get("type"),
+            )
+        else:
+            inbound_email.email_kind = "verification"
+            inbound_email.parse_status = "ignored"
+            inbound_email.parse_error = "Verification email captured"
+            org_inbox.verification_status = "action_required"
+            org_inbox.verification_provider = provider or "unknown"
+            org_inbox.verification_email_id = inbound_email.id
+            org_inbox.verification_action_type = action.get("type")
+            org_inbox.verification_action_payload = action
+            org_inbox.verification_detected_at = datetime.now(timezone.utc)
+            org_inbox.verification_error = None
+            org_inbox.status = "pending"
+            logger.info(
+                "Verification email detected inbox=%s provider=%s action_type=%s",
+                org_inbox.inbox_address,
+                provider,
+                action.get("type"),
+            )
+            await db.commit()
+            return {
+                "status": "ok",
+                "message": "Verification email detected",
+                "inbound_email_id": str(inbound_email.id),
+                "org_id": str(org_inbox.org_id),
+            }
+
+    if org_inbox.status != "active":
+        inbound_email.parse_status = "ignored"
+        inbound_email.parse_error = "Inbox is pending verification"
+        await db.commit()
+        return {
+            "status": "ok",
+            "message": "Ignored: inbox pending verification",
+            "inbound_email_id": str(inbound_email.id),
+            "org_id": str(org_inbox.org_id),
+        }
+
+    # --- Spam / noise filter ---
+    automated_reason = _is_automated_email(payload)
+    if automated_reason:
+        inbound_email.parse_status = "ignored"
+        inbound_email.parse_error = f"Automated email skipped: {automated_reason}"
+        await db.commit()
+        return {
+            "status": "ok",
+            "message": "Ignored: automated email",
+            "inbound_email_id": str(inbound_email.id),
+            "org_id": str(org_inbox.org_id),
+        }
+
+    # Handle reply to existing conversation (no resume required for replies)
+    # Handle reply to existing conversation (no resume required for replies)
+    conversation_ids: tuple[str, str] | None = None
+    if reply_to_conv_id is not None:
+        conversation_result = await _route_inbound_to_conversation(
+            db, org_inbox, payload, reply_to_conversation_id=reply_to_conv_id
+        )
+        if conversation_result is not None:
+            conv_id, msg_id, _, _ = conversation_result
+            conversation_ids = (conv_id, msg_id)
+            # Reply processed - commit and return
+            inbound_email.parse_status = "processed"
+            inbound_email.parse_error = None
+            await db.commit()
+            # Reply processed - commit and return
+            inbound_email.parse_status = "processed"
+            inbound_email.parse_error = None
+            await db.commit()
+            logger.info(
+                "Inbound email reply processed: conversation_id=%s message_id=%s from=%s",
+                "Inbound email reply processed: conversation_id=%s message_id=%s from=%s",
+                conv_id,
+                msg_id,
+                inbound_email.from_email,
+            )
+            return {
+                "status": "ok",
+                "message": "Reply processed",
+                "message": "Reply processed",
+                "inbound_email_id": str(inbound_email.id),
+                "conversation_id": conv_id,
+                "message_id": msg_id,
+                "org_id": str(org_inbox.org_id),
+            }
+
+    # --- Job inquiry validation (for new conversations only) ---
+    if not _looks_like_job_inquiry(payload):
+        inbound_email.parse_status = "ignored"
+        inbound_email.parse_error = "Email does not match job application keywords"
+        await db.commit()
+
+    # --- Job inquiry validation (for new conversations only) ---
+    if not _looks_like_job_inquiry(payload):
+        inbound_email.parse_status = "ignored"
+        inbound_email.parse_error = "Email does not match job application keywords"
+        await db.commit()
+        logger.info(
+            "Inbound email ignored (not job-related): from=%s subject=%r",
+            inbound_email.from_email,
+            (inbound_email.subject or "")[:60],
+        )
+        return {
+            "status": "ok",
+            "message": "Ignored: not job-related",
+            "inbound_email_id": str(inbound_email.id),
+            "org_id": str(org_inbox.org_id),
+        }
+
+    # Check if resume attachment exists (before expensive parsing)
+    if not has_resume:
+        # Try resume link from body as fallback
+        link_resume = await _process_resume_link_fallback(
+            body_text,
+            org_inbox.org_id,
+            inbound_email.id,
+            db,
+        )
+
+        if link_resume is None:
+            inbound_email.parse_status = "ignored"
+            inbound_email.parse_error = (
+                "No resume attachment or link found - candidate creation requires resume"
+            )
+            await db.commit()
+            logger.info(
+                "Inbound email ignored (no resume): from=%s subject=%r",
+                inbound_email.from_email,
+                (inbound_email.subject or "")[:60],
+            )
+            return {
+                "status": "ok",
+                "message": "Ignored: no resume attachment",
+                "inbound_email_id": str(inbound_email.id),
+                "org_id": str(org_inbox.org_id),
+            }
+            "Inbound email ignored (not job-related): from=%s subject=%r",
+            inbound_email.from_email,
+            (inbound_email.subject or "")[:60],
+        )
+        return {
+            "status": "ok",
+            "message": "Ignored: not job-related",
+            "inbound_email_id": str(inbound_email.id),
+            "org_id": str(org_inbox.org_id),
+        }
+
+    # Check if resume attachment exists (before expensive parsing)
+    if not has_resume:
+        # Try resume link from body as fallback
+        link_resume = await _process_resume_link_fallback(
+            body_text,
+            org_inbox.org_id,
+            inbound_email.id,
+            db,
+        )
+
+        if link_resume is None:
+            inbound_email.parse_status = "ignored"
+            inbound_email.parse_error = (
+                "No resume attachment or link found - candidate creation requires resume"
+            )
+            await db.commit()
+            logger.info(
+                "Inbound email ignored (no resume): from=%s subject=%r",
+                inbound_email.from_email,
+                (inbound_email.subject or "")[:60],
+            )
+            return {
+                "status": "ok",
+                "message": "Ignored: no resume attachment",
+                "inbound_email_id": str(inbound_email.id),
+                "org_id": str(org_inbox.org_id),
+            }
+
+        # Resume link found and stored
+        resume_attachment, content = link_resume
+        stored_attachments.append((resume_attachment, content))
+        has_resume = True
+        inbound_email.has_resume_attachment = True
+
+    # NOW parse resume (after all validation filters passed)
+    resume_attachment: InboundEmailAttachment | None = None
+    resume_text: str = ""
+    parse_error: str | None = None
+    resume_parse = None
+
+    for attachment_row, content in stored_attachments:
+        if _is_resume_attachment(attachment_row.filename, attachment_row.content_type):
+            resume_attachment = attachment_row
+            try:
+                resume_parse = run_resume_pipeline(
+                    attachment_row.filename,
+                    attachment_row.content_type,
+                    content,
+                    fallback_email=(inbound_email.from_email or ""),
+                )
+                resume_text = resume_parse.text
+            except Exception as exc:
+                parse_error = f"Resume parse failed: {exc}"
+            break
+
+    if parse_error:
+        inbound_email.parse_status = "failed"
+        inbound_email.parse_error = parse_error
+        await db.commit()
+        return {
+            "status": "ok",
+            "message": "Stored with parse failure",
+            "inbound_email_id": str(inbound_email.id),
+            "org_id": str(org_inbox.org_id),
+        }
+
+    pe = resume_parse.profile.personal if resume_parse else None
+    extracted_email = (
+        (pe.email if pe else None) or _extract_email(resume_text) or inbound_email.from_email
+    )
+    extracted_phone = (pe.phone if pe else None) or _extract_phone(resume_text)
+    extracted_name = (
+        (pe.full_name if pe else None)
+        or _extract_name(resume_text, extracted_email)
+        or "Unknown Candidate"
+    )
+    extracted_address = (pe.address if pe else None) or _extract_location(resume_text)
+    confidence = _resume_confidence_score(
+        resume_text,
+        extracted_name,
+        extracted_email,
+        extracted_phone,
+        extracted_address,
+    )
+    if resume_parse and resume_parse.parse_method == "llm_json":
+        confidence += 2
+    min_confidence = max(1, int(settings.inbound_resume_min_confidence))
+    if confidence < min_confidence:
+        inbound_email.parse_status = "ignored"
+        inbound_email.parse_error = (
+            f"Low resume confidence ({confidence}<{min_confidence}); candidate not created"
+        )
+        await db.commit()
+        return {
+            "status": "ok",
+            "message": "Ignored: low resume confidence",
+            "inbound_email_id": str(inbound_email.id),
+            "org_id": str(org_inbox.org_id),
+        }
+
+    candidate_query = None
+    if extracted_email:
+        candidate_query = await db.execute(
+            select(Candidate).where(
+                Candidate.org_id == org_inbox.org_id,
+                func.lower(Candidate.email) == extracted_email.lower(),
+            )
+        )
+    elif extracted_phone:
+        normalized_phone = _normalize_phone(extracted_phone)
+        if normalized_phone:
+            candidate_query = await db.execute(
+                select(Candidate).where(
+                    Candidate.org_id == org_inbox.org_id,
+                    Candidate.phone.is_not(None),
+                    func.regexp_replace(Candidate.phone, r"\\D", "", "g") == normalized_phone,
+                )
+            )
+    candidate = candidate_query.scalars().first() if candidate_query is not None else None
+
+    candidate_created = False
+    parsed_resume_json = resume_parse.profile.model_dump(mode="json") if resume_parse else None
+    if candidate is None:
+        candidate = Candidate(
+            org_id=org_inbox.org_id,
+            job_id=None,
+            stage_id=None,
+            status="active",
+            name=extracted_name,
+            email=extracted_email or f"unknown+{inbound_email.id}@invalid.local",
+            phone=extracted_phone,
+            address=extracted_address,
+            profile_links={},
+            parsed_resume=parsed_resume_json,
+            source="Email",
+            tags=[],
+        )
+        db.add(candidate)
+        await db.flush()
+        candidate_created = True
+        candidate_created = True
+    else:
+        if extracted_name and (not candidate.name or candidate.name == "Unknown Candidate"):
+            candidate.name = extracted_name
+        if _should_replace_phone(candidate.phone, extracted_phone):
+            candidate.phone = extracted_phone
+        if _should_replace_location(candidate.address, extracted_address):
+            candidate.address = extracted_address
+        if parsed_resume_json is not None:
+            candidate.parsed_resume = parsed_resume_json
+
+    latest_version_result = await db.execute(
+        select(func.max(CandidateDocument.version)).where(
+            CandidateDocument.org_id == org_inbox.org_id,
+            CandidateDocument.candidate_id == candidate.id,
+            CandidateDocument.field_key == "resume",
+        )
+    )
+    latest_version = latest_version_result.scalar_one_or_none() or 0
+    existing_hash_result = await db.execute(
+        select(InboundEmailAttachment.sha256)
+        .join(
+            CandidateDocument,
+            CandidateDocument.object_key == InboundEmailAttachment.storage_key,
+        )
+        .where(
+            CandidateDocument.org_id == org_inbox.org_id,
+            CandidateDocument.candidate_id == candidate.id,
+            CandidateDocument.field_key == "resume",
+        )
+        .order_by(CandidateDocument.created_at.desc())
+        .limit(1)
+    )
+    latest_resume_hash = existing_hash_result.scalar_one_or_none()
+    if latest_resume_hash != resume_attachment.sha256:
+        resume_url = await storage_service.resolve_url(resume_attachment.storage_key)
+        db.add(
+            CandidateDocument(
+                org_id=org_inbox.org_id,
+                candidate_id=candidate.id,
+                job_id=None,
+                field_key="resume",
+                field_label_snapshot="Resume",
+                doc_type="resume",
+                name=resume_attachment.filename,
+                url=resume_url,
+                object_key=resume_attachment.storage_key,
+                mime_type=resume_attachment.content_type,
+                size_bytes=resume_attachment.size_bytes,
+                uploaded_by_user_id=None,
+                version=int(latest_version) + 1,
+            )
+        )
+    parsed_candidate = candidate
+
+    # Create conversation ONLY for new candidates, append to existing for updates
+    # Create conversation ONLY for new candidates, append to existing for updates
+    if conversation_ids is None:
+        if candidate_created:
+            # New candidate → Create new conversation
+            conversation_result = await _route_inbound_to_conversation(
+                db,
+                org_inbox,
+                payload,
+                reply_to_conversation_id=None,
+                candidate_override=parsed_candidate,
+            )
+            if conversation_result is not None:
+                conv_id, msg_id, _, _ = conversation_result
+                conversation_ids = (conv_id, msg_id)
+                logger.info(
+                    "Inbound email created NEW conversation for NEW candidate "
+                    "conv_id=%s candidate_id=%s resume_email=%s",
+                    conv_id,
+                    parsed_candidate.id,
+                    extracted_email,
+                )
+        else:
+            # Existing candidate → Find existing conversation and append message
+            existing_conv_result = await db.execute(
+                select(Conversation).where(
+                    Conversation.org_id == org_inbox.org_id,
+                    Conversation.candidate_id == parsed_candidate.id,
+                )
+            )
+            existing_conv = existing_conv_result.scalar_one_or_none()
+
+            if existing_conv:
+                # Append message to existing conversation
+                from app.utils.uuid import uuid7
+
+                body_text = (payload.text_body or "").strip() or (payload.html_body or "").strip()
+                now = datetime.now(tz=timezone.utc)
+
+                inbound_msg = Message(
+                    id=uuid7(),
+                    org_id=org_inbox.org_id,
+                    conversation_id=existing_conv.id,
+                    direction="inbound",
+                    sender_type="candidate",
+                    sender_user_id=None,
+                    from_email=(payload.from_email or "").strip().lower(),
+                    to_email=org_inbox.inbox_address,
+                    body=body_text or "(empty)",
+                    html_body=payload.html_body or None,
+                    status="received",
+                    email_message_id=(payload.message_id or "").strip().strip("<>") or None,
+                    in_reply_to=None,
+                    created_at=now,
+                )
+                db.add(inbound_msg)
+
+                existing_conv.last_message_at = now
+                if existing_conv.status in ("closed", "archived"):
+                    existing_conv.status = "open"
+
+                await db.flush()
+
+                conversation_ids = (str(existing_conv.id), str(inbound_msg.id))
+
+                logger.info(
+                    "Inbound email APPENDED to existing conversation for existing candidate "
+                    "conv_id=%s candidate_id=%s resume_email=%s",
+                    existing_conv.id,
+                    parsed_candidate.id,
+                    extracted_email,
+                )
+            else:
+                # No conversation row yet for this candidate
+                conversation_result = await _route_inbound_to_conversation(
+                    db,
+                    org_inbox,
+                    payload,
+                    reply_to_conversation_id=None,
+                    candidate_override=parsed_candidate,
+                )
+                if conversation_result is not None:
+                    conv_id, msg_id, _, _ = conversation_result
+                    conversation_ids = (conv_id, msg_id)
+                    logger.info(
+                        "Inbound email created NEW conversation for existing candidate (no thread yet) "
+                        "conv_id=%s candidate_id=%s resume_email=%s",
+                        conv_id,
+                        parsed_candidate.id,
+                        extracted_email,
+                    )
+
+    inbound_email.parsed_candidate_id = parsed_candidate.id
+    inbound_email.parse_status = "processed"
+    inbound_email.parse_error = None
+    await db.commit()
+
+    # Trigger automations for email-based candidate creation
+    # Use candidate_email_received trigger for email inbound candidates
+    if candidate is not None:
+        try:
+            await execute_automations_for_trigger(
+                db=db,
+                trigger_key="candidate_email_received",
+                org_id=org_inbox.org_id,
+                candidate_id=parsed_candidate.id,
+                job_id=None,  # Email inbound candidates don't have job context initially
+                metadata={
+                    "source": "email_inbound",
+                    "stage_name": None,
+                },
+            )
+        except Exception as e:
+            # Log but don't fail the inbound email processing
+            logger.error(
+                f"Failed to trigger automation for email candidate {parsed_candidate.id}: {e}",
+                exc_info=True,
+            )
+
+    # Trigger automations for email-based candidate creation
+    # Use candidate_email_received trigger for email inbound candidates
+    if candidate is not None:
+        try:
+            await execute_automations_for_trigger(
+                db=db,
+                trigger_key="candidate_email_received",
+                org_id=org_inbox.org_id,
+                candidate_id=parsed_candidate.id,
+                job_id=None,  # Email inbound candidates don't have job context initially
+                metadata={
+                    "source": "email_inbound",
+                    "stage_name": None,
+                },
+            )
+        except Exception as e:
+            # Log but don't fail the inbound email processing
+            logger.error(
+                f"Failed to trigger automation for email candidate {parsed_candidate.id}: {e}",
+                exc_info=True,
+            )
+
+    response: dict = {
+        "status": "ok",
+        "message": "Processed",
+        "inbound_email_id": str(inbound_email.id),
+        "candidate_id": str(parsed_candidate.id),
+        "org_id": str(org_inbox.org_id),
+    }
+    if conversation_ids:
+        conv_id, msg_id = conversation_ids
+        response["conversation_id"] = conv_id
+        response["message_id"] = msg_id
+    return response
+
+
+@router.websocket("/inbound/events/ws")
+async def inbound_events_ws(websocket: WebSocket):
+    token = websocket.query_params.get("token")
+    if not token:
+        token = websocket.cookies.get("access_token")
+    if not token:
+        await websocket.close(code=4401)
+        return
+
+    try:
+        payload = verify_access_token(token)
+    except Exception:
+        await websocket.close(code=4401)
+        return
+    org_id = str(payload.get("org_id") or "").strip()
+    if not org_id:
+        await websocket.close(code=4403)
+        return
+
+    await websocket.accept()
+    redis_client = aioredis.from_url(settings.redis_url, decode_responses=True)
+    pubsub = redis_client.pubsub(ignore_subscribe_messages=True)
+    await pubsub.subscribe(settings.inbound_events_channel)
+    try:
+        while True:
+            message = await pubsub.get_message(timeout=1.0)
+            if message and message.get("type") == "message":
+                raw_data = message.get("data", "")
+                try:
+                    data = json.loads(str(raw_data))
+                except Exception:
+                    continue
+                event_org_id = str(data.get("org_id") or "").strip()
+                if event_org_id and event_org_id != org_id:
+                    continue
+                await websocket.send_text(json.dumps(data))
+            await asyncio.sleep(0.05)
+    except WebSocketDisconnect:
+        pass
+    except RedisConnectionError:
+        logger.warning("Inbound events websocket Redis connection dropped")
+    except Exception:
+        logger.exception("Inbound events websocket loop failed unexpectedly")
+    finally:
+        try:
+            await websocket.close()
+        except Exception:
+            pass
+        try:
+            await pubsub.close()
+        except Exception:
+            pass
+        try:
+            await redis_client.close()
+        except Exception:
+            pass

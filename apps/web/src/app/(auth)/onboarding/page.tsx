@@ -2,7 +2,7 @@
 
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect } from "react";
 import { Button } from "@onehash/ui/button";
 import { InputField } from "@onehash/ui/input";
@@ -10,16 +10,18 @@ import { Form, FormField, FormItem, FormControl } from "@onehash/ui/form";
 import { Icon } from "@onehash/ui/icon";
 import { onboardingSchema, type OnboardingFormValues } from "@/lib/schemas/zodResolver";
 import { useTranslation } from "react-i18next";
-import { PRODUCT_LOGO_LETTER, PRODUCT_NAME } from "@/lib/constants";
+import { PRODUCT_LOGO_LETTER, PLATFORM_NAME } from "@/lib/constants";
 import { completeOnboarding } from "@/api/index";
 import { useAuthSession } from "@/app/providers";
 
 export default function Onboarding() {
   const { t } = useTranslation();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, refreshSession } = useAuthSession();
-  const isInviteOnboarding = user?.status === "invited";
-  const shouldLockOrgName = isInviteOnboarding;
+  const inviteDeclined = searchParams.get("invite_declined") === "1";
+  const isInviteOnboarding = user?.status === "pending";
+  const shouldLockOrgName = isInviteOnboarding && !inviteDeclined;
   const form = useForm<OnboardingFormValues>({
     resolver: zodResolver(onboardingSchema),
     defaultValues: {
@@ -63,12 +65,12 @@ export default function Onboarding() {
           <div className="h-9 w-9 rounded-lg bg-foreground flex items-center justify-center">
             <span className="text-background text-sm font-bold">{PRODUCT_LOGO_LETTER}</span>
           </div>
-          <span className="text-lg font-semibold tracking-tight">{PRODUCT_NAME}</span>
+          <span className="text-lg font-semibold tracking-tight">{PLATFORM_NAME}</span>
         </div>
 
         <div className="rounded-xl border border-border bg-card p-8 shadow-sm">
           <div className="mb-6">
-            <h2 className="text-xl font-semibold tracking-tight">Welcome to {PRODUCT_NAME}</h2>
+            <h2 className="text-xl font-semibold tracking-tight">Welcome to {PLATFORM_NAME}</h2>
             <p className="text-sm text-muted-foreground mt-1">
               Tell us a little about yourself to get started
             </p>

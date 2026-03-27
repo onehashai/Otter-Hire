@@ -5,7 +5,7 @@ This document describes the actual implementation of three core systems in the O
 This repository currently contains a mix of:
 
 1. Stable baseline features already part of the previous implementation.
-2. New multi-org, invite, category, and pipeline enhancements that are implemented in the working tree and require runtime verification.
+2. New multi-org, invite, category, and hiring-workflow enhancements that are implemented in the working tree and require runtime verification.
 
 The sections below remain valuable historical context. This status section is the authoritative snapshot of "what exists now" in code.
 
@@ -74,18 +74,17 @@ instead of `alembic upgrade head`.
 
 The following items are implemented in the current codebase (including uncommitted working tree changes) and were not fully captured above:
 
-1. Job pipeline API for real job board data:
-   - `GET /jobs/{job_id}/pipeline` added.
-   - Returns job metadata, ordered stages, and candidates mapped by `stage_id`.
-   - Backend file: `apps/backend/app/api/v1/endpoints/jobs.py`.
-   - Schema file: `apps/backend/app/schemas/jobs.py`.
+1. Job workspace API for hiring board data:
+   - `GET /jobs/{job_id}/workspace` returns job metadata, ordered stages, and candidates mapped by `stage_id`.
+   - Backend file: `apps/backend/app/api/v1/internal/endpoints/jobs.py`.
+   - Schema file: `apps/backend/app/schemas/jobs.py` (`JobWorkspaceResponse`).
 
 2. Public application form is now schema-driven and enforced at submit-time:
    - Public job detail includes `application_form_schema`.
    - Public apply validates required/optional/hidden behavior from schema for default fields, profile links, and custom fields.
    - Submission rejects unknown answer keys.
    - Backend files:
-     - `apps/backend/app/api/v1/endpoints/public.py`
+     - `apps/backend/app/api/v1/internal/endpoints/public.py`
      - `apps/backend/app/schemas/public_jobs.py`
 
 3. Job applications persistence introduced:
@@ -96,54 +95,47 @@ The following items are implemented in the current codebase (including uncommitt
      - Model: `apps/backend/app/models/job_application.py`
      - Job model update: `apps/backend/app/models/job.py`
 
-4. Jobs UI updated to card-based listing and pipeline drilldown:
-   - Jobs table replaced by cards.
-   - Card click opens job form.
-   - `View Pipeline` button opens job-specific pipeline.
+4. Jobs UI: card listing and per-job workspace:
+   - Card click opens `/jobs/{jobId}` (candidates by stage). Setup remains under `/jobs/{jobId}/info`, etc.
    - Files:
      - `apps/web/src/components/jobs/JobsList.tsx`
-     - `apps/web/src/app/(app-page-wrapper)/pipeline/[id]/page.tsx`
-     - `apps/web/src/components/pipeline/PipelineBoard.tsx`
+     - `apps/web/src/app/(app-page-wrapper)/jobs/[jobId]/page.tsx`
+     - `apps/web/src/components/common/JobWorkspaceSidebar.tsx`
      - `apps/web/src/api/job/get.ts`
      - `apps/web/src/api/job/types.ts`
 
-5. Pipeline route behavior:
-   - `/pipeline` now redirects to `/jobs`.
-   - Job-specific pipeline is loaded via `/pipeline/{jobId}`.
-   - File: `apps/web/src/app/(app-page-wrapper)/pipeline/page.tsx`.
-
-6. Branding click behavior:
+5. Branding click behavior:
    - Sidebar ATS logo/title now routes to app root (`/`), which resolves correctly on local/prod app domains.
    - File: `apps/web/src/components/common/AppSidebar.tsx`.
 
-7. Candidates module backend (new API surface):
+6. Candidates module backend (new API surface):
    - Added candidates router with org-scoped endpoints:
      - `GET /candidates` (search/filter/pagination)
      - `GET /candidates/{candidate_id}`
      - `PATCH /candidates/{candidate_id}/stage`
      - `PATCH /candidates/{candidate_id}/status`
    - Files:
-     - `apps/backend/app/api/v1/endpoints/candidates.py`
+     - `apps/backend/app/api/v1/internal/endpoints/candidates.py`
      - `apps/backend/app/schemas/candidates.py`
      - `apps/backend/app/api/v1/router.py`
 
-8. Public apply to candidate pipeline ingestion:
+7. Public apply (candidate ingestion):
    - `POST /public/orgs/{org_id}/jobs/{job_id}/apply` now also upserts candidate into `candidates`.
    - Candidate is created in first stage (by stage position) for that job when no existing candidate exists for same `org_id + job_id + email`.
    - Existing candidate is refreshed with latest name/phone/resume when applicable.
-   - File: `apps/backend/app/api/v1/endpoints/public.py`.
+   - File: `apps/backend/app/api/v1/internal/endpoints/public.py`.
 
-9. Candidates frontend moved from dummy to API-backed (core pages):
+8. Candidates frontend moved from dummy to API-backed (core pages):
    - Candidates list page now fetches from backend (`GET /candidates`) and applies UI filtering client-side.
    - Candidate detail page now fetches from backend (`GET /candidates/{id}`) and renders using existing components with real summary data.
    - New frontend API module:
      - `apps/web/src/api/candidates/index.ts`
      - exported via `apps/web/src/api/index.ts`
    - Updated pages:
-     - `apps/web/src/app/(app-page-wrapper)/candidates/page.tsx`
-     - `apps/web/src/app/(app-page-wrapper)/candidates/[candidateId]/page.tsx`
+     - `apps/web/src/app/(app-page-wrapper)/candidates/page.tsx` (historical list; now redirect-only — see Latest Delta 2026-03-25)
+     - `apps/web/src/app/(app-page-wrapper)/jobs/[jobId]/candidates/[candidateId]/page.tsx`
 
-10. Candidates Phase-2 hardening (pagination, bulk, pipeline persistence):
+9. Candidates Phase-2 hardening (pagination, bulk, stage updates):
    - Added paginated list endpoint with metadata:
      - `GET /candidates/paginated` returns `{ items, total, limit, offset }`.
    - Added bulk candidate action endpoints:
@@ -151,21 +143,17 @@ The following items are implemented in the current codebase (including uncommitt
      - `PATCH /candidates/actions/bulk/stage`
    - Route safety:
      - Bulk endpoints intentionally use `/actions/bulk/*` namespace to avoid conflict with `/{candidate_id}` UUID routes.
-   - Pipeline drag/drop persistence:
-     - Frontend pipeline board now calls backend `PATCH /candidates/{candidate_id}/stage` on drop.
-     - UI uses optimistic move + rollback on API failure.
+   - Single-candidate stage changes use `PATCH /candidates/{candidate_id}/stage`.
    - Files:
      - Backend:
-       - `apps/backend/app/api/v1/endpoints/candidates.py`
+       - `apps/backend/app/api/v1/internal/endpoints/candidates.py`
        - `apps/backend/app/schemas/candidates.py`
      - Frontend:
        - `apps/web/src/api/candidates/index.ts`
-       - `apps/web/src/app/(app-page-wrapper)/pipeline/[id]/page.tsx`
-       - `apps/web/src/components/pipeline/PipelineBoard.tsx`
-     - `apps/web/src/app/(app-page-wrapper)/candidates/page.tsx`
-     - `apps/web/src/components/candidates/CandidatesList.tsx`
+     - `apps/web/src/app/(app-page-wrapper)/candidates/page.tsx` (historical list; now redirect-only — see Latest Delta 2026-03-25)
+     - `apps/web/src/components/candidates/CandidatesList.tsx` (removed; see Latest Delta 2026-03-25)
 
-11. Candidates Phase-3 completion (remaining plan items):
+10. Candidates Phase-3 completion (remaining plan items):
    - Bulk stage move UX implemented on candidates list:
      - Reuses existing dialog/select components.
      - Enforces single-job selection before opening stage chooser.
@@ -174,10 +162,10 @@ The following items are implemented in the current codebase (including uncommitt
      - Uses `GET /candidates/paginated` with `limit/offset/search`.
      - Adds previous/next paging controls and page indicator.
    - Frontend files:
-     - `apps/web/src/app/(app-page-wrapper)/candidates/page.tsx`
+     - `apps/web/src/app/(app-page-wrapper)/candidates/page.tsx` (historical list; now redirect-only — see Latest Delta 2026-03-25)
      - `apps/web/src/api/candidates/index.ts`
 
-12. Manual candidate add flow (ATS internal):
+11. Manual candidate add flow (ATS internal):
    - Backend:
      - Added `POST /candidates` for manual candidate creation.
      - Validates job belongs to current org.
@@ -187,12 +175,12 @@ The following items are implemented in the current codebase (including uncommitt
      - Candidates page `Add` action now opens modal form (job, name, email, optional phone).
      - Submits to `POST /candidates` and updates list immediately on success.
    - Files:
-     - `apps/backend/app/api/v1/endpoints/candidates.py`
+     - `apps/backend/app/api/v1/internal/endpoints/candidates.py`
      - `apps/backend/app/schemas/candidates.py`
      - `apps/web/src/api/candidates/index.ts`
-     - `apps/web/src/app/(app-page-wrapper)/candidates/page.tsx`
+     - `apps/web/src/app/(app-page-wrapper)/candidates/page.tsx` (historical list; now redirect-only — see Latest Delta 2026-03-25)
 
-13. Candidate audit trail + rich filters/sort + detail data integration:
+12. Candidate audit trail + rich filters/sort + detail data integration:
    - Backend candidates list filtering/sorting extended:
      - Filters: `search`, `job_id`, `stage_id`, `status`, `source`, `tag`
      - Sorting: `sort_by` (`updated_at|created_at|name|status|job_title|stage_name`) and `sort_order` (`asc|desc`)
@@ -223,11 +211,11 @@ The following items are implemented in the current codebase (including uncommitt
      - Overview tab now loads notes/activity from API and supports add note.
      - Interviews/Evaluation/Documents tabs now read live backend data.
      - files:
-       - `apps/web/src/app/(app-page-wrapper)/candidates/[candidateId]/page.tsx`
-    - `apps/web/src/components/candidates/tabs/OverviewTab.tsx`
-    - `apps/web/src/api/candidates/index.ts`
+       - `apps/web/src/app/(app-page-wrapper)/jobs/[jobId]/candidates/[candidateId]/page.tsx`
+       - `apps/web/src/components/candidates/tabs/OverviewTab.tsx`
+       - `apps/web/src/api/candidates/index.ts`
 
-14. Candidate tab workflow tooling completion (reuse-only UI):
+13. Candidate tab workflow tooling completion (reuse-only UI):
    - Interviews tab:
      - Schedule Interview action wired to backend.
      - Add Feedback action wired per interview.
@@ -239,12 +227,19 @@ The following items are implemented in the current codebase (including uncommitt
      - Add Note is fully functional and persists to DB.
    - Candidate detail page now orchestrates all tab actions through dialogs using existing design system components only.
    - Files:
-     - `apps/web/src/app/(app-page-wrapper)/candidates/[candidateId]/page.tsx`
+     - `apps/web/src/app/(app-page-wrapper)/jobs/[jobId]/candidates/[candidateId]/page.tsx`
      - `apps/web/src/components/candidates/tabs/InterviewsTab.tsx`
      - `apps/web/src/components/candidates/tabs/EvaluationTab.tsx`
      - `apps/web/src/components/candidates/tabs/DocumentsTab.tsx`
      - `apps/web/src/components/candidates/tabs/OverviewTab.tsx`
      - `apps/web/src/api/candidates/index.ts`
+
+### Latest Delta (2026-03-25) – Job-scoped candidate URLs
+
+- **Canonical profile route:** `/jobs/[jobId]/candidates/[candidateId]` — implementation: `apps/web/src/app/(app-page-wrapper)/jobs/[jobId]/candidates/[candidateId]/page.tsx`. Matches `Candidate.job_id` (separate candidate rows per job are first-class).
+- **Removed:** Org-wide candidates list UI and `apps/web/src/components/candidates/CandidatesList.tsx`. Recruiters work candidates from the **job workspace** (`/jobs/[jobId]/stage/[stageId]`).
+- **Legacy redirects (client):** `apps/web/src/app/(app-page-wrapper)/candidates/page.tsx` → `/jobs`; `apps/web/src/app/(app-page-wrapper)/candidates/[candidateId]/page.tsx` loads `GET /candidates/{id}` and redirects to the canonical job-scoped URL (or `/jobs` on failure).
+- **Navigation/layout:** Job workspace shell includes candidate profile: `(app-page-wrapper)/layout.tsx`, `jobs/[jobId]/layout.tsx`, `JobWorkspaceSidebar.tsx`, `jobs/[jobId]/stage/[stageId]/page.tsx` (links to profile), `ActionButtons.tsx` (post-delete → `/jobs/{jobId}`).
 
 ### Latest Delta (2026-02-26) – Storage, Avatars, Candidate Domain Hardening
 
@@ -273,7 +268,7 @@ The following updates are now implemented and should be treated as the current s
      - `POST /integrations/email/verify-complete`
    - Legacy org inbox management routes are removed from organizations endpoint surface.
    - Backend files:
-     - `apps/backend/app/api/v1/endpoints/integrations.py`
+     - `apps/backend/app/api/v1/internal/endpoints/integrations.py`
      - `apps/backend/app/integrations/app_store/registry.py`
 
 2. Frontend settings migration to integrations module:
@@ -291,7 +286,7 @@ The following updates are now implemented and should be treated as the current s
    - Key enforcement file:
      - `apps/backend/app/core/permissions.py`
    - Candidate/interview endpoint guards updated to use granular candidate/interview permissions:
-     - `apps/backend/app/api/v1/endpoints/candidates.py`
+     - `apps/backend/app/api/v1/internal/endpoints/candidates.py`
 
 4. Validation assets kept as internal, non-release-gating support:
    - Runbooks:
@@ -318,7 +313,7 @@ The following updates are now implemented and should be treated as the current s
    - Backend files:
      - `apps/backend/app/models/user.py`
      - `apps/backend/app/schemas/users.py`
-     - `apps/backend/app/api/v1/endpoints/users.py`
+     - `apps/backend/app/api/v1/internal/endpoints/users.py`
 
 3. Organization avatar support added:
    - `organizations.avatar_url` added and used by settings/top bar.
@@ -329,12 +324,12 @@ The following updates are now implemented and should be treated as the current s
    - Backend files:
      - `apps/backend/app/models/organization.py`
      - `apps/backend/app/schemas/organization.py`
-     - `apps/backend/app/api/v1/endpoints/organizations.py`
+     - `apps/backend/app/api/v1/internal/endpoints/organizations.py`
 
 4. File-serving route for local storage:
    - Added backend route for serving local file URLs used in dev mode.
    - Backend files:
-     - `apps/backend/app/api/v1/endpoints/files.py`
+     - `apps/backend/app/api/v1/internal/endpoints/files.py`
      - `apps/backend/app/api/v1/router.py`
 
 5. Candidate documents re-normalized to dedicated table:
@@ -345,7 +340,7 @@ The following updates are now implemented and should be treated as the current s
      - `apps/backend/app/models/candidate_document.py`
      - `apps/backend/app/models/candidate.py`
      - `apps/backend/app/schemas/candidates.py`
-     - `apps/backend/app/api/v1/endpoints/candidates.py`
+     - `apps/backend/app/api/v1/internal/endpoints/candidates.py`
 
 6. Candidate core schema evolved for talent-pool support:
    - `candidates.job_id` and `candidates.stage_id` are nullable.
@@ -354,13 +349,13 @@ The following updates are now implemented and should be treated as the current s
    - Backend files:
      - `apps/backend/app/models/candidate.py`
      - `apps/backend/app/schemas/candidates.py`
-     - `apps/backend/app/api/v1/endpoints/candidates.py`
+     - `apps/backend/app/api/v1/internal/endpoints/candidates.py`
 
 7. Public apply ingestion now writes candidate document rows:
    - Public application `files` payload is validated against allowed configured file keys.
    - Accepted file entries (resume/cover_letter/custom file fields) are persisted to `candidate_documents`.
    - Backend files:
-     - `apps/backend/app/api/v1/endpoints/public.py`
+     - `apps/backend/app/api/v1/internal/endpoints/public.py`
      - `apps/backend/app/schemas/public_jobs.py`
 
 8. Candidate detail UX + persistence updates:
@@ -368,7 +363,7 @@ The following updates are now implemented and should be treated as the current s
    - Resume & links card edit behavior is wired to backend document/profile-links updates.
    - Manual and job-board candidates share the same editable flow.
    - Frontend files:
-     - `apps/web/src/app/(app-page-wrapper)/candidates/[candidateId]/page.tsx`
+     - `apps/web/src/app/(app-page-wrapper)/jobs/[jobId]/candidates/[candidateId]/page.tsx`
      - `apps/web/src/components/candidates/summary/SummaryPanel.tsx`
      - `apps/web/src/components/candidates/tabs/DocumentsTab.tsx`
      - `apps/web/src/api/candidates/index.ts`
@@ -376,8 +371,8 @@ The following updates are now implemented and should be treated as the current s
 9. Candidate list columns adjusted for MVP:
    - Removed non-functional Rating/Recruiter columns from candidates list view.
    - Frontend files:
-     - `apps/web/src/components/candidates/CandidatesList.tsx`
-     - `apps/web/src/app/(app-page-wrapper)/candidates/page.tsx`
+     - `apps/web/src/components/candidates/CandidatesList.tsx` (removed; see Latest Delta 2026-03-25)
+     - `apps/web/src/app/(app-page-wrapper)/candidates/page.tsx` (historical list; now redirect-only — see Latest Delta 2026-03-25)
 
 10. Job edit/save behavior hardening:
    - Save now persists tab changes reliably and does not over-block on publish-only constraints.
@@ -390,7 +385,7 @@ The following updates are now implemented and should be treated as the current s
    - Default workplace type for new jobs is now `onsite`.
    - Files:
      - `apps/backend/app/models/job.py`
-     - `apps/backend/app/api/v1/endpoints/jobs.py`
+     - `apps/backend/app/api/v1/internal/endpoints/jobs.py`
      - `apps/web/src/app/(app-page-wrapper)/jobs/[jobId]/constants.ts`
      - `apps/web/src/app/(app-page-wrapper)/jobs/[jobId]/context.tsx`
 
@@ -398,7 +393,7 @@ The following updates are now implemented and should be treated as the current s
    - Overview timeline now emphasizes hiring-status events rather than generic document noise.
    - Frontend files:
      - `apps/web/src/components/candidates/tabs/OverviewTab.tsx`
-     - `apps/web/src/app/(app-page-wrapper)/candidates/[candidateId]/page.tsx`
+     - `apps/web/src/app/(app-page-wrapper)/jobs/[jobId]/candidates/[candidateId]/page.tsx`
 
 13. Team/settings avatar consistency:
    - Team list and top bar now consume avatar URLs when present and fallback correctly.
@@ -530,7 +525,7 @@ Raises `ValueError` on invalid/expired tokens.
 
 ### Cookie Configuration
 
-**Implementation**: `apps/backend/app/api/v1/endpoints/auth.py`
+**Implementation**: `apps/backend/app/api/v1/internal/endpoints/auth.py`
 
 ```python
 def _set_access_cookie(response: Response, token: str) -> None:
@@ -568,7 +563,7 @@ def _set_access_cookie(response: Response, token: str) -> None:
 }
 ```
 
-**Implementation**: `apps/backend/app/api/v1/endpoints/auth.py`
+**Implementation**: `apps/backend/app/api/v1/internal/endpoints/auth.py`
 ```python
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -733,7 +728,7 @@ class Organization(Base):
 
 ### Token Generation
 
-**Implementation**: `apps/backend/app/api/v1/endpoints/auth.py` (signup endpoint)
+**Implementation**: `apps/backend/app/api/v1/internal/endpoints/auth.py` (signup endpoint)
 
 ```python
 raw_token = secrets.token_urlsafe(32)  # 32 bytes = 43 characters base64
@@ -1716,7 +1711,7 @@ Transitions `open` → `draft`. Clears `published_at`.
 
 ## Notes
 
-- Candidate and interview permissions are implemented and enforced through granular permission keys in `apps/backend/app/core/permissions.py` and endpoint guards in `apps/backend/app/api/v1/endpoints/candidates.py`.
+- Candidate and interview permissions are implemented and enforced through granular permission keys in `apps/backend/app/core/permissions.py` and endpoint guards in `apps/backend/app/api/v1/internal/endpoints/candidates.py`.
 - Billing permission key exists in permission model (`billing:manage`), but dedicated billing domain endpoints are still limited and should be validated per deployment scope.
 - Authentication (JWT, cookies, /auth/me, require_active_user) remains active and unchanged in architecture.
 
@@ -1764,7 +1759,7 @@ All team management operations call real backend endpoints:
 
 ## Backend Implementation
 
-**Location**: `apps/backend/app/api/v1/endpoints/users.py`
+**Location**: `apps/backend/app/api/v1/internal/endpoints/users.py`
 
 ### Endpoints
 
@@ -1956,7 +1951,7 @@ Workspace Settings allows users to update their organization's profile informati
 
 **Endpoint**: `PATCH /organizations/me`
 
-**Location**: `apps/backend/app/api/v1/endpoints/organizations.py`
+**Location**: `apps/backend/app/api/v1/internal/endpoints/organizations.py`
 
 **Authentication**: Requires `require_active_user` (verified + onboarded user)
 
@@ -2206,7 +2201,7 @@ baseUrl = `${protocol}://${host}`
 
 ## Cookie Domain Behavior
 
-**Backend**: `apps/backend/app/api/v1/endpoints/auth.py`
+**Backend**: `apps/backend/app/api/v1/internal/endpoints/auth.py`
 
 **Logic**:
 ```python
@@ -2386,7 +2381,7 @@ export const config = {
 
 ### Backend Cookie Configuration
 
-**Location**: `apps/backend/app/api/v1/endpoints/auth.py`
+**Location**: `apps/backend/app/api/v1/internal/endpoints/auth.py`
 
 ```python
 def _set_access_cookie(response: Response, token: str) -> None:
@@ -2805,7 +2800,7 @@ Organizations can configure a careers inbox and ingest inbound candidate emails 
 
 - Candidate is created/updated **only if a resume attachment is present**.
 - Supported parse formats in MVP:
-  - PDF (`pdfminer.six`)
+  - PDF (PyMuPDF)
   - DOCX (`python-docx`)
 - Field extraction (best effort): `name`, `email`, `phone`, `location`
 - Dedupe order:
@@ -2864,21 +2859,21 @@ This section captures implemented behavior found in code that was previously mis
 1. Inbound async + live updates:
 - `POST /public/inbound/s3-event`
 - `WS /public/inbound/events/ws`
-- File: `apps/backend/app/api/v1/endpoints/public.py`
+- File: `apps/backend/app/api/v1/internal/endpoints/public.py`
 
 2. Local file serving (dev/local storage):
 - `GET /files/local/{object_key:path}`
-- File: `apps/backend/app/api/v1/endpoints/files.py`
+- File: `apps/backend/app/api/v1/internal/endpoints/files.py`
 
 3. Organization categories:
 - `GET /organizations/categories`
 - `POST /organizations/categories`
 - `DELETE /organizations/categories/{category_id}`
-- File: `apps/backend/app/api/v1/endpoints/job_categories.py`
+- File: `apps/backend/app/api/v1/internal/endpoints/job_categories.py`
 
 4. Candidate documents include delete:
 - `DELETE /candidates/{candidate_id}/documents/{document_id}`
-- File: `apps/backend/app/api/v1/endpoints/candidates.py`
+- File: `apps/backend/app/api/v1/internal/endpoints/candidates.py`
 
 ### Role/permission clarifications from code
 

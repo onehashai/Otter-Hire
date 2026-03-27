@@ -1,23 +1,21 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { MessageSquare, Settings, Sun, Moon } from "lucide-react";
-// TODO(mvp-nav): Re-enable Reports/Automations/AI Assistant icons in mobile drawer after MVP launch.
-// import { Calendar, BarChart3, Zap, Bot } from "lucide-react";
+import { BarChart3, Bot, Settings, Sun, Moon, Users } from "lucide-react";
+// TODO(mvp-nav): Re-enable Interviews/Automations in mobile drawer after MVP launch.
+// import { Calendar, Zap } from "lucide-react";
 import { useTheme } from "@/components/common/ThemeProvider";
 import { Separator } from "@onehash/ui/separator";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@onehash/ui/drawer";
 
 const moreItems = [
-  { title: "Conversations", url: "/conversations", icon: MessageSquare },
+  { title: "Talent Pool", url: "/talent-pool", icon: Users },
   // TODO(mvp-nav): Re-enable Interviews in mobile drawer post-messaging launch.
   // { title: "Interviews", url: "/interviews", icon: Calendar },
-  // TODO(mvp-nav): Re-enable Reports in mobile drawer after MVP launch.
-  // { title: "Reports", url: "/reports", icon: BarChart3 },
+  { title: "Reports", url: "/reports", icon: BarChart3 },
   // TODO(mvp-nav): Re-enable Automations in mobile drawer after MVP launch.
   // { title: "Automations", url: "/automations", icon: Zap },
-  // TODO(mvp-nav): Re-enable AI Assistant in mobile drawer after MVP launch.
-  // { title: "AI Assistant", url: "/ai-assistant", icon: Bot },
+  { title: "AI Assistant", url: "/ai-assistant", icon: Bot },
   { title: "Settings", url: "/settings/profile", icon: Settings },
 ];
 

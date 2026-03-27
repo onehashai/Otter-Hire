@@ -42,7 +42,6 @@ async def get_current_user(
         select(OrgMembership).where(
             OrgMembership.user_id == user_id,
             OrgMembership.org_id == org_id,
-            OrgMembership.status != "disabled",
         )
     )
     membership = membership_result.scalar_one_or_none()
@@ -54,7 +53,7 @@ async def get_current_user(
 
     # Compatibility shim: existing handlers expect org-scoped attrs on current_user.
     user.org_id = membership.org_id
-    user.role = membership.role
+    user.membership_role = membership.role
     user.status = membership.status
 
     return user

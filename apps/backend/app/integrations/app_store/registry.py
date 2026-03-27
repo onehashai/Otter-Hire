@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.integrations.app_store.email_integration import service as email_integration_service
+from app.integrations.linkedin import service as linkedin_service
 from app.schemas.integrations import (
     IntegrationAppDescriptor,
     IntegrationEmailConfigActionResponse,
@@ -87,7 +88,59 @@ class EmailIntegrationModule(AppStoreIntegration):
         return IntegrationEmailConfigActionResponse(**result.model_dump())
 
 
-INTEGRATIONS: tuple[AppStoreIntegration, ...] = (EmailIntegrationModule(),)
+@dataclass(frozen=True)
+class LinkedInIntegrationModule(AppStoreIntegration):
+    app_id: str = "linkedin"
+    slug: str = "linkedin"
+    name: str = "LinkedIn"
+    category: str = "Job Board"
+
+    async def list_apps(
+        self, db: AsyncSession, owner: IntegrationOwnerContext
+    ) -> list[IntegrationAppDescriptor]:
+        integration = await linkedin_service.get_linkedin_integration(db)
+        if not integration:
+            return []
+
+        cred = await linkedin_service.get_linkedin_credential(db, owner.org_id)
+        status = cred.status if cred else "not_installed"
+        installed = cred is not None and cred.status == "active"
+
+        return [
+            IntegrationAppDescriptor(
+                app_id=self.app_id,
+                slug=self.slug,
+                name=self.name,
+                category=self.category,
+                description="Post jobs and share content on LinkedIn",
+                status=status,
+                installed=installed,
+            )
+        ]
+
+    async def list_installed(
+        self, db: AsyncSession, owner: IntegrationOwnerContext
+    ) -> list[IntegrationInstalledApp]:
+        cred = await linkedin_service.get_linkedin_credential(db, owner.org_id)
+        if not cred:
+            return []
+
+        return [
+            IntegrationInstalledApp(
+                app_id=self.app_id,
+                slug=self.slug,
+                name=self.name,
+                status=cred.status,
+                installed_at=cred.created_at,
+                configured=True,
+            )
+        ]
+
+
+INTEGRATIONS: tuple[AppStoreIntegration, ...] = (
+    EmailIntegrationModule(),
+    LinkedInIntegrationModule(),
+)
 
 
 def all_integrations() -> tuple[AppStoreIntegration, ...]:

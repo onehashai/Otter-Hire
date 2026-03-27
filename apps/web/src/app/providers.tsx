@@ -9,7 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "@/components/common/ThemeProvider";
 import { Toaster } from "@onehash/ui/toaster";
@@ -51,6 +51,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   const [sessionVersion, setSessionVersion] = useState(0);
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const inflightRef = useRef<Promise<AuthSessionResponse | null> | null>(null);
 
   const refreshSession = useCallback(
@@ -102,6 +103,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
     const isAuthRoute = AUTH_ROUTES.includes(pathname);
     const isLifecycleRoute = LIFECYCLE_ROUTES.includes(pathname);
     const onInvitePage = isInvitePath(pathname);
+    const onInviteSignup = pathname === "/signup" && Boolean(searchParams.get("invite"));
+    const isInviteLifecycleUser = user?.status === "pending" || user?.status === "declined";
 
     if (!user) {
       if (!isAuthRoute && !isLifecycleRoute && !onInvitePage) {
@@ -111,7 +114,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
     }
 
     if (!user.is_verified) {
-      if (pathname !== "/verify" && !onInvitePage) {
+      // Invitation lifecycle users should never be forced through /verify.
+      if (!isInviteLifecycleUser && pathname !== "/verify" && !onInvitePage && !onInviteSignup) {
         router.replace("/verify");
       }
       return;
@@ -129,7 +133,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       // router.replace("/dashboard");
       router.replace("/");
     }
-  }, [user, loading, pathname, router, sessionVersion]);
+  }, [user, loading, pathname, router, searchParams, sessionVersion]);
 
   const authValue = useMemo(
     () => ({ user, loading, refreshSession, clearSession }),

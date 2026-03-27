@@ -1,7 +1,7 @@
 import unittest
 from uuid import uuid4
 
-from app.api.v1.endpoints.candidates import (
+from app.api.v1.internal.endpoints.candidates import (
     _candidate_note_excerpt,
     _serialize_note_mentions,
 )

@@ -17,10 +17,10 @@ import {
   Briefcase,
   Users,
   Calendar,
-  // TODO(mvp-nav): Re-enable Reports/Automations/AI Assistant icons after MVP launch.
-  // BarChart3,
+  BarChart3,
+  // TODO(mvp-nav): Re-enable Automations in command palette after MVP launch.
   // Zap,
-  // Bot,
+  Bot,
   Settings,
   Plus,
   UserPlus,
@@ -31,14 +31,12 @@ const pages = [
   // TODO(mvp-nav): Re-enable Dashboard in command palette after MVP launch.
   // { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Jobs", url: "/jobs", icon: Briefcase },
-  { title: "Candidates", url: "/candidates", icon: Users },
+  { title: "Talent Pool", url: "/talent-pool", icon: Users },
   { title: "Interviews", url: "/interviews", icon: Calendar },
-  // TODO(mvp-nav): Re-enable Reports in command palette after MVP launch.
-  // { title: "Reports", url: "/reports", icon: BarChart3 },
+  { title: "Reports", url: "/reports", icon: BarChart3 },
   // TODO(mvp-nav): Re-enable Automations in command palette after MVP launch.
   // { title: "Automations", url: "/automations", icon: Zap },
-  // TODO(mvp-nav): Re-enable AI Assistant in command palette after MVP launch.
-  // { title: "AI Assistant", url: "/ai-assistant", icon: Bot },
+  { title: "AI Assistant", url: "/ai-assistant", icon: Bot },
   { title: "Settings", url: "/settings/profile", icon: Settings },
 ];
 

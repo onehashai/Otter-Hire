@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -12,8 +12,9 @@ class CandidateListItemResponse(BaseModel):
     name: str
     email: str
     phone: Optional[str] = None
-    location: Optional[str] = None
-    profile_links: dict[str, str] = {}
+    address: Optional[str] = None
+    profile_links: dict[str, Any] = {}
+    parsed_resume: Optional[dict[str, Any]] = None
     source: Optional[str] = None
     tags: list[str] = []
     status: str
@@ -34,10 +35,10 @@ class CandidateCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     email: str = Field(min_length=3, max_length=320)
     phone: Optional[str] = None
-    location: Optional[str] = None
+    address: Optional[str] = None
     profile_links: dict[str, str] = {}
     stage_id: Optional[UUID] = None
-    source: Optional[str] = Field(default="manual", max_length=100)
+    source: Optional[str] = Field(default="Manual", max_length=100)
     tags: list[str] = []
     status: str = Field(default="active", pattern=r"^(active|rejected|hired)$")
 
@@ -54,7 +55,7 @@ class CandidateUpdateRequest(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=255)
     email: Optional[str] = Field(default=None, min_length=3, max_length=320)
     phone: Optional[str] = None
-    location: Optional[str] = None
+    address: Optional[str] = None
     profile_links: Optional[dict[str, str]] = None
     job_id: Optional[UUID] = None
     clear_job: bool = False
@@ -68,7 +69,7 @@ class CandidateListResponse(BaseModel):
 
 
 class CandidateStageFilterOptionsResponse(BaseModel):
-    """Ordered hiring stage filter labels (pipeline union + terminal statuses when applicable)."""
+    """Ordered hiring stage filter labels (stage union + terminal statuses when applicable)."""
 
     names: list[str]
 
@@ -83,8 +84,25 @@ class CandidateBulkStatusUpdateRequest(BaseModel):
     status: str = Field(pattern=r"^(active|rejected|hired)$")
 
 
+class CandidateBulkAssignJobRequest(BaseModel):
+    candidate_ids: list[UUID] = Field(min_length=1)
+    job_id: UUID
+
+
 class CandidateBulkUpdateResponse(BaseModel):
     updated_count: int
+
+
+class CandidateCsvImportError(BaseModel):
+    row: int
+    reason: str
+
+
+class CandidateCsvImportResponse(BaseModel):
+    total_rows: int
+    created_count: int
+    failed_count: int
+    errors: list[CandidateCsvImportError] = []
 
 
 class CandidateNoteRequest(BaseModel):
@@ -176,3 +194,23 @@ class CandidateDocumentResponse(BaseModel):
     created_by_user_id: Optional[UUID] = None
     created_by_name: Optional[str] = None
     created_at: datetime
+
+
+class CandidateApplicationResponseFile(BaseModel):
+    name: str
+    url: str
+
+
+class CandidateApplicationResponseItem(BaseModel):
+    key: str
+    label: str
+    type: str
+    required: bool = False
+    response: str | int | float | bool | list[str] | None = None
+    files: list[CandidateApplicationResponseFile] = []
+
+
+class CandidateApplicationResponsesResponse(BaseModel):
+    submitted_at: datetime | None = None
+    has_additional_questions: bool = False
+    items: list[CandidateApplicationResponseItem] = []

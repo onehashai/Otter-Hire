@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     is_production: bool = Field(default=False, validation_alias="IS_PRODUCTION")
 
     # Product branding (emails, UI copy, API metadata)
-    product_name: str = Field(default="OneHash ATS", validation_alias="PRODUCT_NAME")
+    platform_name: str = Field(default="OneHash ATS", validation_alias="PLATFORM_NAME")
     support_email: str = Field(default="support@onehash.ai", validation_alias="SUPPORT_EMAIL")
 
     # SQLAdmin (local development only — ignored in production)
@@ -46,16 +46,32 @@ class Settings(BaseSettings):
     app_subdomain: str = Field(default="app", validation_alias="APP_SUBDOMAIN")
     jobs_subdomain: str = Field(default="jobs", validation_alias="JOBS_SUBDOMAIN")
 
-    # Frontend URL — defaults to http://{APP_SUBDOMAIN}.{APP_DOMAIN}:3000 if not set explicitly
+    # Frontend URL — if FRONTEND_BASE_URL is unset/empty, derived at load time from
+    # APP_SUBDOMAIN, APP_DOMAIN, and IS_PRODUCTION.
     frontend_base_url: str = Field(default="", validation_alias="FRONTEND_BASE_URL")
 
-    # API base URL — prod https://api.smartats.in, local http://localhost:8000
-    # Used for OAuth redirect_uri when API is on dedicated subdomain
+    # Public API base URL (OAuth callbacks, etc.). If API_BASE_URL is unset/empty, derived at
+    # load time from APP_SUBDOMAIN, APP_DOMAIN, and IS_PRODUCTION (port :8000 in non-prod).
     api_base_url: str = Field(default="", validation_alias="API_BASE_URL")
 
     # Google OAuth
     google_client_id: str | None = Field(default=None, validation_alias="GOOGLE_CLIENT_ID")
     google_client_secret: str | None = Field(default=None, validation_alias="GOOGLE_CLIENT_SECRET")
+
+    # LinkedIn OAuth
+    linkedin_client_id: str | None = Field(default=None, validation_alias="LINKEDIN_CLIENT_ID")
+    linkedin_client_secret: str | None = Field(
+        default=None, validation_alias="LINKEDIN_CLIENT_SECRET"
+    )
+    linkedin_webhook_secret: str | None = Field(
+        default=None, validation_alias="LINKEDIN_WEBHOOK_SECRET"
+    )
+    feature_linkedin_distribution: bool = Field(
+        default=False, validation_alias="FEATURE_LINKEDIN_DISTRIBUTION"
+    )
+    feature_linkedin_applicant_ingestion: bool = Field(
+        default=False, validation_alias="FEATURE_LINKEDIN_APPLICANT_INGESTION"
+    )
 
     # SMTP credential encryption (Fernet key, base64-encoded 32 bytes)
     # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
@@ -93,6 +109,10 @@ class Settings(BaseSettings):
     # Storage
     local_storage_root: str = Field(default="storage/local", validation_alias="LOCAL_STORAGE_ROOT")
     max_upload_bytes: int = Field(default=1024 * 1024, validation_alias="MAX_UPLOAD_BYTES")
+    public_job_apply_max_upload_bytes: int = Field(
+        default=10 * 1024 * 1024,
+        validation_alias="PUBLIC_JOB_APPLY_MAX_UPLOAD_BYTES",
+    )
     aws_s3_bucket: str | None = Field(default=None, validation_alias="AWS_S3_BUCKET")
     aws_s3_region: str | None = Field(default=None, validation_alias="AWS_S3_REGION")
     s3_root_prefix_raw: str = Field(default="", validation_alias="S3_ROOT_PREFIX")
@@ -171,31 +191,20 @@ class Settings(BaseSettings):
         default=False, validation_alias="FEATURE_LEGACY_ORG_INBOX_ROUTE_REDIRECT"
     )
 
+    # OpenAI key
+    openai_api_key: str | None = Field(default=None, validation_alias="OPENAI_API_KEY")
+
     @property
     def _scheme(self) -> str:
         return "https" if self.is_production else "http"
 
     @property
-    def effective_frontend_base_url(self) -> str:
-        if self.frontend_base_url:
-            return self.frontend_base_url.rstrip("/")
-        port = "" if self.is_production else ":3000"
-        return f"{self._scheme}://{self.app_subdomain}.{self.app_domain}{port}"
-
-    @property
-    def effective_google_redirect_uri(self) -> str | None:
-        """Returns the explicit override if set, otherwise derives from API_BASE_URL or APP_DOMAIN."""
-        if self.api_base_url:
-            base = self.api_base_url.rstrip("/")
-            return f"{base}/v1/internal/auth/google/callback"
-        if self.app_domain:
-            port = "" if self.is_production else ":8000"
-            return f"{self._scheme}://{self.app_subdomain}.{self.app_domain}{port}/v1/internal/auth/google/callback"
-        return None
-
-    @property
     def google_oauth_enabled(self) -> bool:
         return bool(self.google_client_id and self.google_client_secret)
+
+    @property
+    def linkedin_oauth_enabled(self) -> bool:
+        return bool(self.linkedin_client_id and self.linkedin_client_secret)
 
     @property
     def cors_origins(self) -> list[str]:
@@ -228,20 +237,6 @@ class Settings(BaseSettings):
         if value:
             return value
         return "ats-production" if self.is_production else "ats-staging"
-
-    @property
-    def effective_ses_raw_bridge_bucket(self) -> str:
-        value = (self.ses_raw_bridge_bucket or "").strip()
-        if value:
-            return value
-        return (self.aws_s3_bucket or "").strip()
-
-    @property
-    def effective_ses_raw_bridge_prefix(self) -> str:
-        value = (self.ses_raw_bridge_prefix or "").strip().lstrip("/")
-        if value:
-            return value
-        return f"{self.s3_root_prefix}/ses-inbound/raw/"
 
 
 settings = Settings()

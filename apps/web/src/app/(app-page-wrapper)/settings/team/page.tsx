@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { toast } from "sonner";
+import { toast } from "@onehash/ui/sonner";
 import { Button } from "@onehash/ui/button";
 import { Icon } from "@onehash/ui/icon";
 import { Skeleton } from "@onehash/ui/skeleton";
@@ -61,7 +61,7 @@ export default function TeamSettingsPage() {
   const [ownershipTransferTarget, setOwnershipTransferTarget] = useState<TeamMember | null>(null);
 
   const currentUserId = user?.id ?? "";
-  const currentRole = user?.role ?? "";
+  const currentRole = user?.membership_role ?? "";
   const isOwner = currentRole === "owner";
   const isAdmin = currentRole === "admin";
 

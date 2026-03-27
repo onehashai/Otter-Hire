@@ -8,6 +8,7 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from app.db.base import Base
@@ -33,14 +34,16 @@ class OrgMembership(Base):
         UniqueConstraint("user_id", "org_id", name="uq_org_memberships_user_org"),
         CheckConstraint(
             "role IN ("
-            "'owner', 'admin', 'super_admin', 'recruiter', "
+            "'owner', 'admin', 'recruiter', "
             "'hiring_manager', 'interviewer', 'employee'"
             ")",
             name="ck_org_memberships_role",
         ),
         CheckConstraint(
-            "status IN ('invited', 'active', 'disabled')", name="ck_org_memberships_status"
+            "status IN ('pending', 'active', 'declined')", name="ck_org_memberships_status"
         ),
         Index("ix_org_memberships_org_user", "org_id", "user_id"),
         Index("ix_org_memberships_user_status", "user_id", "status"),
     )
+
+    user = relationship("User", back_populates="memberships")

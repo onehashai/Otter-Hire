@@ -41,6 +41,7 @@ async def test_user(db: AsyncSession, test_org: Organization) -> User:
         email="test@example.com",
         hashed_password="dummy",
         status="active",
+        role="user",
     )
     db.add(user)
     await db.commit()

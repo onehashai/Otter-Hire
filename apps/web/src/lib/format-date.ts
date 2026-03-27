@@ -1,24 +1,46 @@
-/** English ordinal day: 1st, 2nd, 3rd, 12th, 21st, … */
-function ordinalDay(n: number): string {
-  const abs = Math.abs(n);
-  const last = abs % 10;
-  const lastTwo = abs % 100;
-  if (lastTwo >= 11 && lastTwo <= 13) return `${n}th`;
-  if (last === 1) return `${n}st`;
-  if (last === 2) return `${n}nd`;
-  if (last === 3) return `${n}rd`;
-  return `${n}th`;
+/**
+ * Full local date and time, e.g. `13 Mar 2026, 3pm` (on the hour) or `13 Mar 2026, 3:05pm`.
+ */
+export function formatTimestampToDateTime(isoString: string | null, locale = "en-GB"): string {
+  if (!isoString) return "";
+  const date = new Date(isoString);
+  if (Number.isNaN(date.getTime())) return "";
+  const day = date.getDate();
+  const month = date.toLocaleString(locale, { month: "short" });
+  const year = date.getFullYear();
+  const hours = date.getHours();
+  const minutes = date.getMinutes();
+  const hour12 = hours % 12 || 12;
+  const ampm = hours >= 12 ? "pm" : "am";
+  const timePart =
+    minutes === 0 ? `${hour12}${ampm}` : `${hour12}:${minutes.toString().padStart(2, "0")}${ampm}`;
+  return `${day} ${month} ${year}, ${timePart}`;
 }
 
 /**
- * Formats an ISO datetime (UTC from API) for display in the user's local calendar date,
- * e.g. "12th March 2026".
+ * Thread header labels: "Yesterday", "Today" with time, short date, or full datetime for older messages.
  */
-export function formatOrdinalLongDate(iso: string, locale = "en-GB"): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  const day = d.getDate();
-  const month = d.toLocaleString(locale, { month: "long" });
-  const year = d.getFullYear();
-  return `${ordinalDay(day)} ${month} ${year}`;
+export function formatThreadMessageTime(isoString: string | null, locale = "en-GB"): string {
+  if (!isoString) return "";
+  const date = new Date(isoString);
+  if (Number.isNaN(date.getTime())) return "";
+  const now = new Date();
+  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startMsg = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const dayDiff = Math.round((startToday.getTime() - startMsg.getTime()) / 86_400_000);
+
+  if (dayDiff === 0) {
+    const hours = date.getHours();
+    const minutes = date.getMinutes();
+    const hour12 = hours % 12 || 12;
+    const ampm = hours >= 12 ? "pm" : "am";
+    const timePart =
+      minutes === 0
+        ? `${hour12}${ampm}`
+        : `${hour12}:${minutes.toString().padStart(2, "0")}${ampm}`;
+    return `Today, ${timePart}`;
+  }
+  if (dayDiff === 1) return "Yesterday";
+
+  return formatTimestampToDateTime(isoString, locale);
 }

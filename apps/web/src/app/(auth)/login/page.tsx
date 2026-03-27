@@ -11,9 +11,9 @@ import { Checkbox } from "@onehash/ui/checkbox";
 import { Form, FormField, FormItem, FormControl } from "@onehash/ui/form";
 import { Icon } from "@onehash/ui/icon";
 import { useTranslation } from "react-i18next";
-import { PRODUCT_LOGO_LETTER, PRODUCT_NAME } from "@/lib/constants";
+import { PRODUCT_LOGO_LETTER, PLATFORM_NAME } from "@/lib/constants";
 import { loginSchema, type LoginFormValues } from "@/lib/schemas/zodResolver";
-import { acceptExistingInvite, getGoogleAuthEnabled, login, API_BASE_URL } from "@/api/index";
+import { getGoogleAuthEnabled, login, API_BASE_URL } from "@/api/index";
 import { useAuthSession } from "@/app/providers";
 
 function isSafeRedirect(path: string): boolean {
@@ -65,13 +65,10 @@ export default function Login() {
         password: data.password,
       });
       const inviteToken = getInviteTokenFromRedirect(inviteRedirect);
-      if (inviteToken) {
-        await acceptExistingInvite(inviteToken);
-      }
       await refreshSession(true);
       // Avoid cross-subdomain cookie propagation race between api.* and app.*.
       await new Promise((resolve) => setTimeout(resolve, 200));
-      window.location.assign("/");
+      window.location.assign(inviteToken ? `/invite/${encodeURIComponent(inviteToken)}` : "/");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to sign in";
       form.setError("root", { message });
@@ -99,7 +96,7 @@ export default function Login() {
             <div className="h-9 w-9 rounded-lg bg-foreground flex items-center justify-center">
               <span className="text-background text-sm font-bold">{PRODUCT_LOGO_LETTER}</span>
             </div>
-            <span className="text-lg font-semibold tracking-tight">{PRODUCT_NAME}</span>
+            <span className="text-lg font-semibold tracking-tight">{PLATFORM_NAME}</span>
           </div>
           <h1 className="text-3xl font-semibold tracking-tight leading-tight mb-3">
             Modern hiring,
@@ -107,7 +104,7 @@ export default function Login() {
             simplified.
           </h1>
           <p className="text-muted-foreground text-sm leading-relaxed">
-            Streamline your recruitment pipeline with an intuitive, distraction-free experience
+            Streamline your recruitment workflow with an intuitive, distraction-free experience
             built for modern teams.
           </p>
         </div>
@@ -121,7 +118,7 @@ export default function Login() {
             <div className="h-9 w-9 rounded-lg bg-foreground flex items-center justify-center">
               <span className="text-background text-sm font-bold">{PRODUCT_LOGO_LETTER}</span>
             </div>
-            <span className="text-lg font-semibold tracking-tight">{PRODUCT_NAME}</span>
+            <span className="text-lg font-semibold tracking-tight">{PLATFORM_NAME}</span>
           </div>
 
           <div className="lg:rounded-xl lg:border lg:border-border lg:bg-card lg:p-8 lg:shadow-sm">
@@ -200,6 +197,7 @@ export default function Login() {
                         type="email"
                         placeholder="acme@example.com"
                         autoComplete="email"
+                        disabled={Boolean(inviteEmail)}
                         error={fieldState.error?.message}
                       />
                     </FormControl>

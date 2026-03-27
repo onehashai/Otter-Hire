@@ -6,17 +6,27 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.integration import Integration
 from app.models.integration_credential import IntegrationCredential
 from app.schemas.integrations import IntegrationOwnerContext
 
-INTEGRATION_TYPE = "outbound_email"
+INTEGRATION_SLUG = "email"
+INTEGRATION_TYPE = "outbound_email"  # Backward-compatible response field
+
+
+async def _get_email_integration(db: AsyncSession) -> Integration | None:
+    result = await db.execute(select(Integration).where(Integration.slug == INTEGRATION_SLUG))
+    return result.scalar_one_or_none()
 
 
 async def _get_row(db: AsyncSession, org_id: UUID) -> IntegrationCredential | None:
+    email_integration = await _get_email_integration(db)
+    if email_integration is None:
+        return None
     result = await db.execute(
         select(IntegrationCredential).where(
             IntegrationCredential.org_id == org_id,
-            IntegrationCredential.integration_type == INTEGRATION_TYPE,
+            IntegrationCredential.integration_id == email_integration.id,
         )
     )
     return result.scalar_one_or_none()
@@ -69,9 +79,12 @@ async def upsert_outbound_config(
 
     row = await _get_row(db, owner.org_id)
     if row is None:
+        email_integration = await _get_email_integration(db)
+        if email_integration is None:
+            raise HTTPException(status_code=500, detail="Email integration is not available")
         row = IntegrationCredential(
             org_id=owner.org_id,
-            integration_type=INTEGRATION_TYPE,
+            integration_id=email_integration.id,
             config=plain_config,
             status="active",
         )
@@ -79,7 +92,6 @@ async def upsert_outbound_config(
     else:
         row.config = plain_config
         row.status = "active"
-        row.last_test_error = None
 
     await db.commit()
     await db.refresh(row)

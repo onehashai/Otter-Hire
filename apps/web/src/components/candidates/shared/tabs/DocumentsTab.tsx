@@ -22,10 +22,7 @@ interface DocumentsTabProps {
 function formatDisplayFileName(rawName: string): string {
   const base = decodeURIComponent((rawName || "").split("/").pop() || rawName || "document");
   // Stored names can be prefixed like "<uuid>_tmp-.._<original>" for uniqueness.
-  const withoutUuidPrefix = base.replace(
-    /^[0-9a-f]{8,}-[0-9a-f-]{20,}_(.+)$/i,
-    "$1",
-  );
+  const withoutUuidPrefix = base.replace(/^[0-9a-f]{8,}-[0-9a-f-]{20,}_(.+)$/i, "$1");
   const clean = withoutUuidPrefix.replace(/^tmp-\d+-\d+_(.+)$/i, "$1");
   return clean || base;
 }

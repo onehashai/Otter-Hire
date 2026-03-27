@@ -26,10 +26,7 @@ interface ApplicationResponsesTabProps {
 
 function formatDisplayFileName(rawName: string): string {
   const base = decodeURIComponent((rawName || "").split("/").pop() || rawName || "attachment");
-  const withoutUuidPrefix = base.replace(
-    /^[0-9a-f]{8,}-[0-9a-f-]{20,}_(.+)$/i,
-    "$1",
-  );
+  const withoutUuidPrefix = base.replace(/^[0-9a-f]{8,}-[0-9a-f-]{20,}_(.+)$/i, "$1");
   const clean = withoutUuidPrefix.replace(/^tmp-\d+-\d+_(.+)$/i, "$1");
   return clean || base;
 }

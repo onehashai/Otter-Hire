@@ -161,7 +161,10 @@ export default function CareerJobDetailPage() {
     }
     setApplyForm((s) => ({
       ...s,
-      files: { ...s.files, [key]: { name: file.name, size: file.size, type: file.type, uploading: true } },
+      files: {
+        ...s.files,
+        [key]: { name: file.name, size: file.size, type: file.type, uploading: true },
+      },
     }));
     try {
       const uploaded = await uploadPublicApplicationFile(
@@ -535,13 +538,18 @@ export default function CareerJobDetailPage() {
                   <div className="mt-1.5 flex items-center gap-2">
                     <label className="flex-1 flex items-center justify-center gap-2 rounded-lg border border-border border-dashed px-4 py-3 text-xs text-muted-foreground hover:bg-muted/50 cursor-pointer transition-colors">
                       <Icon name="Upload" className="h-4 w-4 shrink-0" />
-                      <span>{applyForm.files.cover_letter?.name ?? "Choose file or drag and drop"}</span>
+                      <span>
+                        {applyForm.files.cover_letter?.name ?? "Choose file or drag and drop"}
+                      </span>
                       <input
                         type="file"
                         accept=".pdf,.doc,.docx,.txt"
                         className="sr-only"
                         onChange={(e) => {
-                          void handleSelectAndUploadFile("cover_letter", e.target.files?.[0] || null);
+                          void handleSelectAndUploadFile(
+                            "cover_letter",
+                            e.target.files?.[0] || null,
+                          );
                         }}
                       />
                     </label>
@@ -681,7 +689,9 @@ export default function CareerJobDetailPage() {
                         <div className="mt-1.5 flex items-center gap-2">
                           <label className="flex-1 flex items-center justify-center gap-2 rounded-lg border border-border border-dashed px-4 py-3 text-xs text-muted-foreground hover:bg-muted/50 cursor-pointer transition-colors">
                             <Icon name="Upload" className="h-4 w-4 shrink-0" />
-                            <span>{applyForm.files[key]?.name ?? "Choose file or drag and drop"}</span>
+                            <span>
+                              {applyForm.files[key]?.name ?? "Choose file or drag and drop"}
+                            </span>
                             <input
                               type="file"
                               className="sr-only"

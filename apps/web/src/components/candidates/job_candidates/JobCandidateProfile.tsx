@@ -159,12 +159,13 @@ export function JobCandidateProfile({
   });
 
   const loadAll = async (candidateId: string) => {
-    const [candidateData, overviewData, documentsData, applicationResponsesData] = await Promise.all([
-      getCandidateById(candidateId),
-      getCandidateOverview(candidateId),
-      getCandidateDocuments(candidateId),
-      getCandidateApplicationResponses(candidateId),
-    ]);
+    const [candidateData, overviewData, documentsData, applicationResponsesData] =
+      await Promise.all([
+        getCandidateById(candidateId),
+        getCandidateOverview(candidateId),
+        getCandidateDocuments(candidateId),
+        getCandidateApplicationResponses(candidateId),
+      ]);
     setCandidate(candidateData);
     setOverview(overviewData);
     setDocuments(documentsData);

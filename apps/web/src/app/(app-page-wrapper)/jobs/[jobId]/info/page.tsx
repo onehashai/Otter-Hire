@@ -128,9 +128,13 @@ export default function JobInfoPage() {
       ? t("required")
       : undefined;
   const minError =
-    hiringValidation.minError && (minTouched || hiringDetailsAttemptedSave) ? t("required") : undefined;
+    hiringValidation.minError && (minTouched || hiringDetailsAttemptedSave)
+      ? t("required")
+      : undefined;
   const maxError =
-    hiringValidation.maxError && (maxTouched || hiringDetailsAttemptedSave) ? t("required") : undefined;
+    hiringValidation.maxError && (maxTouched || hiringDetailsAttemptedSave)
+      ? t("required")
+      : undefined;
 
   useEffect(() => {
     getJobCategories()

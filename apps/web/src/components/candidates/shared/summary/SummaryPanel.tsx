@@ -132,7 +132,9 @@ export function SummaryPanel({
 
   const nonEmptyProfileLinks = useMemo(
     () =>
-      Object.entries(candidate.profileLinks || {}).filter(([, value]) => typeof value === "string" && value.trim()),
+      Object.entries(candidate.profileLinks || {}).filter(
+        ([, value]) => typeof value === "string" && value.trim(),
+      ),
     [candidate.profileLinks],
   );
 
@@ -368,7 +370,12 @@ export function SummaryPanel({
                 ) : null}
               </div>
               <p className="text-[11px] text-muted-foreground">
-                Resume: {resumeFile ? resumeFile.name : hasResume ? formatDisplayFileName(resumeDoc.name) : "—"}
+                Resume:{" "}
+                {resumeFile
+                  ? resumeFile.name
+                  : hasResume
+                    ? formatDisplayFileName(resumeDoc.name)
+                    : "—"}
               </p>
               {editableProfileLinkFields.map((field) => (
                 <InputField

@@ -21,12 +21,8 @@ export default function DistributionPage() {
   const { t } = useTranslation();
   const [linkedinStatus, setLinkedinStatus] = useState<LinkedInStatus | null>(null);
   const [loadingLinkedInStatus, setLoadingLinkedInStatus] = useState(true);
-  const {
-    postToLinkedin,
-    setPostToLinkedin,
-    linkedinSyncStatus,
-    linkedinLastError,
-  } = useJobSetup();
+  const { postToLinkedin, setPostToLinkedin, linkedinSyncStatus, linkedinLastError } =
+    useJobSetup();
 
   useEffect(() => {
     let mounted = true;
@@ -90,7 +86,9 @@ export default function DistributionPage() {
       <div className="rounded-lg border border-border p-4 space-y-3">
         <div className="flex items-center justify-between gap-3">
           <p className="text-sm font-medium">{t("distribution_status")}</p>
-          <Badge variant={statusVariant[(linkedinSyncStatus || "not_posted") as DistributionStatus]}>
+          <Badge
+            variant={statusVariant[(linkedinSyncStatus || "not_posted") as DistributionStatus]}
+          >
             {statusLabel}
           </Badge>
         </div>

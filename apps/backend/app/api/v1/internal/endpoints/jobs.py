@@ -11,11 +11,13 @@ from app.core.config import settings
 from app.core.permissions import require_permission
 from app.db.session import get_db
 from app.deps.job_scope import ASSIGNED_ONLY_ROLES, require_job_access
+from app.integrations.linkedin import service as linkedin_service
 from app.models.candidate import Candidate
 from app.models.job import Job
 from app.models.job_team_member import JobTeamMember
 from app.models.stage import Stage
 from app.models.user import User
+from app.schemas.integrations import IntegrationOwnerContext
 from app.schemas.jobs import (
     HiringStageResponse,
     JobCreateRequest,
@@ -170,6 +172,11 @@ def _build_detail_response(job: Job) -> JobDetailResponse:
         salary_fixed=job.salary_fixed,
         currency=job.currency,
         salary_timeframe=job.salary_timeframe,
+        post_to_linkedin=bool(job.post_to_linkedin),
+        linkedin_sync_status=job.linkedin_sync_status,
+        linkedin_external_job_id=job.linkedin_external_job_id,
+        linkedin_last_synced_at=job.linkedin_last_synced_at,
+        linkedin_last_error=job.linkedin_last_error,
         description=job.description,
         status=job.status,
         visibility=job.visibility,
@@ -598,9 +605,31 @@ async def publish_job(
                 detail="Salary minimum must be less than or equal to maximum.",
             )
 
+    if job.post_to_linkedin:
+        if not settings.feature_linkedin_distribution:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="LinkedIn distribution feature is disabled.",
+            )
+        linkedin_status = await linkedin_service.get_linkedin_status(
+            db,
+            IntegrationOwnerContext(
+                org_id=str(current_user.org_id),
+                user_id=str(current_user.id),
+                role=current_user.membership_role,
+            ),
+        )
+        if not linkedin_status.get("connected") or not linkedin_status.get("setup_complete"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="LinkedIn distribution is enabled but integration setup is incomplete.",
+            )
+
     job.status = "open"
     job.visibility = "public"
     job.published_at = datetime.now(timezone.utc)
+    if job.post_to_linkedin:
+        await linkedin_service.sync_job_distribution_to_linkedin(db, job)
     await db.commit()
 
     return _build_detail_response(await _get_job_or_404(db, job.id, current_user.org_id))

@@ -23,12 +23,16 @@ from app.models.email import Email
 from app.models.feedback import Feedback
 from app.models.interview import Interview
 from app.models.job import Job
+from app.models.job_application import JobApplication
 from app.models.note import Note
 from app.models.org_membership import OrgMembership
 from app.models.stage import Stage
 from app.models.user import User
 from app.schemas.candidates import (
     CandidateActivityResponse,
+    CandidateApplicationResponseFile,
+    CandidateApplicationResponseItem,
+    CandidateApplicationResponsesResponse,
     CandidateBulkAssignJobRequest,
     CandidateBulkStageUpdateRequest,
     CandidateBulkStatusUpdateRequest,
@@ -194,6 +198,112 @@ def _candidate_note_excerpt(content: str, limit: int = 280) -> str:
     if len(compact) <= limit:
         return compact
     return f"{compact[: limit - 1].rstrip()}…"
+
+
+def _application_response_value(
+    field_type: str, raw_value: object
+) -> str | int | float | bool | list[str] | None:
+    if raw_value is None:
+        return None
+    normalized_type = (field_type or "").strip().lower()
+    if normalized_type == "multi_select":
+        if isinstance(raw_value, list):
+            values = [str(item).strip() for item in raw_value if str(item).strip()]
+            return values or None
+        text = str(raw_value).strip()
+        return [text] if text else None
+    if normalized_type == "yes_no":
+        if isinstance(raw_value, bool):
+            return raw_value
+        text = str(raw_value).strip().lower()
+        if text in {"yes", "true", "1"}:
+            return True
+        if text in {"no", "false", "0"}:
+            return False
+        return None
+    if normalized_type == "number":
+        if isinstance(raw_value, (int, float)):
+            return raw_value
+        text = str(raw_value).strip()
+        if not text:
+            return None
+        try:
+            if "." in text:
+                return float(text)
+            return int(text)
+        except ValueError:
+            return text
+    text = str(raw_value).strip()
+    return text or None
+
+
+async def _resolve_application_file_link(file_ref: object) -> CandidateApplicationResponseFile | None:
+    if not isinstance(file_ref, str):
+        return None
+    raw = file_ref.strip()
+    if not raw:
+        return None
+
+    resolved_url = raw
+    if not raw.startswith(("http://", "https://", "/v1/internal/files/local/", "/api/files/local/", "/files/local/")):
+        resolved_url = await storage_service.resolve_url(raw)
+
+    name = raw.rsplit("/", 1)[-1] if "/" in raw else raw
+    name = name.split("?", 1)[0].strip() or "attachment"
+    return CandidateApplicationResponseFile(name=name, url=resolved_url)
+
+
+def _iter_application_custom_questions(schema_snapshot: dict) -> list[tuple[str, str, str, bool]]:
+    custom_fields = schema_snapshot.get("custom_fields") or []
+    items: list[tuple[str, str, str, bool]] = []
+    for raw_field in custom_fields:
+        if not isinstance(raw_field, dict):
+            continue
+        key = str(raw_field.get("key") or raw_field.get("id") or "").strip()
+        if not key:
+            continue
+        visibility = str(raw_field.get("visibility") or "optional").strip().lower()
+        if visibility == "hidden":
+            continue
+        field_type = str(raw_field.get("type") or "short_text").strip()
+        label = str(raw_field.get("label") or key).strip() or key
+        items.append((key, label, field_type, visibility == "required"))
+    return items
+
+
+def _canonical_profile_link_key(field_key: str) -> str:
+    key = (field_key or "").strip()
+    if key.startswith("profile_link_"):
+        suffix = key.removeprefix("profile_link_").strip()
+        if suffix:
+            return suffix
+    return key
+
+
+def _extract_profile_links_from_application(
+    schema_snapshot: dict | None, answers: dict | None
+) -> dict[str, str]:
+    schema = dict(schema_snapshot or {})
+    values = dict(answers or {})
+    profile_link_fields = schema.get("profile_links") or []
+    normalized: dict[str, str] = {}
+    for field in profile_link_fields:
+        if not isinstance(field, dict):
+            continue
+        visibility = str(field.get("visibility") or "hidden").strip().lower()
+        if visibility == "hidden":
+            continue
+        field_key = str(field.get("key") or field.get("id") or "").strip()
+        if not field_key:
+            continue
+        raw = values.get(field_key)
+        if raw is None:
+            continue
+        link = str(raw).strip()
+        if not link:
+            continue
+        normalized[_canonical_profile_link_key(field_key)] = link
+    return normalized
 
 
 @router.post("", response_model=CandidateDetailResponse, status_code=status.HTTP_201_CREATED)
@@ -651,13 +761,41 @@ async def get_candidate(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Candidate not found")
 
     c, job_title, stage_name = row
+    profile_links = dict(c.profile_links or {})
+    if not profile_links and c.job_id is not None:
+        application_result = await db.execute(
+            select(JobApplication)
+            .where(
+                JobApplication.org_id == current_user.org_id,
+                JobApplication.candidate_id == c.id,
+            )
+            .order_by(JobApplication.created_at.desc())
+            .limit(1)
+        )
+        application = application_result.scalar_one_or_none()
+        if application is None:
+            fallback_result = await db.execute(
+                select(JobApplication)
+                .where(
+                    JobApplication.org_id == current_user.org_id,
+                    JobApplication.job_id == c.job_id,
+                    func.lower(JobApplication.email) == (c.email or "").strip().lower(),
+                )
+                .order_by(JobApplication.created_at.desc())
+                .limit(1)
+            )
+            application = fallback_result.scalar_one_or_none()
+        if application is not None:
+            profile_links = _extract_profile_links_from_application(
+                application.schema_snapshot, application.answers
+            )
     return CandidateDetailResponse(
         id=c.id,
         name=c.name,
         email=c.email,
         phone=c.phone,
         location=c.location,
-        profile_links=dict(c.profile_links or {}),
+        profile_links=profile_links,
         source=c.source,
         tags=list(c.tags or []),
         status=c.status,
@@ -667,6 +805,112 @@ async def get_candidate(
         stage_name=stage_name,
         created_at=c.created_at,
         updated_at=c.updated_at,
+    )
+
+
+@router.get(
+    "/{candidate_id}/application-responses",
+    response_model=CandidateApplicationResponsesResponse,
+)
+async def get_candidate_application_responses(
+    candidate_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("candidates:read")),
+):
+    candidate_result = await db.execute(
+        select(Candidate).where(
+            Candidate.id == candidate_id,
+            Candidate.org_id == current_user.org_id,
+        )
+    )
+    candidate = candidate_result.scalar_one_or_none()
+    if candidate is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Candidate not found")
+    if candidate.job_id is None:
+        return CandidateApplicationResponsesResponse(
+            submitted_at=None,
+            has_additional_questions=False,
+            items=[],
+        )
+
+    # Prefer explicit candidate linkage; fallback to org+job+email for older rows.
+    app_result = await db.execute(
+        select(JobApplication)
+        .where(
+            JobApplication.org_id == current_user.org_id,
+            JobApplication.candidate_id == candidate.id,
+        )
+        .order_by(JobApplication.created_at.desc())
+        .limit(1)
+    )
+    application = app_result.scalar_one_or_none()
+    if application is None:
+        fallback_result = await db.execute(
+            select(JobApplication)
+            .where(
+                JobApplication.org_id == current_user.org_id,
+                JobApplication.job_id == candidate.job_id,
+                func.lower(JobApplication.email) == (candidate.email or "").strip().lower(),
+            )
+            .order_by(JobApplication.created_at.desc())
+            .limit(1)
+        )
+        application = fallback_result.scalar_one_or_none()
+
+    if application is None:
+        return CandidateApplicationResponsesResponse(
+            submitted_at=None,
+            has_additional_questions=False,
+            items=[],
+        )
+
+    schema_snapshot = dict(application.schema_snapshot or {})
+    questions = _iter_application_custom_questions(schema_snapshot)
+    answers = dict(application.answers or {})
+    files = dict(application.files or {})
+
+    items: list[CandidateApplicationResponseItem] = []
+    for key, label, field_type, required in questions:
+        if field_type == "file_upload":
+            raw_file_value = files.get(key)
+            file_refs: list[str] = []
+            if isinstance(raw_file_value, list):
+                file_refs = [str(item).strip() for item in raw_file_value if str(item).strip()]
+            elif isinstance(raw_file_value, str) and raw_file_value.strip():
+                file_refs = [raw_file_value.strip()]
+            resolved_files: list[CandidateApplicationResponseFile] = []
+            for file_ref in file_refs:
+                file_obj = await _resolve_application_file_link(file_ref)
+                if file_obj is not None:
+                    resolved_files.append(file_obj)
+            items.append(
+                CandidateApplicationResponseItem(
+                    key=key,
+                    label=label,
+                    type=field_type,
+                    required=required,
+                    response=None,
+                    files=resolved_files,
+                )
+            )
+            continue
+
+        response_value = _application_response_value(field_type, answers.get(key))
+        items.append(
+            CandidateApplicationResponseItem(
+                key=key,
+                label=label,
+                type=field_type,
+                required=required,
+                response=response_value,
+                files=[],
+            )
+        )
+
+    return CandidateApplicationResponsesResponse(
+        submitted_at=application.created_at,
+        has_additional_questions=len(questions) > 0,
+        items=items,
     )
 
 

@@ -11,6 +11,7 @@ import zipfile
 from datetime import datetime, timezone
 from io import BytesIO
 from typing import Optional
+from urllib.parse import urlparse
 from urllib.request import urlopen
 from uuid import UUID
 
@@ -22,11 +23,14 @@ from cryptography.x509 import load_pem_x509_certificate
 from fastapi import (
     APIRouter,
     Depends,
+    File,
+    Form,
     Header,
     HTTPException,
     Query,
     Request,
     Response,
+    UploadFile,
     WebSocket,
     WebSocketDisconnect,
 )
@@ -51,6 +55,7 @@ from app.models.organization import Organization, OrgInbox
 from app.models.stage import Stage
 from app.schemas.public_jobs import (
     InboundEmailPayload,
+    PublicApplyFileUploadResponse,
     PublicJobApplyRequest,
     PublicJobApplyResponse,
     PublicJobDetail,
@@ -60,6 +65,7 @@ from app.schemas.public_jobs import (
 from app.services.automation import execute_automations_for_trigger
 from app.services.resume_links import resolve_resume_from_body
 from app.services.storage import storage_service
+from app.utils.uuid import uuid7
 
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
@@ -180,6 +186,57 @@ def _guess_file_name(file_ref: str, fallback: str) -> str:
         name = cleaned.rsplit("/", 1)[-1]
         return name or fallback
     return cleaned
+
+
+def _to_candidate_document_object_key(file_ref: str) -> str:
+    """Normalize file references into storage object keys."""
+    raw = (file_ref or "").strip()
+    if not raw:
+        return ""
+
+    candidate = raw
+    parsed = urlparse(raw)
+    if parsed.scheme and parsed.netloc:
+        candidate = parsed.path or raw
+
+    candidate = candidate.strip()
+    for prefix in ("/v1/internal/files/local/", "/api/files/local/", "/files/local/"):
+        if candidate.startswith(prefix):
+            return candidate.removeprefix(prefix).lstrip("/")
+
+    return candidate.lstrip("/")
+
+
+def _canonical_profile_link_key(field_key: str) -> str:
+    key = (field_key or "").strip()
+    if key.startswith("profile_link_"):
+        suffix = key.removeprefix("profile_link_").strip()
+        if suffix:
+            return suffix
+    return key
+
+
+def _extract_profile_links_from_answers(
+    profile_link_fields: list, answers: dict[str, object]
+) -> dict[str, str]:
+    normalized: dict[str, str] = {}
+    for field in profile_link_fields or []:
+        if not isinstance(field, dict):
+            continue
+        visibility = str(field.get("visibility") or "hidden").strip().lower()
+        if visibility == "hidden":
+            continue
+        key = str(field.get("key") or field.get("id") or "").strip()
+        if not key:
+            continue
+        raw_value = answers.get(key)
+        if raw_value is None:
+            continue
+        value = str(raw_value).strip()
+        if not value:
+            continue
+        normalized[_canonical_profile_link_key(key)] = value
+    return normalized
 
 
 def _is_resume_attachment(filename: str, content_type: str) -> bool:
@@ -970,6 +1027,71 @@ async def get_public_job_detail(
 
 
 @router.post(
+    "/orgs/{org_id}/jobs/{job_id}/apply/upload",
+    response_model=PublicApplyFileUploadResponse,
+    status_code=201,
+)
+@limiter.limit("60/minute")
+async def upload_public_job_application_file(
+    request: Request,
+    org_id: str,
+    job_id: str,
+    org_slug: str = Query(
+        ..., min_length=1, description="Careers URL name segment before org UUID"
+    ),
+    field_key: str = Form(...),
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        org_uuid = UUID(org_id)
+        job_uuid = UUID(job_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    org_row = await db.execute(select(Organization).where(Organization.id == org_uuid))
+    org_for_slug = org_row.scalar_one_or_none()
+    if not org_for_slug:
+        raise HTTPException(status_code=404, detail="Job not found")
+    _require_public_org_slug(org_for_slug, org_slug)
+
+    result = await db.execute(
+        select(Job).where(
+            Job.id == job_uuid,
+            Job.org_id == org_uuid,
+            Job.status == "open",
+            Job.visibility == "public",
+        )
+    )
+    job = result.scalar_one_or_none()
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    field_key_clean = (field_key or "").strip()
+    if not field_key_clean:
+        raise HTTPException(status_code=422, detail="field_key is required")
+
+    safe_name = (file.filename or "attachment.bin").strip() or "attachment.bin"
+    content = await file.read()
+    if len(content) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=422, detail="File size must be <= 10MB")
+
+    object_key = (
+        f"orgs/{org_uuid}/job_applications/{job_uuid}/uploads/"
+        f"{uuid7()}_{field_key_clean}_{safe_name}"
+    )
+    await storage_service.write_bytes(object_key, content, file.content_type or "application/octet-stream")
+    resolved_url = await storage_service.resolve_url(object_key)
+    return PublicApplyFileUploadResponse(
+        key=field_key_clean,
+        name=safe_name,
+        content_type=(file.content_type or "").strip() or None,
+        size_bytes=len(content),
+        url=resolved_url,
+    )
+
+
+@router.post(
     "/orgs/{org_id}/jobs/{job_id}/apply", response_model=PublicJobApplyResponse, status_code=201
 )
 @limiter.limit("30/minute")
@@ -1124,6 +1246,16 @@ async def apply_public_job(
         candidate.name = body.full_name.strip() or candidate.name
         candidate.phone = (body.phone or "").strip() or candidate.phone
 
+    submitted_profile_links = _extract_profile_links_from_answers(profile_links, body.answers)
+    if submitted_profile_links:
+        existing_profile_links = dict(candidate.profile_links or {})
+        existing_profile_links.update(submitted_profile_links)
+        candidate.profile_links = existing_profile_links
+
+    # Ensure candidate has an ID for document linkage and application linkage.
+    await db.flush()
+    application.candidate_id = candidate.id
+
     if isinstance(files, dict):
         for field_key, file_ref in files.items():
             if not isinstance(file_ref, str) or not file_ref.strip():
@@ -1149,13 +1281,7 @@ async def apply_public_job(
             )
             latest_version = existing_version_result.scalar_one_or_none() or 0
 
-            object_key = file_url
-            if file_url.startswith("/v1/internal/files/local/"):
-                object_key = file_url.removeprefix("/v1/internal/files/local/")
-            elif file_url.startswith("/api/files/local/"):
-                object_key = file_url.removeprefix("/api/files/local/")
-            elif file_url.startswith("/files/local/"):
-                object_key = file_url.removeprefix("/files/local/")
+            object_key = _to_candidate_document_object_key(file_url)
 
             db.add(
                 CandidateDocument(

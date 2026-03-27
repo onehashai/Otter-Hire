@@ -93,6 +93,13 @@ class PublicJobApplyResponse(BaseModel):
     status: str
 
 
+class PublicApplyFileUploadResponse(BaseModel):
+    key: str
+    name: str
+    content_type: str | None = None
+    size_bytes: int
+    url: str
+
 class InboundAttachmentPayload(BaseModel):
     filename: str
     content_type: str

@@ -37,6 +37,11 @@ class Job(Base):
     salary_fixed = Column(Integer)
     currency = Column(String(3), server_default="USD")
     salary_timeframe = Column(String(10), server_default="per_year")
+    post_to_linkedin = Column(Boolean, nullable=False, server_default="false")
+    linkedin_sync_status = Column(String(20), nullable=False, server_default="not_posted")
+    linkedin_external_job_id = Column(String(255), nullable=True)
+    linkedin_last_synced_at = Column(DateTime(timezone=True), nullable=True)
+    linkedin_last_error = Column(Text, nullable=True)
     status = Column(String(10), nullable=False, server_default="draft")
     visibility = Column(String(20), nullable=False, server_default="internal")
     collect_resume = Column(Boolean, nullable=False, server_default="true")
@@ -52,6 +57,10 @@ class Job(Base):
         CheckConstraint("status IN ('draft', 'open', 'archived')", name="ck_jobs_status"),
         CheckConstraint("visibility IN ('internal', 'public')", name="ck_jobs_visibility"),
         CheckConstraint("salary_type IN ('hidden', 'fixed', 'range')", name="ck_jobs_salary_type"),
+        CheckConstraint(
+            "linkedin_sync_status IN ('not_posted', 'posting', 'posted', 'failed')",
+            name="ck_jobs_linkedin_sync_status",
+        ),
         CheckConstraint(
             "salary_min IS NULL OR salary_max IS NULL OR salary_min <= salary_max",
             name="ck_jobs_salary_range",

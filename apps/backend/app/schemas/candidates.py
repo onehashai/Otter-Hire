@@ -193,3 +193,23 @@ class CandidateDocumentResponse(BaseModel):
     created_by_user_id: Optional[UUID] = None
     created_by_name: Optional[str] = None
     created_at: datetime
+
+
+class CandidateApplicationResponseFile(BaseModel):
+    name: str
+    url: str
+
+
+class CandidateApplicationResponseItem(BaseModel):
+    key: str
+    label: str
+    type: str
+    required: bool = False
+    response: str | int | float | bool | list[str] | None = None
+    files: list[CandidateApplicationResponseFile] = []
+
+
+class CandidateApplicationResponsesResponse(BaseModel):
+    submitted_at: datetime | None = None
+    has_additional_questions: bool = False
+    items: list[CandidateApplicationResponseItem] = []

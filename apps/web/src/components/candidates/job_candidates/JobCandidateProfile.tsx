@@ -13,18 +13,23 @@ import {
   OverviewTab,
   DocumentsTab,
   CandidateMessagesTab,
+  ResumeTab,
+  ApplicationResponsesTab,
 } from "@/components/candidates/shared/tabs";
 import { SummaryPanel } from "@/components/candidates/shared/summary/SummaryPanel";
 import { ActionButtons } from "@/components/candidates/job_candidates/ActionButtons";
 import { useTranslation } from "react-i18next";
 import { useSetPageMetadata } from "@/hooks/useSetPageMetadata";
 import {
+  getApiBase,
   addCandidateNote,
   deleteCandidateDocument,
   getCandidateById,
+  getJobById,
   getJobWorkspace,
   getJobs,
   getCandidateDocuments,
+  getCandidateApplicationResponses,
   getCandidateOverview,
   getOrgUsers,
   updateCandidate,
@@ -33,7 +38,9 @@ import {
   type CandidateDocumentResponse,
   type JobListItemResponse,
   type JobHiringStageResponse,
+  type JobDetailResponse,
   type CandidateOverviewResponse,
+  type CandidateApplicationResponsesResponse,
   type OrgUserResponse,
 } from "@/api";
 import { toast } from "@onehash/ui/sonner";
@@ -130,8 +137,13 @@ export function JobCandidateProfile({
   const [candidate, setCandidate] = useState<CandidateDetailResponse | null>(null);
   const [overview, setOverview] = useState<CandidateOverviewResponse | null>(null);
   const [documents, setDocuments] = useState<CandidateDocumentResponse[]>([]);
+  const [applicationResponses, setApplicationResponses] =
+    useState<CandidateApplicationResponsesResponse | null>(null);
+  const [applicationResponsesLoading, setApplicationResponsesLoading] = useState(false);
+  const [applicationResponsesError, setApplicationResponsesError] = useState<string | null>(null);
   const [jobs, setJobs] = useState<JobListItemResponse[]>([]);
   const [jobStages, setJobStages] = useState<JobHiringStageResponse[]>([]);
+  const [jobDetail, setJobDetail] = useState<JobDetailResponse | null>(null);
   const [orgUsers, setOrgUsers] = useState<OrgUserResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -147,14 +159,17 @@ export function JobCandidateProfile({
   });
 
   const loadAll = async (candidateId: string) => {
-    const [candidateData, overviewData, documentsData] = await Promise.all([
+    const [candidateData, overviewData, documentsData, applicationResponsesData] = await Promise.all([
       getCandidateById(candidateId),
       getCandidateOverview(candidateId),
       getCandidateDocuments(candidateId),
+      getCandidateApplicationResponses(candidateId),
     ]);
     setCandidate(candidateData);
     setOverview(overviewData);
     setDocuments(documentsData);
+    setApplicationResponses(applicationResponsesData);
+    setApplicationResponsesError(null);
   };
 
   useEffect(() => {
@@ -211,15 +226,25 @@ export function JobCandidateProfile({
   useEffect(() => {
     if (!currentJobId) {
       setJobStages([]);
+      setJobDetail(null);
       return;
     }
     let cancelled = false;
     (async () => {
       try {
-        const workspace = await getJobWorkspace(currentJobId);
-        if (!cancelled) setJobStages(workspace.stages ?? []);
+        const [workspace, detail] = await Promise.all([
+          getJobWorkspace(currentJobId),
+          getJobById(currentJobId),
+        ]);
+        if (!cancelled) {
+          setJobStages(workspace.stages ?? []);
+          setJobDetail(detail);
+        }
       } catch {
-        if (!cancelled) setJobStages([]);
+        if (!cancelled) {
+          setJobStages([]);
+          setJobDetail(null);
+        }
       }
     })();
     return () => {
@@ -255,8 +280,7 @@ export function JobCandidateProfile({
           url: d.url,
         })),
       ],
-      linkedin: candidate.profile_links?.linkedin,
-      portfolio: candidate.profile_links?.portfolio,
+      profileLinks: ((candidate.profile_links ?? {}) as Record<string, string>) || {},
       coverLetter: false,
       tags: candidate.tags ?? [],
       timeline,
@@ -268,6 +292,16 @@ export function JobCandidateProfile({
       })),
     };
   }, [candidate, overview, documents]);
+
+  const resumeDoc = useMemo(() => {
+    const docs = uiCandidate?.documents ?? [];
+    return (
+      docs.find((d) => d.type?.toLowerCase?.() === "resume") ??
+      docs.find((d) => d.name?.toLowerCase?.().includes("resume")) ??
+      docs[0] ??
+      null
+    );
+  }, [uiCandidate]);
 
   const handleAddNote = async (content: string, mentions: string[]) => {
     if (!id) return;
@@ -295,6 +329,42 @@ export function JobCandidateProfile({
       toast.error(err instanceof Error ? err.message : "Failed to upload document");
     } finally {
       setDocumentLoading(false);
+    }
+  };
+
+  const handleReplaceResume = async (file: File) => {
+    if (!id) return;
+    try {
+      const existingResumeDocs = documents.filter(
+        (d) => d.doc_type?.toLowerCase() === "resume" || d.name?.toLowerCase().includes("resume"),
+      );
+      const uploaded = await uploadCandidateDocument(id, file, "resume", "resume", "Resume");
+      for (const doc of existingResumeDocs) {
+        if (doc.id !== uploaded.id) {
+          await deleteCandidateDocument(id, doc.id);
+        }
+      }
+      await loadAll(id);
+      toast.success("Resume updated");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update resume");
+      throw err;
+    }
+  };
+
+  const handleRemoveResume = async () => {
+    if (!id) return;
+    const currentResume = documents.find(
+      (d) => d.doc_type?.toLowerCase() === "resume" || d.name?.toLowerCase().includes("resume"),
+    );
+    if (!currentResume?.id) return;
+    try {
+      await deleteCandidateDocument(id, currentResume.id);
+      await loadAll(id);
+      toast.success("Resume removed");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to remove resume");
+      throw err;
     }
   };
 
@@ -327,15 +397,18 @@ export function JobCandidateProfile({
     }
   };
 
-  const handleSaveSummaryLinks = async (payload: { linkedin?: string; portfolio?: string }) => {
+  const handleSaveSummaryLinks = async (payload: Record<string, string>) => {
     if (!id || !candidate) return;
     try {
+      const normalized: Record<string, string> = {};
+      for (const [key, value] of Object.entries(payload || {})) {
+        const cleanKey = key.trim();
+        const cleanValue = String(value ?? "").trim();
+        if (!cleanKey || !cleanValue) continue;
+        normalized[cleanKey] = cleanValue;
+      }
       await updateCandidate(id, {
-        profile_links: {
-          ...((candidate.profile_links ?? {}) as Record<string, string>),
-          linkedin: payload.linkedin?.trim() ?? "",
-          portfolio: payload.portfolio?.trim() ?? "",
-        },
+        profile_links: normalized,
       });
       await loadAll(id);
       toast.success("Links updated");
@@ -343,6 +416,53 @@ export function JobCandidateProfile({
       toast.error(err instanceof Error ? err.message : "Failed to update links");
     }
   };
+
+  const loadApplicationResponses = async (candidateId: string) => {
+    try {
+      setApplicationResponsesLoading(true);
+      setApplicationResponsesError(null);
+      const data = await getCandidateApplicationResponses(candidateId);
+      setApplicationResponses(data);
+    } catch (err) {
+      setApplicationResponsesError(
+        err instanceof Error ? err.message : "Failed to load application responses",
+      );
+    } finally {
+      setApplicationResponsesLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab !== "application_responses") return;
+    if (applicationResponses?.has_additional_questions) return;
+    setActiveTab("overview");
+  }, [activeTab, applicationResponses?.has_additional_questions]);
+
+  const hasAdditionalQuestions = applicationResponses?.has_additional_questions ?? false;
+  const profileLinkFields = useMemo(() => {
+    const schema = (jobDetail?.application_form_schema ?? {}) as Record<string, unknown>;
+    const raw = Array.isArray(schema.profile_links)
+      ? (schema.profile_links as Array<Record<string, unknown>>)
+      : [];
+    const mapped = raw
+      .map((field) => {
+        const visibility = String(field.visibility ?? "hidden").toLowerCase();
+        if (visibility === "hidden") return null;
+        const sourceKey = String(field.key ?? field.id ?? "").trim();
+        if (!sourceKey) return null;
+        const key = sourceKey.startsWith("profile_link_")
+          ? sourceKey.replace("profile_link_", "")
+          : sourceKey;
+        const label = String(field.label ?? key).trim() || key;
+        return {
+          key,
+          label,
+          required: visibility === "required",
+        };
+      })
+      .filter((item): item is { key: string; label: string; required: boolean } => Boolean(item));
+    return mapped;
+  }, [jobDetail?.application_form_schema]);
 
   if (loading) {
     return <p className="text-sm text-muted-foreground">Loading candidate...</p>;
@@ -421,6 +541,9 @@ export function JobCandidateProfile({
               { value: "overview", label: t("overview") },
               { value: "messages", label: t("messages") },
               { value: "documents", label: t("documents") },
+              ...(hasAdditionalQuestions
+                ? [{ value: "application_responses", label: "Application Responses" }]
+                : []),
             ].map((tab) => (
               <TabsTrigger
                 key={tab.value}
@@ -435,14 +558,38 @@ export function JobCandidateProfile({
           <div className={`mt-4 ${isMobile ? "space-y-4" : "grid grid-cols-[1fr_320px] gap-4"}`}>
             <div>
               <TabsContent value="overview" className={`mt-0 ${isMobile ? "space-y-4" : ""}`}>
-                <OverviewTab
-                  timeline={uiCandidate.timeline}
-                  notes={uiCandidate.notes}
-                  mentionableUsers={orgUsers}
-                  onAddNote={handleAddNote}
-                  timelineTitle="Hiring Status Timeline"
-                  timelineEmptyText="No hiring status updates yet."
-                />
+                {isStageThreePane ? (
+                  <div className="space-y-4">
+                    <ResumeTab
+                      resumeUrl={resumeDoc?.url ?? null}
+                      previewUrl={
+                        id && resumeDoc?.id
+                          ? `${getApiBase()}/v1/internal/candidates/${encodeURIComponent(id)}/documents/${encodeURIComponent(
+                              resumeDoc.id,
+                            )}/preview`
+                          : null
+                      }
+                      resumeName={resumeDoc?.name ?? null}
+                      onUploadDocument={undefined}
+                    />
+                    <OverviewTab
+                      timeline={[]}
+                      notes={uiCandidate.notes}
+                      mentionableUsers={orgUsers}
+                      onAddNote={handleAddNote}
+                      showTimeline={false}
+                    />
+                  </div>
+                ) : (
+                  <OverviewTab
+                    timeline={uiCandidate.timeline}
+                    notes={uiCandidate.notes}
+                    mentionableUsers={orgUsers}
+                    onAddNote={handleAddNote}
+                    timelineTitle="Hiring Status Timeline"
+                    timelineEmptyText="No hiring status updates yet."
+                  />
+                )}
               </TabsContent>
               <TabsContent value="messages" className="mt-0">
                 <CandidateMessagesTab
@@ -460,6 +607,20 @@ export function JobCandidateProfile({
                   onDeleteDocument={handleDeleteDocument}
                 />
               </TabsContent>
+              {hasAdditionalQuestions ? (
+                <TabsContent value="application_responses" className="mt-0">
+                  <ApplicationResponsesTab
+                    loading={applicationResponsesLoading}
+                    error={applicationResponsesError}
+                    submittedAt={applicationResponses?.submitted_at ?? null}
+                    items={applicationResponses?.items ?? []}
+                    onRetry={() => {
+                      if (!id) return;
+                      void loadApplicationResponses(id);
+                    }}
+                  />
+                </TabsContent>
+              ) : null}
             </div>
             <SummaryPanel
               variant="job"
@@ -467,8 +628,9 @@ export function JobCandidateProfile({
               jobs={jobs.map((j) => ({ id: j.id, title: j.title }))}
               onSaveProfile={handleSaveSummaryProfile}
               onSaveLinks={handleSaveSummaryLinks}
-              onUploadDocument={() => setDocumentOpen(true)}
-              onDeleteDocument={handleDeleteDocument}
+              onReplaceResume={handleReplaceResume}
+              onRemoveResume={handleRemoveResume}
+              profileLinkFields={profileLinkFields}
             />
           </div>
         </Tabs>

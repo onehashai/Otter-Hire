@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.logging import logger
+from app.models.integration import Integration
 from app.models.integration_credential import IntegrationCredential
 
 
@@ -134,9 +135,11 @@ async def record_ses_event(
     as 'failed' so outbound sending is paused until reviewed.
     """
     result = await db.execute(
-        select(IntegrationCredential).where(
+        select(IntegrationCredential)
+        .join(Integration, Integration.id == IntegrationCredential.integration_id)
+        .where(
             IntegrationCredential.org_id == org_id,
-            IntegrationCredential.integration_type == "outbound_email",
+            Integration.slug == "email",
         )
     )
     row: IntegrationCredential | None = result.scalar_one_or_none()

@@ -75,7 +75,6 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
     hasUnsavedChanges,
     showUnsavedDialog,
     setBasicInfoAttemptedSave,
-    setHiringDetailsAttemptedSave,
     handleSave,
     handlePublish,
     handleUnpublish,
@@ -135,7 +134,6 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
     if (!basicInfoValidation.valid) {
       const titleError = basicInfoValidation.titleError;
       setBasicInfoAttemptedSave(true);
-      setHiringDetailsAttemptedSave(false);
       if (titleError === "min") {
         toast.error(t("min_char_length", { count: 1 }));
       } else if (titleError === "max") {
@@ -151,7 +149,6 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
       return;
     }
     setBasicInfoAttemptedSave(false);
-    setHiringDetailsAttemptedSave(false);
     handleSave();
   };
 
@@ -160,7 +157,6 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
       const first = getFirstInvalidSection(validationState);
       if (first) {
         setBasicInfoAttemptedSave(first.slug === "info");
-        setHiringDetailsAttemptedSave(first.slug === "details");
         toast.error(
           first.messageParams ? t(first.messageKey, first.messageParams) : t(first.messageKey),
         );
@@ -169,7 +165,6 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
       return;
     }
     setBasicInfoAttemptedSave(false);
-    setHiringDetailsAttemptedSave(false);
     handlePublish();
   };
 

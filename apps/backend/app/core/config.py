@@ -234,4 +234,5 @@ class Settings(BaseSettings):
             return value
         return "ats-production" if self.is_production else "ats-staging"
 
+
 settings = Settings()

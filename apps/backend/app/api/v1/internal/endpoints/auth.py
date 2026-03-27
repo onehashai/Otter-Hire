@@ -392,7 +392,9 @@ async def onboarding(
     else:
         if membership.status == "pending":
             membership.status = "active"
-        org_result = await db.execute(select(Organization).where(Organization.id == membership.org_id))
+        org_result = await db.execute(
+            select(Organization).where(Organization.id == membership.org_id)
+        )
         organization = org_result.scalar_one()
         if membership.role == "owner":
             organization.name = payload.organization_name

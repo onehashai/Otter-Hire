@@ -137,15 +137,15 @@ export function TalentPoolCandidateProfile({
       role: candidate.job_title ?? "—",
       email: candidate.email,
       phone: candidate.phone ?? "—",
-      location: candidate.location ?? "—",
+      address: candidate.address ?? "—",
       stage,
-      source: candidate.source ?? "job_board",
+      source: candidate.source ?? "Job Board",
       appliedDate: candidate.created_at,
       documents: documents.map((d) => ({
         id: d.id,
         name: d.name,
         type: d.doc_type,
-        date: new Date(d.created_at).toLocaleDateString(),
+        date: d.created_at,
         size: d.size_label ?? "—",
         url: d.url,
       })),
@@ -221,7 +221,7 @@ export function TalentPoolCandidateProfile({
     name: string;
     email: string;
     phone: string | null;
-    location: string | null;
+    address: string | null;
   }) => {
     if (!id) return;
     try {

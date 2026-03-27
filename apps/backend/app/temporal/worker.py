@@ -1,3 +1,5 @@
+"""Temporal worker process: polls task queues for all registered workflows/activities."""
+
 from __future__ import annotations
 
 import asyncio
@@ -6,7 +8,7 @@ import logging
 from temporalio.worker import Worker
 
 from app.core.config import settings
-from app.integrations.app_store.email_integration.temporal.activities import (
+from app.temporal.email.activities import (
     download_and_extract_resume_activity,
     download_email_activity,
     extract_resume_activity,
@@ -16,16 +18,18 @@ from app.integrations.app_store.email_integration.temporal.activities import (
     publish_update_activity,
     send_outbound_email_activity,
 )
-from app.integrations.app_store.email_integration.temporal.workflow import (
+from app.temporal.email.workflow import (
     InboundEmailWorkflow,
     OutboundEmailWorkflow,
 )
-from app.services.temporal_client import get_temporal_client
+from app.temporal.client import get_temporal_client
+from app.temporal.resume_parsing.activities import parse_job_apply_resume_activity
+from app.temporal.resume_parsing.workflow import JobApplyResumeParseWorkflow
 
 logger = logging.getLogger("ats_worker")
 
 
-async def run_worker() -> None:
+async def run_temporal_worker() -> None:
     try:
         logger.info(
             "[WORKER] Connecting to Temporal server=%s namespace=%s",
@@ -61,8 +65,16 @@ async def run_worker() -> None:
             max_concurrent_activities=20,
             max_concurrent_workflow_tasks=5,
         )
+        worker_careers_resume = Worker(
+            client,
+            task_queue="careers-resume-parse",
+            workflows=[JobApplyResumeParseWorkflow],
+            activities=[parse_job_apply_resume_activity],
+            max_concurrent_activities=10,
+            max_concurrent_workflow_tasks=10,
+        )
         logger.info(
-            "[WORKER] Started task_queues=email-inbound,email-outbound namespace=%s",
+            "[WORKER] Started task_queues=email-inbound,email-outbound,careers-resume-parse namespace=%s",
             settings.temporal_namespace,
         )
         logger.info("[WORKER] Polling for tasks...")
@@ -70,13 +82,19 @@ async def run_worker() -> None:
         async def _keepalive() -> None:
             while True:
                 await asyncio.sleep(60)
-                logger.info("[WORKER] Alive, polling email-inbound, email-outbound")
+                logger.info(
+                    "[WORKER] Alive, polling email-inbound, email-outbound, careers-resume-parse"
+                )
 
         await asyncio.gather(
             worker_inbound.run(),
             worker_outbound.run(),
+            worker_careers_resume.run(),
             _keepalive(),
         )
     except Exception as e:
         logger.error(f"Worker failed to start: {type(e).__name__}: {e}", exc_info=True)
         raise
+
+
+run_worker = run_temporal_worker

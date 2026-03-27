@@ -2800,7 +2800,7 @@ Organizations can configure a careers inbox and ingest inbound candidate emails 
 
 - Candidate is created/updated **only if a resume attachment is present**.
 - Supported parse formats in MVP:
-  - PDF (`pdfminer.six`)
+  - PDF (PyMuPDF)
   - DOCX (`python-docx`)
 - Field extraction (best effort): `name`, `email`, `phone`, `location`
 - Dedupe order:

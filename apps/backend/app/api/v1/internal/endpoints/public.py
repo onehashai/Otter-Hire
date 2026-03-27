@@ -7,11 +7,8 @@ import html
 import json
 import logging
 import re
-import zipfile
 from datetime import datetime, timezone
-from io import BytesIO
 from typing import Optional
-from urllib.parse import urlparse
 from urllib.request import urlopen
 from uuid import UUID
 
@@ -42,7 +39,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.security import verify_access_token
 from app.db.session import get_db
-from app.integrations.app_store.email_integration.temporal.queue import enqueue_ses_raw_key
+from app.temporal.email.queue import enqueue_ses_raw_key
+from app.temporal.resume_parsing.queue import enqueue_job_apply_resume_parse
+from app.temporal.resume_parsing.types import JobApplyResumeParseInput
 from app.models.candidate import Candidate
 from app.models.candidate_document import CandidateDocument
 from app.models.conversation import Conversation
@@ -63,6 +62,24 @@ from app.schemas.public_jobs import (
     PublicJobsListResponse,
 )
 from app.services.automation import execute_automations_for_trigger
+from app.services.public_job_application_files import (
+    PublicJobFileValidationError,
+    file_ref_to_object_key,
+    is_object_key_allowed_for_public_job,
+    public_job_upload_prefix,
+    validate_upload_bytes,
+)
+from app.services.resume.heuristics import (
+    extract_email as _extract_email,
+    extract_location as _extract_location,
+    extract_name as _extract_name,
+    extract_phone as _extract_phone,
+    normalize_phone as _normalize_phone,
+    resume_confidence_score as _resume_confidence_score,
+    should_replace_location as _should_replace_location,
+    should_replace_phone as _should_replace_phone,
+)
+from app.services.resume.pipeline import run_resume_pipeline
 from app.services.resume_links import resolve_resume_from_body
 from app.services.storage import storage_service
 from app.utils.uuid import uuid7
@@ -188,23 +205,13 @@ def _guess_file_name(file_ref: str, fallback: str) -> str:
     return cleaned
 
 
-def _to_candidate_document_object_key(file_ref: str) -> str:
-    """Normalize file references into storage object keys."""
-    raw = (file_ref or "").strip()
-    if not raw:
-        return ""
+def _redis_idempotency_client():
+    try:
+        import redis as redis_lib
 
-    candidate = raw
-    parsed = urlparse(raw)
-    if parsed.scheme and parsed.netloc:
-        candidate = parsed.path or raw
-
-    candidate = candidate.strip()
-    for prefix in ("/v1/internal/files/local/", "/api/files/local/", "/files/local/"):
-        if candidate.startswith(prefix):
-            return candidate.removeprefix(prefix).lstrip("/")
-
-    return candidate.lstrip("/")
+        return redis_lib.Redis.from_url(settings.redis_url, decode_responses=True)
+    except Exception:
+        return None
 
 
 def _canonical_profile_link_key(field_key: str) -> str:
@@ -251,354 +258,6 @@ def _is_resume_attachment(filename: str, content_type: str) -> bool:
     if lower_name.endswith(".doc") or lower_type in {"application/msword"}:
         return True
     return False
-
-
-def _extract_email(text: str) -> Optional[str]:
-    match = re.search(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", text, re.IGNORECASE)
-    if not match:
-        return None
-    return match.group(0).strip().lower()
-
-
-def _extract_phone(text: str) -> Optional[str]:
-    candidates = re.finditer(r"(?:\+?\d[\d()\-\s]{8,}\d)", text)
-    best: Optional[str] = None
-    best_score = -1
-
-    for match in candidates:
-        raw = re.sub(r"\s+", " ", match.group(0)).strip()
-        # Common resume pattern: ZIP before phone, e.g. "68005 (402) 291-5432"
-        raw = re.sub(r"^\d{5}\s+(?=\()", "", raw)
-        score = _score_phone(raw)
-        if score <= 0:
-            continue
-
-        if score > best_score:
-            best_score = score
-            best = raw
-
-    return best
-
-
-def _extract_location(text: str) -> Optional[str]:
-    def _clean_location_candidate(raw: str) -> str:
-        # Resume headers often mix location + phone/email with separators.
-        # Keep only the left-most location-like segment.
-        part = re.split(r"[•|]", raw, maxsplit=1)[0]
-        part = re.sub(r"\s+", " ", part).strip(" ,;-")
-        return part
-
-    def _looks_like_location(value: str) -> bool:
-        if len(value) < 4 or len(value) > 60:
-            return False
-        if any(ch.isdigit() for ch in value):
-            return False
-        # Require comma-separated city + state/region/country style.
-        if "," not in value:
-            return False
-        # Reject job/company-like phrases.
-        job_tokens = {
-            "intern",
-            "engineer",
-            "developer",
-            "manager",
-            "analyst",
-            "research",
-            "limited",
-            "private",
-            "technologies",
-            "solutions",
-            "software",
-        }
-        lowered = value.lower()
-        if any(token in lowered for token in job_tokens):
-            return False
-        return bool(re.fullmatch(r"[A-Za-z .'-]{2,40},\s*[A-Za-z .'-]{2,40}", value))
-
-    blocked_tokens = {
-        "bachelor",
-        "master",
-        "university",
-        "college",
-        "curriculum",
-        "vitae",
-        "resume",
-        "experience",
-        "education",
-        "objective",
-        "skills",
-        "certification",
-        "project",
-        "linkedin",
-        "github",
-    }
-    lines = [line.strip() for line in text.splitlines() if line.strip()]
-    for line in lines[:20]:
-        if len(line) > 80:
-            continue
-        lowered = line.lower()
-        if any(token in lowered for token in blocked_tokens):
-            continue
-        if re.search(r"\(\s*\(", line):
-            continue
-        alpha_count = sum(1 for ch in line if ch.isalpha())
-        if alpha_count < 4:
-            continue
-
-        candidate = _clean_location_candidate(line)
-        if _looks_like_location(candidate):
-            return candidate
-
-        # Primary pattern: "City, State/Region [ZIP optional]"
-        if re.fullmatch(r"[A-Za-z .'-]{2,40},\s*[A-Za-z .'-]{2,40}(?:\s+\d{4,6})?", line):
-            return line
-
-        # Secondary pattern: clean comma phrase without obvious job/company tokens.
-        symbol_count = sum(1 for ch in line if not (ch.isalnum() or ch.isspace() or ch in ",.-'"))
-        if symbol_count > 2:
-            continue
-        relaxed = _clean_location_candidate(line)
-        if _looks_like_location(relaxed):
-            return relaxed
-    return None
-
-
-def _score_location(value: Optional[str]) -> int:
-    if not value:
-        return 0
-    line = value.strip()
-    lowered = line.lower()
-    if len(line) < 4 or len(line) > 80:
-        return 0
-
-    blocked_tokens = {
-        "bachelor",
-        "master",
-        "university",
-        "college",
-        "curriculum",
-        "vitae",
-        "resume",
-        "experience",
-        "education",
-        "objective",
-        "skills",
-        "certification",
-        "project",
-    }
-    if any(token in lowered for token in blocked_tokens):
-        return 0
-    if "@" in line:
-        return 0
-
-    score = 1
-    if "," in line:
-        score += 2
-    if re.fullmatch(r"[A-Za-z .'-]{2,40},\s*[A-Za-z .'-]{2,40}(?:\s+\d{4,6})?", line):
-        score += 3
-    if re.search(r"\(\s*\(", line):
-        score -= 3
-    symbol_count = sum(1 for ch in line if not (ch.isalnum() or ch.isspace() or ch in ",.-'"))
-    if symbol_count > 2:
-        score -= 2
-    return max(score, 0)
-
-
-def _should_replace_location(existing_location: Optional[str], new_location: Optional[str]) -> bool:
-    existing_score = _score_location(existing_location)
-    new_score = _score_location(new_location)
-    # Clear noisy existing OCR location when new parse no longer finds a reliable location.
-    if new_location is None and existing_score <= 1:
-        return True
-    if not new_location:
-        return False
-    if not existing_location:
-        return True
-    return new_score > existing_score
-
-
-def _extract_name(text: str, fallback_email: Optional[str]) -> Optional[str]:
-    lines = [line.strip() for line in text.splitlines() if line.strip()]
-    for line in lines[:12]:
-        if len(line) > 80:
-            continue
-        if "@" in line:
-            continue
-        if re.fullmatch(r"[A-Za-z][A-Za-z .'-]{1,60}", line):
-            return line
-    if fallback_email and "@" in fallback_email:
-        local = fallback_email.split("@", 1)[0].replace(".", " ").replace("_", " ")
-        local = " ".join(part for part in local.split() if part)
-        if local:
-            return local.title()
-    return None
-
-
-def _looks_like_person_name(value: Optional[str]) -> bool:
-    if not value:
-        return False
-    name = value.strip()
-    if len(name) < 3 or len(name) > 80:
-        return False
-    if "@" in name:
-        return False
-    if re.search(r"\d", name):
-        return False
-    parts = [p for p in re.split(r"\s+", name) if p]
-    return len(parts) >= 2
-
-
-def _resume_confidence_score(
-    text: str,
-    extracted_name: Optional[str],
-    extracted_email: Optional[str],
-    extracted_phone: Optional[str],
-    extracted_location: Optional[str],
-) -> int:
-    normalized = re.sub(r"\s+", " ", (text or "")).strip().lower()
-    score = 0
-
-    if extracted_email and extracted_email.endswith("@invalid.local") is False:
-        score += 2
-    if extracted_phone:
-        score += 2
-    if _looks_like_person_name(extracted_name):
-        score += 2
-    if extracted_location:
-        score += 1
-
-    if len(normalized) >= 120:
-        score += 2
-    elif len(normalized) >= 60:
-        score += 1
-
-    resume_keywords = {
-        "experience",
-        "education",
-        "skills",
-        "projects",
-        "summary",
-        "employment",
-        "work history",
-        "certification",
-        "linkedin",
-        "github",
-    }
-    keyword_hits = sum(1 for keyword in resume_keywords if keyword in normalized)
-    score += min(keyword_hits, 3)
-
-    return score
-
-
-def _normalize_phone(value: Optional[str]) -> Optional[str]:
-    if not value:
-        return None
-    digits = re.sub(r"\D", "", value)
-    return digits or None
-
-
-def _score_phone(value: Optional[str]) -> int:
-    if not value:
-        return 0
-    raw = re.sub(r"\s+", " ", value).strip()
-    digits = re.sub(r"\D", "", raw)
-    if len(digits) < 10 or len(digits) > 15:
-        return 0
-
-    score = 0
-    if raw.startswith("+"):
-        score += 2
-    if "(" in raw and ")" in raw:
-        score += 2
-    if "-" in raw:
-        score += 1
-    if len(digits) in {10, 11}:
-        score += 2
-    if re.match(r"^\d{5}\s+\(", raw):
-        score -= 3
-    if len(raw) > 24:
-        score -= 1
-    return score
-
-
-def _should_replace_phone(existing_phone: Optional[str], new_phone: Optional[str]) -> bool:
-    if not new_phone:
-        return False
-    if not existing_phone:
-        return True
-    return _score_phone(new_phone) > _score_phone(existing_phone)
-
-
-def _parse_resume_bytes(filename: str, content_type: str, content: bytes) -> str:
-    def _is_low_text(value: str) -> bool:
-        normalized = re.sub(r"\s+", " ", (value or "")).strip()
-        return len(normalized) < 80
-
-    def _ocr_pdf_bytes(pdf_bytes: bytes) -> str:
-        import pypdfium2 as pdfium
-        import pytesseract
-
-        text_chunks: list[str] = []
-        pdf = pdfium.PdfDocument(pdf_bytes)
-        page_count = min(len(pdf), 3)
-        for page_index in range(page_count):
-            page = pdf[page_index]
-            pil_image = page.render(scale=2).to_pil()
-            ocr_text = pytesseract.image_to_string(pil_image)
-            if ocr_text and ocr_text.strip():
-                text_chunks.append(ocr_text.strip())
-        return "\n".join(text_chunks).strip()
-
-    def _ocr_docx_bytes(docx_bytes: bytes) -> str:
-        import pytesseract
-        from PIL import Image
-
-        text_chunks: list[str] = []
-        with zipfile.ZipFile(BytesIO(docx_bytes)) as archive:
-            media_files = [name for name in archive.namelist() if name.startswith("word/media/")]
-            for media_name in media_files[:4]:
-                image_bytes = archive.read(media_name)
-                try:
-                    image = Image.open(BytesIO(image_bytes))
-                    ocr_text = pytesseract.image_to_string(image)
-                    if ocr_text and ocr_text.strip():
-                        text_chunks.append(ocr_text.strip())
-                except Exception:
-                    continue
-        return "\n".join(text_chunks).strip()
-
-    lower_name = (filename or "").lower()
-    lower_type = (content_type or "").lower()
-    if lower_name.endswith(".pdf") or lower_type == "application/pdf":
-        from pdfminer.high_level import extract_text
-
-        parsed = (extract_text(BytesIO(content)) or "").strip()
-        if not _is_low_text(parsed):
-            return parsed
-        try:
-            ocr = _ocr_pdf_bytes(content)
-            if ocr:
-                return ocr
-        except Exception:
-            pass
-        return parsed
-    if lower_name.endswith(".docx") or lower_type == (
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-    ):
-        from docx import Document
-
-        document = Document(BytesIO(content))
-        parsed = "\n".join((p.text or "").strip() for p in document.paragraphs).strip()
-        if not _is_low_text(parsed):
-            return parsed
-        try:
-            ocr = _ocr_docx_bytes(content)
-            if ocr:
-                return ocr
-        except Exception:
-            pass
-        return parsed
-    raise ValueError("Unsupported resume format")
 
 
 def _verify_hmac_signature(signature_header: str, secret: str, raw_body: bytes) -> bool:
@@ -1071,23 +730,40 @@ async def upload_public_job_application_file(
     if not field_key_clean:
         raise HTTPException(status_code=422, detail="field_key is required")
 
-    safe_name = (file.filename or "attachment.bin").strip() or "attachment.bin"
+    safe_name_raw = (file.filename or "attachment.bin").strip() or "attachment.bin"
     content = await file.read()
-    if len(content) > 10 * 1024 * 1024:
-        raise HTTPException(status_code=422, detail="File size must be <= 10MB")
+    max_bytes = settings.public_job_apply_max_upload_bytes
+    if len(content) > max_bytes:
+        mb = max(max_bytes // (1024 * 1024), 1)
+        raise HTTPException(
+            status_code=422,
+            detail=f"File size must be <= {mb}MB",
+        )
 
-    object_key = (
-        f"orgs/{org_uuid}/job_applications/{job_uuid}/uploads/"
-        f"{uuid7()}_{field_key_clean}_{safe_name}"
-    )
-    await storage_service.write_bytes(
-        object_key, content, file.content_type or "application/octet-stream"
-    )
+    try:
+        mime, safe_display_name = validate_upload_bytes(
+            field_key=field_key_clean,
+            filename=safe_name_raw,
+            content=content,
+        )
+    except PublicJobFileValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    prefix = public_job_upload_prefix(org_uuid, job_uuid)
+    if "." in safe_display_name:
+        stem, ext_part = safe_display_name.rsplit(".", 1)
+        ext_norm = f".{ext_part.lower()}"
+    else:
+        stem, ext_norm = safe_display_name, ""
+    stem_key = re.sub(r"[^a-zA-Z0-9_-]+", "_", stem)[:80] or "file"
+    object_key = f"{prefix}{uuid7()}_{field_key_clean}_{stem_key}{ext_norm}"
+
+    await storage_service.write_bytes(object_key, content, mime)
     resolved_url = await storage_service.resolve_url(object_key)
     return PublicApplyFileUploadResponse(
         key=field_key_clean,
-        name=safe_name,
-        content_type=(file.content_type or "").strip() or None,
+        name=safe_display_name,
+        content_type=mime.split(";")[0].strip() if mime else None,
         size_bytes=len(content),
         url=resolved_url,
     )
@@ -1106,6 +782,7 @@ async def apply_public_job(
         ..., min_length=1, description="Careers URL name segment before org UUID"
     ),
     db: AsyncSession = Depends(get_db),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
     try:
         org_uuid = UUID(org_id)
@@ -1199,6 +876,20 @@ async def apply_public_job(
     if extra_file_keys:
         raise HTTPException(status_code=422, detail="Unexpected file fields provided")
 
+    idem_redis = None
+    idem_key = None
+    if idempotency_key and idempotency_key.strip():
+        idem_redis = _redis_idempotency_client()
+        if idem_redis:
+            idem_key = f"public_apply:idem:{org_uuid}:{job_uuid}:{idempotency_key.strip()[:200]}"
+            try:
+                existing_id = idem_redis.get(idem_key)
+            except Exception:
+                existing_id = None
+                logger.exception("public apply idempotency redis get failed")
+            if existing_id:
+                return PublicJobApplyResponse(id=existing_id, status="submitted")
+
     application = JobApplication(
         org_id=org_uuid,
         job_id=job_uuid,
@@ -1240,7 +931,7 @@ async def apply_public_job(
             name=body.full_name.strip(),
             email=body.email.strip().lower(),
             phone=(body.phone or "").strip() or None,
-            source="job_board",
+            source="Job Board",
             tags=[],
         )
         db.add(candidate)
@@ -1258,16 +949,49 @@ async def apply_public_job(
     await db.flush()
     application.candidate_id = candidate.id
 
+    resume_parse_payload: tuple[str, str, str] | None = None
     if isinstance(files, dict):
         for field_key, file_ref in files.items():
             if not isinstance(file_ref, str) or not file_ref.strip():
                 continue
             file_url = file_ref.strip()
+            object_key = file_ref_to_object_key(file_url)
+            if not object_key or not is_object_key_allowed_for_public_job(
+                org_uuid, job_uuid, object_key
+            ):
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Invalid or untrusted file reference for field {field_key}",
+                )
+            try:
+                content = await storage_service.read_bytes(object_key)
+            except FileNotFoundError:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Uploaded file not found for field {field_key}",
+                ) from None
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Could not read file for field {field_key}",
+                ) from exc
+
+            display_name = _guess_file_name(file_url, f"{field_key}.bin")
+            try:
+                mime, safe_display_name = validate_upload_bytes(
+                    field_key=field_key,
+                    filename=display_name,
+                    content=content,
+                )
+            except PublicJobFileValidationError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
+
             label = field_key.replace("_", " ").title()
             doc_type = "custom_field_attachment"
             if field_key == "resume":
                 label = default_fields.get("resume", {}).get("label", "Resume")
                 doc_type = "resume"
+                resume_parse_payload = (object_key, safe_display_name, mime)
             elif field_key == "cover_letter":
                 label = default_fields.get("cover_letter", {}).get("label", "Cover Letter")
                 doc_type = "cover_letter"
@@ -1283,7 +1007,7 @@ async def apply_public_job(
             )
             latest_version = existing_version_result.scalar_one_or_none() or 0
 
-            object_key = _to_candidate_document_object_key(file_url)
+            mime_stored = (mime.split(";")[0].strip() if mime else "application/octet-stream")[:120]
 
             db.add(
                 CandidateDocument(
@@ -1293,18 +1017,43 @@ async def apply_public_job(
                     field_key=field_key,
                     field_label_snapshot=str(label) if label else None,
                     doc_type=doc_type,
-                    name=_guess_file_name(file_url, f"{field_key}.bin"),
+                    name=safe_display_name,
                     url=file_url,
                     object_key=object_key,
-                    mime_type="application/octet-stream",
-                    size_bytes=0,
+                    mime_type=mime_stored,
+                    size_bytes=len(content),
                     uploaded_by_user_id=None,
                     version=int(latest_version) + 1,
                 )
             )
 
     await db.commit()
+    if idem_redis and idem_key:
+        try:
+            idem_redis.setex(idem_key, 86400, str(application.id))
+        except Exception:
+            logger.exception("public apply idempotency redis set failed")
     await db.refresh(application)
+
+    if resume_parse_payload:
+        obj_key, disp_n, mime_p = resume_parse_payload
+        try:
+            await enqueue_job_apply_resume_parse(
+                application_id=str(application.id),
+                input_data=JobApplyResumeParseInput(
+                    org_id=str(org_uuid),
+                    candidate_id=str(candidate.id),
+                    object_key=obj_key,
+                    resume_display_name=disp_n,
+                    mime=mime_p,
+                    fallback_email=body.email.strip().lower(),
+                ),
+            )
+        except Exception:
+            logger.exception(
+                "public apply: failed to start resume parse workflow application_id=%s",
+                application.id,
+            )
 
     # Fetch stage name for automation metadata
     stage_name = None
@@ -1320,7 +1069,7 @@ async def apply_public_job(
         candidate_id=candidate.id,
         job_id=job_uuid,
         metadata={
-            "source": "job_board",
+            "source": "Job Board",
             "stage_name": stage_name,
         },
     )
@@ -2030,14 +1779,19 @@ async def ingest_inbound_email(
     resume_attachment: InboundEmailAttachment | None = None
     resume_text: str = ""
     parse_error: str | None = None
+    resume_parse = None
 
     for attachment_row, content in stored_attachments:
         if _is_resume_attachment(attachment_row.filename, attachment_row.content_type):
             resume_attachment = attachment_row
             try:
-                resume_text = _parse_resume_bytes(
-                    attachment_row.filename, attachment_row.content_type, content
+                resume_parse = run_resume_pipeline(
+                    attachment_row.filename,
+                    attachment_row.content_type,
+                    content,
+                    fallback_email=(inbound_email.from_email or ""),
                 )
+                resume_text = resume_parse.text
             except Exception as exc:
                 parse_error = f"Resume parse failed: {exc}"
             break
@@ -2053,17 +1807,26 @@ async def ingest_inbound_email(
             "org_id": str(org_inbox.org_id),
         }
 
-    extracted_email = _extract_email(resume_text) or inbound_email.from_email
-    extracted_phone = _extract_phone(resume_text)
-    extracted_name = _extract_name(resume_text, extracted_email) or "Unknown Candidate"
-    extracted_location = _extract_location(resume_text)
+    pe = resume_parse.profile.personal if resume_parse else None
+    extracted_email = (
+        (pe.email if pe else None) or _extract_email(resume_text) or inbound_email.from_email
+    )
+    extracted_phone = (pe.phone if pe else None) or _extract_phone(resume_text)
+    extracted_name = (
+        (pe.full_name if pe else None)
+        or _extract_name(resume_text, extracted_email)
+        or "Unknown Candidate"
+    )
+    extracted_address = (pe.address if pe else None) or _extract_location(resume_text)
     confidence = _resume_confidence_score(
         resume_text,
         extracted_name,
         extracted_email,
         extracted_phone,
-        extracted_location,
+        extracted_address,
     )
+    if resume_parse and resume_parse.parse_method == "llm_json":
+        confidence += 2
     min_confidence = max(1, int(settings.inbound_resume_min_confidence))
     if confidence < min_confidence:
         inbound_email.parse_status = "ignored"
@@ -2099,6 +1862,7 @@ async def ingest_inbound_email(
     candidate = candidate_query.scalars().first() if candidate_query is not None else None
 
     candidate_created = False
+    parsed_resume_json = resume_parse.profile.model_dump(mode="json") if resume_parse else None
     if candidate is None:
         candidate = Candidate(
             org_id=org_inbox.org_id,
@@ -2108,8 +1872,9 @@ async def ingest_inbound_email(
             name=extracted_name,
             email=extracted_email or f"unknown+{inbound_email.id}@invalid.local",
             phone=extracted_phone,
-            location=extracted_location,
+            address=extracted_address,
             profile_links={},
+            parsed_resume=parsed_resume_json,
             source="Email",
             tags=[],
         )
@@ -2121,8 +1886,10 @@ async def ingest_inbound_email(
             candidate.name = extracted_name
         if _should_replace_phone(candidate.phone, extracted_phone):
             candidate.phone = extracted_phone
-        if _should_replace_location(candidate.location, extracted_location):
-            candidate.location = extracted_location
+        if _should_replace_location(candidate.address, extracted_address):
+            candidate.address = extracted_address
+        if parsed_resume_json is not None:
+            candidate.parsed_resume = parsed_resume_json
 
     latest_version_result = await db.execute(
         select(func.max(CandidateDocument.version)).where(

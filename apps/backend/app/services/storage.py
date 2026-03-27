@@ -55,6 +55,17 @@ class StorageService:
         path.write_bytes(content)
         return object_key
 
+    async def read_bytes(self, object_key: str) -> bytes:
+        if self.use_s3:
+            s3_key = self._s3_key(object_key)
+            response = self.s3_client.get_object(Bucket=self.bucket, Key=s3_key)
+            return response["Body"].read()
+
+        path = self._safe_local_path(object_key)
+        if not path.is_file():
+            raise FileNotFoundError(object_key)
+        return path.read_bytes()
+
     async def delete_object(self, object_key: str) -> None:
         if self.use_s3:
             self.s3_client.delete_object(Bucket=self.bucket, Key=self._s3_key(object_key))

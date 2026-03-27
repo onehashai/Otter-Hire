@@ -249,7 +249,7 @@ class CandidateAdmin(ModelView, model=Candidate):
     column_sortable_list = [Candidate.name, Candidate.email, Candidate.status, Candidate.created_at]
     column_default_sort = [(Candidate.created_at, True)]
 
-    form_excluded_columns = [Candidate.profile_links, Candidate.tags]
+    form_excluded_columns = [Candidate.profile_links, Candidate.parsed_resume, Candidate.tags]
 
 
 class CandidateDocumentAdmin(ModelView, model=CandidateDocument):

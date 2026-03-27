@@ -84,7 +84,7 @@ function mapHiringTimelineItem(activity: {
   if (activity.type === "candidate_created") {
     const source = String(metadata.source ?? "Manual");
     return {
-      action: source === "job_board" ? "Applied from job board" : "Candidate added",
+      action: source === "Job Board" ? "Applied from job board" : "Candidate added",
       user: actor,
       date,
       icon: "apply",
@@ -263,16 +263,16 @@ export function JobCandidateProfile({
       role: candidate.job_title ?? "—",
       email: candidate.email,
       phone: candidate.phone ?? "—",
-      location: candidate.location ?? "—",
+      address: candidate.address ?? "—",
       stage,
-      source: candidate.source ?? "job_board",
+      source: candidate.source ?? "Job Board",
       appliedDate: candidate.created_at,
       documents: [
         ...documents.map((d) => ({
           id: d.id,
           name: d.name,
           type: d.doc_type,
-          date: new Date(d.created_at).toLocaleDateString(),
+          date: d.created_at,
           size: d.size_label ?? "—",
           url: d.url,
         })),
@@ -380,7 +380,7 @@ export function JobCandidateProfile({
     name: string;
     email: string;
     phone: string | null;
-    location: string | null;
+    address: string | null;
   }) => {
     if (!id) return;
     try {
@@ -482,15 +482,6 @@ export function JobCandidateProfile({
       </div>
     );
   }
-
-  const sourceBadgeLabel =
-    uiCandidate.source === "Manual"
-      ? "Manually Added"
-      : uiCandidate.source === "email_automation"
-        ? "Email Automation"
-        : uiCandidate.source === "job_board"
-          ? "Job Portal"
-          : toTitle(uiCandidate.source).replaceAll("_", " ");
 
   return (
     <>

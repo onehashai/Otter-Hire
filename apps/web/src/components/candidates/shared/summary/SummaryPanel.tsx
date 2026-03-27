@@ -8,7 +8,7 @@ import { Avatar } from "@onehash/ui/avatar";
 import { Separator } from "@onehash/ui/separator";
 import { Icon } from "@onehash/ui/icon";
 import { InputField, PhoneNumberField, isValidPhoneNumber } from "@onehash/ui/input";
-import { formatTimestampToDateTime } from "@/lib/format-date";
+import { formatThreadMessageTime } from "@/lib/format-date";
 import { Label } from "@onehash/ui/label";
 import { formatPhoneForDisplay, parseStoredPhone } from "@/lib/phone";
 import { getInitialsFromName } from "@/lib/name-initials";
@@ -28,7 +28,7 @@ interface CandidateSummary {
   role: string;
   email: string;
   phone: string;
-  location: string;
+  address: string;
   stage: string;
   source: string;
   appliedDate: string;
@@ -51,7 +51,7 @@ interface SummaryPanelProps {
     name: string;
     email: string;
     phone: string | null;
-    location: string | null;
+    address: string | null;
   }) => Promise<void>;
   onSaveLinks: (payload: Record<string, string>) => Promise<void>;
   onReplaceResume?: (file: File) => Promise<void>;
@@ -98,7 +98,7 @@ export function SummaryPanel({
   const [email, setEmail] = useState(candidate.email);
   const [phone, setPhone] = useState<string | undefined>(() => parseStoredPhone(candidate.phone));
   const [phoneError, setPhoneError] = useState<string | null>(null);
-  const [location, setLocation] = useState(candidate.location === "—" ? "" : candidate.location);
+  const [address, setAddress] = useState(candidate.address === "—" ? "" : candidate.address);
 
   const [linkDraft, setLinkDraft] = useState<Record<string, string>>(() => ({
     ...(candidate.profileLinks || {}),
@@ -109,7 +109,7 @@ export function SummaryPanel({
     setEmail(candidate.email);
     setPhone(parseStoredPhone(candidate.phone));
     setPhoneError(null);
-    setLocation(candidate.location === "—" ? "" : candidate.location);
+    setAddress(candidate.address === "—" ? "" : candidate.address);
     setLinkDraft({ ...(candidate.profileLinks || {}) });
     setResumeFile(null);
   }, [candidate]);
@@ -176,9 +176,9 @@ export function SummaryPanel({
                 error={phoneError ?? undefined}
               />
               <InputField
-                label="Location"
-                value={location}
-                onChange={(e) => setLocation(e.target.value)}
+                label="Address"
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
               />
               <div className="flex gap-2">
                 <Button
@@ -202,7 +202,7 @@ export function SummaryPanel({
                         name: name.trim(),
                         email: email.trim(),
                         phone: phone ?? null,
-                        location: location.trim() || null,
+                        address: address.trim() || null,
                       });
                       setProfileEdit(false);
                     } finally {
@@ -223,7 +223,7 @@ export function SummaryPanel({
                     setEmail(candidate.email);
                     setPhone(parseStoredPhone(candidate.phone));
                     setPhoneError(null);
-                    setLocation(candidate.location === "—" ? "" : candidate.location);
+                    setAddress(candidate.address === "—" ? "" : candidate.address);
                   }}
                 >
                   Cancel
@@ -241,7 +241,7 @@ export function SummaryPanel({
                   {formatPhoneForDisplay(candidate.phone)}
                 </div>
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <Icon name="House" className="h-3.5 w-3.5" /> {candidate.location}
+                  <Icon name="House" className="h-3.5 w-3.5" /> {candidate.address}
                 </div>
               </div>
               <Separator />
@@ -267,7 +267,7 @@ export function SummaryPanel({
                 <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">
                   {t("applied")}
                 </Label>
-                <p className="text-xs">{formatTimestampToDateTime(candidate.appliedDate)}</p>
+                <p className="text-xs">{formatThreadMessageTime(candidate.appliedDate)}</p>
               </div>
             </>
           )}
@@ -338,7 +338,7 @@ export function SummaryPanel({
                   </Button>
                 ) : null}
               </div>
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-[11px] text-muted-foreground min-w-0 max-w-full break-all">
                 Resume:{" "}
                 {resumeFile
                   ? resumeFile.name

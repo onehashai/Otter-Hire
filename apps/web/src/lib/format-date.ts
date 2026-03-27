@@ -91,10 +91,5 @@ export function formatThreadMessageTime(isoString: string | null, locale = "en-G
   }
   if (dayDiff === 1) return "Yesterday";
 
-  const diffMs = now.getTime() - date.getTime();
-  if (diffMs >= 0 && diffMs < 7 * 86_400_000) {
-    return date.toLocaleDateString(locale, { weekday: "short" });
-  }
-
   return formatTimestampToDateTime(isoString, locale);
 }

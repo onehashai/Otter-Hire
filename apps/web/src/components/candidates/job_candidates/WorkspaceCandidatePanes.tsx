@@ -64,7 +64,7 @@ function mapHiringTimelineItem(activity: {
   if (activity.type === "candidate_created") {
     const source = String(metadata.source ?? "Manual");
     return {
-      action: source === "job_board" ? "Applied from job board" : "Candidate added",
+      action: source === "Job Board" ? "Applied from job board" : "Candidate added",
       user: actor,
       date,
       icon: "apply",
@@ -187,7 +187,7 @@ export function WorkspaceCandidatePanes({
         id: d.id,
         name: d.name,
         type: d.doc_type,
-        date: new Date(d.created_at).toLocaleDateString(),
+        date: d.created_at,
         size: d.size_label ?? "—",
         url: d.url,
       })),

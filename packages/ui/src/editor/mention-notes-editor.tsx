@@ -12,7 +12,7 @@ import type { SuggestionKeyDownProps, SuggestionProps } from "@tiptap/suggestion
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { Button } from "../button";
 import { cn } from "../lib/utils";
-
+import "./mention-notes-editor.css";
 export interface NotesMentionableUser {
   id: string;
   name: string | null;
@@ -271,8 +271,9 @@ export function MentionNotesEditor({
       extensions,
       editorProps: {
         attributes: {
-          class:
-            "min-h-[60px] w-full resize-none px-3 py-2 text-xs leading-normal text-foreground outline-none focus:outline-none",
+          class: cn(
+            "tiptap min-h-[60px] w-full resize-none px-3 py-2 text-xs leading-normal text-foreground outline-none focus:outline-none",
+          ),
         },
       },
       onUpdate: () => setTick((n) => n + 1),

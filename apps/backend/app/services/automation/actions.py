@@ -43,12 +43,8 @@ async def handle_send_email_action(
         from datetime import datetime, timezone
 
         from app.core.config import settings
-        from app.integrations.app_store.email_integration.temporal.queue import (
-            enqueue_outbound_email,
-        )
-        from app.integrations.app_store.email_integration.temporal.types import (
-            OutboundWorkflowInput,
-        )
+        from app.temporal.email.queue import enqueue_outbound_email
+        from app.temporal.email.types import OutboundWorkflowInput
         from app.models.candidate import Candidate
         from app.models.conversation import Conversation
         from app.models.message import Message

@@ -11,7 +11,7 @@ from uuid import UUID
 from temporalio import activity
 
 from app.core.config import settings
-from app.integrations.app_store.email_integration.temporal.types import (
+from app.temporal.email.types import (
     InboundWorkflowInput,
     OutboundWorkflowInput,
 )

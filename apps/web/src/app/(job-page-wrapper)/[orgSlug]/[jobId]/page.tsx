@@ -39,6 +39,14 @@ type ApplyFile = {
   uploading?: boolean;
 };
 
+function newIdempotencyKey(): string {
+  const c = typeof globalThis !== "undefined" ? globalThis.crypto : undefined;
+  if (c && typeof c.randomUUID === "function") {
+    return c.randomUUID();
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 11)}`;
+}
+
 function formatSalary(job: PublicJobDetail): string | null {
   const currencySymbol =
     job.currency === "INR"
@@ -151,6 +159,8 @@ export default function CareerJobDetailPage() {
 
   const isRequired = (visibility: string) => visibility === "required";
   const isVisible = (visibility: string) => visibility !== "hidden";
+
+  const anyFileUploading = Object.values(applyForm.files).some((f) => f?.uploading);
 
   const handleSelectAndUploadFile = async (key: string, file: File | null) => {
     if (!file) return;
@@ -270,13 +280,19 @@ export default function CareerJobDetailPage() {
           setApplySubmitting(false);
           return;
         }
-        await applyToPublicJob(parsedOrg.orgId, jobId, parsedOrg.orgName, {
-          full_name: applyForm.fullName,
-          email: applyForm.email,
-          phone: applyForm.phone || null,
-          answers: payloadAnswers,
-          files: Object.keys(payloadFiles).length ? payloadFiles : undefined,
-        });
+        await applyToPublicJob(
+          parsedOrg.orgId,
+          jobId,
+          parsedOrg.orgName,
+          {
+            full_name: applyForm.fullName,
+            email: applyForm.email,
+            phone: applyForm.phone || null,
+            answers: payloadAnswers,
+            files: Object.keys(payloadFiles).length ? payloadFiles : undefined,
+          },
+          { idempotencyKey: newIdempotencyKey() },
+        );
         setApplySubmitting(false);
         closeApplyDialog();
         toast.success("Application submitted. We'll be in touch!");
@@ -514,13 +530,35 @@ export default function CareerJobDetailPage() {
                     {isRequired(fieldVisibility("resume", "hidden")) ? "*" : "(optional)"}
                   </Label>
                   <div className="mt-1.5 flex items-center gap-2">
-                    <label className="flex-1 flex items-center justify-center gap-2 rounded-lg border border-border border-dashed px-4 py-3 text-xs text-muted-foreground hover:bg-muted/50 cursor-pointer transition-colors">
+                    <label
+                      className={cn(
+                        "flex-1 flex items-center justify-center gap-2 rounded-lg border border-border border-dashed px-4 py-3 text-xs text-muted-foreground transition-colors",
+                        applyForm.files.resume?.uploading
+                          ? "cursor-wait opacity-80"
+                          : "hover:bg-muted/50 cursor-pointer",
+                      )}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const file = e.dataTransfer.files?.[0];
+                        if (file) void handleSelectAndUploadFile("resume", file);
+                      }}
+                    >
                       <Icon name="Upload" className="h-4 w-4 shrink-0" />
-                      <span>{applyForm.files.resume?.name ?? "Choose file or drag and drop"}</span>
+                      <span>
+                        {applyForm.files.resume?.uploading
+                          ? "Uploading…"
+                          : (applyForm.files.resume?.name ?? "Choose file or drag and drop")}
+                      </span>
                       <input
                         type="file"
                         accept=".pdf,.doc,.docx"
                         className="sr-only"
+                        disabled={applyForm.files.resume?.uploading}
                         onChange={(e) => {
                           void handleSelectAndUploadFile("resume", e.target.files?.[0] || null);
                         }}
@@ -536,15 +574,35 @@ export default function CareerJobDetailPage() {
                     {isRequired(fieldVisibility("cover_letter", "hidden")) ? "*" : "(optional)"}
                   </Label>
                   <div className="mt-1.5 flex items-center gap-2">
-                    <label className="flex-1 flex items-center justify-center gap-2 rounded-lg border border-border border-dashed px-4 py-3 text-xs text-muted-foreground hover:bg-muted/50 cursor-pointer transition-colors">
+                    <label
+                      className={cn(
+                        "flex-1 flex items-center justify-center gap-2 rounded-lg border border-border border-dashed px-4 py-3 text-xs text-muted-foreground transition-colors",
+                        applyForm.files.cover_letter?.uploading
+                          ? "cursor-wait opacity-80"
+                          : "hover:bg-muted/50 cursor-pointer",
+                      )}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const file = e.dataTransfer.files?.[0];
+                        if (file) void handleSelectAndUploadFile("cover_letter", file);
+                      }}
+                    >
                       <Icon name="Upload" className="h-4 w-4 shrink-0" />
                       <span>
-                        {applyForm.files.cover_letter?.name ?? "Choose file or drag and drop"}
+                        {applyForm.files.cover_letter?.uploading
+                          ? "Uploading…"
+                          : (applyForm.files.cover_letter?.name ?? "Choose file or drag and drop")}
                       </span>
                       <input
                         type="file"
-                        accept=".pdf,.doc,.docx,.txt"
+                        accept=".pdf,.docx,.txt"
                         className="sr-only"
+                        disabled={applyForm.files.cover_letter?.uploading}
                         onChange={(e) => {
                           void handleSelectAndUploadFile(
                             "cover_letter",
@@ -687,14 +745,35 @@ export default function CareerJobDetailPage() {
                         </select>
                       ) : type === "file_upload" ? (
                         <div className="mt-1.5 flex items-center gap-2">
-                          <label className="flex-1 flex items-center justify-center gap-2 rounded-lg border border-border border-dashed px-4 py-3 text-xs text-muted-foreground hover:bg-muted/50 cursor-pointer transition-colors">
+                          <label
+                            className={cn(
+                              "flex-1 flex items-center justify-center gap-2 rounded-lg border border-border border-dashed px-4 py-3 text-xs text-muted-foreground transition-colors",
+                              applyForm.files[key]?.uploading
+                                ? "cursor-wait opacity-80"
+                                : "hover:bg-muted/50 cursor-pointer",
+                            )}
+                            onDragOver={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                            }}
+                            onDrop={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              const file = e.dataTransfer.files?.[0];
+                              if (file) void handleSelectAndUploadFile(key, file);
+                            }}
+                          >
                             <Icon name="Upload" className="h-4 w-4 shrink-0" />
                             <span>
-                              {applyForm.files[key]?.name ?? "Choose file or drag and drop"}
+                              {applyForm.files[key]?.uploading
+                                ? "Uploading…"
+                                : (applyForm.files[key]?.name ?? "Choose file or drag and drop")}
                             </span>
                             <input
                               type="file"
+                              accept=".pdf,.docx,.txt"
                               className="sr-only"
+                              disabled={applyForm.files[key]?.uploading}
                               onChange={(e) => {
                                 void handleSelectAndUploadFile(key, e.target.files?.[0] || null);
                               }}
@@ -726,12 +805,12 @@ export default function CareerJobDetailPage() {
                   );
                 })}
             </div>
-            <DialogFooter className="mt-4 gap-2 sm:gap-0">
+            <DialogFooter className="mt-4">
               <Button type="button" variant="outline" size="sm" onClick={closeApplyDialog}>
                 Cancel
               </Button>
-              <Button type="submit" size="sm" disabled={applySubmitting}>
-                {applySubmitting ? "Submitting…" : "Submit application"}
+              <Button type="submit" size="sm" disabled={applySubmitting || anyFileUploading}>
+                {applySubmitting ? "Submitting" : "Submit application"}
               </Button>
             </DialogFooter>
           </form>

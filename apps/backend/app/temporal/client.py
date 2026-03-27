@@ -1,3 +1,5 @@
+"""Temporal client singleton (namespace connection)."""
+
 from __future__ import annotations
 
 import asyncio

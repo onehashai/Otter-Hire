@@ -38,7 +38,9 @@ function OutboundStatus({ status }: { status: MessageRead["status"] | undefined 
               : null;
   if (!label) return null;
   const done =
-    status === "delivered" || status === "read" ? (
+    status === "delivered" ? (
+      <CheckCheck className="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden />
+    ) : status === "read" ? (
       <CheckCheck className="h-3 w-3 shrink-0 text-blue-600" aria-hidden />
     ) : status === "sent" ? (
       <Check className="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden />
@@ -47,7 +49,7 @@ function OutboundStatus({ status }: { status: MessageRead["status"] | undefined 
     <p
       className={cn(
         "text-[10px] mt-1.5 flex items-center justify-end gap-1",
-        status === "read" || status === "delivered" ? "text-blue-600" : "text-muted-foreground",
+        status === "read" ? "text-blue-600" : "text-muted-foreground",
       )}
     >
       {done}

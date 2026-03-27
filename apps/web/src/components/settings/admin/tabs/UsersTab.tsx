@@ -50,13 +50,13 @@ function formatProductRole(role: string): string {
 
 function formatMembershipStatus(status: string): { label: string } {
   if (status === "active") return { label: "Active" };
-  if (status === "invited") return { label: "Invited" };
-  if (status === "disabled") return { label: "Disabled" };
+  if (status === "pending") return { label: "Pending" };
+  if (status === "declined") return { label: "Declined" };
   return { label: status };
 }
 
 function formatLastActive(iso: string | null | undefined, status: string): string {
-  if (status === "invited") return "—";
+  if (status === "pending") return "—";
   if (!iso) return "—";
   try {
     return formatDistanceToNow(new Date(iso), { addSuffix: true });

@@ -134,6 +134,7 @@ export function SummaryPanel({
     return (
       candidate.documents.find((d) => d.type?.toLowerCase() === "resume") ??
       candidate.documents.find((d) => d.name?.toLowerCase().includes("resume")) ??
+      candidate.documents[0] ??
       null
     );
   }, [candidate.documents]);

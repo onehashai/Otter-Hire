@@ -40,7 +40,7 @@ class OrgMembership(Base):
             name="ck_org_memberships_role",
         ),
         CheckConstraint(
-            "status IN ('invited', 'active', 'disabled')", name="ck_org_memberships_status"
+            "status IN ('pending', 'active', 'declined')", name="ck_org_memberships_status"
         ),
         Index("ix_org_memberships_org_user", "org_id", "user_id"),
         Index("ix_org_memberships_user_status", "user_id", "status"),

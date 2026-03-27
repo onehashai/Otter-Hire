@@ -41,6 +41,7 @@ async def test_user(db: AsyncSession, test_org: Organization) -> User:
         email="test@example.com",
         hashed_password="dummy",
         status="active",
+        role="user",
     )
     db.add(user)
     await db.commit()
@@ -99,6 +100,7 @@ async def test_update_candidate_status_to_rejected(
         name="Admin",
         email="admin@example.com",
         status="active",
+        role="user",
     )
 
     # Create request
@@ -155,6 +157,7 @@ async def test_update_candidate_status_idempotency(
         name="Admin",
         email="admin@example.com",
         status="active",
+        role="user",
     )
 
     # Try to reject again
@@ -202,6 +205,7 @@ async def test_update_candidate_status_to_hired(
         name="Admin",
         email="admin@example.com",
         status="active",
+        role="user",
     )
 
     request = CandidateStatusUpdateRequest(status="hired")
@@ -243,6 +247,7 @@ async def test_update_candidate_status_to_active(
         name="Admin",
         email="admin@example.com",
         status="active",
+        role="user",
     )
 
     # Change back to active
@@ -277,6 +282,7 @@ async def test_update_candidate_status_not_found(db: AsyncSession):
         name="Admin",
         email="admin@example.com",
         status="active",
+        role="user",
     )
 
     request = CandidateStatusUpdateRequest(status="rejected")
@@ -314,6 +320,7 @@ async def test_update_candidate_status_activity_metadata(
         name="Admin",
         email="admin@example.com",
         status="active",
+        role="user",
     )
 
     request = CandidateStatusUpdateRequest(status="rejected")
@@ -356,6 +363,7 @@ async def test_update_candidate_status_multiple_times(
         name="Admin",
         email="admin@example.com",
         status="active",
+        role="user",
     )
 
     # First update: active -> rejected

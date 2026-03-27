@@ -42,7 +42,8 @@ function roleBadgeClassFor(role: string): string {
 
 function formatStatus(status: string): { label: string; active: boolean } {
   if (status === "active") return { label: "Active", active: true };
-  if (status === "invited") return { label: "Pending", active: false };
+  if (status === "pending") return { label: "Pending", active: false };
+  if (status === "declined") return { label: "Declined", active: false };
   return { label: status, active: false };
 }
 
@@ -103,7 +104,7 @@ export function TeamMembersList({
   const MemberActions = ({ member }: { member: TeamMember }) => {
     const roleCheck = canChangeRole(member, currentUserId, isOwner, isAdmin);
     const removeCheck = canRemove(member, currentUserId, isOwner, isAdmin);
-    const isPending = member.status === "invited";
+    const isPending = member.status === "pending";
 
     return (
       <TooltipProvider delayDuration={200}>

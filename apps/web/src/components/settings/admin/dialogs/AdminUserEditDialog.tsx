@@ -21,7 +21,7 @@ const PRODUCT_OPTIONS = [
 
 const STATUS_OPTIONS = [
   { value: "active", label: "Active" },
-  { value: "disabled", label: "Disabled" },
+  { value: "declined", label: "Declined" },
 ];
 
 type AdminUserEditDialogProps = {
@@ -30,9 +30,9 @@ type AdminUserEditDialogProps = {
   onSaved: (updated: AdminUserMembershipRow) => void;
 };
 
-/** Map membership to a selectable status (invited → active as default target). */
-function initialMembershipStatus(row: AdminUserMembershipRow): "active" | "disabled" {
-  if (row.status === "disabled") return "disabled";
+/** Map membership to a selectable status (pending -> active as default target). */
+function initialMembershipStatus(row: AdminUserMembershipRow): "active" | "declined" {
+  if (row.status === "declined") return "declined";
   return "active";
 }
 
@@ -41,7 +41,7 @@ export function AdminUserEditDialog({ row, onOpenChange, onSaved }: AdminUserEdi
   const isOwner = row?.organization_role === "owner";
 
   const [productRole, setProductRole] = useState<"user" | "admin">("user");
-  const [membershipStatus, setMembershipStatus] = useState<"active" | "disabled">("active");
+  const [membershipStatus, setMembershipStatus] = useState<"active" | "declined">("active");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -86,10 +86,10 @@ export function AdminUserEditDialog({ row, onOpenChange, onSaved }: AdminUserEdi
   const statusLabel =
     row?.status === "active"
       ? "Active"
-      : row?.status === "invited"
-        ? "Invited"
-        : row?.status === "disabled"
-          ? "Disabled"
+      : row?.status === "pending"
+        ? "Pending"
+        : row?.status === "declined"
+          ? "Declined"
           : (row?.status ?? "—");
 
   return (
@@ -116,14 +116,14 @@ export function AdminUserEditDialog({ row, onOpenChange, onSaved }: AdminUserEdi
                 {statusLabel}
               </p>
               <p className="text-[11px] text-muted-foreground/70">
-                Owner membership cannot be disabled here.
+                Owner membership cannot be declined here.
               </p>
             </div>
           ) : (
             <SelectField
               label="Status"
               value={membershipStatus}
-              onValueChange={(v) => setMembershipStatus(v as "active" | "disabled")}
+              onValueChange={(v) => setMembershipStatus(v as "active" | "declined")}
               options={STATUS_OPTIONS}
             />
           )}

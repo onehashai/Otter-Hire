@@ -37,6 +37,7 @@ export type AuthPayload = {
   email: string;
   password: string;
   name?: string;
+  invite_token?: string;
 };
 
 export function login(payload: AuthPayload): Promise<unknown> {
@@ -186,4 +187,6 @@ export type InviteDetailsResponse = {
   role: string;
   email: string;
   account_exists: boolean;
+  status: string;
+  suggested_name?: string | null;
 };

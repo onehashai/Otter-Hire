@@ -17,6 +17,7 @@ from uuid import UUID
 
 import pycountry
 import redis.asyncio as aioredis
+from redis.exceptions import ConnectionError as RedisConnectionError
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric.padding import PKCS1v15
 from cryptography.x509 import load_pem_x509_certificate
@@ -2339,7 +2340,15 @@ async def inbound_events_ws(websocket: WebSocket):
             await asyncio.sleep(0.05)
     except WebSocketDisconnect:
         pass
+    except RedisConnectionError:
+        logger.warning("Inbound events websocket Redis connection dropped")
+    except Exception:
+        logger.exception("Inbound events websocket loop failed unexpectedly")
     finally:
+        try:
+            await websocket.close()
+        except Exception:
+            pass
         try:
             await pubsub.close()
         except Exception:

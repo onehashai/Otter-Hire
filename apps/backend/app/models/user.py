@@ -42,7 +42,7 @@ class User(Base):
     __table_args__ = (
         UniqueConstraint("email", name="uq_users_email"),
         UniqueConstraint("google_id", name="uq_users_google_id"),
-        CheckConstraint("status IN ('invited', 'active', 'disabled')", name="ck_users_status"),
+        CheckConstraint("status IN ('pending', 'active', 'declined')", name="ck_users_status"),
         CheckConstraint(
             "auth_provider IN ('local', 'google', 'both')",
             name="ck_users_auth_provider",

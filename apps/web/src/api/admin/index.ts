@@ -39,7 +39,7 @@ export type AdminUpdateMembershipPatch = {
   email?: string;
   product_role?: "user" | "admin";
   organization_role?: string;
-  status?: "invited" | "active" | "disabled";
+  status?: "pending" | "active" | "declined";
 };
 
 export async function patchAdminMembership(

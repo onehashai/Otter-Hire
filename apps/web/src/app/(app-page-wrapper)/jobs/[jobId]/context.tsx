@@ -45,6 +45,11 @@ export interface JobSetupState {
   salaryMax: string;
   currency: string;
   timeframe: TimeframeType;
+  postToLinkedin: boolean;
+  linkedinSyncStatus: string;
+  linkedinExternalJobId: string | null;
+  linkedinLastSyncedAt: string | null;
+  linkedinLastError: string | null;
   collectResume: boolean;
   collectCover: boolean;
   screeningQuestions: string[];
@@ -87,6 +92,11 @@ const defaultState: JobSetupState = {
   salaryMax: "",
   currency: "USD",
   timeframe: "per_year" as TimeframeType,
+  postToLinkedin: false,
+  linkedinSyncStatus: "not_posted",
+  linkedinExternalJobId: null,
+  linkedinLastSyncedAt: null,
+  linkedinLastError: null,
   collectResume: true,
   collectCover: false,
   screeningQuestions: [],
@@ -165,6 +175,11 @@ function mapApiToState(job: JobDetailResponse): Partial<JobSetupState> {
     salaryMax: job.salary_max != null ? String(job.salary_max) : "",
     currency: job.currency ?? "USD",
     timeframe: (job.salary_timeframe ?? "per_year") as TimeframeType,
+    postToLinkedin: Boolean(job.post_to_linkedin),
+    linkedinSyncStatus: job.linkedin_sync_status ?? "not_posted",
+    linkedinExternalJobId: job.linkedin_external_job_id ?? null,
+    linkedinLastSyncedAt: job.linkedin_last_synced_at ?? null,
+    linkedinLastError: job.linkedin_last_error ?? null,
     collectResume: job.collect_resume,
     collectCover: job.collect_cover,
     screeningQuestions: job.screening_questions ?? [],
@@ -204,6 +219,7 @@ type JobSetupContextValue = JobSetupState & {
   setSalaryMax: (v: string) => void;
   setCurrency: (v: string) => void;
   setTimeframe: (v: TimeframeType) => void;
+  setPostToLinkedin: (v: boolean) => void;
   setCollectResume: (v: boolean) => void;
   setCollectCover: (v: boolean) => void;
   setScreeningQuestions: (v: string[]) => void;
@@ -304,6 +320,7 @@ export function JobSetupProvider({ children }: { children: ReactNode }) {
         salary_max: currentState.salaryMax ? Number(currentState.salaryMax) : null,
         currency: currentState.currency,
         salary_timeframe: currentState.timeframe,
+        post_to_linkedin: currentState.postToLinkedin,
         description: currentState.description || null,
         collect_resume: currentState.collectResume,
         collect_cover: currentState.collectCover,
@@ -708,6 +725,10 @@ export function JobSetupProvider({ children }: { children: ReactNode }) {
     },
     setTimeframe: (v) => {
       setState((s) => ({ ...s, timeframe: v }));
+      markUnsaved();
+    },
+    setPostToLinkedin: (v) => {
+      setState((s) => ({ ...s, postToLinkedin: v }));
       markUnsaved();
     },
     setCollectResume: (v) => {

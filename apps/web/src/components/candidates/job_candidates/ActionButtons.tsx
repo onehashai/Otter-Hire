@@ -26,7 +26,12 @@ import {
   AlertDialogTrigger,
 } from "@onehash/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { updateCandidateStage, updateCandidateStatus, type JobHiringStageResponse } from "@/api";
+import {
+  deleteCandidate,
+  updateCandidateStage,
+  updateCandidateStatus,
+  type JobHiringStageResponse,
+} from "@/api";
 
 export interface ActionButtonsProps {
   candidateName: string;
@@ -52,6 +57,7 @@ export function ActionButtons({
   const router = useRouter();
   const { toast } = useToast();
   const [movingToStageId, setMovingToStageId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const sortedStages = useMemo(
     () => [...(stages ?? [])].sort((a, b) => a.position - b.position),
@@ -296,12 +302,30 @@ export function ActionButtons({
                 <AlertDialogCancel className="text-xs">Cancel</AlertDialogCancel>
                 <AlertDialogAction
                   className="text-xs bg-destructive text-destructive-foreground"
+                  disabled={deleting || !candidateId}
                   onClick={() => {
-                    toast({ title: "Candidate deleted" });
-                    router.push(jobId ? `/jobs/${encodeURIComponent(jobId)}` : "/talent-pool");
+                    if (!candidateId) {
+                      toast({ title: "Candidate not found", variant: "destructive" });
+                      return;
+                    }
+                    void (async () => {
+                      try {
+                        setDeleting(true);
+                        await deleteCandidate(candidateId);
+                        toast({ title: "Candidate deleted" });
+                        router.push(jobId ? `/jobs/${encodeURIComponent(jobId)}` : "/talent-pool");
+                      } catch (err) {
+                        toast({
+                          title: err instanceof Error ? err.message : "Failed to delete candidate",
+                          variant: "destructive",
+                        });
+                      } finally {
+                        setDeleting(false);
+                      }
+                    })();
                   }}
                 >
-                  Delete
+                  {deleting ? "Deleting..." : "Delete"}
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>

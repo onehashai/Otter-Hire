@@ -19,6 +19,14 @@ interface DocumentsTabProps {
   onDeleteDocument?: (documentId: string) => void;
 }
 
+function formatDisplayFileName(rawName: string): string {
+  const base = decodeURIComponent((rawName || "").split("/").pop() || rawName || "document");
+  // Stored names can be prefixed like "<uuid>_tmp-.._<original>" for uniqueness.
+  const withoutUuidPrefix = base.replace(/^[0-9a-f]{8,}-[0-9a-f-]{20,}_(.+)$/i, "$1");
+  const clean = withoutUuidPrefix.replace(/^tmp-\d+-\d+_(.+)$/i, "$1");
+  return clean || base;
+}
+
 export function DocumentsTab({ documents, onUploadDocument, onDeleteDocument }: DocumentsTabProps) {
   return (
     <div className="space-y-3">
@@ -43,7 +51,7 @@ export function DocumentsTab({ documents, onUploadDocument, onDeleteDocument }: 
                   <Icon name="ScrollText" className="h-4 w-4 text-muted-foreground" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium truncate">{doc.name}</p>
+                  <p className="text-xs font-medium truncate">{formatDisplayFileName(doc.name)}</p>
                   <p className="text-[10px] text-muted-foreground">
                     {doc.type} · {doc.size} · {doc.date}
                   </p>

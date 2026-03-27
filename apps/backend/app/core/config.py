@@ -63,6 +63,15 @@ class Settings(BaseSettings):
     linkedin_client_secret: str | None = Field(
         default=None, validation_alias="LINKEDIN_CLIENT_SECRET"
     )
+    linkedin_webhook_secret: str | None = Field(
+        default=None, validation_alias="LINKEDIN_WEBHOOK_SECRET"
+    )
+    feature_linkedin_distribution: bool = Field(
+        default=False, validation_alias="FEATURE_LINKEDIN_DISTRIBUTION"
+    )
+    feature_linkedin_applicant_ingestion: bool = Field(
+        default=False, validation_alias="FEATURE_LINKEDIN_APPLICANT_INGESTION"
+    )
 
     # SMTP credential encryption (Fernet key, base64-encoded 32 bytes)
     # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"

@@ -33,9 +33,14 @@ interface CandidateSummary {
   source: string;
   appliedDate: string;
   documents: Document[];
-  linkedin?: string;
-  portfolio?: string;
+  profileLinks?: Record<string, string>;
   tags: string[];
+}
+
+interface ProfileLinkField {
+  key: string;
+  label: string;
+  required: boolean;
 }
 
 interface SummaryPanelProps {
@@ -48,9 +53,20 @@ interface SummaryPanelProps {
     phone: string | null;
     location: string | null;
   }) => Promise<void>;
-  onSaveLinks: (payload: { linkedin?: string; portfolio?: string }) => Promise<void>;
+  onSaveLinks: (payload: Record<string, string>) => Promise<void>;
+  onReplaceResume?: (file: File) => Promise<void>;
+  onRemoveResume?: () => Promise<void>;
+  // Backward-compatible props used in talent pool profile.
   onUploadDocument?: () => void;
   onDeleteDocument?: (documentId: string) => void;
+  profileLinkFields?: ProfileLinkField[];
+}
+
+function formatDisplayFileName(rawName: string): string {
+  const base = decodeURIComponent((rawName || "").split("/").pop() || rawName || "document");
+  const withoutUuidPrefix = base.replace(/^[0-9a-f]{8,}-[0-9a-f-]{20,}_(.+)$/i, "$1");
+  const clean = withoutUuidPrefix.replace(/^tmp-\d+-\d+_(.+)$/i, "$1");
+  return clean || base;
 }
 
 const stageVariant = (stage: string) => {
@@ -64,8 +80,11 @@ export function SummaryPanel({
   variant = "job",
   onSaveProfile,
   onSaveLinks,
+  onReplaceResume,
+  onRemoveResume,
   onUploadDocument,
   onDeleteDocument,
+  profileLinkFields,
 }: SummaryPanelProps) {
   const { t } = useTranslation();
   const initials = getInitialsFromName(candidate.name);
@@ -73,6 +92,7 @@ export function SummaryPanel({
   const [linksEdit, setLinksEdit] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingLinks, setSavingLinks] = useState(false);
+  const [resumeFile, setResumeFile] = useState<File | null>(null);
 
   const [name, setName] = useState(candidate.name);
   const [email, setEmail] = useState(candidate.email);
@@ -80,8 +100,9 @@ export function SummaryPanel({
   const [phoneError, setPhoneError] = useState<string | null>(null);
   const [location, setLocation] = useState(candidate.location === "—" ? "" : candidate.location);
 
-  const [linkedin, setLinkedin] = useState(candidate.linkedin ?? "");
-  const [portfolio, setPortfolio] = useState(candidate.portfolio ?? "");
+  const [linkDraft, setLinkDraft] = useState<Record<string, string>>(() => ({
+    ...(candidate.profileLinks || {}),
+  }));
 
   useEffect(() => {
     setName(candidate.name);
@@ -89,14 +110,34 @@ export function SummaryPanel({
     setPhone(parseStoredPhone(candidate.phone));
     setPhoneError(null);
     setLocation(candidate.location === "—" ? "" : candidate.location);
-    setLinkedin(candidate.linkedin ?? "");
-    setPortfolio(candidate.portfolio ?? "");
+    setLinkDraft({ ...(candidate.profileLinks || {}) });
+    setResumeFile(null);
   }, [candidate]);
 
-  const hasResume = useMemo(
-    () => candidate.documents.some((d) => d.type === "resume" || d.type === "Resume"),
-    [candidate.documents],
+  const editableProfileLinkFields = useMemo<ProfileLinkField[]>(() => {
+    if (profileLinkFields && profileLinkFields.length > 0) return profileLinkFields;
+    return [
+      { key: "linkedin", label: "LinkedIn", required: false },
+      { key: "portfolio", label: "Portfolio", required: false },
+    ];
+  }, [profileLinkFields]);
+
+  const nonEmptyProfileLinks = useMemo(
+    () =>
+      Object.entries(candidate.profileLinks || {}).filter(
+        ([, value]) => typeof value === "string" && value.trim(),
+      ),
+    [candidate.profileLinks],
   );
+
+  const resumeDoc = useMemo(() => {
+    return (
+      candidate.documents.find((d) => d.type?.toLowerCase() === "resume") ??
+      candidate.documents.find((d) => d.name?.toLowerCase().includes("resume")) ??
+      null
+    );
+  }, [candidate.documents]);
+  const hasResume = Boolean(resumeDoc);
 
   return (
     <div className="space-y-4">
@@ -255,31 +296,69 @@ export function SummaryPanel({
                   variant="outline"
                   size="sm"
                   className="h-8 text-xs gap-1.5"
-                  onClick={onUploadDocument}
+                  onClick={() => {
+                    if (onReplaceResume) {
+                      const input = document.getElementById("summary-resume-replace-input");
+                      input?.click();
+                      return;
+                    }
+                    onUploadDocument?.();
+                  }}
                 >
                   <Icon name="Upload" className="h-3.5 w-3.5" /> Upload
                 </Button>
-                {hasResume && candidate.documents[0]?.id && onDeleteDocument ? (
+                {onReplaceResume ? (
+                  <input
+                    id="summary-resume-replace-input"
+                    type="file"
+                    accept="application/pdf,.pdf"
+                    className="hidden"
+                    onChange={(e) => setResumeFile(e.target.files?.[0] ?? null)}
+                  />
+                ) : null}
+                {hasResume && (onRemoveResume || onDeleteDocument) ? (
                   <Button
                     variant="outline"
                     size="sm"
                     className="h-8 text-xs text-destructive border-destructive/30 hover:bg-destructive/5 gap-1.5"
-                    onClick={() => onDeleteDocument(candidate.documents[0].id as string)}
+                    onClick={() => {
+                      void (async () => {
+                        if (onRemoveResume) {
+                          await onRemoveResume();
+                          return;
+                        }
+                        const fallbackResumeId = resumeDoc?.id;
+                        if (fallbackResumeId && onDeleteDocument) {
+                          onDeleteDocument(fallbackResumeId);
+                        }
+                      })();
+                    }}
                   >
                     <Icon name="Trash2" className="h-3.5 w-3.5" /> Remove
                   </Button>
                 ) : null}
               </div>
-              <InputField
-                label="LinkedIn"
-                value={linkedin}
-                onChange={(e) => setLinkedin(e.target.value)}
-              />
-              <InputField
-                label="Portfolio"
-                value={portfolio}
-                onChange={(e) => setPortfolio(e.target.value)}
-              />
+              <p className="text-[11px] text-muted-foreground">
+                Resume:{" "}
+                {resumeFile
+                  ? resumeFile.name
+                  : hasResume
+                    ? formatDisplayFileName(resumeDoc.name)
+                    : "—"}
+              </p>
+              {editableProfileLinkFields.map((field) => (
+                <InputField
+                  key={field.key}
+                  label={`${field.label}${field.required ? " *" : ""}`}
+                  value={linkDraft[field.key] ?? ""}
+                  onChange={(e) =>
+                    setLinkDraft((prev) => ({
+                      ...prev,
+                      [field.key]: e.target.value,
+                    }))
+                  }
+                />
+              ))}
               <div className="flex gap-2">
                 <Button
                   size="sm"
@@ -288,8 +367,12 @@ export function SummaryPanel({
                   onClick={async () => {
                     try {
                       setSavingLinks(true);
-                      await onSaveLinks({ linkedin, portfolio });
+                      if (resumeFile && onReplaceResume) {
+                        await onReplaceResume(resumeFile);
+                      }
+                      await onSaveLinks(linkDraft);
                       setLinksEdit(false);
+                      setResumeFile(null);
                     } finally {
                       setSavingLinks(false);
                     }
@@ -302,7 +385,11 @@ export function SummaryPanel({
                   variant="outline"
                   size="sm"
                   className="h-8 text-xs"
-                  onClick={() => setLinksEdit(false)}
+                  onClick={() => {
+                    setLinksEdit(false);
+                    setLinkDraft({ ...(candidate.profileLinks || {}) });
+                    setResumeFile(null);
+                  }}
                 >
                   Cancel
                 </Button>
@@ -310,35 +397,41 @@ export function SummaryPanel({
             </>
           ) : (
             <>
-              {candidate.documents.slice(0, 3).map((d, i) => (
+              {resumeDoc ? (
                 <Button
-                  key={d.id ?? i}
+                  key={resumeDoc.id ?? "resume-doc"}
                   variant="ghost"
                   size="sm"
                   className="h-8 text-xs w-full justify-start gap-2"
+                  asChild
                 >
-                  <Icon name="ScrollText" className="h-3.5 w-3.5" />
-                  <span className="truncate flex-1 text-left">{d.name}</span>
-                </Button>
-              ))}
-              {candidate.linkedin ? (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 text-xs w-full justify-start gap-2"
-                >
-                  <Icon name="Link" className="h-3.5 w-3.5" /> LinkedIn
+                  <a href={resumeDoc.url} target="_blank" rel="noreferrer">
+                    <Icon name="ScrollText" className="h-3.5 w-3.5" />
+                    <span className="truncate flex-1 text-left">
+                      {formatDisplayFileName(resumeDoc.name)}
+                    </span>
+                  </a>
                 </Button>
               ) : null}
-              {candidate.portfolio ? (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 text-xs w-full justify-start gap-2"
-                >
-                  <Icon name="Link" className="h-3.5 w-3.5" /> Portfolio
-                </Button>
-              ) : null}
+              {nonEmptyProfileLinks.map(([key, value]) => {
+                const label =
+                  editableProfileLinkFields.find((f) => f.key === key)?.label ??
+                  key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+                return (
+                  <Button
+                    key={key}
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 text-xs w-full justify-start gap-2"
+                    asChild
+                  >
+                    <a href={value} target="_blank" rel="noreferrer">
+                      <Icon name="Link" className="h-3.5 w-3.5" />
+                      <span className="truncate flex-1 text-left">{`${label}: ${value}`}</span>
+                    </a>
+                  </Button>
+                );
+              })}
             </>
           )}
         </CardContent>

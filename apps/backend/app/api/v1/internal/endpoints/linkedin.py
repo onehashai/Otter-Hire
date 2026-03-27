@@ -1,8 +1,9 @@
 """LinkedIn integration API endpoints."""
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.permissions import require_permission
 from app.db.session import get_db
 from app.integrations.linkedin import service as linkedin_service
@@ -183,3 +184,27 @@ async def disconnect_linkedin(
     await linkedin_service.disconnect_linkedin(db, _owner_ctx(current_user))
 
     return {"message": "LinkedIn integration disconnected successfully"}
+
+
+@router.post("/webhook")
+async def linkedin_applicant_webhook(
+    request: Request,
+    x_linkedin_signature: str | None = Header(default=None, alias="X-LinkedIn-Signature"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Ingest LinkedIn applicant payload to ATS candidates pipeline."""
+    if not settings.feature_linkedin_applicant_ingestion:
+        raise HTTPException(
+            status_code=404, detail="LinkedIn applicant ingestion feature is disabled"
+        )
+
+    raw_body = await request.body()
+    if not linkedin_service.verify_linkedin_webhook_signature(raw_body, x_linkedin_signature):
+        raise HTTPException(status_code=401, detail="Invalid LinkedIn webhook signature")
+
+    payload = await request.json()
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Invalid LinkedIn webhook payload")
+
+    candidate = await linkedin_service.ingest_linkedin_applicant_event(db, payload)
+    return {"message": "Applicant ingested", "candidate_id": str(candidate.id)}

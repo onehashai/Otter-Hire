@@ -149,8 +149,7 @@ export function TalentPoolCandidateProfile({
         size: d.size_label ?? "—",
         url: d.url,
       })),
-      linkedin: candidate.profile_links?.linkedin,
-      portfolio: candidate.profile_links?.portfolio,
+      profileLinks: ((candidate.profile_links ?? {}) as Record<string, string>) || {},
       coverLetter: false,
       tags: candidate.tags ?? [],
       notes: (overview?.notes ?? []).map((n) => ({
@@ -234,15 +233,18 @@ export function TalentPoolCandidateProfile({
     }
   };
 
-  const handleSaveSummaryLinks = async (payload: { linkedin?: string; portfolio?: string }) => {
+  const handleSaveSummaryLinks = async (payload: Record<string, string>) => {
     if (!id || !candidate) return;
     try {
+      const normalized: Record<string, string> = {};
+      for (const [key, value] of Object.entries(payload || {})) {
+        const cleanKey = key.trim();
+        const cleanValue = String(value ?? "").trim();
+        if (!cleanKey || !cleanValue) continue;
+        normalized[cleanKey] = cleanValue;
+      }
       await updateCandidate(id, {
-        profile_links: {
-          ...((candidate.profile_links ?? {}) as Record<string, string>),
-          linkedin: payload.linkedin?.trim() ?? "",
-          portfolio: payload.portfolio?.trim() ?? "",
-        },
+        profile_links: normalized,
       });
       await loadCore(id);
       toast.success("Links updated");

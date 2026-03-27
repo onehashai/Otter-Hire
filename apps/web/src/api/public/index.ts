@@ -1,4 +1,4 @@
-import { apiFetch, apiGet, normalizeApiUrl } from "../client/client";
+import { API_BASE_URL, apiFetch, apiGet, normalizeApiUrl } from "../client/client";
 
 export type PublicJobListItem = {
   id: string;
@@ -57,6 +57,14 @@ export type PublicApplyResponse = {
   status: string;
 };
 
+export type PublicApplyFileUploadResponse = {
+  key: string;
+  name: string;
+  content_type: string | null;
+  size_bytes: number;
+  url: string;
+};
+
 function publicCareersQuery(orgSlugPrefix: string): string {
   const q = new URLSearchParams({ org_slug: orgSlugPrefix });
   return `?${q.toString()}`;
@@ -96,4 +104,42 @@ export async function applyToPublicJob(
       body: payload,
     },
   );
+}
+
+export async function uploadPublicApplicationFile(
+  orgId: string,
+  jobId: string,
+  orgSlugPrefix: string,
+  fieldKey: string,
+  file: File,
+): Promise<PublicApplyFileUploadResponse> {
+  const form = new FormData();
+  form.append("field_key", fieldKey);
+  form.append("file", file);
+
+  const res = await fetch(
+    `${API_BASE_URL}/orgs/${orgId}/jobs/${jobId}/apply/upload${publicCareersQuery(orgSlugPrefix)}`,
+    {
+      method: "POST",
+      credentials: "include",
+      body: form,
+    },
+  );
+  if (!res.ok) {
+    let message = `Upload failed: ${res.status} ${res.statusText}`;
+    try {
+      const data = (await res.json()) as { detail?: string; error?: string };
+      const detail =
+        typeof data.detail === "string"
+          ? data.detail
+          : typeof data.error === "string"
+            ? data.error
+            : "";
+      if (detail.trim()) message = detail;
+    } catch {}
+    throw new Error(message);
+  }
+  const data = (await res.json()) as PublicApplyFileUploadResponse;
+  // Keep backend-local URL as-is so apply payload stores canonical object reference.
+  return data;
 }

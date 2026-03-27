@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { Button } from "@onehash/ui/button";
 import { InputField } from "@onehash/ui/input";
-import { Separator } from "@onehash/ui/separator";
 import { SelectField } from "@onehash/ui/select";
 import { Country } from "country-state-city";
 
@@ -24,8 +23,6 @@ export default function HiringDetailsPage() {
   const [minTouched, setMinTouched] = useState(false);
   const [maxTouched, setMaxTouched] = useState(false);
   const {
-    openings,
-    setOpenings,
     salaryType,
     setSalaryType,
     salaryFixed,
@@ -38,8 +35,6 @@ export default function HiringDetailsPage() {
     setCurrency,
     timeframe,
     setTimeframe,
-    country,
-    city,
     hiringDetailsAttemptedSave,
   } = useJobSetup();
 
@@ -64,15 +59,6 @@ export default function HiringDetailsPage() {
 
   return (
     <div className="space-y-5">
-      <InputField
-        label={t("openings")}
-        type="number"
-        min={1}
-        value={openings}
-        onChange={(e) => setOpenings(Number(e.target.value))}
-        className="h-9 text-sm max-w-[120px]"
-      />
-      <Separator />
       <SelectField label={t("salary")}>
         <div className="flex gap-1.5">
           {salaryTypes.map((type: SalaryType) => (

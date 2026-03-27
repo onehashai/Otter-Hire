@@ -128,6 +128,26 @@ export type CandidateCsvImportResponse = {
   errors: CandidateCsvImportError[];
 };
 
+export type CandidateApplicationResponseFile = {
+  name: string;
+  url: string;
+};
+
+export type CandidateApplicationResponseItem = {
+  key: string;
+  label: string;
+  type: string;
+  required: boolean;
+  response: string | number | boolean | string[] | null;
+  files: CandidateApplicationResponseFile[];
+};
+
+export type CandidateApplicationResponsesResponse = {
+  submitted_at: string | null;
+  has_additional_questions: boolean;
+  items: CandidateApplicationResponseItem[];
+};
+
 export async function getCandidates(params?: {
   search?: string;
   job_id?: string;
@@ -269,6 +289,25 @@ export async function createCandidate(
 
 export async function getCandidateOverview(id: string): Promise<CandidateOverviewResponse> {
   return apiFetch<CandidateOverviewResponse>(`/candidates/${id}/overview`, { method: "GET" });
+}
+
+export async function getCandidateApplicationResponses(
+  id: string,
+): Promise<CandidateApplicationResponsesResponse> {
+  const data = await apiFetch<CandidateApplicationResponsesResponse>(
+    `/candidates/${id}/application-responses`,
+    { method: "GET" },
+  );
+  return {
+    ...data,
+    items: (data.items || []).map((item) => ({
+      ...item,
+      files: (item.files || []).map((file) => ({
+        ...file,
+        url: normalizeApiUrl(file.url) ?? file.url,
+      })),
+    })),
+  };
 }
 
 export async function addCandidateNote(

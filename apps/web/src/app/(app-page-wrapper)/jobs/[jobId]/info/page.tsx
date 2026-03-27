@@ -4,17 +4,38 @@ import { useMemo, useState, useEffect } from "react";
 import { Button } from "@onehash/ui/button";
 import { InputField } from "@onehash/ui/input";
 import { SelectField, SearchableSelectField } from "@onehash/ui/select";
+import { Separator } from "@onehash/ui/separator";
 import { Country, City } from "country-state-city";
 import { useJobSetup } from "../context";
-import { employmentTypes, workplaceTypes, CITY_VALUE_SEP, getCityDisplayName } from "../constants";
+import {
+  employmentTypes,
+  workplaceTypes,
+  salaryTypes,
+  timeframes,
+  CITY_VALUE_SEP,
+  getCityDisplayName,
+  type SalaryType,
+} from "../constants";
 import { useTranslation } from "react-i18next";
-import { getBasicInfoValidation } from "../../../../../lib/validations/setupValidation";
+import {
+  getBasicInfoValidation,
+  getHiringDetailsValidation,
+} from "../../../../../lib/validations/setupValidation";
 import { getJobCategories, type JobCategoryResponse } from "@/api";
+
+const uniqueCurrencies = (() => {
+  const set = new Set<string>();
+  Country.getAllCountries().forEach((c) => c.currency && set.add(c.currency));
+  return [...set].sort();
+})();
 
 export default function JobInfoPage() {
   const { t } = useTranslation();
   const [countrySearch, setCountrySearch] = useState("");
   const [titleTouched, setTitleTouched] = useState(false);
+  const [amountTouched, setAmountTouched] = useState(false);
+  const [minTouched, setMinTouched] = useState(false);
+  const [maxTouched, setMaxTouched] = useState(false);
   const [categories, setCategories] = useState<JobCategoryResponse[]>([]);
   const {
     title,
@@ -31,6 +52,19 @@ export default function JobInfoPage() {
     setCity,
     citySearch,
     setCitySearch,
+    salaryType,
+    setSalaryType,
+    salaryFixed,
+    setSalaryFixed,
+    salaryMin,
+    setSalaryMin,
+    salaryMax,
+    setSalaryMax,
+    currency,
+    setCurrency,
+    timeframe,
+    setTimeframe,
+    hiringDetailsAttemptedSave,
     handleCountryChange,
   } = useJobSetup();
 
@@ -78,6 +112,29 @@ export default function JobInfoPage() {
     if (valid || !locationError) return undefined;
     return t("location_required_hybrid_onsite");
   }, [basicInfoAttemptedNext, needsLocation, title, workplaceType, country, city, t]);
+
+  const hiringValidation = useMemo(
+    () =>
+      getHiringDetailsValidation({
+        salaryType,
+        salaryFixed,
+        salaryMin,
+        salaryMax,
+      }),
+    [salaryType, salaryFixed, salaryMin, salaryMax],
+  );
+  const amountError =
+    hiringValidation.amountError && (amountTouched || hiringDetailsAttemptedSave)
+      ? t("required")
+      : undefined;
+  const minError =
+    hiringValidation.minError && (minTouched || hiringDetailsAttemptedSave)
+      ? t("required")
+      : undefined;
+  const maxError =
+    hiringValidation.maxError && (maxTouched || hiringDetailsAttemptedSave)
+      ? t("required")
+      : undefined;
 
   useEffect(() => {
     getJobCategories()
@@ -131,6 +188,101 @@ export default function JobInfoPage() {
           ))}
         </div>
       </SelectField>
+      <Separator />
+      <SelectField label={t("salary")}>
+        <div className="flex gap-1.5">
+          {salaryTypes.map((type: SalaryType) => (
+            <Button
+              key={type}
+              type="button"
+              variant={salaryType === type ? "default" : "outline"}
+              size="sm"
+              className="h-9 text-xs flex-1"
+              onClick={() => setSalaryType(type)}
+            >
+              {t(type)}
+            </Button>
+          ))}
+        </div>
+      </SelectField>
+      {salaryType === "fixed" && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <InputField
+            label={t("amount")}
+            value={salaryFixed}
+            onChange={(e) => setSalaryFixed(e.target.value)}
+            onBlur={() => setAmountTouched(true)}
+            error={amountError}
+            placeholder="e.g. 150000"
+            className="h-9 text-sm"
+            type="number"
+            showAsterisk
+          />
+          <SelectField
+            label={t("currency")}
+            value={currency}
+            onValueChange={setCurrency}
+            options={uniqueCurrencies.map((curr) => ({ value: curr, label: curr }))}
+            placeholder={t("select")}
+          />
+          <SelectField
+            label={t("timeframe")}
+            value={timeframe}
+            onValueChange={setTimeframe}
+            options={timeframes.map((tf) => ({ value: tf, label: t(tf) }))}
+            placeholder={t("select")}
+          />
+        </div>
+      )}
+      {salaryType === "range" && (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <InputField
+              label={t("minimum")}
+              value={salaryMin}
+              onChange={(e) => setSalaryMin(e.target.value)}
+              onBlur={() => setMinTouched(true)}
+              error={minError}
+              placeholder="e.g. 140000"
+              className="h-9 text-sm"
+              type="number"
+              showAsterisk
+            />
+            <InputField
+              label={t("maximum")}
+              value={salaryMax}
+              onChange={(e) => setSalaryMax(e.target.value)}
+              onBlur={() => setMaxTouched(true)}
+              error={maxError}
+              placeholder="e.g. 180000"
+              className="h-9 text-sm"
+              type="number"
+              showAsterisk
+            />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <SelectField
+              label={t("currency")}
+              value={currency}
+              onValueChange={setCurrency}
+              options={uniqueCurrencies.map((curr) => ({ value: curr, label: curr }))}
+              placeholder={t("select")}
+            />
+            <SelectField
+              label={t("timeframe")}
+              value={timeframe}
+              onValueChange={setTimeframe}
+              options={timeframes.map((tf) => ({ value: tf, label: t(tf) }))}
+              placeholder={t("select")}
+            />
+          </div>
+          {salaryMin && salaryMax && Number(salaryMin) > Number(salaryMax) && (
+            <p className="text-xs text-destructive">
+              Minimum salary must be less than or equal to maximum.
+            </p>
+          )}
+        </>
+      )}
       {needsLocation ? (
         <div className="space-y-1.5">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

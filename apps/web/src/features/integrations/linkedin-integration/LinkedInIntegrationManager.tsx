@@ -11,7 +11,8 @@ import {
   DialogTitle,
 } from "@onehash/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@onehash/ui/select";
-import { Loader2 } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@onehash/ui/tooltip";
+import { Loader2, Settings, Trash2 } from "lucide-react";
 import { toast } from "@onehash/ui/sonner";
 import {
   connectLinkedIn,
@@ -58,18 +59,23 @@ export function LinkedInIntegrationManager({ onChanged }: LinkedInIntegrationMan
     fetchStatus();
   }, []);
 
-  const fetchOrganizations = async () => {
+  const fetchOrganizations = async (preferredOrgId?: string) => {
     setLoadingOrgs(true);
     try {
       const data = await getLinkedInOrganizations();
       setOrganizations(data.organizations || []);
 
-      if (data.organizations.length === 1) {
+      if (preferredOrgId && data.organizations.some((org) => org.id === preferredOrgId)) {
+        setSelectedOrgId(preferredOrgId);
+      } else if (data.organizations.length === 1) {
         setSelectedOrgId(data.organizations[0].id);
+      } else {
+        setSelectedOrgId("");
       }
     } catch (error) {
       console.error("Failed to fetch organizations:", error);
       setOrganizations([]);
+      setSelectedOrgId("");
     } finally {
       setLoadingOrgs(false);
     }
@@ -80,36 +86,62 @@ export function LinkedInIntegrationManager({ onChanged }: LinkedInIntegrationMan
     setConnecting(false);
   };
 
-  const handleSwitchAccount = async () => {
+  const openLogoutPopup = () => {
+    const width = 600;
+    const height = 600;
+    const left = window.screen.width / 2 - width / 2;
+    const top = window.screen.height / 2 - height / 2;
+
+    // Open synchronously from user gesture to avoid popup blocking.
+    return window.open(
+      "",
+      "LinkedIn Logout",
+      `width=${width},height=${height},left=${left},top=${top}`,
+    );
+  };
+
+  const finalizeLinkedInLogout = (logoutPopup: Window | null) => {
+    if (!logoutPopup) {
+      toast.warning("Popup was blocked. Please log out of LinkedIn manually before reconnecting.");
+      return;
+    }
+
+    logoutPopup.location.href = "https://www.linkedin.com/m/logout";
+    setTimeout(() => {
+      logoutPopup.close();
+    }, 1500);
+  };
+
+  const disconnectThenLogout = async (logoutPopup: Window | null) => {
     try {
       await disconnectLinkedIn();
       await fetchStatus();
       await onChanged?.();
-      setSetupDialogOpen(false);
-
-      const width = 600;
-      const height = 600;
-      const left = window.screen.width / 2 - width / 2;
-      const top = window.screen.height / 2 - height / 2;
-
-      const logoutPopup = window.open(
-        "https://www.linkedin.com/m/logout",
-        "LinkedIn Logout",
-        `width=${width},height=${height},left=${left},top=${top}`,
-      );
-
-      setTimeout(() => {
-        logoutPopup?.close();
-      }, 1000);
+      finalizeLinkedInLogout(logoutPopup);
     } catch (error) {
       console.error("Failed to disconnect:", error);
-      toast.error("Failed to switch account");
+      if (logoutPopup && !logoutPopup.closed) {
+        logoutPopup.close();
+      }
+      toast.error("Failed to disconnect LinkedIn");
+      throw error;
+    }
+  };
+
+  const handleSwitchAccountFromSetup = async () => {
+    const logoutPopup = openLogoutPopup();
+    try {
+      await disconnectThenLogout(logoutPopup);
+      setSetupDialogOpen(false);
+      toast.success("Switched account. Reconnect with your preferred LinkedIn account.");
+    } catch {
+      // Error already handled in disconnectThenLogout
     }
   };
 
   const handleOpenSetup = async () => {
     setSetupDialogOpen(true);
-    await fetchOrganizations();
+    await fetchOrganizations(status?.organization?.id);
   };
 
   const handleConnect = async () => {
@@ -190,15 +222,13 @@ export function LinkedInIntegrationManager({ onChanged }: LinkedInIntegrationMan
 
   const handleDisconnect = async () => {
     setDisconnecting(true);
+    const logoutPopup = openLogoutPopup();
     try {
-      await disconnectLinkedIn();
+      await disconnectThenLogout(logoutPopup);
       toast.success("LinkedIn disconnected successfully");
       setDisconnectDialogOpen(false);
-      await fetchStatus();
-      await onChanged?.();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to disconnect LinkedIn";
-      toast.error(message);
+    } catch {
+      // Error toast already handled in disconnectThenLogout
     } finally {
       setDisconnecting(false);
     }
@@ -214,26 +244,42 @@ export function LinkedInIntegrationManager({ onChanged }: LinkedInIntegrationMan
   }
 
   const isSetupComplete = status.connected && status.setup_complete;
-  const isSetupIncomplete = status.setup_incomplete;
+  const isSetupIncomplete = status.connected && !status.setup_complete;
 
   return (
     <>
       <div className="flex items-center justify-between gap-2">
         {isSetupComplete ? (
-          <>
-            <div className="flex items-center gap-2 text-xs text-green-600 font-medium">
-              ✓ Connected
-            </div>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setDisconnectDialogOpen(true)}
-              disabled={disconnecting}
-              className="text-xs h-8"
-            >
-              Disconnect
-            </Button>
-          </>
+          <div className="flex items-center justify-between gap-2 w-full">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 w-8 p-0"
+                  onClick={handleOpenSetup}
+                  disabled={loadingOrgs || completingSetup}
+                >
+                  <Settings className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Manage</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                  onClick={() => setDisconnectDialogOpen(true)}
+                  disabled={disconnecting}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Disconnect</TooltipContent>
+            </Tooltip>
+          </div>
         ) : isSetupIncomplete ? (
           <>
             <div className="flex items-center gap-2 text-xs text-amber-600 font-medium">
@@ -328,7 +374,11 @@ export function LinkedInIntegrationManager({ onChanged }: LinkedInIntegrationMan
                 >
                   Close
                 </Button>
-                <Button type="button" className="text-xs h-8" onClick={handleSwitchAccount}>
+                <Button
+                  type="button"
+                  className="text-xs h-8"
+                  onClick={handleSwitchAccountFromSetup}
+                >
                   Switch Account
                 </Button>
               </>

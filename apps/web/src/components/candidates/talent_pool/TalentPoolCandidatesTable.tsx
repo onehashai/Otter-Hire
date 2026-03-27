@@ -6,7 +6,7 @@ import { Avatar } from "@onehash/ui/avatar";
 import { Badge } from "@onehash/ui/badge";
 import { Checkbox } from "@onehash/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@onehash/ui/table";
-import { formatDayMonth } from "@/lib/format-date";
+import { formatThreadMessageTime } from "@/lib/format-date";
 import { getInitialsFromName } from "@/lib/name-initials";
 import { type CandidateListItemResponse, type JobListItemResponse } from "@/api";
 
@@ -116,7 +116,7 @@ export function TalentPoolCandidatesTable({
                   </TableCell>
                   <TableCell className="py-2">
                     <span className="text-xs text-muted-foreground tabular-nums whitespace-nowrap">
-                      {formatDayMonth(c.created_at)}
+                      {formatThreadMessageTime(c.created_at)}
                     </span>
                   </TableCell>
                   <TableCell className="py-2 hidden sm:table-cell">

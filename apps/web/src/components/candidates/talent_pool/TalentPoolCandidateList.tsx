@@ -32,7 +32,7 @@ import {
   DialogTitle,
 } from "@onehash/ui/dialog";
 import { SelectField } from "@onehash/ui/select";
-import { formatDayMonth } from "@/lib/format-date";
+import { formatThreadMessageTime } from "@/lib/format-date";
 import { getInitialsFromName } from "@/lib/name-initials";
 import {
   deleteCandidate,
@@ -137,7 +137,7 @@ export function TalentPoolCandidateList({
               onKeyDown={(e) => e.stopPropagation()}
             >
               <span className="text-xs text-muted-foreground tabular-nums whitespace-nowrap">
-                {formatDayMonth(c.created_at)}
+                {formatThreadMessageTime(c.created_at)}
               </span>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>

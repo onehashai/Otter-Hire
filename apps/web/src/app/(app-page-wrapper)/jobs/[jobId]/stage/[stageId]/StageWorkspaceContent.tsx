@@ -15,7 +15,7 @@ import { getDefaultStageId } from "@/lib/job-workspace";
 import { AddCandidateDialog } from "@/components/candidates/shared/dialogs/AddCandidateDialog";
 import { useJobWorkspaceStage } from "../context";
 import { ChevronLeft } from "lucide-react";
-import { formatTimestamp } from "@/lib/format-date";
+import { formatThreadMessageTime } from "@/lib/format-date";
 import { getInitialsFromName } from "@/lib/name-initials";
 import { JobCandidateProfile } from "@/components/candidates/job_candidates/JobCandidateProfile";
 
@@ -291,7 +291,7 @@ export default function StageWorkspaceContent() {
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-sm font-medium truncate">{c.name}</p>
                     <p className="text-[10px] text-muted-foreground shrink-0">
-                      {formatTimestamp(c.created_at)}
+                      {formatThreadMessageTime(c.created_at)}
                     </p>
                   </div>
                 </button>

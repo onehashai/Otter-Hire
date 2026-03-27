@@ -22,20 +22,14 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     conn = op.get_bind()
 
-    # Insert LinkedIn integration
+    # Insert LinkedIn integration (may already exist from 3a698558a5d6 backfill)
     conn.execute(
         sa.text("""
         INSERT INTO integrations (id, name, slug, category, logo_url, description, is_active, config)
-        VALUES (
-            gen_random_uuid(),
-            'LinkedIn',
-            'linkedin',
-            'job_board',
-            'https://cdn-icons-png.flaticon.com/512/174/174857.png',
-            'Post jobs and share content on LinkedIn',
-            true,
-            '{}'::jsonb
-        )
+        SELECT gen_random_uuid(), 'LinkedIn', 'linkedin', 'job_board',
+               'https://cdn-icons-png.flaticon.com/512/174/174857.png',
+               'Post jobs and share content on LinkedIn', true, '{}'::jsonb
+        WHERE NOT EXISTS (SELECT 1 FROM integrations WHERE slug = 'linkedin')
     """)
     )
 

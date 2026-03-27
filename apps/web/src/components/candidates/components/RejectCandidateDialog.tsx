@@ -12,7 +12,7 @@ import {
 } from "@onehash/ui/alert-dialog";
 import { Button } from "@onehash/ui/button";
 import { updateCandidateStatus } from "@/api";
-import { toast } from "sonner";
+import { toast } from "@onehash/ui/sonner";
 
 interface RejectCandidateDialogProps {
   open: boolean;

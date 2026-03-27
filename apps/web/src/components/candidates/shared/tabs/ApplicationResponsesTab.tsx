@@ -127,7 +127,7 @@ export function ApplicationResponsesTab({
       <Card>
         <CardContent className="py-12 flex flex-col items-center gap-3 text-center">
           <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
-            <Icon name="CircleHelp" className="h-4 w-4 text-muted-foreground" />
+            <Icon name="MessageSquare" className="h-4 w-4 text-muted-foreground" />
           </div>
           <p className="text-xs text-muted-foreground">No application responses found.</p>
         </CardContent>
@@ -140,7 +140,7 @@ export function ApplicationResponsesTab({
       <CardContent className="p-4 md:p-5">
         <div className="flex items-center justify-between gap-2 rounded-md bg-muted/30 px-3 py-2">
           <div className="flex items-center gap-2 text-[11px] text-muted-foreground leading-none">
-            <Icon name="CalendarClock" className="h-3.5 w-3.5" />
+            <Icon name="CalendarPlus" className="h-3.5 w-3.5" />
             <span>
               {submittedAt
                 ? `Submitted ${formatSubmittedAt(submittedAt)}`
@@ -190,7 +190,7 @@ export function ApplicationResponsesTab({
                           aria-label={`Open file ${formatDisplayFileName(file.name)}`}
                         >
                           <Icon
-                            name="Paperclip"
+                            name="Link"
                             className="h-3.5 w-3.5 text-muted-foreground shrink-0"
                           />
                           <span className="truncate text-foreground/90">

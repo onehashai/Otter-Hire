@@ -495,6 +495,9 @@ async def get_public_jobs(
     org_slug: str = Query(
         ..., min_length=1, description="Careers URL name segment before org UUID"
     ),
+    org_slug: str = Query(
+        ..., min_length=1, description="Careers URL name segment before org UUID"
+    ),
     authorization: Optional[str] = Header(None),
     db: AsyncSession = Depends(get_db),
 ):
@@ -599,6 +602,9 @@ async def get_public_job_detail(
     response: Response,
     org_id: str,
     job_id: str,
+    org_slug: str = Query(
+        ..., min_length=1, description="Careers URL name segment before org UUID"
+    ),
     org_slug: str = Query(
         ..., min_length=1, description="Careers URL name segment before org UUID"
     ),
@@ -779,6 +785,9 @@ async def apply_public_job(
     org_id: str,
     job_id: str,
     body: PublicJobApplyRequest,
+    org_slug: str = Query(
+        ..., min_length=1, description="Careers URL name segment before org UUID"
+    ),
     org_slug: str = Query(
         ..., min_length=1, description="Careers URL name segment before org UUID"
     ),
@@ -1249,6 +1258,65 @@ async def _process_resume_link_fallback(
     return (resume_attachment, content)
 
 
+async def _process_resume_link_fallback(
+    body_text: str,
+    org_id: UUID,
+    inbound_email_id: UUID,
+    db: "AsyncSession",
+) -> tuple["InboundEmailAttachment", bytes] | None:
+    """Try to resolve and store resume from links in email body.
+
+    Returns (attachment_row, content) if successful, None otherwise.
+    """
+    try:
+        link_result = await resolve_resume_from_body(
+            body_text,
+            max_bytes=settings.inbound_max_attachment_bytes,
+            timeout=10.0,
+        )
+    except Exception:
+        return None
+
+    if link_result is None:
+        return None
+
+    filename, content_type, content = link_result
+    safe_name = _guess_file_name(filename, "resume_from_link.bin")
+
+    # Validate file extension
+    allowed_extensions = {".pdf", ".doc", ".docx"}
+    lower_name = safe_name.lower()
+    ext = ""
+    if "." in lower_name:
+        ext = "." + lower_name.rsplit(".", 1)[-1]
+    if ext not in allowed_extensions:
+        logger.warning(
+            "Resume link has invalid extension: %s (allowed: %s)",
+            ext,
+            allowed_extensions,
+        )
+        return None
+
+    # Store to S3
+    storage_key = f"orgs/{org_id}/inbox/attachments/{inbound_email_id}/link_{safe_name}"
+    await storage_service.write_bytes(
+        storage_key, content, content_type or "application/octet-stream"
+    )
+
+    # Create attachment record
+    resume_attachment = InboundEmailAttachment(
+        inbound_email_id=inbound_email_id,
+        filename=safe_name,
+        content_type=content_type or "application/octet-stream",
+        storage_key=storage_key,
+        size_bytes=len(content),
+        sha256=hashlib.sha256(content).hexdigest(),
+    )
+    db.add(resume_attachment)
+
+    return (resume_attachment, content)
+
+
 # Matches To/Reply-To addresses like reply+<conversation_id>@inbound.domain
 _REPLY_CONVERSATION_PATTERN = re.compile(
     r"^reply\+([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})@",
@@ -1341,6 +1409,7 @@ async def _route_inbound_to_conversation(
             else:
                 conv = None
 
+    # New conversation path: ONLY accept if candidate_override is provided (from resume parsing)
     # New conversation path: ONLY accept if candidate_override is provided (from resume parsing)
     if conv is None:
         # Only create conversation if candidate was already created from resume
@@ -1599,6 +1668,8 @@ async def ingest_inbound_email(
 
     # Store attachments but DON'T parse yet (optimization: parse only after validation)
     stored_attachments: list[tuple[InboundEmailAttachment, bytes]] = []
+    # Store attachments but DON'T parse yet (optimization: parse only after validation)
+    stored_attachments: list[tuple[InboundEmailAttachment, bytes]] = []
     for idx, att in enumerate(payload.attachments or []):
         if not att.content_base64:
             continue
@@ -1624,6 +1695,11 @@ async def ingest_inbound_email(
             sha256=hashlib.sha256(content).hexdigest(),
         )
         db.add(attachment_row)
+        stored_attachments.append((attachment_row, content))
+
+        # Mark if resume attachment exists (but don't parse yet)
+        if _is_resume_attachment(safe_name, att.content_type):
+            has_resume = True
         stored_attachments.append((attachment_row, content))
 
         # Mark if resume attachment exists (but don't parse yet)
@@ -1698,6 +1774,7 @@ async def ingest_inbound_email(
         }
 
     # Handle reply to existing conversation (no resume required for replies)
+    # Handle reply to existing conversation (no resume required for replies)
     conversation_ids: tuple[str, str] | None = None
     if reply_to_conv_id is not None:
         conversation_result = await _route_inbound_to_conversation(
@@ -1710,7 +1787,12 @@ async def ingest_inbound_email(
             inbound_email.parse_status = "processed"
             inbound_email.parse_error = None
             await db.commit()
+            # Reply processed - commit and return
+            inbound_email.parse_status = "processed"
+            inbound_email.parse_error = None
+            await db.commit()
             logger.info(
+                "Inbound email reply processed: conversation_id=%s message_id=%s from=%s",
                 "Inbound email reply processed: conversation_id=%s message_id=%s from=%s",
                 conv_id,
                 msg_id,
@@ -1718,6 +1800,7 @@ async def ingest_inbound_email(
             )
             return {
                 "status": "ok",
+                "message": "Reply processed",
                 "message": "Reply processed",
                 "inbound_email_id": str(inbound_email.id),
                 "conversation_id": conv_id,
@@ -1730,7 +1813,51 @@ async def ingest_inbound_email(
         inbound_email.parse_status = "ignored"
         inbound_email.parse_error = "Email does not match job application keywords"
         await db.commit()
+
+    # --- Job inquiry validation (for new conversations only) ---
+    if not _looks_like_job_inquiry(payload):
+        inbound_email.parse_status = "ignored"
+        inbound_email.parse_error = "Email does not match job application keywords"
+        await db.commit()
         logger.info(
+            "Inbound email ignored (not job-related): from=%s subject=%r",
+            inbound_email.from_email,
+            (inbound_email.subject or "")[:60],
+        )
+        return {
+            "status": "ok",
+            "message": "Ignored: not job-related",
+            "inbound_email_id": str(inbound_email.id),
+            "org_id": str(org_inbox.org_id),
+        }
+
+    # Check if resume attachment exists (before expensive parsing)
+    if not has_resume:
+        # Try resume link from body as fallback
+        link_resume = await _process_resume_link_fallback(
+            body_text,
+            org_inbox.org_id,
+            inbound_email.id,
+            db,
+        )
+
+        if link_resume is None:
+            inbound_email.parse_status = "ignored"
+            inbound_email.parse_error = (
+                "No resume attachment or link found - candidate creation requires resume"
+            )
+            await db.commit()
+            logger.info(
+                "Inbound email ignored (no resume): from=%s subject=%r",
+                inbound_email.from_email,
+                (inbound_email.subject or "")[:60],
+            )
+            return {
+                "status": "ok",
+                "message": "Ignored: no resume attachment",
+                "inbound_email_id": str(inbound_email.id),
+                "org_id": str(org_inbox.org_id),
+            }
             "Inbound email ignored (not job-related): from=%s subject=%r",
             inbound_email.from_email,
             (inbound_email.subject or "")[:60],
@@ -1882,6 +2009,7 @@ async def ingest_inbound_email(
         db.add(candidate)
         await db.flush()
         candidate_created = True
+        candidate_created = True
     else:
         if extracted_name and (not candidate.name or candidate.name == "Unknown Candidate"):
             candidate.name = extracted_name
@@ -1936,6 +2064,7 @@ async def ingest_inbound_email(
         )
     parsed_candidate = candidate
 
+    # Create conversation ONLY for new candidates, append to existing for updates
     # Create conversation ONLY for new candidates, append to existing for updates
     if conversation_ids is None:
         if candidate_created:
@@ -2031,6 +2160,28 @@ async def ingest_inbound_email(
     inbound_email.parse_status = "processed"
     inbound_email.parse_error = None
     await db.commit()
+
+    # Trigger automations for email-based candidate creation
+    # Use candidate_email_received trigger for email inbound candidates
+    if candidate is not None:
+        try:
+            await execute_automations_for_trigger(
+                db=db,
+                trigger_key="candidate_email_received",
+                org_id=org_inbox.org_id,
+                candidate_id=parsed_candidate.id,
+                job_id=None,  # Email inbound candidates don't have job context initially
+                metadata={
+                    "source": "email_inbound",
+                    "stage_name": None,
+                },
+            )
+        except Exception as e:
+            # Log but don't fail the inbound email processing
+            logger.error(
+                f"Failed to trigger automation for email candidate {parsed_candidate.id}: {e}",
+                exc_info=True,
+            )
 
     # Trigger automations for email-based candidate creation
     # Use candidate_email_received trigger for email inbound candidates

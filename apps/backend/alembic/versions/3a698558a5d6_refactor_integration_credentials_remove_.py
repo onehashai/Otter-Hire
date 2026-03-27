@@ -26,26 +26,100 @@ def upgrade() -> None:
     )
     op.drop_index("ix_integration_credentials_org_type")
 
-    # 2. Remove integration_type column
+    conn = op.get_bind()
+
+    # 2. Backfill integration_id before dropping integration_type.
+    #    019 only linked outbound_email → email; other rows (e.g. linkedin) may still be NULL,
+    #    and the LinkedIn master row is added in a later migration — seed stubs here so NOT NULL succeeds.
+    conn.execute(
+        sa.text("""
+        UPDATE integration_credentials ic
+        SET integration_id = i.id
+        FROM integrations i
+        WHERE ic.integration_id IS NULL
+          AND ic.integration_type = i.slug
+    """)
+    )
+
+    conn.execute(
+        sa.text("""
+        INSERT INTO integrations (id, name, slug, category, logo_url, description, is_active, config)
+        SELECT gen_random_uuid(), 'LinkedIn', 'linkedin', 'job_board',
+               'https://cdn-icons-png.flaticon.com/512/174/174857.png',
+               'Post jobs and share content on LinkedIn', true, '{}'::jsonb
+        WHERE NOT EXISTS (SELECT 1 FROM integrations WHERE slug = 'linkedin')
+    """)
+    )
+
+    conn.execute(
+        sa.text("""
+        UPDATE integration_credentials ic
+        SET integration_id = i.id
+        FROM integrations i
+        WHERE ic.integration_id IS NULL
+          AND ic.integration_type = i.slug
+    """)
+    )
+
+    conn.execute(
+        sa.text("""
+        INSERT INTO integrations (id, name, slug, category, logo_url, description, is_active, config)
+        SELECT
+            gen_random_uuid(),
+            initcap(replace(ic.integration_type, '_', ' ')),
+            ic.integration_type,
+            'other',
+            NULL,
+            '',
+            true,
+            '{}'::jsonb
+        FROM integration_credentials ic
+        WHERE ic.integration_id IS NULL
+          AND NOT EXISTS (SELECT 1 FROM integrations i WHERE i.slug = ic.integration_type)
+        GROUP BY ic.integration_type
+    """)
+    )
+
+    conn.execute(
+        sa.text("""
+        UPDATE integration_credentials ic
+        SET integration_id = i.id
+        FROM integrations i
+        WHERE ic.integration_id IS NULL
+          AND ic.integration_type = i.slug
+    """)
+    )
+
+    remaining = conn.execute(
+        sa.text(
+            "SELECT integration_type FROM integration_credentials WHERE integration_id IS NULL"
+        )
+    ).fetchall()
+    if remaining:
+        types = {row[0] for row in remaining}
+        raise RuntimeError(
+            "integration_credentials still has NULL integration_id for integration_type(s): "
+            f"{sorted(types)} — fix data or add matching integrations rows before re-running."
+        )
+
+    # 3. Remove integration_type column
     op.drop_column("integration_credentials", "integration_type")
 
-    # 3. Remove last_tested_at and last_test_error columns
+    # 4. Remove last_tested_at and last_test_error columns
     op.drop_column("integration_credentials", "last_tested_at")
     op.drop_column("integration_credentials", "last_test_error")
 
-    # 4. Make integration_id NOT NULL (required now)
+    # 5. Make integration_id NOT NULL (required now)
     op.alter_column("integration_credentials", "integration_id", nullable=False)
 
-    # 5. Create unique constraint on (org_id, integration_id)
+    # 6. Create unique constraint on (org_id, integration_id)
     op.create_unique_constraint(
         "uq_integration_credentials_org_integration",
         "integration_credentials",
         ["org_id", "integration_id"],
     )
 
-    # 6. Migrate existing org_inboxes data to integration_credentials
-    conn = op.get_bind()
-
+    # 7. Migrate existing org_inboxes data to integration_credentials
     # Get Email integration ID
     result = conn.execute(sa.text("SELECT id FROM integrations WHERE slug = 'email'"))
     email_integration_id = result.fetchone()[0]

@@ -3,8 +3,8 @@
 from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.permissions import require_permission
 from app.core.config import settings
+from app.core.permissions import require_permission
 from app.db.session import get_db
 from app.integrations.linkedin import service as linkedin_service
 from app.models.user import User

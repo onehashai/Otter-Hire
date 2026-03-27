@@ -17,7 +17,6 @@ from uuid import UUID
 
 import pycountry
 import redis.asyncio as aioredis
-from redis.exceptions import ConnectionError as RedisConnectionError
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric.padding import PKCS1v15
 from cryptography.x509 import load_pem_x509_certificate
@@ -35,6 +34,7 @@ from fastapi import (
     WebSocket,
     WebSocketDisconnect,
 )
+from redis.exceptions import ConnectionError as RedisConnectionError
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy import func, or_, select

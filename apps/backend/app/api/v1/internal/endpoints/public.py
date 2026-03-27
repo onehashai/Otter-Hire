@@ -495,9 +495,6 @@ async def get_public_jobs(
     org_slug: str = Query(
         ..., min_length=1, description="Careers URL name segment before org UUID"
     ),
-    org_slug: str = Query(
-        ..., min_length=1, description="Careers URL name segment before org UUID"
-    ),
     authorization: Optional[str] = Header(None),
     db: AsyncSession = Depends(get_db),
 ):
@@ -602,9 +599,6 @@ async def get_public_job_detail(
     response: Response,
     org_id: str,
     job_id: str,
-    org_slug: str = Query(
-        ..., min_length=1, description="Careers URL name segment before org UUID"
-    ),
     org_slug: str = Query(
         ..., min_length=1, description="Careers URL name segment before org UUID"
     ),
@@ -785,9 +779,6 @@ async def apply_public_job(
     org_id: str,
     job_id: str,
     body: PublicJobApplyRequest,
-    org_slug: str = Query(
-        ..., min_length=1, description="Careers URL name segment before org UUID"
-    ),
     org_slug: str = Query(
         ..., min_length=1, description="Careers URL name segment before org UUID"
     ),
@@ -1774,7 +1765,6 @@ async def ingest_inbound_email(
         }
 
     # Handle reply to existing conversation (no resume required for replies)
-    # Handle reply to existing conversation (no resume required for replies)
     conversation_ids: tuple[str, str] | None = None
     if reply_to_conv_id is not None:
         conversation_result = await _route_inbound_to_conversation(
@@ -1783,16 +1773,10 @@ async def ingest_inbound_email(
         if conversation_result is not None:
             conv_id, msg_id, _, _ = conversation_result
             conversation_ids = (conv_id, msg_id)
-            # Reply processed - commit and return
-            inbound_email.parse_status = "processed"
-            inbound_email.parse_error = None
-            await db.commit()
-            # Reply processed - commit and return
             inbound_email.parse_status = "processed"
             inbound_email.parse_error = None
             await db.commit()
             logger.info(
-                "Inbound email reply processed: conversation_id=%s message_id=%s from=%s",
                 "Inbound email reply processed: conversation_id=%s message_id=%s from=%s",
                 conv_id,
                 msg_id,
@@ -1800,7 +1784,6 @@ async def ingest_inbound_email(
             )
             return {
                 "status": "ok",
-                "message": "Reply processed",
                 "message": "Reply processed",
                 "inbound_email_id": str(inbound_email.id),
                 "conversation_id": conv_id,
@@ -1813,51 +1796,7 @@ async def ingest_inbound_email(
         inbound_email.parse_status = "ignored"
         inbound_email.parse_error = "Email does not match job application keywords"
         await db.commit()
-
-    # --- Job inquiry validation (for new conversations only) ---
-    if not _looks_like_job_inquiry(payload):
-        inbound_email.parse_status = "ignored"
-        inbound_email.parse_error = "Email does not match job application keywords"
-        await db.commit()
         logger.info(
-            "Inbound email ignored (not job-related): from=%s subject=%r",
-            inbound_email.from_email,
-            (inbound_email.subject or "")[:60],
-        )
-        return {
-            "status": "ok",
-            "message": "Ignored: not job-related",
-            "inbound_email_id": str(inbound_email.id),
-            "org_id": str(org_inbox.org_id),
-        }
-
-    # Check if resume attachment exists (before expensive parsing)
-    if not has_resume:
-        # Try resume link from body as fallback
-        link_resume = await _process_resume_link_fallback(
-            body_text,
-            org_inbox.org_id,
-            inbound_email.id,
-            db,
-        )
-
-        if link_resume is None:
-            inbound_email.parse_status = "ignored"
-            inbound_email.parse_error = (
-                "No resume attachment or link found - candidate creation requires resume"
-            )
-            await db.commit()
-            logger.info(
-                "Inbound email ignored (no resume): from=%s subject=%r",
-                inbound_email.from_email,
-                (inbound_email.subject or "")[:60],
-            )
-            return {
-                "status": "ok",
-                "message": "Ignored: no resume attachment",
-                "inbound_email_id": str(inbound_email.id),
-                "org_id": str(org_inbox.org_id),
-            }
             "Inbound email ignored (not job-related): from=%s subject=%r",
             inbound_email.from_email,
             (inbound_email.subject or "")[:60],

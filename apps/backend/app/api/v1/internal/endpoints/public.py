@@ -31,6 +31,7 @@ from fastapi import (
     WebSocket,
     WebSocketDisconnect,
 )
+from redis.exceptions import ConnectionError as RedisConnectionError
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy import func, or_, select
@@ -2106,7 +2107,15 @@ async def inbound_events_ws(websocket: WebSocket):
             await asyncio.sleep(0.05)
     except WebSocketDisconnect:
         pass
+    except RedisConnectionError:
+        logger.warning("Inbound events websocket Redis connection dropped")
+    except Exception:
+        logger.exception("Inbound events websocket loop failed unexpectedly")
     finally:
+        try:
+            await websocket.close()
+        except Exception:
+            pass
         try:
             await pubsub.close()
         except Exception:

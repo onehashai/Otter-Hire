@@ -164,7 +164,7 @@ async def invite_user(
         existing_membership = existing_membership_result.scalar_one_or_none()
 
     if existing_membership is not None:
-        if existing_membership.status == "invited":
+        if existing_membership.status == "pending":
             raw_token = secrets.token_urlsafe(32)
             token_hash = sha256(raw_token.encode()).hexdigest()
             token_expires_at = datetime.now(timezone.utc) + timedelta(
@@ -218,7 +218,8 @@ async def invite_user(
         email=body.email,
         name=body.name or body.email.split("@")[0],
         hashed_password="",
-        status="invited",
+        status="pending",
+        role="user",
         is_verified=False,
         is_onboarded=False,
     )
@@ -230,7 +231,7 @@ async def invite_user(
         user_id=new_user.id,
         org_id=current_user.org_id,
         role=body.role.value,
-        status="invited",
+        status="pending",
         invite_token_hash=token_hash,
         invite_token_expires_at=token_expires_at,
     )

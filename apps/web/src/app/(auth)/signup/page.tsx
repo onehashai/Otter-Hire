@@ -13,7 +13,8 @@ import { useTranslation } from "react-i18next";
 import { PRODUCT_LOGO_LETTER, PLATFORM_NAME } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { signupSchema, type SignupFormValues } from "@/lib/schemas/zodResolver";
-import { signup, acceptInvite, getGoogleAuthEnabled, API_BASE_URL } from "@/api/index";
+import { signup, getGoogleAuthEnabled, API_BASE_URL } from "@/api/index";
+import { useAuthSession } from "@/app/providers";
 
 const PASSWORD_RULES = [
   { label: "At least 8 characters", test: (pw: string) => pw.length >= 8 },
@@ -28,6 +29,7 @@ export default function Signup() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { t } = useTranslation();
+  const { refreshSession } = useAuthSession();
   const inviteToken = searchParams.get("invite");
   const inviteEmail = searchParams.get("invite_email");
   const [googleEnabled, setGoogleEnabled] = useState(false);
@@ -61,14 +63,15 @@ export default function Signup() {
           form.setError("root", { message: "Use the invited email address to continue." });
           return;
         }
-        await acceptInvite({
-          token: inviteToken.trim(),
+        await signup({
+          email: data.email,
           password: data.password,
+          invite_token: inviteToken.trim(),
         });
-        sessionStorage.setItem("signup_email", data.email);
-        sessionStorage.removeItem("invite_token");
-        router.replace("/verify");
-        router.refresh();
+        await refreshSession(true);
+        // Avoid cookie propagation race after invite-signup before entering invite page.
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        window.location.assign(`/invite/${encodeURIComponent(inviteToken.trim())}`);
         return;
       }
 

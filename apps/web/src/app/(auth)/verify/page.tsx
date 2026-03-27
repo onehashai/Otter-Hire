@@ -31,21 +31,23 @@ function VerifyEmailContent() {
         sessionStorage.removeItem("signup_email");
         const inviteToken = sessionStorage.getItem("invite_token");
         sessionStorage.removeItem("invite_token");
-        await refreshSession();
+        const refreshedUser = await refreshSession(true);
         localStorage.setItem("session_updated", Date.now().toString());
 
         // Verification does not always imply an authenticated cookie in this browser session
         // (e.g. user opened email link in a different browser/incognito). In that case,
         // send user to login with a success hint and continue normal post-login routing.
-        if (!user) {
+        if (!refreshedUser) {
           router.replace("/login?verified=1");
           return;
         }
 
         if (inviteToken) {
           router.replace(`/invite/${encodeURIComponent(inviteToken)}`);
-        } else {
+        } else if (!refreshedUser.is_onboarded) {
           router.replace("/onboarding");
+        } else {
+          router.replace("/");
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : "Verification failed";
@@ -53,7 +55,7 @@ function VerifyEmailContent() {
         setVerifying(false);
       }
     },
-    [refreshSession, router, user],
+    [refreshSession, router],
   );
 
   useEffect(() => {

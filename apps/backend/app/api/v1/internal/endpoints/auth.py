@@ -85,6 +85,54 @@ async def signup(
     request: Request, payload: SignupRequest, response: Response, db: AsyncSession = Depends(get_db)
 ) -> AuthUserResponse:
     normalized_email = payload.email.lower()
+    invite_token = payload.invite_token.strip() if payload.invite_token else None
+
+    if invite_token:
+        token_hash = sha256(invite_token.encode()).hexdigest()
+        now = datetime.now(timezone.utc)
+        invite_result = await db.execute(
+            select(OrgMembership, User)
+            .join(User, OrgMembership.user_id == User.id)
+            .where(
+                OrgMembership.invite_token_hash == token_hash,
+                OrgMembership.invite_token_expires_at > now,
+                OrgMembership.status == "pending",
+            )
+        )
+        invite_row = invite_result.first()
+        membership: OrgMembership | None = invite_row[0] if invite_row else None
+        user: User | None = invite_row[1] if invite_row else None
+        if membership is None or user is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid or expired invitation token",
+            )
+        if user.email.lower() != normalized_email:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Use the invited email address to continue",
+            )
+        if user.hashed_password:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Account password is already configured. Please sign in.",
+            )
+
+        user.hashed_password = hash_password(payload.password)
+        if payload.name:
+            user.name = payload.name
+        user.status = "pending"
+        user.is_verified = False
+        user.verified_at = None
+        user.is_onboarded = False
+
+        await db.commit()
+        await db.refresh(user)
+        await db.refresh(membership)
+
+        token = _create_session_token(user, membership)
+        _set_access_cookie(response, token)
+        return _to_user_response(user, membership)
 
     existing_user = await db.execute(select(User).where(User.email == normalized_email))
     if existing_user.scalar_one_or_none():
@@ -111,6 +159,7 @@ async def signup(
         hashed_password=hash_password(payload.password),
         name=payload.name or normalized_email.split("@")[0],
         status="active",
+        role="user",
         is_verified=False,
         verification_token_hash=token_hash,
         verification_token_expires_at=token_expires_at,
@@ -157,8 +206,8 @@ async def login(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={
-                "code": "AUTH_GOOGLE_ACCOUNT",
-                "message": "This account was created with Google Sign-In. Please use the 'Continue with Google' button.",
+                "code": "AUTH_PASSWORD_NOT_SET",
+                "message": "Password is not set for this account. Accept your invite first or use Google Sign-In.",
             },
         )
     if not verify_password(payload.password, user.hashed_password):
@@ -172,8 +221,14 @@ async def login(
 
     membership_result = await db.execute(
         select(OrgMembership)
-        .where(OrgMembership.user_id == user.id, OrgMembership.status == "active")
-        .order_by(OrgMembership.created_at.asc())
+        .where(
+            OrgMembership.user_id == user.id,
+            OrgMembership.status.in_(("active", "pending")),
+        )
+        .order_by(
+            OrgMembership.status.asc(),  # active sorts before pending
+            OrgMembership.created_at.asc(),
+        )
     )
     membership = membership_result.scalars().first()
     if membership is None:
@@ -290,16 +345,6 @@ async def onboarding(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> AuthUserResponse:
-    if not current_user.is_verified:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Email verification required"
-        )
-
-    if current_user.is_onboarded:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="User already onboarded"
-        )
-
     membership_result = await db.execute(
         select(OrgMembership).where(
             OrgMembership.user_id == current_user.id,
@@ -310,15 +355,49 @@ async def onboarding(
     if membership is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Membership not found")
 
+    # Invite lifecycle users (pending/declined) are trusted via invite-token ownership and should
+    # not be blocked by verification redirect requirements.
+    is_invite_lifecycle = membership.status in ("pending", "declined")
+    if not current_user.is_verified and not is_invite_lifecycle:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Email verification required"
+        )
+
+    if current_user.is_onboarded:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="User already onboarded"
+        )
+
     current_user.name = payload.full_name
     current_user.is_onboarded = True
-    if membership.status == "invited":
-        membership.status = "active"
+    current_user.status = "active"
 
-    org_result = await db.execute(select(Organization).where(Organization.id == membership.org_id))
-    organization = org_result.scalar_one()
-    if membership.role == "owner":
-        organization.name = payload.organization_name
+    if membership.status == "declined":
+        organization = Organization(id=uuid7(), name=payload.organization_name)
+        db.add(organization)
+        await db.flush()
+
+        create_default_job_categories_for_org(db, organization.id)
+        create_default_templates_for_org(db, organization.id)
+
+        owner_membership = OrgMembership(
+            user_id=current_user.id,
+            org_id=organization.id,
+            role="owner",
+            status="active",
+        )
+        db.add(owner_membership)
+        current_user.org_id = organization.id
+        membership = owner_membership
+    else:
+        if membership.status == "pending":
+            membership.status = "active"
+        org_result = await db.execute(
+            select(Organization).where(Organization.id == membership.org_id)
+        )
+        organization = org_result.scalar_one()
+        if membership.role == "owner":
+            organization.name = payload.organization_name
 
     await db.commit()
     await db.refresh(current_user)
@@ -346,7 +425,7 @@ async def accept_invite(
         .where(
             OrgMembership.invite_token_hash == token_hash,
             OrgMembership.invite_token_expires_at > now,
-            OrgMembership.status == "invited",
+            OrgMembership.status == "pending",
         )
     )
     row = result.first()
@@ -359,31 +438,20 @@ async def accept_invite(
             detail="Invalid or expired invitation token",
         )
 
-    if payload.name:
-        user.name = payload.name
-    user.hashed_password = hash_password(payload.password)
-    membership.status = "invited"
-    user.is_verified = False
-    user.verified_at = None
-    user.is_onboarded = False
+    user.name = payload.name.strip()
+    user.status = "active"
+    membership.status = "active"
+    user.is_verified = True
+    user.verified_at = now
+    user.is_onboarded = True
     membership.invite_token_hash = None
     membership.invite_token_expires_at = None
-    raw_token = secrets.token_urlsafe(32)
-    token_hash = sha256(raw_token.encode()).hexdigest()
-    token_expires_at = datetime.now(timezone.utc) + timedelta(
-        hours=settings.verification_token_expire_hours
-    )
-    user.verification_token_hash = token_hash
-    user.verification_token_expires_at = token_expires_at
+    user.verification_token_hash = None
+    user.verification_token_expires_at = None
 
     await db.commit()
     await db.refresh(user)
     await db.refresh(membership)
-    verify_url = f"{settings.frontend_base_url}/verify?token={raw_token}"
-    await send_verification_email(
-        to_email=user.email,
-        verify_url=verify_url,
-    )
 
     token = _create_session_token(user, membership)
     _set_access_cookie(response, token)
@@ -408,7 +476,7 @@ async def accept_existing_invite(
         .where(
             OrgMembership.invite_token_hash == token_hash,
             OrgMembership.invite_token_expires_at > now,
-            OrgMembership.status == "invited",
+            OrgMembership.status == "pending",
         )
     )
     row = result.first()
@@ -425,6 +493,7 @@ async def accept_existing_invite(
 
     invited_user.name = current_user.name
     invited_user.hashed_password = current_user.hashed_password
+    invited_user.status = "active"
     membership.status = "active"
     invited_user.is_verified = True
     invited_user.verified_at = current_user.verified_at or now
@@ -460,7 +529,7 @@ async def get_invite_details(
         .where(
             OrgMembership.invite_token_hash == token_hash,
             OrgMembership.invite_token_expires_at > now,
-            OrgMembership.status == "invited",
+            OrgMembership.status == "pending",
         )
     )
     row = result.first()
@@ -474,6 +543,8 @@ async def get_invite_details(
         role=membership.role,
         email=user.email,
         account_exists=account_exists,
+        status=membership.status,
+        suggested_name=user.name,
     )
 
 
@@ -488,19 +559,29 @@ async def decline_invite(
     now = datetime.now(timezone.utc)
 
     result = await db.execute(
-        select(OrgMembership).where(
+        select(OrgMembership, User)
+        .join(User, OrgMembership.user_id == User.id)
+        .where(
             OrgMembership.invite_token_hash == token_hash,
             OrgMembership.invite_token_expires_at > now,
-            OrgMembership.status == "invited",
+            OrgMembership.status == "pending",
         )
     )
-    membership = result.scalar_one_or_none()
-    if membership is None:
+    row = result.first()
+    membership: OrgMembership | None = row[0] if row else None
+    invited_user: User | None = row[1] if row else None
+    if membership is None or invited_user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invite not found")
 
-    membership.status = "disabled"
+    membership.status = "declined"
     membership.invite_token_hash = None
     membership.invite_token_expires_at = None
+    # Invitation link ownership acts as email proof for invite-only flow.
+    invited_user.is_verified = True
+    invited_user.verified_at = invited_user.verified_at or now
+    invited_user.verification_token_hash = None
+    invited_user.verification_token_expires_at = None
+    invited_user.status = "active"
     await db.commit()
 
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -667,6 +748,7 @@ async def google_oauth_callback(
                 auth_provider="google",
                 name=name,
                 status="active",
+                role="user",
                 is_verified=True,
                 verified_at=now,
                 is_onboarded=False,

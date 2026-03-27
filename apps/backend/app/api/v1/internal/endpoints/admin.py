@@ -117,7 +117,7 @@ async def update_membership(
         membership.role = body.organization_role
 
     if body.status is not None and body.status != membership.status:
-        if membership.role == "owner" and body.status == "disabled":
+        if membership.role == "owner" and body.status == "declined":
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Cannot disable an organization owner",
@@ -153,7 +153,7 @@ async def list_all_organizations(
             OrgMembership.org_id.label("org_id"),
             func.count(OrgMembership.id).label("cnt"),
         )
-        .where(OrgMembership.status.in_(("active", "invited")))
+        .where(OrgMembership.status.in_(("active", "pending")))
         .group_by(OrgMembership.org_id)
     ).subquery()
 

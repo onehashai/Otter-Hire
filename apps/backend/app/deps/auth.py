@@ -42,7 +42,6 @@ async def get_current_user(
         select(OrgMembership).where(
             OrgMembership.user_id == user_id,
             OrgMembership.org_id == org_id,
-            OrgMembership.status != "disabled",
         )
     )
     membership = membership_result.scalar_one_or_none()

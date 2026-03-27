@@ -206,6 +206,42 @@ export function TalentPoolCandidateProfile({
     }
   };
 
+  const handleReplaceResume = async (file: File) => {
+    if (!id) return;
+    try {
+      const existingResumeDocs = documents.filter(
+        (d) => d.doc_type?.toLowerCase() === "resume" || d.name?.toLowerCase().includes("resume"),
+      );
+      const uploaded = await uploadCandidateDocument(id, file, "resume", "resume", "Resume");
+      for (const doc of existingResumeDocs) {
+        if (doc.id !== uploaded.id) {
+          await deleteCandidateDocument(id, doc.id);
+        }
+      }
+      await loadCore(id);
+      toast.success("Resume updated");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update resume");
+      throw err;
+    }
+  };
+
+  const handleRemoveResume = async () => {
+    if (!id) return;
+    const currentResume = documents.find(
+      (d) => d.doc_type?.toLowerCase() === "resume" || d.name?.toLowerCase().includes("resume"),
+    );
+    if (!currentResume?.id) return;
+    try {
+      await deleteCandidateDocument(id, currentResume.id);
+      await loadCore(id);
+      toast.success("Resume removed");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to remove resume");
+      throw err;
+    }
+  };
+
   const handleDeleteDocument = async (documentId: string) => {
     if (!id) return;
     try {
@@ -358,8 +394,8 @@ export function TalentPoolCandidateProfile({
               candidate={uiCandidate}
               onSaveProfile={handleSaveSummaryProfile}
               onSaveLinks={handleSaveSummaryLinks}
-              onUploadDocument={() => setDocumentOpen(true)}
-              onDeleteDocument={handleDeleteDocument}
+              onReplaceResume={handleReplaceResume}
+              onRemoveResume={handleRemoveResume}
             />
           </div>
         </Tabs>

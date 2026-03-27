@@ -40,7 +40,7 @@ class AdminUpdateMembershipRequest(BaseModel):
     email: EmailStr | None = None
     product_role: Literal["user", "admin"] | None = None
     organization_role: str | None = None
-    status: Literal["invited", "active", "disabled"] | None = None
+    status: Literal["pending", "active", "declined"] | None = None
 
     @model_validator(mode="after")
     def at_least_one_field(self) -> "AdminUpdateMembershipRequest":

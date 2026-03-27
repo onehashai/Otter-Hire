@@ -2,7 +2,7 @@
 
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect } from "react";
 import { Button } from "@onehash/ui/button";
 import { InputField } from "@onehash/ui/input";
@@ -17,9 +17,11 @@ import { useAuthSession } from "@/app/providers";
 export default function Onboarding() {
   const { t } = useTranslation();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, refreshSession } = useAuthSession();
-  const isInviteOnboarding = user?.status === "invited";
-  const shouldLockOrgName = isInviteOnboarding;
+  const inviteDeclined = searchParams.get("invite_declined") === "1";
+  const isInviteOnboarding = user?.status === "pending";
+  const shouldLockOrgName = isInviteOnboarding && !inviteDeclined;
   const form = useForm<OnboardingFormValues>({
     resolver: zodResolver(onboardingSchema),
     defaultValues: {

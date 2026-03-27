@@ -12,7 +12,7 @@ import {
 } from "@onehash/ui/dialog";
 import { SelectField } from "@onehash/ui/select";
 import { getJobPipeline, updateCandidateStage, type JobHiringStageResponse } from "@/api";
-import { toast } from "sonner";
+import { toast } from "@onehash/ui/sonner";
 
 interface MoveStageDialogProps {
   open: boolean;

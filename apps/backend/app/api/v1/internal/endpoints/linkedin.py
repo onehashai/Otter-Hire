@@ -194,7 +194,9 @@ async def linkedin_applicant_webhook(
 ):
     """Ingest LinkedIn applicant payload to ATS candidates pipeline."""
     if not settings.feature_linkedin_applicant_ingestion:
-        raise HTTPException(status_code=404, detail="LinkedIn applicant ingestion feature is disabled")
+        raise HTTPException(
+            status_code=404, detail="LinkedIn applicant ingestion feature is disabled"
+        )
 
     raw_body = await request.body()
     if not linkedin_service.verify_linkedin_webhook_signature(raw_body, x_linkedin_signature):

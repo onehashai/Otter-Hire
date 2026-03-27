@@ -1080,7 +1080,9 @@ async def upload_public_job_application_file(
         f"orgs/{org_uuid}/job_applications/{job_uuid}/uploads/"
         f"{uuid7()}_{field_key_clean}_{safe_name}"
     )
-    await storage_service.write_bytes(object_key, content, file.content_type or "application/octet-stream")
+    await storage_service.write_bytes(
+        object_key, content, file.content_type or "application/octet-stream"
+    )
     resolved_url = await storage_service.resolve_url(object_key)
     return PublicApplyFileUploadResponse(
         key=field_key_clean,

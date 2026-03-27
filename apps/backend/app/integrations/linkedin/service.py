@@ -428,7 +428,9 @@ async def ingest_linkedin_applicant_event(db: AsyncSession, event: dict[str, Any
     if not name:
         name = email.split("@")[0]
 
-    job_result = await db.execute(select(Job).where(Job.linkedin_external_job_id == external_job_id))
+    job_result = await db.execute(
+        select(Job).where(Job.linkedin_external_job_id == external_job_id)
+    )
     job = job_result.scalar_one_or_none()
     if not job:
         raise HTTPException(status_code=404, detail="No ATS job mapped for external_job_id")

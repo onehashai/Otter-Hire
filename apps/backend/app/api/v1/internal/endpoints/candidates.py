@@ -237,7 +237,9 @@ def _application_response_value(
     return text or None
 
 
-async def _resolve_application_file_link(file_ref: object) -> CandidateApplicationResponseFile | None:
+async def _resolve_application_file_link(
+    file_ref: object,
+) -> CandidateApplicationResponseFile | None:
     if not isinstance(file_ref, str):
         return None
     raw = file_ref.strip()
@@ -245,7 +247,9 @@ async def _resolve_application_file_link(file_ref: object) -> CandidateApplicati
         return None
 
     resolved_url = raw
-    if not raw.startswith(("http://", "https://", "/v1/internal/files/local/", "/api/files/local/", "/files/local/")):
+    if not raw.startswith(
+        ("http://", "https://", "/v1/internal/files/local/", "/api/files/local/", "/files/local/")
+    ):
         resolved_url = await storage_service.resolve_url(raw)
 
     name = raw.rsplit("/", 1)[-1] if "/" in raw else raw

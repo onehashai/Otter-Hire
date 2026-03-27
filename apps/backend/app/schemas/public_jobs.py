@@ -100,6 +100,7 @@ class PublicApplyFileUploadResponse(BaseModel):
     size_bytes: int
     url: str
 
+
 class InboundAttachmentPayload(BaseModel):
     filename: str
     content_type: str

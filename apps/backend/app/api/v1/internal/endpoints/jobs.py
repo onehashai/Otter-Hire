@@ -489,7 +489,9 @@ async def get_job_workspace(
         .where(
             Candidate.org_id == current_user.org_id,
             Candidate.job_id == job.id,
-            Candidate.status == "active",
+            # Include rejected/hired so stage columns match DB (Reject sets status=rejected;
+            # Hired stage often keeps status=active but hired is allowed on the model).
+            Candidate.status.in_(("active", "rejected", "hired")),
         )
         .order_by(Candidate.updated_at.desc(), Candidate.created_at.desc())
     )

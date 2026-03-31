@@ -6,13 +6,7 @@ import { Button } from "@onehash/ui/button";
 import { Badge } from "@onehash/ui/badge";
 import { Avatar } from "@onehash/ui/avatar";
 import { Separator } from "@onehash/ui/separator";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@onehash/ui/dialog";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@onehash/ui/dialog";
 import { Icon } from "@onehash/ui/icon";
 import { InputField, PhoneNumberField, isValidPhoneNumber } from "@onehash/ui/input";
 import { formatThreadMessageTime, formatTimestampToDateTime } from "@/lib/format-date";

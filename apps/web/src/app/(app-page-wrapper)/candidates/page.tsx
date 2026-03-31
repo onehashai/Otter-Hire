@@ -100,7 +100,9 @@ export default function CandidatesPage() {
   const lastSavedColumnsRef = useRef<string>(
     JSON.stringify(normalizeVisibleCandidateColumns(DEFAULT_VISIBLE_CANDIDATE_COLUMNS)),
   );
-  const lastSavedOrderRef = useRef<string>(JSON.stringify(normalizeCandidateColumnOrder(CANDIDATE_ALL_COLUMNS)));
+  const lastSavedOrderRef = useRef<string>(
+    JSON.stringify(normalizeCandidateColumnOrder(CANDIDATE_ALL_COLUMNS)),
+  );
   const draggedColumnRef = useRef<CandidateColumnKey | null>(null);
 
   useSetPageMetadata({
@@ -322,10 +324,7 @@ export default function CandidatesPage() {
     () => new Set(normalizeVisibleCandidateColumns(visibleColumns)),
     [visibleColumns],
   );
-  const orderedColumns = useMemo(
-    () => normalizeCandidateColumnOrder(columnOrder),
-    [columnOrder],
-  );
+  const orderedColumns = useMemo(() => normalizeCandidateColumnOrder(columnOrder), [columnOrder]);
   const toggleColumn = (columnKey: CandidateColumnKey, nextChecked: boolean) => {
     if (CANDIDATE_FIXED_COLUMNS.includes(columnKey)) return;
     setVisibleColumns((prev) => {

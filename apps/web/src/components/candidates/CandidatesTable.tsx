@@ -291,7 +291,9 @@ export function CandidatesTable({
     if (column === "created_at") {
       return (
         <TableCell key={column} className="py-2 align-middle min-w-0 max-w-[200px] text-center">
-          <span className="text-xs text-muted-foreground">{formatTimestampToDateTime(c.created_at)}</span>
+          <span className="text-xs text-muted-foreground">
+            {formatTimestampToDateTime(c.created_at)}
+          </span>
         </TableCell>
       );
     }
@@ -323,7 +325,9 @@ export function CandidatesTable({
     if (column === "updated_at") {
       return (
         <TableCell key={column} className="py-2 align-middle min-w-0 max-w-[200px] text-center">
-          <span className="text-xs text-muted-foreground">{formatTimestampToDateTime(c.updated_at)}</span>
+          <span className="text-xs text-muted-foreground">
+            {formatTimestampToDateTime(c.updated_at)}
+          </span>
         </TableCell>
       );
     }

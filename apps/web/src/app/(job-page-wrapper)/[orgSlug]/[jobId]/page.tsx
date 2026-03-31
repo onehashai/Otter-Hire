@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@onehash/ui/button";
@@ -138,19 +138,25 @@ export default function CareerJobDetailPage() {
     const key = String(linkField.key ?? linkField.id ?? "");
     if (key) profileLinkMap.set(key, linkField);
   }
-  const customFields: Array<Record<string, unknown>> = [];
-  for (const field of schemaCustomFields) {
-    const key = String(field.key ?? field.id ?? "");
-    if (key.startsWith("profile_link_")) {
-      profileLinkMap.set(key, field);
-      continue;
+  const customFields = useMemo(() => {
+    const fields: Array<Record<string, unknown>> = [];
+    for (const field of schemaCustomFields) {
+      const key = String(field.key ?? field.id ?? "");
+      if (key.startsWith("profile_link_")) {
+        continue;
+      }
+      fields.push(field);
     }
-    customFields.push(field);
-  }
+    return fields;
+  }, [schemaCustomFields]);
+
   const profileLinkFields = Array.from(profileLinkMap.values());
 
-  const fieldVisibility = (key: string, fallback: "required" | "optional" | "hidden" = "hidden") =>
-    (defaultFields[key]?.visibility as "required" | "optional" | "hidden" | undefined) ?? fallback;
+  const fieldVisibility = useCallback(
+    (key: string, fallback: "required" | "optional" | "hidden" = "hidden") =>
+      (defaultFields[key]?.visibility as "required" | "optional" | "hidden" | undefined) ?? fallback,
+    [defaultFields]
+  );
 
   const isRequired = (visibility: string) => visibility === "required";
   const isVisible = (visibility: string) => visibility !== "hidden";

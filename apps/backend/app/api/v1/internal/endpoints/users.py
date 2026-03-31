@@ -19,10 +19,10 @@ from app.models.user import User
 from app.schemas.users import (
     InviteUserRequest,
     ProfileResponse,
-    UserPreferencesPatchRequest,
-    UserPreferencesResponse,
     UpdateProfileRequest,
     UpdateUserRoleRequest,
+    UserPreferencesPatchRequest,
+    UserPreferencesResponse,
     UserResponse,
 )
 from app.services.email import send_invite_email

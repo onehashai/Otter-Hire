@@ -1,6 +1,5 @@
 from enum import Enum
-from typing import Any
-from typing import Optional
+from typing import Any, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, field_validator

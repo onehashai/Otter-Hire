@@ -4,7 +4,11 @@ const nextConfig = {
   async redirects() {
     return [
       { source: "/talent-pool", destination: "/candidates", permanent: true },
-      { source: "/talent-pool/:candidateId", destination: "/candidates/:candidateId", permanent: true },
+      {
+        source: "/talent-pool/:candidateId",
+        destination: "/candidates/:candidateId",
+        permanent: true,
+      },
     ];
   },
 };

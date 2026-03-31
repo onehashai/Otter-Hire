@@ -55,9 +55,6 @@ export function getPersonNameInitials(
 }
 
 /** Alias for {@link getPersonNameInitials} (existing call sites). */
-export function getInitialsFromName(
-  name: string | null | undefined,
-  emptyFallback = "?",
-): string {
+export function getInitialsFromName(name: string | null | undefined, emptyFallback = "?"): string {
   return getPersonNameInitials(name, emptyFallback);
 }

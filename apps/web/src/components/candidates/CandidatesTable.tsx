@@ -106,7 +106,9 @@ export function CandidatesTable({
               );
               const activeJobsCount = activeAssignments.length;
               const tooltipText =
-                activeJobTitles.length > 0 ? activeJobTitles.join(", ") : t("candidates_no_assigned_jobs");
+                activeJobTitles.length > 0
+                  ? activeJobTitles.join(", ")
+                  : t("candidates_no_assigned_jobs");
               return (
                 <TableRow key={c.id} className="cursor-pointer" onClick={() => router.push(href)}>
                   {selectedIds && onToggleSelected ? (
@@ -150,7 +152,9 @@ export function CandidatesTable({
                     {activeJobsCount > 0 ? (
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <span className="text-xs text-muted-foreground inline-block">{activeJobsCount}</span>
+                          <span className="text-xs text-muted-foreground inline-block">
+                            {activeJobsCount}
+                          </span>
                         </TooltipTrigger>
                         <TooltipContent side="top" className="max-w-[320px] text-xs">
                           {tooltipText}

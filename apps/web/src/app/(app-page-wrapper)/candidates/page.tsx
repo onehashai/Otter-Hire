@@ -367,11 +367,7 @@ export default function CandidatesPage() {
           ))}
         </div>
       ) : items.length === 0 ? (
-        <EmptyCard
-          icon="Users"
-          title={t("candidates_title")}
-          description={t("candidates_empty")}
-        />
+        <EmptyCard icon="Users" title={t("candidates_title")} description={t("candidates_empty")} />
       ) : (
         <>
           <CandidatesTable
@@ -525,11 +521,7 @@ export default function CandidatesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <AddCandidateDialog
-        open={addOpen}
-        onOpenChange={setAddOpen}
-        onAdded={() => void refresh()}
-      />
+      <AddCandidateDialog open={addOpen} onOpenChange={setAddOpen} onAdded={() => void refresh()} />
     </MainPagesLayout>
   );
 }

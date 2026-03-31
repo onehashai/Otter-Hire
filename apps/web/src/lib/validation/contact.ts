@@ -19,7 +19,9 @@ export function isAllowedPhoneChar(char: string): boolean {
 }
 
 export function sanitizePhoneInput(raw: string): string {
-  return Array.from(raw).filter((ch) => isAllowedPhoneChar(ch)).join("");
+  return Array.from(raw)
+    .filter((ch) => isAllowedPhoneChar(ch))
+    .join("");
 }
 
 export function isValidPhone(value: string): boolean {

@@ -208,7 +208,7 @@ export default function CareerJobDetailPage() {
 
     const hasUploadingFiles = Object.values(applyForm.files).some((f) => f?.uploading);
     return { errors, hasUploadingFiles };
-  }, [applyForm, profileLinkFields, customFields, defaultFields]);
+  }, [applyForm, profileLinkFields, customFields, fieldVisibility]);
 
   const handleSelectAndUploadFile = async (key: string, file: File | null) => {
     if (!file) return;

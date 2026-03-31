@@ -30,11 +30,11 @@ from app.models.org_membership import OrgMembership
 from app.models.stage import Stage
 from app.models.user import User
 from app.schemas.candidates import (
-    CandidateAssignmentItemResponse,
     CandidateActivityResponse,
     CandidateApplicationResponseFile,
     CandidateApplicationResponseItem,
     CandidateApplicationResponsesResponse,
+    CandidateAssignmentItemResponse,
     CandidateBulkAssignJobRequest,
     CandidateBulkStageUpdateRequest,
     CandidateBulkStatusUpdateRequest,
@@ -477,7 +477,9 @@ async def create_candidate(
             candidate_id=candidate.id,
             job_id=candidate.job_id,
             stage_id=candidate.stage_id,
-            assignment_status=candidate.status if candidate.status in {"active", "rejected", "hired"} else "active",
+            assignment_status=candidate.status
+            if candidate.status in {"active", "rejected", "hired"}
+            else "active",
             source=candidate.source,
             applied_at=candidate.created_at if candidate.source == "job_board" else None,
             assigned_at=candidate.updated_at,
@@ -1218,7 +1220,9 @@ async def update_candidate(
             candidate_id=candidate.id,
             job_id=candidate.job_id,
             stage_id=candidate.stage_id,
-            assignment_status=candidate.status if candidate.status in {"active", "rejected", "hired"} else "active",
+            assignment_status=candidate.status
+            if candidate.status in {"active", "rejected", "hired"}
+            else "active",
             source=candidate.source,
             assigned_at=datetime.now(timezone.utc),
         )
@@ -1486,7 +1490,9 @@ async def update_candidate_status(
             terminal_stage = terminal_stage_result.scalar_one_or_none()
             if terminal_stage is not None:
                 assignment.stage_id = terminal_stage.id
-                candidate.stage_id = terminal_stage.id if candidate.job_id == target_job_id else candidate.stage_id
+                candidate.stage_id = (
+                    terminal_stage.id if candidate.job_id == target_job_id else candidate.stage_id
+                )
     await _log_activity(
         db,
         org_id=current_user.org_id,
@@ -1505,7 +1511,10 @@ async def update_candidate_status(
             org_id=current_user.org_id,
             candidate_id=candidate.id,
             job_id=target_job_id,
-            metadata={"status": "rejected", "job_id": str(target_job_id) if target_job_id else None},
+            metadata={
+                "status": "rejected",
+                "job_id": str(target_job_id) if target_job_id else None,
+            },
         )
     elif body.status == "hired":
         await execute_automations_for_trigger(

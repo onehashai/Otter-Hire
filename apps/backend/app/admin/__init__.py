@@ -29,8 +29,8 @@ def setup_admin(app: FastAPI) -> Admin:
     from app.admin.views import (
         ActivityAdmin,
         CandidateAdmin,
-        CandidateJobsAdmin,
         CandidateDocumentAdmin,
+        CandidateJobsAdmin,
         ConversationAdmin,
         EmailAdmin,
         FeedbackAdmin,

@@ -496,7 +496,11 @@ async def get_job_workspace(
             CandidateJobs.job_id == job.id,
             CandidateJobs.assignment_status.in_(("active", "rejected", "hired")),
         )
-        .order_by(CandidateJobs.updated_at.desc(), Candidate.updated_at.desc(), Candidate.created_at.desc())
+        .order_by(
+            CandidateJobs.updated_at.desc(),
+            Candidate.updated_at.desc(),
+            Candidate.created_at.desc(),
+        )
     )
     rows = candidate_result.all()
     candidates = [row[0] for row in rows]

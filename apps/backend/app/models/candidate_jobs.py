@@ -1,4 +1,12 @@
-from sqlalchemy import CheckConstraint, Column, DateTime, ForeignKey, Index, String, UniqueConstraint
+from sqlalchemy import (
+    CheckConstraint,
+    Column,
+    DateTime,
+    ForeignKey,
+    Index,
+    String,
+    UniqueConstraint,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -18,7 +26,9 @@ class CandidateJobs(Base):
         UUID(as_uuid=True), ForeignKey("candidates.id", ondelete="CASCADE"), nullable=False
     )
     job_id = Column(UUID(as_uuid=True), ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False)
-    stage_id = Column(UUID(as_uuid=True), ForeignKey("stages.id", ondelete="SET NULL"), nullable=True)
+    stage_id = Column(
+        UUID(as_uuid=True), ForeignKey("stages.id", ondelete="SET NULL"), nullable=True
+    )
     assignment_status = Column(String(32), nullable=False, server_default="active")
     source = Column(String(100), nullable=True)
     applied_at = Column(DateTime(timezone=True), nullable=True)

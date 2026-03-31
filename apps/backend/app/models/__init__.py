@@ -2,8 +2,8 @@ from app.models.activity import Activity
 from app.models.automation import Automation, AutomationExecution
 from app.models.candidate import Candidate
 from app.models.candidate_jobs import CandidateJobs
-from app.models.document import CandidateDocument
 from app.models.conversation import Conversation
+from app.models.document import CandidateDocument
 from app.models.email import Email, InboundEmail, InboundEmailAttachment
 from app.models.feedback import Feedback
 from app.models.integration import Integration

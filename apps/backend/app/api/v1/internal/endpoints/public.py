@@ -46,8 +46,8 @@ from app.db.session import get_db
 from app.integrations.app_store.email_integration.temporal.queue import enqueue_ses_raw_key
 from app.models.candidate import Candidate
 from app.models.candidate_jobs import CandidateJobs
-from app.models.document import CandidateDocument
 from app.models.conversation import Conversation
+from app.models.document import CandidateDocument
 from app.models.email import InboundEmail, InboundEmailAttachment
 from app.models.job import Job
 from app.models.job_application import JobApplication
@@ -1262,7 +1262,10 @@ async def apply_public_job(
     db.add(application)
 
     first_stage_result = await db.execute(
-        select(Stage).where(Stage.org_id == org_uuid, Stage.job_id == job_uuid).order_by(Stage.position.asc()).limit(1)
+        select(Stage)
+        .where(Stage.org_id == org_uuid, Stage.job_id == job_uuid)
+        .order_by(Stage.position.asc())
+        .limit(1)
     )
     first_stage = first_stage_result.scalar_one_or_none()
 

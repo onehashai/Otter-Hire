@@ -36,12 +36,15 @@ import {
 } from "@onehash/ui/dialog";
 import { InputField } from "@onehash/ui/input";
 import { getOrganizationNameInitials } from "@/lib/name-initials";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { cn } from "@/lib/utils";
 
 export function TopBar() {
   const router = useRouter();
   const { user, clearSession, refreshSession } = useAuthSession();
   const { metadata } = usePageMetadata();
   const { t } = useTranslation();
+  const isMobile = useIsMobile();
   const [createOpen, setCreateOpen] = useState(false);
   const [newOrgName, setNewOrgName] = useState("");
   const [memberships, setMemberships] = useState<OrganizationMembership[]>([]);
@@ -155,17 +158,28 @@ export function TopBar() {
   const initials = getOrganizationNameInitials(user?.org_name, "U");
 
   return (
-    <header className="h-12 border-b border-border flex items-center justify-between px-4 md:px-6 bg-background shrink-0">
-      <div className="flex flex-col justify-center">
-        <h1 className="text-sm font-semibold text-foreground leading-tight">{metadata.title}</h1>
+    <header
+      className={cn(
+        "border-b border-border flex justify-between px-4 md:px-6 bg-background shrink-0 gap-2",
+        isMobile
+          ? "min-h-12 h-auto py-1.5 items-start"
+          : "h-12 items-center",
+      )}
+    >
+      <div className="flex flex-col justify-center flex-1 min-w-0 pr-2 md:pr-3">
+        <h1 className="text-sm font-semibold text-foreground leading-snug break-words">
+          {metadata.title}
+        </h1>
         {metadata.subtitle && (
-          <p className="text-xs text-muted-foreground leading-tight">{metadata.subtitle}</p>
+          <p className="text-xs text-muted-foreground leading-snug break-words mt-0.5 line-clamp-3 md:line-clamp-none">
+            {metadata.subtitle}
+          </p>
         )}
       </div>
 
       <DropdownMenu onOpenChange={handleMenuOpenChange}>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" className="h-8 w-32">
+          <Button variant="ghost" className="h-8 w-32 shrink-0">
             <Avatar
               className="h-6 w-6 border border-border"
               src={orgAvatarUrl}

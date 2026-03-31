@@ -2,6 +2,7 @@ import os
 import secrets
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
@@ -18,6 +19,8 @@ from app.models.user import User
 from app.schemas.users import (
     InviteUserRequest,
     ProfileResponse,
+    UserPreferencesPatchRequest,
+    UserPreferencesResponse,
     UpdateProfileRequest,
     UpdateUserRoleRequest,
     UserResponse,
@@ -27,6 +30,44 @@ from app.services.media import ensure_avatar_type, read_upload_with_size_check
 from app.services.storage import storage_service
 
 router = APIRouter(prefix="/users", tags=["users"])
+
+CANDIDATE_COLUMN_KEYS = {
+    "name",
+    "email",
+    "phone",
+    "assigned_jobs",
+    "created_at",
+    "source",
+    "status",
+    "location",
+    "updated_at",
+    "tags",
+    "stage_name",
+}
+CANDIDATE_FIXED_COLUMNS = {"name", "email"}
+
+
+def _sanitize_preferences(raw_preferences: Any) -> dict[str, Any]:
+    if not isinstance(raw_preferences, dict):
+        return {}
+    prefs = dict(raw_preferences)
+    tables = prefs.get("tables")
+    if not isinstance(tables, dict):
+        prefs["tables"] = {}
+        return prefs
+
+    candidates = tables.get("candidates")
+    if not isinstance(candidates, dict):
+        return prefs
+
+    visible_columns = candidates.get("visible_columns")
+    if isinstance(visible_columns, list):
+        filtered = [v for v in visible_columns if isinstance(v, str) and v in CANDIDATE_COLUMN_KEYS]
+        for fixed in CANDIDATE_FIXED_COLUMNS:
+            if fixed not in filtered:
+                filtered.append(fixed)
+        candidates["visible_columns"] = filtered
+    return prefs
 
 
 @router.get("/me/profile", response_model=ProfileResponse)
@@ -39,6 +80,25 @@ async def get_my_profile(
         name=current_user.name,
         avatar_url=current_user.avatar_url,
     )
+
+
+@router.get("/me/preferences", response_model=UserPreferencesResponse)
+async def get_my_preferences(
+    current_user: User = Depends(require_active_user),
+):
+    return UserPreferencesResponse(preferences=_sanitize_preferences(current_user.preferences))
+
+
+@router.patch("/me/preferences", response_model=UserPreferencesResponse)
+async def update_my_preferences(
+    body: UserPreferencesPatchRequest,
+    current_user: User = Depends(require_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    sanitized = _sanitize_preferences(body.preferences)
+    current_user.preferences = sanitized
+    await db.commit()
+    return UserPreferencesResponse(preferences=sanitized)
 
 
 @router.patch("/me/profile", response_model=ProfileResponse)

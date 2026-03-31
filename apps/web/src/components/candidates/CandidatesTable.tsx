@@ -3,19 +3,51 @@
 import { useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslation } from "react-i18next";
-import { Avatar } from "@onehash/ui/avatar";
 import { Badge } from "@onehash/ui/badge";
 import { Checkbox } from "@onehash/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@onehash/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@onehash/ui/tooltip";
 import { formatTimestampToDateTime } from "@/lib/format-date";
-import { getInitialsFromName } from "@/lib/name-initials";
 import { type CandidateListItemResponse, type JobListItemResponse } from "@/api";
+
+export const CANDIDATE_COLUMN_DEFS = {
+  name: { label: "Candidate", fixed: true, defaultVisible: true },
+  email: { label: "Email", fixed: true, defaultVisible: true },
+  phone: { label: "Phone", fixed: false, defaultVisible: true },
+  assigned_jobs: { label: "Assigned Jobs", fixed: false, defaultVisible: true },
+  created_at: { label: "Created", fixed: false, defaultVisible: true },
+  source: { label: "Source", fixed: false, defaultVisible: true },
+  status: { label: "Status", fixed: false, defaultVisible: false },
+  location: { label: "Location", fixed: false, defaultVisible: false },
+  updated_at: { label: "Updated", fixed: false, defaultVisible: false },
+  tags: { label: "Tags", fixed: false, defaultVisible: false },
+  stage_name: { label: "Stage", fixed: false, defaultVisible: false },
+} as const;
+
+export type CandidateColumnKey = keyof typeof CANDIDATE_COLUMN_DEFS;
+
+export const CANDIDATE_ALL_COLUMNS = Object.keys(CANDIDATE_COLUMN_DEFS) as CandidateColumnKey[];
+export const CANDIDATE_FIXED_COLUMNS = CANDIDATE_ALL_COLUMNS.filter(
+  (key) => CANDIDATE_COLUMN_DEFS[key].fixed,
+);
+export const DEFAULT_VISIBLE_CANDIDATE_COLUMNS = CANDIDATE_ALL_COLUMNS.filter(
+  (key) => CANDIDATE_COLUMN_DEFS[key].defaultVisible,
+);
+
+export function normalizeVisibleCandidateColumns(
+  visibleColumns: string[] | CandidateColumnKey[] | null | undefined,
+): CandidateColumnKey[] {
+  const incoming = new Set((visibleColumns ?? []).filter((v): v is CandidateColumnKey => v in CANDIDATE_COLUMN_DEFS));
+  for (const fixed of CANDIDATE_FIXED_COLUMNS) incoming.add(fixed);
+  const normalized = CANDIDATE_ALL_COLUMNS.filter((key) => incoming.has(key));
+  return normalized.length > 0 ? normalized : DEFAULT_VISIBLE_CANDIDATE_COLUMNS;
+}
 
 type Props = {
   items: CandidateListItemResponse[];
   jobs?: JobListItemResponse[];
   selectedIds?: Set<string>;
+  visibleColumns?: CandidateColumnKey[];
   onToggleSelected?: (candidateId: string, nextSelected: boolean) => void;
   onToggleAllVisible?: (nextSelected: boolean) => void;
   onListChange?: () => void | Promise<void>;
@@ -35,11 +67,16 @@ function formatSourceLabel(source: string | null | undefined, t: (key: string) =
 export function CandidatesTable({
   items,
   selectedIds,
+  visibleColumns,
   onToggleSelected,
   onToggleAllVisible,
 }: Props) {
   const router = useRouter();
   const { t } = useTranslation();
+  const visibleColumnSet = useMemo(
+    () => new Set(normalizeVisibleCandidateColumns(visibleColumns)),
+    [visibleColumns],
+  );
 
   const allVisibleSelected = useMemo(() => {
     if (!selectedIds || items.length === 0) return false;
@@ -53,14 +90,15 @@ export function CandidatesTable({
 
   return (
     <>
-      <div className="rounded-lg border border-border overflow-x-auto bg-card">
-        <Table>
+      <div className="rounded-lg border border-border bg-card">
+        <Table className="w-max min-w-full">
           <TableHeader>
             <TableRow className="hover:bg-transparent">
               {selectedIds && onToggleAllVisible ? (
-                <TableHead className="w-10 h-9 align-middle">
+                <TableHead className="w-10 h-9 align-middle text-center">
                   <div className="flex items-center justify-center">
                     <Checkbox
+                      className="rounded-[4px]"
                       checked={
                         allVisibleSelected ? true : someVisibleSelected ? "indeterminate" : false
                       }
@@ -70,24 +108,55 @@ export function CandidatesTable({
                   </div>
                 </TableHead>
               ) : null}
-              <TableHead className="text-xs font-medium h-9 min-w-[140px] max-w-[220px]">
+              <TableHead className="text-xs font-medium h-9 min-w-[140px] max-w-[220px] text-center">
                 Candidate
               </TableHead>
-              <TableHead className="text-xs font-medium h-9 min-w-[160px] hidden md:table-cell max-w-[240px]">
-                Email
-              </TableHead>
-              <TableHead className="text-xs font-medium h-9 min-w-[120px] hidden lg:table-cell max-w-[160px]">
-                Phone
-              </TableHead>
-              <TableHead className="text-xs font-medium h-9 min-w-[160px] hidden lg:table-cell max-w-[280px]">
-                {t("candidates_assigned_jobs")}
-              </TableHead>
-              <TableHead className="text-xs font-medium h-9 min-w-[150px] whitespace-nowrap">
-                {t("candidates_table_created")}
-              </TableHead>
-              <TableHead className="text-xs font-medium h-9 min-w-[100px] hidden sm:table-cell">
-                Source
-              </TableHead>
+              {visibleColumnSet.has("email") ? (
+                <TableHead className="text-xs font-medium h-9 min-w-[160px] max-w-[240px] text-center">
+                  Email
+                </TableHead>
+              ) : null}
+              {visibleColumnSet.has("phone") ? (
+                <TableHead className="text-xs font-medium h-9 min-w-[120px] max-w-[160px] text-center">
+                  Phone
+                </TableHead>
+              ) : null}
+              {visibleColumnSet.has("assigned_jobs") ? (
+                <TableHead className="text-xs font-medium h-9 min-w-[160px] max-w-[280px] text-center">
+                  {t("candidates_assigned_jobs")}
+                </TableHead>
+              ) : null}
+              {visibleColumnSet.has("created_at") ? (
+                <TableHead className="text-xs font-medium h-9 min-w-[150px] whitespace-nowrap text-center">
+                  {t("candidates_table_created")}
+                </TableHead>
+              ) : null}
+              {visibleColumnSet.has("source") ? (
+                <TableHead className="text-xs font-medium h-9 min-w-[100px] text-center">Source</TableHead>
+              ) : null}
+              {visibleColumnSet.has("status") ? (
+                <TableHead className="text-xs font-medium h-9 min-w-[100px] text-center">Status</TableHead>
+              ) : null}
+              {visibleColumnSet.has("location") ? (
+                <TableHead className="text-xs font-medium h-9 min-w-[160px] max-w-[220px] text-center">
+                  Location
+                </TableHead>
+              ) : null}
+              {visibleColumnSet.has("updated_at") ? (
+                <TableHead className="text-xs font-medium h-9 min-w-[150px] whitespace-nowrap text-center">
+                  Updated
+                </TableHead>
+              ) : null}
+              {visibleColumnSet.has("tags") ? (
+                <TableHead className="text-xs font-medium h-9 min-w-[180px] max-w-[260px] text-center">
+                  Tags
+                </TableHead>
+              ) : null}
+              {visibleColumnSet.has("stage_name") ? (
+                <TableHead className="text-xs font-medium h-9 min-w-[140px] max-w-[200px] text-center">
+                  Stage
+                </TableHead>
+              ) : null}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -113,12 +182,13 @@ export function CandidatesTable({
                 <TableRow key={c.id} className="cursor-pointer" onClick={() => router.push(href)}>
                   {selectedIds && onToggleSelected ? (
                     <TableCell
-                      className="py-2 align-middle"
+                      className="py-2 align-middle text-center"
                       onClick={(e) => e.stopPropagation()}
                       onKeyDown={(e) => e.stopPropagation()}
                     >
                       <div className="flex items-center justify-center">
                         <Checkbox
+                          className="rounded-[4px]"
                           checked={isSelected}
                           onCheckedChange={(v) => onToggleSelected(c.id, !!v)}
                           aria-label="Select"
@@ -126,54 +196,98 @@ export function CandidatesTable({
                       </div>
                     </TableCell>
                   ) : null}
-                  <TableCell className="py-2 align-middle min-w-0 max-w-[220px]">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <Avatar
-                        className="h-7 w-7 shrink-0"
-                        alt={c.name}
-                        fallbackClassName="bg-muted text-xs font-medium"
-                      >
-                        {getInitialsFromName(c.name)}
-                      </Avatar>
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">{c.name}</p>
-                      </div>
+                  <TableCell className="py-2 align-middle min-w-0 max-w-[220px] text-center">
+                    <div className="min-w-0 text-center">
+                      <p className="text-sm font-medium truncate">{c.name}</p>
                     </div>
                   </TableCell>
-                  <TableCell className="py-2 align-middle hidden md:table-cell min-w-0 max-w-[240px]">
-                    <span className="text-xs text-muted-foreground truncate block">{c.email}</span>
-                  </TableCell>
-                  <TableCell className="py-2 align-middle hidden lg:table-cell min-w-0 max-w-[160px]">
-                    <span className="text-xs text-muted-foreground truncate block">
-                      {c.phone ?? "—"}
-                    </span>
-                  </TableCell>
-                  <TableCell className="py-2 align-middle hidden lg:table-cell min-w-0 max-w-[280px]">
-                    {activeJobsCount > 0 ? (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <span className="text-xs text-muted-foreground inline-block">
-                            {activeJobsCount}
-                          </span>
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="max-w-[320px] text-xs">
-                          {tooltipText}
-                        </TooltipContent>
-                      </Tooltip>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="py-2 align-middle min-w-0 max-w-[200px]">
-                    <span className="text-xs text-muted-foreground">
-                      {formatTimestampToDateTime(c.created_at)}
-                    </span>
-                  </TableCell>
-                  <TableCell className="py-2 align-middle hidden sm:table-cell">
-                    <Badge variant="outline" className="text-[10px] font-normal">
-                      {formatSourceLabel(c.source, t)}
-                    </Badge>
-                  </TableCell>
+                  {visibleColumnSet.has("email") ? (
+                    <TableCell className="py-2 align-middle min-w-0 max-w-[240px] text-center">
+                      <span className="text-xs text-muted-foreground truncate block">{c.email}</span>
+                    </TableCell>
+                  ) : null}
+                  {visibleColumnSet.has("phone") ? (
+                    <TableCell className="py-2 align-middle min-w-0 max-w-[160px] text-center">
+                      <span className="text-xs text-muted-foreground truncate block">
+                        {c.phone ?? "—"}
+                      </span>
+                    </TableCell>
+                  ) : null}
+                  {visibleColumnSet.has("assigned_jobs") ? (
+                    <TableCell className="py-2 align-middle min-w-0 max-w-[280px] text-center">
+                      {activeJobsCount > 0 ? (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="text-xs text-muted-foreground inline-block mx-auto">
+                              {activeJobsCount}
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-[320px] text-xs">
+                            {tooltipText}
+                          </TooltipContent>
+                        </Tooltip>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                  ) : null}
+                  {visibleColumnSet.has("created_at") ? (
+                    <TableCell className="py-2 align-middle min-w-0 max-w-[200px] text-center">
+                      <span className="text-xs text-muted-foreground">
+                        {formatTimestampToDateTime(c.created_at)}
+                      </span>
+                    </TableCell>
+                  ) : null}
+                  {visibleColumnSet.has("source") ? (
+                    <TableCell className="py-2 align-middle text-center">
+                      <Badge variant="outline" className="text-[10px] font-normal whitespace-nowrap mx-auto">
+                        {formatSourceLabel(c.source, t)}
+                      </Badge>
+                    </TableCell>
+                  ) : null}
+                  {visibleColumnSet.has("status") ? (
+                    <TableCell className="py-2 align-middle text-center">
+                      <Badge variant="secondary" className="text-[10px] font-normal capitalize mx-auto">
+                        {c.status}
+                      </Badge>
+                    </TableCell>
+                  ) : null}
+                  {visibleColumnSet.has("location") ? (
+                    <TableCell className="py-2 align-middle min-w-0 max-w-[220px] text-center">
+                      <span className="text-xs text-muted-foreground truncate block">
+                        {c.location ?? "—"}
+                      </span>
+                    </TableCell>
+                  ) : null}
+                  {visibleColumnSet.has("updated_at") ? (
+                    <TableCell className="py-2 align-middle min-w-0 max-w-[200px] text-center">
+                      <span className="text-xs text-muted-foreground">
+                        {formatTimestampToDateTime(c.updated_at)}
+                      </span>
+                    </TableCell>
+                  ) : null}
+                  {visibleColumnSet.has("tags") ? (
+                    <TableCell className="py-2 align-middle min-w-0 max-w-[260px] text-center">
+                      <div className="flex flex-wrap justify-center gap-1">
+                        {(c.tags ?? []).length > 0 ? (
+                          (c.tags ?? []).slice(0, 3).map((tag) => (
+                            <Badge key={tag} variant="outline" className="text-[10px] font-normal">
+                              {tag}
+                            </Badge>
+                          ))
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </div>
+                    </TableCell>
+                  ) : null}
+                  {visibleColumnSet.has("stage_name") ? (
+                    <TableCell className="py-2 align-middle min-w-0 max-w-[200px] text-center">
+                      <span className="text-xs text-muted-foreground truncate block">
+                        {c.stage_name ?? "—"}
+                      </span>
+                    </TableCell>
+                  ) : null}
                 </TableRow>
               );
             })}

@@ -1,4 +1,5 @@
 from enum import Enum
+from typing import Any
 from typing import Optional
 from uuid import UUID
 
@@ -33,6 +34,14 @@ class ProfileResponse(BaseModel):
 
 class UpdateProfileRequest(BaseModel):
     name: str
+
+
+class UserPreferencesResponse(BaseModel):
+    preferences: dict[str, Any] = {}
+
+
+class UserPreferencesPatchRequest(BaseModel):
+    preferences: dict[str, Any]
 
 
 class InviteUserRequest(BaseModel):

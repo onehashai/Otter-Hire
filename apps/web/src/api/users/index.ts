@@ -7,6 +7,10 @@ export type ProfileResponse = {
   avatar_url: string | null;
 };
 
+export type UserPreferencesResponse = {
+  preferences: Record<string, unknown>;
+};
+
 export async function getMyProfile(): Promise<ProfileResponse> {
   const profile = await apiFetch<ProfileResponse>("/users/me/profile", { method: "GET" });
   return { ...profile, avatar_url: normalizeApiUrl(profile.avatar_url) };
@@ -49,4 +53,17 @@ export async function uploadMyAvatar(file: File): Promise<ProfileResponse> {
 export async function deleteMyAvatar(): Promise<ProfileResponse> {
   const profile = await apiFetch<ProfileResponse>("/users/me/avatar", { method: "DELETE" });
   return { ...profile, avatar_url: normalizeApiUrl(profile.avatar_url) };
+}
+
+export async function getMyPreferences(): Promise<UserPreferencesResponse> {
+  return apiFetch<UserPreferencesResponse>("/users/me/preferences", { method: "GET" });
+}
+
+export async function updateMyPreferences(
+  preferences: Record<string, unknown>,
+): Promise<UserPreferencesResponse> {
+  return apiFetch<UserPreferencesResponse>("/users/me/preferences", {
+    method: "PATCH",
+    body: { preferences },
+  });
 }

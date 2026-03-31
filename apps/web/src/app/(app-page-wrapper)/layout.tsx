@@ -46,11 +46,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         ) : null}
         <div className="flex flex-col flex-1 min-w-0">
           <TopBar />
-          <main className="flex-1 overflow-auto">
+          <main className="flex-1 overflow-auto min-h-0">
             <div
               className={
                 isJobStageWorkspaceRoute
-                  ? "py-0 pb-20 md:pb-0"
+                  ? "py-0 pb-0 md:pb-0 min-h-0"
                   : isCandidatesListRoute
                     ? "mx-auto max-w-[1400px] px-4 md:px-6 py-4 md:py-6 pb-20 md:pb-6 w-full"
                     : "mx-auto max-w-6xl px-4 md:px-6 py-4 md:py-6 pb-20 md:pb-6"

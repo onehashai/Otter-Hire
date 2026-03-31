@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { MainPagesLayout } from "@/components/common/MainPagesLayout";
 import { useSetPageMetadata } from "@/hooks/useSetPageMetadata";
@@ -13,7 +13,15 @@ import {
   type JobListItemResponse,
 } from "@/api";
 import { importCandidatesCsv } from "@/api/candidates";
-import { CandidatesTable } from "@/components/candidates/CandidatesTable";
+import {
+  CANDIDATE_ALL_COLUMNS,
+  CANDIDATE_COLUMN_DEFS,
+  CANDIDATE_FIXED_COLUMNS,
+  type CandidateColumnKey,
+  CandidatesTable,
+  DEFAULT_VISIBLE_CANDIDATE_COLUMNS,
+  normalizeVisibleCandidateColumns,
+} from "@/components/candidates/CandidatesTable";
 import { Button } from "@onehash/ui/button";
 import { EmptyCard, ErrorCard } from "@onehash/ui/card";
 import { SelectField } from "@onehash/ui/select";
@@ -40,10 +48,17 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@onehash/ui/dropdown-menu";
+import { Checkbox } from "@onehash/ui/checkbox";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@onehash/ui/sheet";
 import { Icon } from "@onehash/ui/icon";
 import { toast } from "@onehash/ui/sonner";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { getMyPreferences, updateMyPreferences } from "@/api/users";
 
 const PAGE_SIZE = 25;
 const ASSIGNMENT_ALL = "all";
@@ -52,6 +67,7 @@ const ASSIGNMENT_UNASSIGNED = "unassigned";
 
 export default function CandidatesPage() {
   const { t } = useTranslation();
+  const isMobile = useIsMobile();
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [assignment, setAssignment] = useState<string>(ASSIGNMENT_ALL);
@@ -69,9 +85,19 @@ export default function CandidatesPage() {
 
   const [items, setItems] = useState<CandidateListItemResponse[]>([]);
   const [jobs, setJobs] = useState<JobListItemResponse[]>([]);
+  const [visibleColumns, setVisibleColumns] = useState<CandidateColumnKey[]>(
+    DEFAULT_VISIBLE_CANDIDATE_COLUMNS,
+  );
+  const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
+  const [columnSubmenuOpen, setColumnSubmenuOpen] = useState(false);
+  const [columnPickerOpen, setColumnPickerOpen] = useState(false);
+  const [preferencesLoaded, setPreferencesLoaded] = useState(false);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const lastSavedColumnsRef = useRef<string>(
+    JSON.stringify(normalizeVisibleCandidateColumns(DEFAULT_VISIBLE_CANDIDATE_COLUMNS)),
+  );
 
   useSetPageMetadata({
     title: t("candidates_title"),
@@ -91,6 +117,56 @@ export default function CandidatesPage() {
   useEffect(() => {
     setSelectedIds(new Set());
   }, [page]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await getMyPreferences();
+        const prefs = response.preferences as {
+          tables?: { candidates?: { visible_columns?: string[] } };
+        };
+        const stored = prefs?.tables?.candidates?.visible_columns;
+        const normalized = normalizeVisibleCandidateColumns(stored);
+        if (!cancelled) {
+          setVisibleColumns(normalized);
+          lastSavedColumnsRef.current = JSON.stringify(normalized);
+        }
+      } catch {
+        // Keep defaults when preferences are unavailable.
+      } finally {
+        if (!cancelled) setPreferencesLoaded(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!preferencesLoaded) return;
+    const normalized = normalizeVisibleCandidateColumns(visibleColumns);
+    const serialized = JSON.stringify(normalized);
+    if (serialized === lastSavedColumnsRef.current) return;
+    const id = setTimeout(() => {
+      void (async () => {
+        try {
+          await updateMyPreferences({
+            tables: {
+              candidates: {
+                visible_columns: normalized,
+                version: 1,
+              },
+            },
+          });
+          lastSavedColumnsRef.current = serialized;
+        } catch {
+          toast.error("Unable to save column preferences.");
+        }
+      })();
+    }, 300);
+    return () => clearTimeout(id);
+  }, [preferencesLoaded, visibleColumns]);
 
   const totalPages = useMemo(() => Math.max(1, Math.ceil(total / PAGE_SIZE)), [total]);
   const offset = (page - 1) * PAGE_SIZE;
@@ -225,6 +301,76 @@ export default function CandidatesPage() {
   };
 
   const visibleIds = useMemo(() => items.map((c) => c.id), [items]);
+  const visibleColumnSet = useMemo(
+    () => new Set(normalizeVisibleCandidateColumns(visibleColumns)),
+    [visibleColumns],
+  );
+  const toggleColumn = (columnKey: CandidateColumnKey, nextChecked: boolean) => {
+    if (CANDIDATE_FIXED_COLUMNS.includes(columnKey)) return;
+    setVisibleColumns((prev) => {
+      const next = new Set(normalizeVisibleCandidateColumns(prev));
+      if (nextChecked) next.add(columnKey);
+      else next.delete(columnKey);
+      for (const fixedKey of CANDIDATE_FIXED_COLUMNS) next.add(fixedKey);
+      return normalizeVisibleCandidateColumns(Array.from(next));
+    });
+  };
+  const resetColumns = () => setVisibleColumns(DEFAULT_VISIBLE_CANDIDATE_COLUMNS);
+  const columnLabel = (columnKey: CandidateColumnKey) => {
+    if (columnKey === "assigned_jobs") return t("candidates_assigned_jobs");
+    if (columnKey === "created_at") return t("candidates_table_created");
+    return CANDIDATE_COLUMN_DEFS[columnKey].label;
+  };
+  const columnPickerContent = (
+    <div className="space-y-3">
+      <div className="space-y-2">
+        {CANDIDATE_ALL_COLUMNS.map((columnKey) => {
+          const fixed = CANDIDATE_COLUMN_DEFS[columnKey].fixed;
+          const checked = visibleColumnSet.has(columnKey);
+          return (
+            <label
+              key={columnKey}
+              className="flex items-center justify-between gap-2 rounded-md border border-border px-2.5 py-2"
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <Checkbox
+                  checked={checked}
+                  disabled={fixed}
+                  onCheckedChange={(v) => toggleColumn(columnKey, !!v)}
+                  aria-label={columnLabel(columnKey)}
+                />
+                <span className="text-xs truncate">{columnLabel(columnKey)}</span>
+              </div>
+              {fixed ? (
+                <span className="text-[10px] text-muted-foreground shrink-0">Required</span>
+              ) : null}
+            </label>
+          );
+        })}
+      </div>
+      <div className="flex items-center justify-between gap-2">
+        <Button variant="ghost" size="sm" className="h-7 text-xs px-2" onClick={resetColumns}>
+          Reset to default
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 text-xs px-2"
+          onClick={() => {
+            if (isMobile) {
+              setColumnPickerOpen(false);
+              return;
+            }
+            setColumnSubmenuOpen(false);
+            setActionsMenuOpen(false);
+          }}
+        >
+          Close
+        </Button>
+      </div>
+    </div>
+  );
+
   const toggleSelected = (candidateId: string, nextSelected: boolean) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -329,13 +475,35 @@ export default function CandidatesPage() {
           <Button size="sm" className="h-9 md:h-8 text-xs gap-1.5" onClick={() => setAddOpen(true)}>
             <Icon name="Plus" className="h-3.5 w-3.5" /> Create
           </Button>
-          <DropdownMenu>
+          <DropdownMenu
+            open={actionsMenuOpen}
+            onOpenChange={(open) => {
+              setActionsMenuOpen(open);
+              if (!open) setColumnSubmenuOpen(false);
+            }}
+          >
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm" className="h-9 md:h-8 w-9 p-0">
                 <Icon name="MoreHorizontal" className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
+              {isMobile ? (
+                <DropdownMenuItem
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    setActionsMenuOpen(false);
+                    setColumnPickerOpen(true);
+                  }}
+                >
+                  Column picker
+                </DropdownMenuItem>
+              ) : (
+                <DropdownMenuSub open={columnSubmenuOpen} onOpenChange={setColumnSubmenuOpen}>
+                  <DropdownMenuSubTrigger>Column picker</DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent className="w-80">{columnPickerContent}</DropdownMenuSubContent>
+                </DropdownMenuSub>
+              )}
               <DropdownMenuItem
                 onSelect={(e) => {
                   e.preventDefault();
@@ -373,6 +541,7 @@ export default function CandidatesPage() {
           <CandidatesTable
             items={items}
             jobs={jobs}
+            visibleColumns={visibleColumns}
             selectedIds={selectedIds}
             onToggleSelected={toggleSelected}
             onToggleAllVisible={toggleAllVisible}
@@ -521,6 +690,14 @@ export default function CandidatesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <Sheet open={columnPickerOpen} onOpenChange={setColumnPickerOpen}>
+        <SheetContent side="bottom" className="h-[70vh] rounded-t-2xl overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>Column picker</SheetTitle>
+          </SheetHeader>
+          <div className="mt-4">{columnPickerContent}</div>
+        </SheetContent>
+      </Sheet>
       <AddCandidateDialog open={addOpen} onOpenChange={setAddOpen} onAdded={() => void refresh()} />
     </MainPagesLayout>
   );

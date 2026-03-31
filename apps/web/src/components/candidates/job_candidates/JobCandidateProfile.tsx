@@ -18,6 +18,7 @@ import {
 } from "@/components/candidates/shared/tabs";
 import { SummaryPanel } from "@/components/candidates/shared/summary/SummaryPanel";
 import { ActionButtons } from "@/components/candidates/job_candidates/ActionButtons";
+import { cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
 import {
   getApiBase,
@@ -487,7 +488,12 @@ export function JobCandidateProfile({
   return (
     <>
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
+        <div
+          className={cn(
+            "flex items-center justify-between gap-2",
+            isStageThreePane && isMobile && "px-3",
+          )}
+        >
           {isStageThreePane ? (
             <div className="flex items-center gap-2 min-w-0">
               <p className="text-sm font-medium truncate">{uiCandidate.name}</p>
@@ -523,7 +529,12 @@ export function JobCandidateProfile({
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="h-9 w-full justify-start bg-transparent border-b rounded-none p-0 gap-0">
+          <TabsList
+            className={cn(
+              "h-9 w-full justify-start bg-transparent border-b rounded-none p-0 gap-0",
+              isStageThreePane && isMobile && "px-3",
+            )}
+          >
             {[
               { value: "overview", label: t("overview") },
               { value: "messages", label: t("messages") },
@@ -542,7 +553,13 @@ export function JobCandidateProfile({
             ))}
           </TabsList>
 
-          <div className={`mt-4 ${isMobile ? "space-y-4" : "grid grid-cols-[1fr_320px] gap-4"}`}>
+          <div
+            className={cn(
+              "mt-4",
+              isMobile ? "space-y-4" : "grid grid-cols-[1fr_320px] gap-4",
+              isStageThreePane && isMobile && "px-0",
+            )}
+          >
             <div>
               <TabsContent value="overview" className={`mt-0 ${isMobile ? "space-y-4" : ""}`}>
                 {isStageThreePane ? (

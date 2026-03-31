@@ -10,7 +10,6 @@ import {
   type ReactNode,
 } from "react";
 import { useParams } from "next/navigation";
-import { useTranslation } from "react-i18next";
 import { getJobWorkspace, type JobWorkspaceResponse } from "@/api";
 import { useSetPageMetadata } from "@/hooks/useSetPageMetadata";
 
@@ -26,7 +25,6 @@ const JobWorkspaceStageContext = createContext<JobWorkspaceStageContextValue | n
 export function JobWorkspaceStageProvider({ children }: { children: ReactNode }) {
   const params = useParams();
   const jobId = params?.jobId as string | undefined;
-  const { t } = useTranslation();
 
   const [workspace, setWorkspace] = useState<JobWorkspaceResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -62,8 +60,8 @@ export function JobWorkspaceStageProvider({ children }: { children: ReactNode })
   }, [jobId, reload]);
 
   useSetPageMetadata({
-    title: t("job_candidate_edit_title"),
-    subtitle: t("job_candidate_edit_subtitle"),
+    title: workspace?.title ?? "",
+    subtitle: "Edit and manage candidates and jobs seamlessly in one place",
   });
 
   const value = useMemo(

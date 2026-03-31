@@ -48,8 +48,8 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation();
 
   useSetPageMetadata({
-    title: t("edit_job"),
-    subtitle: t("edit_job_subtitle"),
+    title: title || "",
+    subtitle: "Edit and manage candidates and jobs seamlessly in one place",
   });
 
   const sections = SETUP_SECTIONS(t);

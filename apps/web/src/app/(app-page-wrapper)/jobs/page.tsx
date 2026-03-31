@@ -279,6 +279,10 @@ export default function JobsPage() {
     );
   }
 
+  if (loading) {
+    return <JobsListSkeleton count={6} />;
+  }
+
   if (jobs.length === 0) {
     return (
       <>
@@ -292,10 +296,6 @@ export default function JobsPage() {
         <CreateJobModal open={createOpen} onOpenChange={setCreateOpen} />
       </>
     );
-  }
-
-  if (loading) {
-    return <JobsListSkeleton count={6} />;
   }
 
   return (

@@ -9,12 +9,11 @@ import { InputField } from "@onehash/ui/input";
 import { Icon } from "@onehash/ui/icon";
 import { Separator } from "@onehash/ui/separator";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { useTheme } from "@/components/common/ThemeProvider";
 import { cn } from "@/lib/utils";
 import { getDefaultStageId } from "@/lib/job-workspace";
 import { AddCandidateDialog } from "@/components/candidates/shared/dialogs/AddCandidateDialog";
 import { useJobWorkspaceStage } from "../context";
-import { ChevronLeft, Moon, Sun } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 import { formatTimestamp } from "@/lib/format-date";
 import { JobCandidateProfile } from "@/components/candidates/job_candidates/JobCandidateProfile";
 
@@ -28,7 +27,6 @@ export default function StageWorkspaceContent() {
   const candidateIdParam = params?.candidateId as string | undefined;
   const isMobile = useIsMobile();
   const { workspace, loading, error, reload } = useJobWorkspaceStage();
-  const { theme, setTheme } = useTheme();
 
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
@@ -251,7 +249,7 @@ export default function StageWorkspaceContent() {
             <p className="text-[10px] font-semibold text-muted-foreground tracking-wide px-3 pt-3 pb-1">
               Stages
             </p>
-            <nav className="px-2 pb-2 space-y-0.5 flex-1 min-h-0">
+            <nav className="px-2 pb-2 space-y-0.5 min-h-0">
               {sortedStages.map((s, i) => {
                 const count = candidateCountByStage(s.id);
                 const isActive = i === mobileStageIndex;
@@ -273,10 +271,7 @@ export default function StageWorkspaceContent() {
                   </button>
                 );
               })}
-            </nav>
-
-            <Separator />
-            <div className="p-2 space-y-1 shrink-0">
+              <Separator className="my-2" />
               <Link
                 href={`/jobs/${encodeURIComponent(jobId)}/info`}
                 className={cn(
@@ -287,20 +282,7 @@ export default function StageWorkspaceContent() {
                 <Icon name="PenLine" className="h-3.5 w-3.5 shrink-0" />
                 <span className="truncate">Edit job</span>
               </Link>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-                className="w-full justify-start gap-2.5 px-2.5 h-9 text-muted-foreground hover:text-foreground"
-              >
-                {theme === "dark" ? (
-                  <Sun className="h-4 w-4 shrink-0" />
-                ) : (
-                  <Moon className="h-4 w-4 shrink-0" />
-                )}
-                <span className="text-xs">{theme === "dark" ? "Light mode" : "Dark mode"}</span>
-              </Button>
-            </div>
+            </nav>
           </section>
 
           <section

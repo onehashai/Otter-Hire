@@ -47,11 +47,6 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
   const isMobile = useIsMobile();
   const { t } = useTranslation();
 
-  useSetPageMetadata({
-    title: title || "",
-    subtitle: "Edit and manage candidates and jobs seamlessly in one place",
-  });
-
   const sections = SETUP_SECTIONS(t);
   const {
     title,
@@ -86,6 +81,11 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
     isSaving,
     isPublishing,
   } = useJobSetup();
+
+  useSetPageMetadata({
+    title: title || "",
+    subtitle: "Edit and manage candidates and jobs seamlessly in one place",
+  });
 
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {

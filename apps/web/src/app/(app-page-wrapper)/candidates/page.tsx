@@ -501,7 +501,9 @@ export default function CandidatesPage() {
               ) : (
                 <DropdownMenuSub open={columnSubmenuOpen} onOpenChange={setColumnSubmenuOpen}>
                   <DropdownMenuSubTrigger>Column picker</DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent className="w-80">{columnPickerContent}</DropdownMenuSubContent>
+                  <DropdownMenuSubContent className="w-80">
+                    {columnPickerContent}
+                  </DropdownMenuSubContent>
                 </DropdownMenuSub>
               )}
               <DropdownMenuItem

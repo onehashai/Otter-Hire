@@ -164,8 +164,7 @@ export default function StageWorkspaceContent() {
         <div className="min-w-0">
           <h2 className="text-sm font-semibold">{stageForList?.name ?? "Stage"}</h2>
           <p className="text-xs text-muted-foreground">
-            {candidatesInStage.length}{" "}
-            {candidatesInStage.length === 1 ? "candidate" : "candidates"}
+            {candidatesInStage.length} {candidatesInStage.length === 1 ? "candidate" : "candidates"}
           </p>
         </div>
         <Button size="sm" className="h-7 px-2.5 text-[11px]" onClick={() => setAddOpen(true)}>
@@ -369,7 +368,9 @@ export default function StageWorkspaceContent() {
 
   return (
     <div className="h-[calc(100vh-3rem)] min-h-[640px] flex border-t border-border">
-      <section className="w-[300px] border-r border-border flex flex-col">{listColumnInner}</section>
+      <section className="w-[300px] border-r border-border flex flex-col">
+        {listColumnInner}
+      </section>
 
       {candidateIdParam ? (
         <section className="flex-1 overflow-auto p-4">

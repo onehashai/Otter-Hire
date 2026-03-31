@@ -37,7 +37,9 @@ export const DEFAULT_VISIBLE_CANDIDATE_COLUMNS = CANDIDATE_ALL_COLUMNS.filter(
 export function normalizeVisibleCandidateColumns(
   visibleColumns: string[] | CandidateColumnKey[] | null | undefined,
 ): CandidateColumnKey[] {
-  const incoming = new Set((visibleColumns ?? []).filter((v): v is CandidateColumnKey => v in CANDIDATE_COLUMN_DEFS));
+  const incoming = new Set(
+    (visibleColumns ?? []).filter((v): v is CandidateColumnKey => v in CANDIDATE_COLUMN_DEFS),
+  );
   for (const fixed of CANDIDATE_FIXED_COLUMNS) incoming.add(fixed);
   const normalized = CANDIDATE_ALL_COLUMNS.filter((key) => incoming.has(key));
   return normalized.length > 0 ? normalized : DEFAULT_VISIBLE_CANDIDATE_COLUMNS;
@@ -132,10 +134,14 @@ export function CandidatesTable({
                 </TableHead>
               ) : null}
               {visibleColumnSet.has("source") ? (
-                <TableHead className="text-xs font-medium h-9 min-w-[100px] text-center">Source</TableHead>
+                <TableHead className="text-xs font-medium h-9 min-w-[100px] text-center">
+                  Source
+                </TableHead>
               ) : null}
               {visibleColumnSet.has("status") ? (
-                <TableHead className="text-xs font-medium h-9 min-w-[100px] text-center">Status</TableHead>
+                <TableHead className="text-xs font-medium h-9 min-w-[100px] text-center">
+                  Status
+                </TableHead>
               ) : null}
               {visibleColumnSet.has("location") ? (
                 <TableHead className="text-xs font-medium h-9 min-w-[160px] max-w-[220px] text-center">
@@ -203,7 +209,9 @@ export function CandidatesTable({
                   </TableCell>
                   {visibleColumnSet.has("email") ? (
                     <TableCell className="py-2 align-middle min-w-0 max-w-[240px] text-center">
-                      <span className="text-xs text-muted-foreground truncate block">{c.email}</span>
+                      <span className="text-xs text-muted-foreground truncate block">
+                        {c.email}
+                      </span>
                     </TableCell>
                   ) : null}
                   {visibleColumnSet.has("phone") ? (
@@ -240,14 +248,20 @@ export function CandidatesTable({
                   ) : null}
                   {visibleColumnSet.has("source") ? (
                     <TableCell className="py-2 align-middle text-center">
-                      <Badge variant="outline" className="text-[10px] font-normal whitespace-nowrap mx-auto">
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] font-normal whitespace-nowrap mx-auto"
+                      >
                         {formatSourceLabel(c.source, t)}
                       </Badge>
                     </TableCell>
                   ) : null}
                   {visibleColumnSet.has("status") ? (
                     <TableCell className="py-2 align-middle text-center">
-                      <Badge variant="secondary" className="text-[10px] font-normal capitalize mx-auto">
+                      <Badge
+                        variant="secondary"
+                        className="text-[10px] font-normal capitalize mx-auto"
+                      >
                         {c.status}
                       </Badge>
                     </TableCell>

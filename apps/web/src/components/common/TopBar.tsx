@@ -161,7 +161,7 @@ export function TopBar() {
     <header
       className={cn(
         "border-b border-border flex justify-between px-4 md:px-6 bg-background shrink-0 gap-2",
-        isMobile ? "min-h-12 h-auto py-1.5 items-start" : "h-12 items-center",
+        isMobile ? "h-12 items-center" : "h-12 items-center",
       )}
     >
       <div className="flex flex-col justify-center flex-1 min-w-0 pr-2 md:pr-3">
@@ -169,7 +169,7 @@ export function TopBar() {
           {metadata.title}
         </h1>
         {metadata.subtitle && (
-          <p className="text-xs text-muted-foreground leading-snug break-words mt-0.5 line-clamp-3 md:line-clamp-none">
+          <p className="hidden md:block text-xs text-muted-foreground leading-snug break-words mt-0.5 md:line-clamp-none">
             {metadata.subtitle}
           </p>
         )}

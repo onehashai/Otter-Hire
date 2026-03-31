@@ -4,6 +4,7 @@ import { useRef } from "react";
 import { Card, CardContent } from "@onehash/ui/card";
 import { Icon } from "@onehash/ui/icon";
 import { Button } from "@onehash/ui/button";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 type ResumeTabProps = {
   resumeUrl?: string | null;
@@ -21,6 +22,7 @@ export function ResumeTab({
   onUploadResumeFile,
 }: ResumeTabProps) {
   const resumeInputRef = useRef<HTMLInputElement | null>(null);
+  const isMobile = useIsMobile();
 
   if (!resumeUrl) {
     return (
@@ -73,13 +75,22 @@ export function ResumeTab({
     resumeUrl.toLowerCase().includes(".pdf") ||
     resumeUrl.toLowerCase().includes("application/pdf");
   void resumeName;
+  const viewerHeightClass = isMobile
+    ? "h-[min(64dvh,calc(100dvh-15.5rem))] min-h-[300px]"
+    : "h-[70vh]";
 
   return (
-    <div>
-      <Card>
-        <CardContent className="p-0">
+    <div className="min-w-0 max-w-full overflow-x-hidden">
+      <Card className="min-w-0 max-w-full overflow-hidden">
+        <CardContent className="p-0 min-w-0 max-w-full overflow-hidden">
           {isPdf ? (
-            <iframe title="Resume preview" src={iframeSrc} className="w-full h-[70vh] rounded-md" />
+            <div className="min-w-0 max-w-full overflow-hidden px-2 py-2 sm:px-0 sm:py-0">
+              <iframe
+                title="Resume preview"
+                src={iframeSrc}
+                className={`block w-full max-w-full rounded-md border border-border ${viewerHeightClass}`}
+              />
+            </div>
           ) : (
             <div className="p-6 text-center text-xs text-muted-foreground">
               Preview not available for this file type. Use “Open” to view it.

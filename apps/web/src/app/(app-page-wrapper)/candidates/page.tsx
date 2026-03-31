@@ -20,6 +20,7 @@ import {
   type CandidateColumnKey,
   CandidatesTable,
   DEFAULT_VISIBLE_CANDIDATE_COLUMNS,
+  normalizeCandidateColumnOrder,
   normalizeVisibleCandidateColumns,
 } from "@/components/candidates/CandidatesTable";
 import { Button } from "@onehash/ui/button";
@@ -88,6 +89,7 @@ export default function CandidatesPage() {
   const [visibleColumns, setVisibleColumns] = useState<CandidateColumnKey[]>(
     DEFAULT_VISIBLE_CANDIDATE_COLUMNS,
   );
+  const [columnOrder, setColumnOrder] = useState<CandidateColumnKey[]>(CANDIDATE_ALL_COLUMNS);
   const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
   const [columnSubmenuOpen, setColumnSubmenuOpen] = useState(false);
   const [columnPickerOpen, setColumnPickerOpen] = useState(false);
@@ -98,6 +100,8 @@ export default function CandidatesPage() {
   const lastSavedColumnsRef = useRef<string>(
     JSON.stringify(normalizeVisibleCandidateColumns(DEFAULT_VISIBLE_CANDIDATE_COLUMNS)),
   );
+  const lastSavedOrderRef = useRef<string>(JSON.stringify(normalizeCandidateColumnOrder(CANDIDATE_ALL_COLUMNS)));
+  const draggedColumnRef = useRef<CandidateColumnKey | null>(null);
 
   useSetPageMetadata({
     title: t("candidates_title"),
@@ -124,13 +128,17 @@ export default function CandidatesPage() {
       try {
         const response = await getMyPreferences();
         const prefs = response.preferences as {
-          tables?: { candidates?: { visible_columns?: string[] } };
+          tables?: { candidates?: { visible_columns?: string[]; column_order?: string[] } };
         };
         const stored = prefs?.tables?.candidates?.visible_columns;
+        const storedOrder = prefs?.tables?.candidates?.column_order;
         const normalized = normalizeVisibleCandidateColumns(stored);
+        const normalizedOrder = normalizeCandidateColumnOrder(storedOrder);
         if (!cancelled) {
           setVisibleColumns(normalized);
+          setColumnOrder(normalizedOrder);
           lastSavedColumnsRef.current = JSON.stringify(normalized);
+          lastSavedOrderRef.current = JSON.stringify(normalizedOrder);
         }
       } catch {
         // Keep defaults when preferences are unavailable.
@@ -146,8 +154,15 @@ export default function CandidatesPage() {
   useEffect(() => {
     if (!preferencesLoaded) return;
     const normalized = normalizeVisibleCandidateColumns(visibleColumns);
+    const normalizedOrder = normalizeCandidateColumnOrder(columnOrder);
     const serialized = JSON.stringify(normalized);
-    if (serialized === lastSavedColumnsRef.current) return;
+    const serializedOrder = JSON.stringify(normalizedOrder);
+    if (
+      serialized === lastSavedColumnsRef.current &&
+      serializedOrder === lastSavedOrderRef.current
+    ) {
+      return;
+    }
     const id = setTimeout(() => {
       void (async () => {
         try {
@@ -155,18 +170,20 @@ export default function CandidatesPage() {
             tables: {
               candidates: {
                 visible_columns: normalized,
+                column_order: normalizedOrder,
                 version: 1,
               },
             },
           });
           lastSavedColumnsRef.current = serialized;
+          lastSavedOrderRef.current = serializedOrder;
         } catch {
           toast.error("Unable to save column preferences.");
         }
       })();
     }, 300);
     return () => clearTimeout(id);
-  }, [preferencesLoaded, visibleColumns]);
+  }, [preferencesLoaded, visibleColumns, columnOrder]);
 
   const totalPages = useMemo(() => Math.max(1, Math.ceil(total / PAGE_SIZE)), [total]);
   const offset = (page - 1) * PAGE_SIZE;
@@ -305,6 +322,10 @@ export default function CandidatesPage() {
     () => new Set(normalizeVisibleCandidateColumns(visibleColumns)),
     [visibleColumns],
   );
+  const orderedColumns = useMemo(
+    () => normalizeCandidateColumnOrder(columnOrder),
+    [columnOrder],
+  );
   const toggleColumn = (columnKey: CandidateColumnKey, nextChecked: boolean) => {
     if (CANDIDATE_FIXED_COLUMNS.includes(columnKey)) return;
     setVisibleColumns((prev) => {
@@ -315,7 +336,32 @@ export default function CandidatesPage() {
       return normalizeVisibleCandidateColumns(Array.from(next));
     });
   };
-  const resetColumns = () => setVisibleColumns(DEFAULT_VISIBLE_CANDIDATE_COLUMNS);
+  const resetColumns = () => {
+    setVisibleColumns(DEFAULT_VISIBLE_CANDIDATE_COLUMNS);
+    setColumnOrder(CANDIDATE_ALL_COLUMNS);
+  };
+  const moveColumn = (from: CandidateColumnKey, to: CandidateColumnKey) => {
+    if (from === to) return;
+    setColumnOrder((prev) => {
+      const normalized = normalizeCandidateColumnOrder(prev);
+      const fromIndex = normalized.indexOf(from);
+      const toIndex = normalized.indexOf(to);
+      if (fromIndex < 0 || toIndex < 0) return normalized;
+      const next = [...normalized];
+      const [removed] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, removed);
+      return next;
+    });
+  };
+  const handleDragStart = (columnKey: CandidateColumnKey) => {
+    draggedColumnRef.current = columnKey;
+  };
+  const handleDrop = (targetColumn: CandidateColumnKey) => {
+    const dragged = draggedColumnRef.current;
+    draggedColumnRef.current = null;
+    if (!dragged) return;
+    moveColumn(dragged, targetColumn);
+  };
   const columnLabel = (columnKey: CandidateColumnKey) => {
     if (columnKey === "assigned_jobs") return t("candidates_assigned_jobs");
     if (columnKey === "created_at") return t("candidates_table_created");
@@ -324,13 +370,20 @@ export default function CandidatesPage() {
   const columnPickerContent = (
     <div className="space-y-3">
       <div className="space-y-2">
-        {CANDIDATE_ALL_COLUMNS.map((columnKey) => {
+        {orderedColumns.map((columnKey) => {
           const fixed = CANDIDATE_COLUMN_DEFS[columnKey].fixed;
           const checked = visibleColumnSet.has(columnKey);
           return (
             <label
               key={columnKey}
-              className="flex items-center justify-between gap-2 rounded-md border border-border px-2.5 py-2"
+              draggable
+              onDragStart={() => handleDragStart(columnKey)}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={() => handleDrop(columnKey)}
+              onDragEnd={() => {
+                draggedColumnRef.current = null;
+              }}
+              className="flex items-center justify-between gap-2 rounded-md border border-border px-2.5 py-2 cursor-move"
             >
               <div className="flex items-center gap-2 min-w-0">
                 <Checkbox
@@ -544,6 +597,7 @@ export default function CandidatesPage() {
             items={items}
             jobs={jobs}
             visibleColumns={visibleColumns}
+            columnOrder={columnOrder}
             selectedIds={selectedIds}
             onToggleSelected={toggleSelected}
             onToggleAllVisible={toggleAllVisible}

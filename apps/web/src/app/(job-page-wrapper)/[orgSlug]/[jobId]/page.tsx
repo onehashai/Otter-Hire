@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@onehash/ui/button";
@@ -155,6 +155,61 @@ export default function CareerJobDetailPage() {
   const isRequired = (visibility: string) => visibility === "required";
   const isVisible = (visibility: string) => visibility !== "hidden";
 
+  const applyValidation = useMemo(() => {
+    const fullNameVisibility = fieldVisibility("full_name", "required");
+    const emailVisibility = fieldVisibility("email", "required");
+    const phoneVisibility = fieldVisibility("phone", "optional");
+    const resumeVisibility = fieldVisibility("resume", "hidden");
+    const coverVisibility = fieldVisibility("cover_letter", "hidden");
+
+    const errors: Record<string, string> = {};
+    if (isRequired(fullNameVisibility) && !applyForm.fullName.trim()) {
+      errors.fullName = "Full name is required.";
+    }
+    if (isRequired(emailVisibility) && !applyForm.email.trim()) {
+      errors.email = "Email is required.";
+    }
+    if (applyForm.email.trim() && !isValidEmail(applyForm.email)) {
+      errors.email = "Enter a valid email address.";
+    }
+    if (isRequired(phoneVisibility) && !applyForm.phone.trim()) {
+      errors.phone = "Phone is required.";
+    }
+    if (applyForm.phone.trim() && !isValidPhoneNumber(applyForm.phone)) {
+      errors.phone = "Enter a valid phone number.";
+    }
+    if (isRequired(resumeVisibility) && !applyForm.files.resume) {
+      errors.resume = "Resume is required.";
+    }
+    if (isRequired(coverVisibility) && !applyForm.files.cover_letter) {
+      errors.cover_letter = "Cover letter is required.";
+    }
+
+    for (const field of [...profileLinkFields, ...customFields]) {
+      const key = String(field.key ?? field.id ?? "");
+      const label = String(field.label ?? key);
+      const visibility = String(field.visibility ?? "hidden");
+      const type = String(field.type ?? "short_text");
+      if (!key || visibility === "hidden") continue;
+      if (visibility === "required") {
+        if (type === "file_upload") {
+          const fileMeta = applyForm.files[key];
+          if (!fileMeta || (!fileMeta.url && !fileMeta.name)) {
+            errors[`file:${key}`] = `${label} is required.`;
+          }
+        } else {
+          const val = applyForm.answers[key];
+          if (val == null || (typeof val === "string" && !val.trim())) {
+            errors[`answer:${key}`] = `${label} is required.`;
+          }
+        }
+      }
+    }
+
+    const hasUploadingFiles = Object.values(applyForm.files).some((f) => f?.uploading);
+    return { errors, hasUploadingFiles };
+  }, [applyForm, profileLinkFields, customFields, defaultFields]);
+
   const handleSelectAndUploadFile = async (key: string, file: File | null) => {
     if (!file) return;
     const parsedOrg = parseOrgSlug(orgSlug);
@@ -198,54 +253,11 @@ export default function CareerJobDetailPage() {
 
   const handleApplySubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const fullNameVisibility = fieldVisibility("full_name", "required");
-    const emailVisibility = fieldVisibility("email", "required");
-    const phoneVisibility = fieldVisibility("phone", "optional");
-    const resumeVisibility = fieldVisibility("resume", "hidden");
-    const coverVisibility = fieldVisibility("cover_letter", "hidden");
-
-    const nextErrors: Record<string, string> = {};
-    if (isRequired(fullNameVisibility) && !applyForm.fullName.trim())
-      nextErrors.fullName = "Full name is required.";
-    if (isRequired(emailVisibility) && !applyForm.email.trim())
-      nextErrors.email = "Email is required.";
-    if (applyForm.email.trim() && !isValidEmail(applyForm.email))
-      nextErrors.email = "Enter a valid email address.";
-    if (isRequired(phoneVisibility) && !applyForm.phone.trim())
-      nextErrors.phone = "Phone is required.";
-    if (applyForm.phone.trim() && !isValidPhoneNumber(applyForm.phone))
-      nextErrors.phone = "Enter a valid phone number.";
-    if (isRequired(resumeVisibility) && !applyForm.files.resume)
-      nextErrors.resume = "Resume is required.";
-    if (isRequired(coverVisibility) && !applyForm.files.cover_letter) {
-      nextErrors.cover_letter = "Cover letter is required.";
-    }
-    if (Object.values(applyForm.files).some((f) => f?.uploading)) {
+    if (applyValidation.hasUploadingFiles) {
       return toast.error("Please wait for files to finish uploading.");
     }
-
-    for (const field of [...profileLinkFields, ...customFields]) {
-      const key = String(field.key ?? field.id ?? "");
-      const label = String(field.label ?? key);
-      const visibility = String(field.visibility ?? "hidden");
-      const type = String(field.type ?? "short_text");
-      if (!key || visibility === "hidden") continue;
-      if (visibility === "required") {
-        if (type === "file_upload") {
-          const fileMeta = applyForm.files[key];
-          if (!fileMeta || (!fileMeta.url && !fileMeta.name)) {
-            nextErrors[`file:${key}`] = `${label} is required.`;
-          }
-        } else {
-          const val = applyForm.answers[key];
-          if (val == null || (typeof val === "string" && !val.trim())) {
-            nextErrors[`answer:${key}`] = `${label} is required.`;
-          }
-        }
-      }
-    }
-    setApplyErrors(nextErrors);
-    if (Object.keys(nextErrors).length > 0) return;
+    setApplyErrors(applyValidation.errors);
+    if (Object.keys(applyValidation.errors).length > 0) return;
 
     setApplySubmitting(true);
     (async () => {
@@ -799,11 +811,19 @@ export default function CareerJobDetailPage() {
                   );
                 })}
             </div>
-            <DialogFooter className="mt-4 gap-2 sm:gap-0">
+            <DialogFooter className="mt-4 gap-2 sm:gap-2">
               <Button type="button" variant="outline" size="sm" onClick={closeApplyDialog}>
                 Cancel
               </Button>
-              <Button type="submit" size="sm" disabled={applySubmitting}>
+              <Button
+                type="submit"
+                size="sm"
+                disabled={
+                  applySubmitting ||
+                  applyValidation.hasUploadingFiles ||
+                  Object.keys(applyValidation.errors).length > 0
+                }
+              >
                 {applySubmitting ? "Submitting…" : "Submit application"}
               </Button>
             </DialogFooter>

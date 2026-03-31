@@ -23,7 +23,7 @@ import {
   DialogTitle,
 } from "@onehash/ui/dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@onehash/ui/tooltip";
-import { CheckCircle2, Settings, Trash2 } from "lucide-react";
+import { CheckCircle2, Clock3, Settings, Trash2 } from "lucide-react";
 import { toast } from "@onehash/ui/sonner";
 
 function IntegrationAppIcon({ slug, name }: { slug: string; name: string }) {
@@ -184,7 +184,21 @@ export default function IntegrationsSettingsPage() {
                     )}
                   </div>
                 ) : app.slug === "linkedin" ? (
-                  <LinkedInIntegrationManager onChanged={loadCatalog} />
+                  <div className="relative">
+                    <LinkedInIntegrationManager onChanged={loadCatalog} />
+                    {/* Temporary implementation: remove this button once LinkedIn integration is fully implemented. */}
+                    <div className="absolute inset-x-0 bottom-0 z-20 bg-background rounded-md">
+                      <Button
+                        size="sm"
+                        variant="default"
+                        className="text-xs h-8 w-full gap-1.5 disabled:opacity-100"
+                        disabled
+                      >
+                        <Clock3 className="h-3.5 w-3.5" />
+                        Coming Soon
+                      </Button>
+                    </div>
+                  </div>
                 ) : (
                   <Button size="sm" variant="outline" className="text-xs h-8 w-full" disabled>
                     Coming Soon

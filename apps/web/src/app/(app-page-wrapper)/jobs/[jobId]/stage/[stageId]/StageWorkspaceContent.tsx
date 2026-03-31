@@ -308,7 +308,7 @@ export default function StageWorkspaceContent() {
             )}
           >
             {candidateIdParam ? (
-              <div className="flex-1 overflow-auto min-h-0 py-2 px-0">
+              <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 py-2 px-0">
                 <JobCandidateProfile
                   candidateId={candidateIdParam}
                   jobRouteJobId={jobId}

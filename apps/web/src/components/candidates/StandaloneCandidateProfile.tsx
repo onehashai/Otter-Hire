@@ -348,8 +348,10 @@ export function StandaloneCandidateProfile({
             ))}
           </TabsList>
 
-          <div className={`mt-4 ${isMobile ? "space-y-4" : "grid grid-cols-[1fr_320px] gap-4"}`}>
-            <div>
+          <div
+            className={`mt-4 min-w-0 overflow-x-hidden ${isMobile ? "space-y-4" : "grid grid-cols-[1fr_320px] gap-4"}`}
+          >
+            <div className="min-w-0 overflow-x-hidden">
               <TabsContent
                 value="overview"
                 className={`mt-0 space-y-4 ${isMobile ? "space-y-4" : ""}`}

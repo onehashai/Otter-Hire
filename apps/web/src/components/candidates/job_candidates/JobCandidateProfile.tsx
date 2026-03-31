@@ -555,12 +555,12 @@ export function JobCandidateProfile({
 
           <div
             className={cn(
-              "mt-4",
+              "mt-4 min-w-0 overflow-x-hidden",
               isMobile ? "space-y-4" : "grid grid-cols-[1fr_320px] gap-4",
               isStageThreePane && isMobile && "px-0",
             )}
           >
-            <div>
+            <div className="min-w-0 overflow-x-hidden">
               <TabsContent value="overview" className={`mt-0 ${isMobile ? "space-y-4" : ""}`}>
                 {isStageThreePane ? (
                   <div className="space-y-4">
@@ -629,6 +629,7 @@ export function JobCandidateProfile({
             <SummaryPanel
               variant="job"
               candidate={uiCandidate}
+              timeline={uiCandidate.timeline}
               onSaveProfile={handleSaveSummaryProfile}
               onSaveLinks={handleSaveSummaryLinks}
               onReplaceResume={handleReplaceResume}

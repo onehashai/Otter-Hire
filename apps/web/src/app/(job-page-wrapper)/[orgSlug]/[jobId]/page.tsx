@@ -123,21 +123,34 @@ export default function CareerJobDetailPage() {
   };
 
   const applicationSchema = (job?.application_form_schema ?? {}) as Record<string, unknown>;
-  const defaultFields = (applicationSchema.default_fields ?? {}) as Record<
-    string,
-    { visibility?: string; label?: string }
-  >;
+
+  const defaultFields = useMemo(
+    () =>
+      (applicationSchema.default_fields ?? {}) as Record<
+        string,
+        { visibility?: string; label?: string }
+      >,
+    [applicationSchema.default_fields],
+  );
+
   const schemaProfileLinks = Array.isArray(applicationSchema.profile_links)
     ? (applicationSchema.profile_links as Array<Record<string, unknown>>)
     : [];
-  const schemaCustomFields = Array.isArray(applicationSchema.custom_fields)
-    ? (applicationSchema.custom_fields as Array<Record<string, unknown>>)
-    : [];
+
+  const schemaCustomFields = useMemo(
+    () =>
+      Array.isArray(applicationSchema.custom_fields)
+        ? (applicationSchema.custom_fields as Array<Record<string, unknown>>)
+        : [],
+    [applicationSchema.custom_fields],
+  );
+
   const profileLinkMap = new Map<string, Record<string, unknown>>();
   for (const linkField of schemaProfileLinks) {
     const key = String(linkField.key ?? linkField.id ?? "");
     if (key) profileLinkMap.set(key, linkField);
   }
+
   const customFields = useMemo(() => {
     const fields: Array<Record<string, unknown>> = [];
     for (const field of schemaCustomFields) {
@@ -154,8 +167,9 @@ export default function CareerJobDetailPage() {
 
   const fieldVisibility = useCallback(
     (key: string, fallback: "required" | "optional" | "hidden" = "hidden") =>
-      (defaultFields[key]?.visibility as "required" | "optional" | "hidden" | undefined) ?? fallback,
-    [defaultFields]
+      (defaultFields[key]?.visibility as "required" | "optional" | "hidden" | undefined) ??
+      fallback,
+    [defaultFields],
   );
 
   const isRequired = (visibility: string) => visibility === "required";

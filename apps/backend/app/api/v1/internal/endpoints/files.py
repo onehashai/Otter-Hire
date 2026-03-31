@@ -18,6 +18,38 @@ from app.services.storage import storage_service
 router = APIRouter(prefix="/files", tags=["files"])
 
 
+def _is_own_user_avatar_object_key(normalized_key: str, user_id: UUID) -> bool:
+    """
+    True if key matches orgs/{any_org}/users/{user_id}/avatar/... (user profile image).
+    Allows the same user to load their avatar after switching org (upload used another org prefix).
+    """
+    if ".." in normalized_key:
+        return False
+    parts = normalized_key.split("/")
+    # orgs / {org_id} / users / {user_id} / avatar / {filename}
+    if len(parts) < 6:
+        return False
+    if parts[0] != "orgs" or parts[2] != "users" or parts[4] != "avatar":
+        return False
+    try:
+        UUID(parts[1])
+    except ValueError:
+        return False
+    return parts[3] == str(user_id)
+
+
+def user_may_access_local_object_key(normalized_key: str, current_user: User) -> bool:
+    """Authorization for GET /files/local/{object_key}."""
+    if ".." in normalized_key:
+        return False
+    nk = normalized_key.lstrip("/")
+    if current_user.org_id is not None:
+        org_prefix = f"orgs/{current_user.org_id}/"
+        if nk.startswith(org_prefix):
+            return True
+    return _is_own_user_avatar_object_key(nk, current_user.id)
+
+
 def _object_key_from_stored_file_url(url: str) -> str | None:
     """Extract storage object key from URLs produced by storage_service.resolve_url."""
     clean = (url or "").strip()
@@ -53,9 +85,8 @@ async def serve_local_file(
     object_key: str,
     current_user: User = Depends(require_active_user),
 ):
-    org_prefix = f"orgs/{current_user.org_id}/"
     normalized_key = object_key.lstrip("/")
-    if not normalized_key.startswith(org_prefix):
+    if not user_may_access_local_object_key(normalized_key, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
 
     return await _stream_stored_object(normalized_key)

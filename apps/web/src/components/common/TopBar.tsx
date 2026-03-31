@@ -35,7 +35,7 @@ import {
   DialogTitle,
 } from "@onehash/ui/dialog";
 import { InputField } from "@onehash/ui/input";
-import { getInitialsFromName } from "@/lib/name-initials";
+import { getOrganizationNameInitials } from "@/lib/name-initials";
 
 export function TopBar() {
   const router = useRouter();
@@ -152,7 +152,7 @@ export function TopBar() {
     }
   };
 
-  const initials = getInitialsFromName(user?.org_name, 2, "U");
+  const initials = getOrganizationNameInitials(user?.org_name, "U");
 
   return (
     <header className="h-12 border-b border-border flex items-center justify-between px-4 md:px-6 bg-background shrink-0">

@@ -19,7 +19,6 @@ import {
 import { SummaryPanel } from "@/components/candidates/shared/summary/SummaryPanel";
 import { ActionButtons } from "@/components/candidates/job_candidates/ActionButtons";
 import { useTranslation } from "react-i18next";
-import { useSetPageMetadata } from "@/hooks/useSetPageMetadata";
 import {
   getApiBase,
   addCandidateNote,
@@ -153,11 +152,6 @@ export function JobCandidateProfile({
   const [docType, setDocType] = useState("attachment");
   const [documentLoading, setDocumentLoading] = useState(false);
 
-  useSetPageMetadata({
-    title: t("job_candidate_edit_title"),
-    subtitle: t("job_candidate_edit_subtitle"),
-  });
-
   const loadAll = async (candidateId: string) => {
     const [candidateData, overviewData, documentsData, applicationResponsesData] =
       await Promise.all([
@@ -197,14 +191,6 @@ export function JobCandidateProfile({
   }, [id]);
 
   useEffect(() => {
-    if (!candidate || !jobRouteJobId || !id) return;
-    const cid = candidate.job_id;
-    if (cid && cid !== jobRouteJobId) {
-      router.replace(`/jobs/${encodeURIComponent(cid)}/candidates/${encodeURIComponent(id)}`);
-    }
-  }, [candidate, jobRouteJobId, id, router]);
-
-  useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
@@ -222,6 +208,10 @@ export function JobCandidateProfile({
   }, []);
 
   const currentJobId = jobRouteJobId ?? candidate?.job_id ?? null;
+  const currentAssignment = useMemo(() => {
+    if (!candidate || !currentJobId) return null;
+    return (candidate.assignments ?? []).find((a) => a.job_id === currentJobId) ?? null;
+  }, [candidate, currentJobId]);
 
   useEffect(() => {
     if (!currentJobId) {
@@ -254,7 +244,7 @@ export function JobCandidateProfile({
 
   const uiCandidate = useMemo(() => {
     if (!candidate) return null;
-    const stage = candidate.stage_name ?? "Applied";
+    const stage = currentAssignment?.stage_name ?? candidate.stage_name ?? "Applied";
 
     const timeline = (overview?.activities ?? [])
       .filter((a) => HIRING_TIMELINE_TYPES.has(a.type))
@@ -262,7 +252,7 @@ export function JobCandidateProfile({
 
     return {
       name: candidate.name,
-      role: candidate.job_title ?? "—",
+      role: currentAssignment?.job_title ?? candidate.job_title ?? "—",
       email: candidate.email,
       phone: candidate.phone ?? "—",
       location: candidate.location ?? "—",
@@ -290,7 +280,7 @@ export function JobCandidateProfile({
         mentions: n.mentions,
       })),
     };
-  }, [candidate, overview, documents]);
+  }, [candidate, currentAssignment, overview, documents]);
 
   const resumeDoc = useMemo(() => {
     const docs = uiCandidate?.documents ?? [];
@@ -475,11 +465,11 @@ export function JobCandidateProfile({
           onClick={() =>
             jobRouteJobId
               ? router.push(`/jobs/${encodeURIComponent(jobRouteJobId)}`)
-              : router.push("/talent-pool")
+              : router.push("/candidates")
           }
         >
           <Icon name="ChevronLeft" className="h-3.5 w-3.5 mr-1.5" />{" "}
-          {jobRouteJobId ? "Back to job" : t("talent_pool_title")}
+          {jobRouteJobId ? "Back to job" : t("candidates_title")}
         </Button>
       </div>
     );
@@ -506,15 +496,15 @@ export function JobCandidateProfile({
             <Button variant="ghost" size="sm" className="h-8 text-xs gap-1.5" asChild>
               <Link
                 href={
-                  jobRouteJobId && candidate?.stage_id
-                    ? `/jobs/${encodeURIComponent(jobRouteJobId)}/stage/${encodeURIComponent(candidate.stage_id)}`
+                  jobRouteJobId && (currentAssignment?.stage_id ?? candidate?.stage_id)
+                    ? `/jobs/${encodeURIComponent(jobRouteJobId)}/stage/${encodeURIComponent(currentAssignment?.stage_id ?? candidate?.stage_id ?? "")}`
                     : jobRouteJobId
                       ? `/jobs/${encodeURIComponent(jobRouteJobId)}`
-                      : "/talent-pool"
+                      : "/candidates"
                 }
               >
                 <Icon name="ChevronLeft" className="h-3.5 w-3.5" />{" "}
-                {jobRouteJobId ? "Job" : t("talent_pool_title")}
+                {jobRouteJobId ? "Job" : t("candidates_title")}
               </Link>
             </Button>
           )}
@@ -522,7 +512,7 @@ export function JobCandidateProfile({
             candidateName={uiCandidate.name}
             candidateId={candidate!.id}
             jobId={jobRouteJobId ?? candidate?.job_id ?? undefined}
-            currentStageId={candidate?.stage_id}
+            currentStageId={currentAssignment?.stage_id ?? candidate?.stage_id}
             stages={jobStages}
             onCandidateUpdated={async () => {
               if (id) await loadAll(id);
@@ -567,7 +557,7 @@ export function JobCandidateProfile({
                           : null
                       }
                       resumeName={resumeDoc?.name ?? null}
-                      onUploadDocument={undefined}
+                      onUploadResumeFile={handleReplaceResume}
                     />
                     <OverviewTab
                       timeline={[]}
@@ -594,7 +584,7 @@ export function JobCandidateProfile({
                   candidateName={uiCandidate.name}
                   candidateEmail={candidate!.email}
                   jobId={jobRouteJobId ?? candidate?.job_id ?? null}
-                  jobTitle={candidate?.job_title ?? null}
+                  jobTitle={currentAssignment?.job_title ?? candidate?.job_title ?? null}
                 />
               </TabsContent>
               <TabsContent value="documents" className="mt-0">

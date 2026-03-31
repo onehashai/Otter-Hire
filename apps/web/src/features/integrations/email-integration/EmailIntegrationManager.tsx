@@ -24,6 +24,7 @@ import { Check, Copy, Loader2 } from "lucide-react";
 import { toast } from "@onehash/ui/sonner";
 
 import { copyToClipboard } from "@/lib/clipboard";
+import { isValidEmail, normalizeEmail } from "@/lib/validation/contact";
 
 type EmailIntegrationManagerProps = {
   onChanged?: () => Promise<void> | void;
@@ -112,8 +113,6 @@ export function EmailIntegrationManager({ onChanged }: EmailIntegrationManagerPr
       ? "active"
       : verificationStatus;
 
-  const isValidEmail = (value: string) =>
-    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim().toLowerCase());
   const canSaveInbox = !inboxSaving && !inboxLoading && isValidEmail(inboxAddress);
   const isVerificationReady = verificationStatus === "action_required";
   const isVerificationDone = verificationStatus === "verified" || inboxStatus === "active";
@@ -132,7 +131,7 @@ export function EmailIntegrationManager({ onChanged }: EmailIntegrationManagerPr
     setInboxSaving(true);
     try {
       const config = await upsertEmailIntegrationConfig({
-        inbox_address: inboxAddress.trim().toLowerCase(),
+        inbox_address: normalizeEmail(inboxAddress),
         provider: "ses",
       });
       await rotateEmailIntegrationSecret();

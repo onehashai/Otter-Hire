@@ -45,7 +45,7 @@ import {
 } from "@/api";
 import { toast } from "@onehash/ui/sonner";
 
-export function TalentPoolCandidateProfile({
+export function StandaloneCandidateProfile({
   candidateId: id,
 }: {
   candidateId: string | undefined;
@@ -72,8 +72,8 @@ export function TalentPoolCandidateProfile({
   const [assignLoading, setAssignLoading] = useState(false);
 
   useSetPageMetadata({
-    title: t("talent_pool_candidate_edit_title"),
-    subtitle: t("talent_pool_candidate_edit_subtitle"),
+    title: t("candidates_profile_edit_title"),
+    subtitle: t("candidates_profile_edit_subtitle"),
   });
 
   const loadCore = async (candidateId: string) => {
@@ -130,11 +130,13 @@ export function TalentPoolCandidateProfile({
 
   const uiCandidate = useMemo(() => {
     if (!candidate) return null;
-    const stage = candidate.stage_name ?? "Applied";
+    const primaryAssignment = candidate.assignments?.[0];
+    const stage = candidate.stage_name ?? primaryAssignment?.stage_name ?? "Applied";
+    const role = candidate.job_title ?? primaryAssignment?.job_title ?? "—";
 
     return {
       name: candidate.name,
-      role: candidate.job_title ?? "—",
+      role,
       email: candidate.email,
       phone: candidate.phone ?? "—",
       location: candidate.location ?? "—",
@@ -297,8 +299,8 @@ export function TalentPoolCandidateProfile({
     return (
       <div className="flex flex-col items-center justify-center py-20 gap-3">
         <p className="text-sm text-muted-foreground">{error ?? "Candidate not found"}</p>
-        <Button variant="outline" size="sm" onClick={() => router.push("/talent-pool")}>
-          <Icon name="ChevronLeft" className="h-3.5 w-3.5 mr-1.5" /> {t("talent_pool_title")}
+        <Button variant="outline" size="sm" onClick={() => router.push("/candidates")}>
+          <Icon name="ChevronLeft" className="h-3.5 w-3.5 mr-1.5" /> {t("candidates_title")}
         </Button>
       </div>
     );
@@ -309,8 +311,8 @@ export function TalentPoolCandidateProfile({
       <div className="space-y-4">
         <div className="flex w-full min-w-0 items-center justify-between gap-3">
           <Button variant="ghost" size="sm" className="h-8 shrink-0 text-xs gap-1.5" asChild>
-            <Link href="/talent-pool">
-              <Icon name="ChevronLeft" className="h-3.5 w-3.5" /> {t("talent_pool_title")}
+            <Link href="/candidates">
+              <Icon name="ChevronLeft" className="h-3.5 w-3.5" /> {t("candidates_title")}
             </Link>
           </Button>
           {assignableJobs.length > 0 ? (
@@ -362,7 +364,7 @@ export function TalentPoolCandidateProfile({
                       : null
                   }
                   resumeName={resumeDoc?.name ?? null}
-                  onUploadDocument={() => setDocumentOpen(true)}
+                  onUploadResumeFile={handleReplaceResume}
                 />
                 <OverviewTab
                   timeline={[]}
@@ -390,7 +392,7 @@ export function TalentPoolCandidateProfile({
               </TabsContent>
             </div>
             <SummaryPanel
-              variant="talent_pool"
+              variant="standalone"
               candidate={uiCandidate}
               onSaveProfile={handleSaveSummaryProfile}
               onSaveLinks={handleSaveSummaryLinks}

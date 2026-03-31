@@ -13,6 +13,7 @@ import { Label } from "@onehash/ui/label";
 import { formatPhoneForDisplay, parseStoredPhone } from "@/lib/phone";
 import { getInitialsFromName } from "@/lib/name-initials";
 import { useTranslation } from "react-i18next";
+import { isValidEmail, normalizeEmail, sanitizePhoneInput } from "@/lib/validation/contact";
 
 interface Document {
   id?: string;
@@ -45,8 +46,8 @@ interface ProfileLinkField {
 
 interface SummaryPanelProps {
   candidate: CandidateSummary;
-  /** Talent pool hides pipeline stage; job shows full hiring summary. */
-  variant?: "job" | "talent_pool";
+  /** Standalone /candidates profile hides pipeline stage; job workspace shows full hiring summary. */
+  variant?: "job" | "standalone";
   onSaveProfile: (payload: {
     name: string;
     email: string;
@@ -56,7 +57,7 @@ interface SummaryPanelProps {
   onSaveLinks: (payload: Record<string, string>) => Promise<void>;
   onReplaceResume?: (file: File) => Promise<void>;
   onRemoveResume?: () => Promise<void>;
-  // Backward-compatible props used in talent pool profile.
+  // Props used by standalone candidate profile (/candidates/[id]).
   onUploadDocument?: () => void;
   onDeleteDocument?: (documentId: string) => void;
   profileLinkFields?: ProfileLinkField[];
@@ -98,6 +99,7 @@ export function SummaryPanel({
   const [email, setEmail] = useState(candidate.email);
   const [phone, setPhone] = useState<string | undefined>(() => parseStoredPhone(candidate.phone));
   const [phoneError, setPhoneError] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState<string | null>(null);
   const [location, setLocation] = useState(candidate.location === "—" ? "" : candidate.location);
 
   const [linkDraft, setLinkDraft] = useState<Record<string, string>>(() => ({
@@ -109,6 +111,7 @@ export function SummaryPanel({
     setEmail(candidate.email);
     setPhone(parseStoredPhone(candidate.phone));
     setPhoneError(null);
+    setEmailError(null);
     setLocation(candidate.location === "—" ? "" : candidate.location);
     setLinkDraft({ ...(candidate.profileLinks || {}) });
     setResumeFile(null);
@@ -167,11 +170,19 @@ export function SummaryPanel({
           {profileEdit ? (
             <div className="space-y-3">
               <InputField label="Name" value={name} onChange={(e) => setName(e.target.value)} />
-              <InputField label="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
+              <InputField
+                label="Email"
+                value={email}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  setEmailError(null);
+                }}
+                error={emailError ?? undefined}
+              />
               <PhoneNumberField
                 value={phone}
                 onChange={(v) => {
-                  setPhone(v);
+                  setPhone(v ? sanitizePhoneInput(v) : v);
                   setPhoneError(null);
                 }}
                 error={phoneError ?? undefined}
@@ -189,9 +200,14 @@ export function SummaryPanel({
                     savingProfile ||
                     !name.trim() ||
                     !email.trim() ||
+                    !isValidEmail(email) ||
                     !!(phone && !isValidPhoneNumber(phone))
                   }
                   onClick={async () => {
+                    if (!isValidEmail(email)) {
+                      setEmailError("Enter a valid email address.");
+                      return;
+                    }
                     if (phone && !isValidPhoneNumber(phone)) {
                       setPhoneError("Enter a valid phone number for the selected country.");
                       return;
@@ -201,7 +217,7 @@ export function SummaryPanel({
                       setPhoneError(null);
                       await onSaveProfile({
                         name: name.trim(),
-                        email: email.trim(),
+                        email: normalizeEmail(email),
                         phone: phone ?? null,
                         location: location.trim() || null,
                       });
@@ -224,6 +240,7 @@ export function SummaryPanel({
                     setEmail(candidate.email);
                     setPhone(parseStoredPhone(candidate.phone));
                     setPhoneError(null);
+                    setEmailError(null);
                     setLocation(candidate.location === "—" ? "" : candidate.location);
                   }}
                 >
@@ -266,7 +283,7 @@ export function SummaryPanel({
               </div>
               <div className="flex flex-col gap-1">
                 <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">
-                  {t("applied")}
+                  {t("candidates_table_created")}
                 </Label>
                 <p className="text-xs">{formatTimestampToDateTime(candidate.appliedDate)}</p>
               </div>

@@ -35,3 +35,9 @@ class Candidate(Base):
     organization = relationship("Organization")
     job = relationship("Job")
     stage = relationship("Stage")
+    job_assignments = relationship(
+        "CandidateJobs",
+        back_populates="candidate",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )

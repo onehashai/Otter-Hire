@@ -18,7 +18,8 @@ from app.db.session import get_db
 from app.models.activity import Activity
 from app.models.automation import AutomationExecution
 from app.models.candidate import Candidate
-from app.models.candidate_document import CandidateDocument
+from app.models.candidate_jobs import CandidateJobs
+from app.models.document import CandidateDocument
 from app.models.email import Email
 from app.models.feedback import Feedback
 from app.models.interview import Interview
@@ -29,6 +30,7 @@ from app.models.org_membership import OrgMembership
 from app.models.stage import Stage
 from app.models.user import User
 from app.schemas.candidates import (
+    CandidateAssignmentItemResponse,
     CandidateActivityResponse,
     CandidateApplicationResponseFile,
     CandidateApplicationResponseItem,
@@ -58,6 +60,7 @@ from app.schemas.candidates import (
     CandidateStatusUpdateRequest,
     CandidateUpdateRequest,
 )
+from app.schemas.validators import is_valid_email, is_valid_phone
 from app.services.automation import execute_automations_for_trigger
 from app.services.email import send_candidate_note_mention_email
 from app.services.media import ensure_pdf_type, read_upload_with_size_check
@@ -130,6 +133,87 @@ async def _log_activity(
             metadata_=metadata or {},
         )
     )
+
+
+async def _upsert_candidate_job_assignment(
+    db: AsyncSession,
+    *,
+    org_id: UUID,
+    candidate_id: UUID,
+    job_id: UUID,
+    stage_id: UUID | None,
+    assignment_status: str = "active",
+    source: str | None = None,
+    applied_at: datetime | None = None,
+    assigned_at: datetime | None = None,
+) -> CandidateJobs:
+    existing_result = await db.execute(
+        select(CandidateJobs).where(
+            CandidateJobs.org_id == org_id,
+            CandidateJobs.candidate_id == candidate_id,
+            CandidateJobs.job_id == job_id,
+        )
+    )
+    existing = existing_result.scalar_one_or_none()
+    if existing is None:
+        existing = CandidateJobs(
+            assigned_id=uuid7(),
+            org_id=org_id,
+            candidate_id=candidate_id,
+            job_id=job_id,
+            stage_id=stage_id,
+            assignment_status=assignment_status,
+            source=source,
+            applied_at=applied_at,
+            assigned_at=assigned_at,
+        )
+        db.add(existing)
+    else:
+        existing.stage_id = stage_id
+        existing.assignment_status = assignment_status
+        if source:
+            existing.source = source
+        if applied_at is not None:
+            existing.applied_at = applied_at
+        if assigned_at is not None:
+            existing.assigned_at = assigned_at
+    await db.flush()
+    return existing
+
+
+async def _load_candidate_assignments(
+    db: AsyncSession, *, org_id: UUID, candidate_ids: list[UUID]
+) -> dict[UUID, list[CandidateAssignmentItemResponse]]:
+    if not candidate_ids:
+        return {}
+    rows_result = await db.execute(
+        select(CandidateJobs, Job.title, Stage.name)
+        .outerjoin(Job, Job.id == CandidateJobs.job_id)
+        .outerjoin(Stage, Stage.id == CandidateJobs.stage_id)
+        .where(
+            CandidateJobs.org_id == org_id,
+            CandidateJobs.candidate_id.in_(candidate_ids),
+        )
+        .order_by(CandidateJobs.updated_at.desc(), CandidateJobs.created_at.desc())
+    )
+    grouped: dict[UUID, list[CandidateAssignmentItemResponse]] = {}
+    for assignment, job_title, stage_name in rows_result.all():
+        grouped.setdefault(assignment.candidate_id, []).append(
+            CandidateAssignmentItemResponse(
+                assigned_id=assignment.assigned_id,
+                job_id=assignment.job_id,
+                job_title=job_title,
+                stage_id=assignment.stage_id,
+                stage_name=stage_name,
+                assignment_status=assignment.assignment_status,
+                source=assignment.source,
+                applied_at=assignment.applied_at,
+                assigned_at=assignment.assigned_at,
+                created_at=assignment.created_at,
+                updated_at=assignment.updated_at,
+            )
+        )
+    return grouped
 
 
 def _serialize_note_mentions(raw_mentions: list[dict] | None) -> list[CandidateNoteMentionResponse]:
@@ -385,6 +469,19 @@ async def create_candidate(
     )
     db.add(candidate)
     await db.flush()
+    created_assignment: CandidateJobs | None = None
+    if candidate.job_id is not None:
+        created_assignment = await _upsert_candidate_job_assignment(
+            db,
+            org_id=current_user.org_id,
+            candidate_id=candidate.id,
+            job_id=candidate.job_id,
+            stage_id=candidate.stage_id,
+            assignment_status=candidate.status if candidate.status in {"active", "rejected", "hired"} else "active",
+            source=candidate.source,
+            applied_at=candidate.created_at if candidate.source == "job_board" else None,
+            assigned_at=candidate.updated_at,
+        )
     await _log_activity(
         db,
         org_id=current_user.org_id,
@@ -416,6 +513,7 @@ async def create_candidate(
             metadata={
                 "source": candidate.source,
                 "stage_name": stage_name,
+                "assigned_id": str(created_assignment.assigned_id) if created_assignment else None,
             },
         )
 
@@ -466,6 +564,12 @@ async def import_candidates_csv(
 
         if not name or not email:
             errors.append(CandidateCsvImportError(row=idx, reason="Missing required name/email"))
+            continue
+        if not is_valid_email(email):
+            errors.append(CandidateCsvImportError(row=idx, reason="Invalid email format"))
+            continue
+        if phone and not is_valid_phone(phone):
+            errors.append(CandidateCsvImportError(row=idx, reason="Invalid phone number format"))
             continue
 
         existing_result = await db.execute(
@@ -576,6 +680,11 @@ async def list_candidates(
 
     result = await db.execute(stmt)
     rows = result.all()
+    assignment_map = await _load_candidate_assignments(
+        db,
+        org_id=current_user.org_id,
+        candidate_ids=[c.id for c, _, _ in rows],
+    )
 
     return [
         CandidateListItemResponse(
@@ -592,6 +701,7 @@ async def list_candidates(
             job_title=job_title,
             stage_id=c.stage_id,
             stage_name=stage_name,
+            assignments=assignment_map.get(c.id, []),
             created_at=c.created_at,
             updated_at=c.updated_at,
         )
@@ -609,6 +719,7 @@ async def list_candidates_paginated(
     status_filter: str | None = Query(default=None, alias="status"),
     source: str | None = Query(default=None, max_length=100),
     talent_pool_only: bool = Query(default=False),
+    assigned_only: bool = Query(default=False),
     tag: str | None = Query(default=None, max_length=100),
     sort_by: str = Query(
         default="updated_at", pattern=r"^(updated_at|created_at|name|status|job_title|stage_name)$"
@@ -668,6 +779,9 @@ async def list_candidates_paginated(
     if talent_pool_only:
         stmt = stmt.where(Candidate.job_id.is_(None))
         count_stmt = count_stmt.where(Candidate.job_id.is_(None))
+    if assigned_only:
+        stmt = stmt.where(Candidate.job_id.is_not(None))
+        count_stmt = count_stmt.where(Candidate.job_id.is_not(None))
     if tag:
         stmt = stmt.where(Candidate.tags.contains([tag]))
         count_stmt = count_stmt.where(Candidate.tags.contains([tag]))
@@ -675,6 +789,11 @@ async def list_candidates_paginated(
     result = await db.execute(stmt)
     rows = result.all()
     total = int((await db.execute(count_stmt)).scalar_one() or 0)
+    assignment_map = await _load_candidate_assignments(
+        db,
+        org_id=current_user.org_id,
+        candidate_ids=[c.id for c, _, _ in rows],
+    )
 
     return CandidateListResponse(
         items=[
@@ -692,6 +811,7 @@ async def list_candidates_paginated(
                 job_title=job_title,
                 stage_id=c.stage_id,
                 stage_name=stage_name,
+                assignments=assignment_map.get(c.id, []),
                 created_at=c.created_at,
                 updated_at=c.updated_at,
             )
@@ -701,6 +821,84 @@ async def list_candidates_paginated(
         limit=limit,
         offset=offset,
     )
+
+
+@router.get("/assignments/reconciliation-report")
+async def candidate_jobs_reconciliation_report(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("candidates:read")),
+):
+    missing_assignments_count = int(
+        (
+            await db.execute(
+                select(func.count(Candidate.id))
+                .outerjoin(
+                    CandidateJobs,
+                    (CandidateJobs.candidate_id == Candidate.id)
+                    & (CandidateJobs.job_id == Candidate.job_id)
+                    & (CandidateJobs.org_id == Candidate.org_id),
+                )
+                .where(
+                    Candidate.org_id == current_user.org_id,
+                    Candidate.job_id.is_not(None),
+                    CandidateJobs.assigned_id.is_(None),
+                )
+            )
+        ).scalar_one()
+        or 0
+    )
+
+    stage_mismatch_count = int(
+        (
+            await db.execute(
+                select(func.count(Candidate.id))
+                .join(
+                    CandidateJobs,
+                    (CandidateJobs.candidate_id == Candidate.id)
+                    & (CandidateJobs.job_id == Candidate.job_id)
+                    & (CandidateJobs.org_id == Candidate.org_id),
+                )
+                .where(
+                    Candidate.org_id == current_user.org_id,
+                    Candidate.job_id.is_not(None),
+                    Candidate.stage_id.is_not(None),
+                    CandidateJobs.stage_id.is_not(None),
+                    Candidate.stage_id != CandidateJobs.stage_id,
+                )
+            )
+        ).scalar_one()
+        or 0
+    )
+
+    total_assignments_count = int(
+        (
+            await db.execute(
+                select(func.count(CandidateJobs.assigned_id)).where(
+                    CandidateJobs.org_id == current_user.org_id
+                )
+            )
+        ).scalar_one()
+        or 0
+    )
+    candidate_with_legacy_job_count = int(
+        (
+            await db.execute(
+                select(func.count(Candidate.id)).where(
+                    Candidate.org_id == current_user.org_id,
+                    Candidate.job_id.is_not(None),
+                )
+            )
+        ).scalar_one()
+        or 0
+    )
+
+    return {
+        "candidate_jobs_enabled": True,
+        "candidate_with_legacy_job_count": candidate_with_legacy_job_count,
+        "candidate_jobs_rows": total_assignments_count,
+        "missing_assignments_count": missing_assignments_count,
+        "stage_mismatch_count": stage_mismatch_count,
+    }
 
 
 @router.get("/stage-filter-options", response_model=CandidateStageFilterOptionsResponse)
@@ -807,6 +1005,13 @@ async def get_candidate(
         job_title=job_title,
         stage_id=c.stage_id,
         stage_name=stage_name,
+        assignments=(
+            await _load_candidate_assignments(
+                db,
+                org_id=current_user.org_id,
+                candidate_ids=[c.id],
+            )
+        ).get(c.id, []),
         created_at=c.created_at,
         updated_at=c.updated_at,
     )
@@ -937,6 +1142,7 @@ async def update_candidate(
     # Track if job was assigned (from None to a job_id)
     old_job_id = candidate.job_id
     job_was_assigned = False
+    assigned_job_assignment: CandidateJobs | None = None
 
     if body.name is not None:
         candidate.name = body.name.strip()
@@ -956,8 +1162,21 @@ async def update_candidate(
         candidate.profile_links = normalized_links
 
     if body.clear_job:
+        cleared_job_id = candidate.job_id
         candidate.job_id = None
         candidate.stage_id = None
+        if cleared_job_id is not None:
+            existing_assignment_result = await db.execute(
+                select(CandidateJobs).where(
+                    CandidateJobs.org_id == current_user.org_id,
+                    CandidateJobs.candidate_id == candidate.id,
+                    CandidateJobs.job_id == cleared_job_id,
+                )
+            )
+            existing_assignment = existing_assignment_result.scalar_one_or_none()
+            if existing_assignment is not None:
+                existing_assignment.assignment_status = "withdrawn"
+                existing_assignment.assigned_at = datetime.now(timezone.utc)
     elif body.job_id is not None:
         job_result = await db.execute(
             select(Job).where(Job.id == body.job_id, Job.org_id == current_user.org_id)
@@ -979,6 +1198,30 @@ async def update_candidate(
             )
             first_stage = first_stage_result.scalar_one_or_none()
             candidate.stage_id = first_stage.id if first_stage else None
+            assigned_job_assignment = await _upsert_candidate_job_assignment(
+                db,
+                org_id=current_user.org_id,
+                candidate_id=candidate.id,
+                job_id=body.job_id,
+                stage_id=candidate.stage_id,
+                assignment_status=candidate.status
+                if candidate.status in {"active", "rejected", "hired"}
+                else "active",
+                source=candidate.source,
+                assigned_at=datetime.now(timezone.utc),
+            )
+
+    if candidate.job_id is not None and assigned_job_assignment is None:
+        assigned_job_assignment = await _upsert_candidate_job_assignment(
+            db,
+            org_id=current_user.org_id,
+            candidate_id=candidate.id,
+            job_id=candidate.job_id,
+            stage_id=candidate.stage_id,
+            assignment_status=candidate.status if candidate.status in {"active", "rejected", "hired"} else "active",
+            source=candidate.source,
+            assigned_at=datetime.now(timezone.utc),
+        )
 
     await _log_activity(
         db,
@@ -1014,6 +1257,9 @@ async def update_candidate(
                     "job_title": job.title if job else None,
                     "stage_name": stage_name,
                     "source": candidate.source,
+                    "assigned_id": str(assigned_job_assignment.assigned_id)
+                    if assigned_job_assignment
+                    else None,
                 },
             )
             logger.info(
@@ -1054,6 +1300,11 @@ async def delete_candidate(
     await db.execute(delete(Activity).where(Activity.candidate_id == candidate_id))
     await db.execute(delete(Note).where(Note.candidate_id == candidate_id))
     await db.execute(delete(Email).where(Email.candidate_id == candidate_id))
+    await db.execute(
+        delete(CandidateJobs).where(
+            CandidateJobs.org_id == current_user.org_id, CandidateJobs.candidate_id == candidate_id
+        )
+    )
 
     doc_rows = await db.execute(
         select(CandidateDocument).where(
@@ -1106,17 +1357,32 @@ async def update_candidate_stage(
     candidate = result.scalar_one_or_none()
     if candidate is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Candidate not found")
-    if candidate.job_id is None:
+    target_job_id = body.job_id or candidate.job_id
+    if target_job_id is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Candidate has no job context for stage move",
+        )
+    assignment: CandidateJobs | None = None
+    assignment_result = await db.execute(
+        select(CandidateJobs).where(
+            CandidateJobs.org_id == current_user.org_id,
+            CandidateJobs.candidate_id == candidate.id,
+            CandidateJobs.job_id == target_job_id,
+        )
+    )
+    assignment = assignment_result.scalar_one_or_none()
+    if assignment is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Candidate is not assigned to this job",
         )
 
     stage_result = await db.execute(
         select(Stage).where(
             Stage.id == body.stage_id,
             Stage.org_id == current_user.org_id,
-            Stage.job_id == candidate.job_id,
+            Stage.job_id == target_job_id,
         )
     )
     stage = stage_result.scalar_one_or_none()
@@ -1125,7 +1391,10 @@ async def update_candidate_stage(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid stage for candidate job"
         )
 
-    candidate.stage_id = stage.id
+    if assignment is not None:
+        assignment.stage_id = stage.id
+        assignment.assignment_status = "active"
+        assignment.assigned_at = datetime.now(timezone.utc)
     await _log_activity(
         db,
         org_id=current_user.org_id,
@@ -1142,7 +1411,7 @@ async def update_candidate_stage(
         trigger_key="candidate_moved",
         org_id=current_user.org_id,
         candidate_id=candidate.id,
-        job_id=candidate.job_id,
+        job_id=target_job_id,
         metadata={
             "stage_id": str(stage.id),
             "stage_name": stage.name,
@@ -1168,21 +1437,56 @@ async def update_candidate_status(
     if candidate is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Candidate not found")
 
+    target_job_id = body.job_id or candidate.job_id
+    assignment: CandidateJobs | None = None
+    if target_job_id is not None:
+        assignment_result = await db.execute(
+            select(CandidateJobs).where(
+                CandidateJobs.org_id == current_user.org_id,
+                CandidateJobs.candidate_id == candidate.id,
+                CandidateJobs.job_id == target_job_id,
+            )
+        )
+        assignment = assignment_result.scalar_one_or_none()
+        if assignment is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Candidate is not assigned to this job",
+            )
+
     # Idempotency check: prevent duplicate status updates and automation triggers
-    if candidate.status == body.status:
+    current_status = assignment.assignment_status if assignment is not None else candidate.status
+    if current_status == body.status:
         logger.info(f"Candidate {candidate_id} already has status '{body.status}', skipping update")
         return await get_candidate(candidate_id, db, current_user)
 
     # Validation: Cannot reject candidate without job assignment
-    if body.status == "rejected" and candidate.job_id is None:
+    if body.status == "rejected" and target_job_id is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cannot reject candidate without job assignment. Rejection is per-job basis.",
         )
 
     # Store old status for logging
-    old_status = candidate.status
-    candidate.status = body.status
+    old_status = current_status
+    if assignment is not None:
+        assignment.assignment_status = body.status
+        assignment.assigned_at = datetime.now(timezone.utc)
+        if body.status in {"rejected", "hired"}:
+            terminal_stage_name = "rejected" if body.status == "rejected" else "hired"
+            terminal_stage_result = await db.execute(
+                select(Stage)
+                .where(
+                    Stage.org_id == current_user.org_id,
+                    Stage.job_id == target_job_id,
+                    func.lower(Stage.name) == terminal_stage_name,
+                )
+                .limit(1)
+            )
+            terminal_stage = terminal_stage_result.scalar_one_or_none()
+            if terminal_stage is not None:
+                assignment.stage_id = terminal_stage.id
+                candidate.stage_id = terminal_stage.id if candidate.job_id == target_job_id else candidate.stage_id
     await _log_activity(
         db,
         org_id=current_user.org_id,
@@ -1200,8 +1504,8 @@ async def update_candidate_status(
             trigger_key="candidate_rejected",
             org_id=current_user.org_id,
             candidate_id=candidate.id,
-            job_id=candidate.job_id,
-            metadata={"status": "rejected"},
+            job_id=target_job_id,
+            metadata={"status": "rejected", "job_id": str(target_job_id) if target_job_id else None},
         )
     elif body.status == "hired":
         await execute_automations_for_trigger(
@@ -1209,8 +1513,8 @@ async def update_candidate_status(
             trigger_key="candidate_hired",
             org_id=current_user.org_id,
             candidate_id=candidate.id,
-            job_id=candidate.job_id,
-            metadata={"status": "hired"},
+            job_id=target_job_id,
+            metadata={"status": "hired", "job_id": str(target_job_id) if target_job_id else None},
         )
 
     return await get_candidate(candidate_id, db, current_user)
@@ -1328,15 +1632,32 @@ async def bulk_assign_candidates_to_job(
         return CandidateBulkUpdateResponse(updated_count=0)
 
     # Track which candidates are “newly assigned” (Talent Pool -> Job) to trigger automation.
-    newly_assigned: list[UUID] = []
+    newly_assigned: list[tuple[UUID, UUID | None]] = []
 
     for candidate in candidates:
         old_job_id = candidate.job_id
         if old_job_id != body.job_id:
             if old_job_id is None:
-                newly_assigned.append(candidate.id)
+                newly_assigned.append((candidate.id, None))
             candidate.job_id = body.job_id
             candidate.stage_id = first_stage.id if first_stage else None
+            assigned_id: UUID | None = None
+            assignment = await _upsert_candidate_job_assignment(
+                db,
+                org_id=current_user.org_id,
+                candidate_id=candidate.id,
+                job_id=body.job_id,
+                stage_id=candidate.stage_id,
+                assignment_status=candidate.status
+                if candidate.status in {"active", "rejected", "hired"}
+                else "active",
+                source=candidate.source,
+                assigned_at=datetime.now(timezone.utc),
+            )
+            assigned_id = assignment.assigned_id
+
+            if old_job_id is None and assigned_id is not None:
+                newly_assigned[-1] = (candidate.id, assigned_id)
             await _log_activity(
                 db,
                 org_id=current_user.org_id,
@@ -1355,7 +1676,7 @@ async def bulk_assign_candidates_to_job(
 
     # Trigger automations for candidates assigned from talent pool.
     if newly_assigned:
-        for candidate_id in newly_assigned:
+        for candidate_id, assigned_id in newly_assigned:
             try:
                 await execute_automations_for_trigger(
                     db=db,
@@ -1366,6 +1687,7 @@ async def bulk_assign_candidates_to_job(
                     metadata={
                         "job_title": job.title,
                         "stage_name": first_stage.name if first_stage else None,
+                        "assigned_id": str(assigned_id) if assigned_id else None,
                     },
                 )
             except Exception as e:

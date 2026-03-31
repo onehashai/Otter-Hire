@@ -2,7 +2,8 @@ from sqladmin import ModelView
 
 from app.models.activity import Activity
 from app.models.candidate import Candidate
-from app.models.candidate_document import CandidateDocument
+from app.models.candidate_jobs import CandidateJobs
+from app.models.document import CandidateDocument
 from app.models.conversation import Conversation
 from app.models.email import Email, InboundEmail, InboundEmailAttachment
 from app.models.feedback import Feedback
@@ -252,9 +253,36 @@ class CandidateAdmin(ModelView, model=Candidate):
     form_excluded_columns = [Candidate.profile_links, Candidate.tags]
 
 
+class CandidateJobsAdmin(ModelView, model=CandidateJobs):
+    name = "Candidate Job"
+    name_plural = "Candidate Jobs"
+    icon = "fa-solid fa-link"
+    category = "People"
+
+    column_list = [
+        CandidateJobs.assigned_id,
+        CandidateJobs.org_id,
+        CandidateJobs.candidate_id,
+        CandidateJobs.job_id,
+        CandidateJobs.stage_id,
+        CandidateJobs.assignment_status,
+        CandidateJobs.source,
+        CandidateJobs.applied_at,
+        CandidateJobs.assigned_at,
+        CandidateJobs.created_at,
+        CandidateJobs.updated_at,
+    ]
+    column_sortable_list = [
+        CandidateJobs.assignment_status,
+        CandidateJobs.created_at,
+        CandidateJobs.updated_at,
+    ]
+    column_default_sort = [(CandidateJobs.updated_at, True)]
+
+
 class CandidateDocumentAdmin(ModelView, model=CandidateDocument):
-    name = "Candidate Document"
-    name_plural = "Candidate Documents"
+    name = "Document"
+    name_plural = "Documents"
     icon = "fa-solid fa-file"
 
     column_list = [

@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef } from "react";
 import { Card, CardContent } from "@onehash/ui/card";
 import { Icon } from "@onehash/ui/icon";
 import { Button } from "@onehash/ui/button";
@@ -9,9 +10,18 @@ type ResumeTabProps = {
   previewUrl?: string | null;
   resumeName?: string | null;
   onUploadDocument?: () => void;
+  onUploadResumeFile?: (file: File) => void | Promise<void>;
 };
 
-export function ResumeTab({ resumeUrl, previewUrl, resumeName, onUploadDocument }: ResumeTabProps) {
+export function ResumeTab({
+  resumeUrl,
+  previewUrl,
+  resumeName,
+  onUploadDocument,
+  onUploadResumeFile,
+}: ResumeTabProps) {
+  const resumeInputRef = useRef<HTMLInputElement | null>(null);
+
   if (!resumeUrl) {
     return (
       <Card>
@@ -20,10 +30,36 @@ export function ResumeTab({ resumeUrl, previewUrl, resumeName, onUploadDocument 
             <Icon name="ScrollText" className="h-4 w-4 text-muted-foreground" />
           </div>
           <p className="text-xs text-muted-foreground">No resume available to preview</p>
-          {onUploadDocument ? (
-            <Button size="sm" className="h-7 text-xs gap-1.5" onClick={onUploadDocument}>
-              <Icon name="Upload" className="h-3 w-3" /> Upload Resume
-            </Button>
+          {onUploadDocument || onUploadResumeFile ? (
+            <>
+              {onUploadResumeFile ? (
+                <input
+                  ref={resumeInputRef}
+                  type="file"
+                  accept="application/pdf,.pdf"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    void onUploadResumeFile(file);
+                    e.currentTarget.value = "";
+                  }}
+                />
+              ) : null}
+              <Button
+                size="sm"
+                className="h-7 text-xs gap-1.5"
+                onClick={() => {
+                  if (onUploadResumeFile) {
+                    resumeInputRef.current?.click();
+                    return;
+                  }
+                  onUploadDocument?.();
+                }}
+              >
+                <Icon name="Upload" className="h-3 w-3" /> Upload Resume
+              </Button>
+            </>
           ) : null}
         </CardContent>
       </Card>

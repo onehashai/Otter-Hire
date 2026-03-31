@@ -13,6 +13,7 @@ from app.db.session import get_db
 from app.deps.job_scope import ASSIGNED_ONLY_ROLES, require_job_access
 from app.integrations.linkedin import service as linkedin_service
 from app.models.candidate import Candidate
+from app.models.candidate_jobs import CandidateJobs
 from app.models.job import Job
 from app.models.job_team_member import JobTeamMember
 from app.models.stage import Stage
@@ -420,14 +421,14 @@ async def list_jobs(
 ):
     candidate_count_sub = (
         select(
-            Candidate.job_id,
-            sa_func.count(Candidate.id).label("cnt"),
+            CandidateJobs.job_id,
+            sa_func.count(CandidateJobs.assigned_id).label("cnt"),
         )
         .where(
-            Candidate.org_id == current_user.org_id,
-            Candidate.status == "active",
+            CandidateJobs.org_id == current_user.org_id,
+            CandidateJobs.assignment_status == "active",
         )
-        .group_by(Candidate.job_id)
+        .group_by(CandidateJobs.job_id)
         .subquery()
     )
 
@@ -484,18 +485,22 @@ async def get_job_workspace(
     stages = sorted(job.stages, key=lambda s: s.position)
     fallback_stage_id = stages[0].id if stages else None
 
+    candidates: list[Candidate] = []
+    assignment_by_candidate_id: dict[UUID, CandidateJobs] = {}
     candidate_result = await db.execute(
-        select(Candidate)
+        select(Candidate, CandidateJobs)
+        .join(CandidateJobs, CandidateJobs.candidate_id == Candidate.id)
         .where(
             Candidate.org_id == current_user.org_id,
-            Candidate.job_id == job.id,
-            # Include rejected/hired so stage columns match DB (Reject sets status=rejected;
-            # Hired stage often keeps status=active but hired is allowed on the model).
-            Candidate.status.in_(("active", "rejected", "hired")),
+            CandidateJobs.org_id == current_user.org_id,
+            CandidateJobs.job_id == job.id,
+            CandidateJobs.assignment_status.in_(("active", "rejected", "hired")),
         )
-        .order_by(Candidate.updated_at.desc(), Candidate.created_at.desc())
+        .order_by(CandidateJobs.updated_at.desc(), Candidate.updated_at.desc(), Candidate.created_at.desc())
     )
-    candidates = candidate_result.scalars().all()
+    rows = candidate_result.all()
+    candidates = [row[0] for row in rows]
+    assignment_by_candidate_id = {row[0].id: row[1] for row in rows}
 
     return JobWorkspaceResponse(
         id=job.id,
@@ -515,7 +520,15 @@ async def get_job_workspace(
                 id=candidate.id,
                 name=candidate.name,
                 email=candidate.email,
-                stage_id=candidate.stage_id or fallback_stage_id,
+                stage_id=(
+                    (
+                        assignment_by_candidate_id[candidate.id].stage_id
+                        if candidate.id in assignment_by_candidate_id
+                        else None
+                    )
+                    or candidate.stage_id
+                    or fallback_stage_id
+                ),
                 created_at=candidate.created_at,
                 updated_at=candidate.updated_at,
             )

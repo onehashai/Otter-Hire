@@ -13,7 +13,7 @@ import {
   type JobListItemResponse,
 } from "@/api";
 import { importCandidatesCsv } from "@/api/candidates";
-import { TalentPoolCandidatesTable } from "@/components/candidates/talent_pool/TalentPoolCandidatesTable";
+import { CandidatesTable } from "@/components/candidates/CandidatesTable";
 import { Button } from "@onehash/ui/button";
 import { EmptyCard, ErrorCard } from "@onehash/ui/card";
 import { SelectField } from "@onehash/ui/select";
@@ -46,13 +46,15 @@ import { Icon } from "@onehash/ui/icon";
 import { toast } from "@onehash/ui/sonner";
 
 const PAGE_SIZE = 25;
-const STATUS_ALL = "__all__";
+const ASSIGNMENT_ALL = "all";
+const ASSIGNMENT_ASSIGNED = "assigned";
+const ASSIGNMENT_UNASSIGNED = "unassigned";
 
-export default function TalentPoolPage() {
+export default function CandidatesPage() {
   const { t } = useTranslation();
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [status, setStatus] = useState<string>(STATUS_ALL);
+  const [assignment, setAssignment] = useState<string>(ASSIGNMENT_ALL);
   const [page, setPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [addOpen, setAddOpen] = useState(false);
@@ -72,8 +74,8 @@ export default function TalentPoolPage() {
   const [error, setError] = useState<string | null>(null);
 
   useSetPageMetadata({
-    title: t("talent_pool_title"),
-    subtitle: t("talent_pool_subtitle"),
+    title: t("candidates_title"),
+    subtitle: t("candidates_subtitle"),
   });
 
   useEffect(() => {
@@ -84,7 +86,7 @@ export default function TalentPoolPage() {
   useEffect(() => {
     setPage(1);
     setSelectedIds(new Set());
-  }, [debouncedSearch, status]);
+  }, [debouncedSearch, assignment]);
 
   useEffect(() => {
     setSelectedIds(new Set());
@@ -94,29 +96,32 @@ export default function TalentPoolPage() {
   const offset = (page - 1) * PAGE_SIZE;
   const selectedCount = selectedIds.size;
 
-  const hasActiveFilters = status !== STATUS_ALL;
-  const clearAllFilters = () => setStatus(STATUS_ALL);
+  const hasActiveFilters = assignment !== ASSIGNMENT_ALL;
+  const clearAllFilters = () => {
+    setAssignment(ASSIGNMENT_ALL);
+  };
 
-  const activeChips = hasActiveFilters
-    ? [
-        {
-          label: t(status),
-          clear: () => setStatus(STATUS_ALL),
-        },
-      ]
-    : [];
+  const assignmentChipLabel = () => {
+    if (assignment === ASSIGNMENT_ASSIGNED) return t("candidates_assignment_assigned");
+    if (assignment === ASSIGNMENT_UNASSIGNED) return t("candidates_assignment_unassigned");
+    return "";
+  };
+
+  const activeChips =
+    assignment !== ASSIGNMENT_ALL
+      ? [{ label: assignmentChipLabel(), clear: () => setAssignment(ASSIGNMENT_ALL) }]
+      : [];
 
   const filterContent = (
     <div className="space-y-4 p-1">
       <SelectField
-        label={t("status")}
-        value={status}
-        onValueChange={setStatus}
+        label={t("candidates_assignment")}
+        value={assignment}
+        onValueChange={setAssignment}
         options={[
-          { value: STATUS_ALL, label: t("all") },
-          { value: "active", label: t("active") },
-          { value: "rejected", label: t("rejected") },
-          { value: "hired", label: t("hired") },
+          { value: ASSIGNMENT_ALL, label: t("candidates_assignment_all") },
+          { value: ASSIGNMENT_ASSIGNED, label: t("candidates_assignment_assigned") },
+          { value: ASSIGNMENT_UNASSIGNED, label: t("candidates_assignment_unassigned") },
         ]}
       />
     </div>
@@ -127,9 +132,9 @@ export default function TalentPoolPage() {
     setLoading(true);
     try {
       const res = await getCandidatesPaginated({
-        talent_pool_only: true,
+        ...(assignment === ASSIGNMENT_UNASSIGNED ? { unassignedOnly: true } : {}),
+        ...(assignment === ASSIGNMENT_ASSIGNED ? { assigned_only: true } : {}),
         search: debouncedSearch || undefined,
-        status: status === STATUS_ALL ? undefined : status,
         limit: PAGE_SIZE,
         offset,
       });
@@ -140,7 +145,7 @@ export default function TalentPoolPage() {
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch, status, offset]);
+  }, [debouncedSearch, assignment, offset]);
 
   useEffect(() => {
     void refresh();
@@ -167,7 +172,16 @@ export default function TalentPoolPage() {
       return;
     }
 
-    const header = ["name", "email", "phone", "source", "status", "created_at"];
+    const header = [
+      "name",
+      "email",
+      "phone",
+      "source",
+      "status",
+      "job_title",
+      "stage_name",
+      "created_at",
+    ];
 
     const escape = (value: unknown) => {
       const s = value === null || value === undefined ? "" : String(value);
@@ -179,7 +193,16 @@ export default function TalentPoolPage() {
     const lines = [
       header.join(","),
       ...rows.map((c) =>
-        [c.name, c.email, c.phone ?? "", c.source ?? "", c.status ?? "", c.created_at]
+        [
+          c.name,
+          c.email,
+          c.phone ?? "",
+          c.source ?? "",
+          c.status ?? "",
+          c.job_title ?? "",
+          c.stage_name ?? "",
+          c.created_at,
+        ]
           .map(escape)
           .join(","),
       ),
@@ -198,7 +221,7 @@ export default function TalentPoolPage() {
   };
 
   const handleExport = () => {
-    exportCsv(items, `talent_pool_page_${page}.csv`);
+    exportCsv(items, `candidates_page_${page}.csv`);
   };
 
   const visibleIds = useMemo(() => items.map((c) => c.id), [items]);
@@ -345,13 +368,13 @@ export default function TalentPoolPage() {
         </div>
       ) : items.length === 0 ? (
         <EmptyCard
-          icon="Mail"
-          title={t("talent_pool_title")}
-          description={t("talent_pool_empty")}
+          icon="Users"
+          title={t("candidates_title")}
+          description={t("candidates_empty")}
         />
       ) : (
         <>
-          <TalentPoolCandidatesTable
+          <CandidatesTable
             items={items}
             jobs={jobs}
             selectedIds={selectedIds}
@@ -384,49 +407,6 @@ export default function TalentPoolPage() {
               </Button>
             </div>
           </div>
-
-          <Dialog open={importOpen} onOpenChange={setImportOpen}>
-            <DialogContent className="sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle>Import Candidates</DialogTitle>
-                <DialogDescription>Upload CSV with required columns: name,email</DialogDescription>
-              </DialogHeader>
-              <div className="space-y-2">
-                <p className="text-xs text-muted-foreground">Optional columns: phone,source</p>
-                <input
-                  type="file"
-                  accept=".csv,text/csv"
-                  onChange={(e) => setImportFile(e.target.files?.[0] ?? null)}
-                  className="block w-full text-sm"
-                />
-              </div>
-              <DialogFooter>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setImportOpen(false)}
-                  disabled={importLoading}
-                >
-                  {t("cancel")}
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={() => void handleImport()}
-                  disabled={importLoading || !importFile}
-                  pending={importLoading}
-                >
-                  Import
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-          <AddCandidateDialog
-            open={addOpen}
-            onOpenChange={setAddOpen}
-            onAdded={() => void refresh()}
-          />
 
           {selectedCount > 0 ? (
             <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50">
@@ -507,6 +487,49 @@ export default function TalentPoolPage() {
           </AlertDialog>
         </>
       )}
+
+      <Dialog open={importOpen} onOpenChange={setImportOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Import Candidates</DialogTitle>
+            <DialogDescription>Upload CSV with required columns: name,email</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">Optional columns: phone,source</p>
+            <input
+              type="file"
+              accept=".csv,text/csv"
+              onChange={(e) => setImportFile(e.target.files?.[0] ?? null)}
+              className="block w-full text-sm"
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setImportOpen(false)}
+              disabled={importLoading}
+            >
+              {t("cancel")}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => void handleImport()}
+              disabled={importLoading || !importFile}
+              pending={importLoading}
+            >
+              Import
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <AddCandidateDialog
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        onAdded={() => void refresh()}
+      />
     </MainPagesLayout>
   );
 }

@@ -4,7 +4,9 @@ from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
+
+from app.schemas.validators import is_valid_phone, normalize_email, normalize_phone
 
 
 class CandidateListItemResponse(BaseModel):
@@ -21,6 +23,7 @@ class CandidateListItemResponse(BaseModel):
     job_title: Optional[str] = None
     stage_id: Optional[UUID] = None
     stage_name: Optional[str] = None
+    assignments: list["CandidateAssignmentItemResponse"] = []
     created_at: datetime
     updated_at: datetime
 
@@ -29,10 +32,24 @@ class CandidateDetailResponse(CandidateListItemResponse):
     pass
 
 
+class CandidateAssignmentItemResponse(BaseModel):
+    assigned_id: UUID
+    job_id: UUID
+    job_title: Optional[str] = None
+    stage_id: Optional[UUID] = None
+    stage_name: Optional[str] = None
+    assignment_status: str
+    source: Optional[str] = None
+    applied_at: Optional[datetime] = None
+    assigned_at: Optional[datetime] = None
+    created_at: datetime
+    updated_at: datetime
+
+
 class CandidateCreateRequest(BaseModel):
     job_id: Optional[UUID] = None
     name: str = Field(min_length=1, max_length=255)
-    email: str = Field(min_length=3, max_length=320)
+    email: EmailStr
     phone: Optional[str] = None
     location: Optional[str] = None
     profile_links: dict[str, str] = {}
@@ -41,23 +58,57 @@ class CandidateCreateRequest(BaseModel):
     tags: list[str] = []
     status: str = Field(default="active", pattern=r"^(active|rejected|hired)$")
 
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, value: EmailStr) -> str:
+        return normalize_email(value)
+
+    @field_validator("phone")
+    @classmethod
+    def validate_phone(cls, value: Optional[str]) -> Optional[str]:
+        normalized = normalize_phone(value)
+        if normalized is None:
+            return None
+        if not is_valid_phone(normalized):
+            raise ValueError("Invalid phone number format")
+        return normalized
+
 
 class CandidateStageUpdateRequest(BaseModel):
     stage_id: UUID
+    job_id: Optional[UUID] = None
 
 
 class CandidateStatusUpdateRequest(BaseModel):
     status: str = Field(pattern=r"^(active|rejected|hired)$")
+    job_id: Optional[UUID] = None
 
 
 class CandidateUpdateRequest(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=255)
-    email: Optional[str] = Field(default=None, min_length=3, max_length=320)
+    email: Optional[EmailStr] = None
     phone: Optional[str] = None
     location: Optional[str] = None
     profile_links: Optional[dict[str, str]] = None
     job_id: Optional[UUID] = None
     clear_job: bool = False
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, value: Optional[EmailStr]) -> Optional[str]:
+        if value is None:
+            return None
+        return normalize_email(value)
+
+    @field_validator("phone")
+    @classmethod
+    def validate_phone(cls, value: Optional[str]) -> Optional[str]:
+        normalized = normalize_phone(value)
+        if normalized is None:
+            return None
+        if not is_valid_phone(normalized):
+            raise ValueError("Invalid phone number format")
+        return normalized
 
 
 class CandidateListResponse(BaseModel):

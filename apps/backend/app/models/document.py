@@ -8,7 +8,7 @@ from app.utils.uuid import uuid7
 
 
 class CandidateDocument(Base):
-    __tablename__ = "candidate_documents"
+    __tablename__ = "documents"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid7)
     org_id = Column(
@@ -38,11 +38,9 @@ class CandidateDocument(Base):
     deleted_at = Column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
-        Index(
-            "ix_candidate_documents_org_candidate_created", "org_id", "candidate_id", "created_at"
-        ),
-        Index("ix_candidate_documents_org_job_field", "org_id", "job_id", "field_key"),
-        Index("ix_candidate_documents_org_uploaded_by", "org_id", "uploaded_by_user_id"),
+        Index("ix_documents_org_candidate_created", "org_id", "candidate_id", "created_at"),
+        Index("ix_documents_org_job_field", "org_id", "job_id", "field_key"),
+        Index("ix_documents_org_uploaded_by", "org_id", "uploaded_by_user_id"),
     )
 
     organization = relationship("Organization")

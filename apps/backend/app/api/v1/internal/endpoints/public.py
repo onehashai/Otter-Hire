@@ -45,7 +45,8 @@ from app.core.security import verify_access_token
 from app.db.session import get_db
 from app.integrations.app_store.email_integration.temporal.queue import enqueue_ses_raw_key
 from app.models.candidate import Candidate
-from app.models.candidate_document import CandidateDocument
+from app.models.candidate_jobs import CandidateJobs
+from app.models.document import CandidateDocument
 from app.models.conversation import Conversation
 from app.models.email import InboundEmail, InboundEmailAttachment
 from app.models.job import Job
@@ -71,6 +72,52 @@ from app.utils.uuid import uuid7
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
 logger = logging.getLogger(__name__)
+
+
+async def _upsert_candidate_job_assignment(
+    db: AsyncSession,
+    *,
+    org_id: UUID,
+    candidate_id: UUID,
+    job_id: UUID,
+    stage_id: UUID | None,
+    assignment_status: str = "active",
+    source: str | None = None,
+    applied_at: datetime | None = None,
+    assigned_at: datetime | None = None,
+) -> CandidateJobs:
+    existing_result = await db.execute(
+        select(CandidateJobs).where(
+            CandidateJobs.org_id == org_id,
+            CandidateJobs.candidate_id == candidate_id,
+            CandidateJobs.job_id == job_id,
+        )
+    )
+    existing = existing_result.scalar_one_or_none()
+    if existing is None:
+        existing = CandidateJobs(
+            assigned_id=uuid7(),
+            org_id=org_id,
+            candidate_id=candidate_id,
+            job_id=job_id,
+            stage_id=stage_id,
+            assignment_status=assignment_status,
+            source=source,
+            applied_at=applied_at,
+            assigned_at=assigned_at,
+        )
+        db.add(existing)
+    else:
+        existing.stage_id = stage_id
+        existing.assignment_status = assignment_status
+        if source:
+            existing.source = source
+        if applied_at is not None:
+            existing.applied_at = applied_at
+        if assigned_at is not None:
+            existing.assigned_at = assigned_at
+    await db.flush()
+    return existing
 
 
 def _careers_public_org_slug_prefix(org_name: str) -> str:
@@ -1214,25 +1261,23 @@ async def apply_public_job(
     )
     db.add(application)
 
-    # Upsert into org candidates for recruiter workflows.
-    existing_candidate_result = await db.execute(
-        select(Candidate).where(
-            Candidate.org_id == org_uuid,
-            Candidate.job_id == job_uuid,
-            func.lower(Candidate.email) == body.email.strip().lower(),
-        )
+    first_stage_result = await db.execute(
+        select(Stage).where(Stage.org_id == org_uuid, Stage.job_id == job_uuid).order_by(Stage.position.asc()).limit(1)
     )
-    candidate = existing_candidate_result.scalar_one_or_none()
+    first_stage = first_stage_result.scalar_one_or_none()
+
+    # Upsert into org candidates for recruiter workflows.
+    # Multi-job is always enabled: one candidate per org+email.
+    existing_candidate_filters = [
+        Candidate.org_id == org_uuid,
+        func.lower(Candidate.email) == body.email.strip().lower(),
+    ]
+    existing_candidate_result = await db.execute(
+        select(Candidate).where(*existing_candidate_filters).order_by(Candidate.created_at.asc())
+    )
+    candidate = existing_candidate_result.scalars().first()
 
     if candidate is None:
-        first_stage_result = await db.execute(
-            select(Stage)
-            .where(Stage.org_id == org_uuid, Stage.job_id == job_uuid)
-            .order_by(Stage.position.asc())
-            .limit(1)
-        )
-        first_stage = first_stage_result.scalar_one_or_none()
-
         candidate = Candidate(
             org_id=org_uuid,
             job_id=job_uuid,
@@ -1258,6 +1303,19 @@ async def apply_public_job(
     # Ensure candidate has an ID for document linkage and application linkage.
     await db.flush()
     application.candidate_id = candidate.id
+    assigned_id: UUID | None = None
+    assignment = await _upsert_candidate_job_assignment(
+        db,
+        org_id=org_uuid,
+        candidate_id=candidate.id,
+        job_id=job_uuid,
+        stage_id=first_stage.id if first_stage else None,
+        assignment_status="active",
+        source=candidate.source,
+        applied_at=application.created_at or datetime.now(timezone.utc),
+        assigned_at=datetime.now(timezone.utc),
+    )
+    assigned_id = assignment.assigned_id
 
     if isinstance(files, dict):
         for field_key, file_ref in files.items():
@@ -1323,6 +1381,7 @@ async def apply_public_job(
         metadata={
             "source": "job_board",
             "stage_name": stage_name,
+            "assigned_id": str(assigned_id) if assigned_id else None,
         },
     )
 

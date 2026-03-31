@@ -4,13 +4,14 @@ Main automation execution engine.
 Handles trigger events and executes matching automations.
 """
 
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import logger
-from app.models.automation import Automation
+from app.models.automation import Automation, AutomationExecution
 from app.services.automation.actions import execute_action
 from app.services.automation.logger import log_execution, update_automation_stats
 
@@ -186,6 +187,31 @@ async def _execute_single_automation(
     """
     try:
         logger.info(f"Executing automation: {automation.name} (id={automation.id})")
+
+        # Idempotency safeguard for noisy candidate/job assignment triggers.
+        if trigger_key in {"candidate_applied", "candidate_job_assigned"}:
+            dedupe_window_start = datetime.now(timezone.utc) - timedelta(minutes=2)
+            existing_exec_result = await db.execute(
+                select(AutomationExecution.id)
+                .where(
+                    AutomationExecution.automation_id == automation.id,
+                    AutomationExecution.trigger_event == trigger_key,
+                    AutomationExecution.candidate_id == candidate_id,
+                    AutomationExecution.job_id == job_id,
+                    AutomationExecution.status == "success",
+                    AutomationExecution.created_at >= dedupe_window_start,
+                )
+                .limit(1)
+            )
+            if existing_exec_result.scalar_one_or_none() is not None:
+                logger.info(
+                    "Skipping duplicate automation execution automation_id=%s trigger=%s candidate_id=%s job_id=%s",
+                    automation.id,
+                    trigger_key,
+                    candidate_id,
+                    job_id,
+                )
+                return
 
         actions = automation.actions or []
         if not actions:

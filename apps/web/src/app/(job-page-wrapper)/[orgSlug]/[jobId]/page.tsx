@@ -14,7 +14,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@onehash/ui/dialog";
-import { InputField } from "@onehash/ui/input";
+import { InputField, PhoneNumberField, isValidPhoneNumber } from "@onehash/ui/input";
 import { Label } from "@onehash/ui/label";
 import { Avatar } from "@onehash/ui/avatar";
 import { Icon } from "@onehash/ui/icon";
@@ -30,6 +30,7 @@ import {
 } from "@/api";
 import { PLATFORM_NAME } from "@/lib/constants";
 import { parseOrgSlug } from "@/lib/public-careers-org";
+import { isValidEmail, normalizeEmail } from "@/lib/validation/contact";
 
 type ApplyFile = {
   name: string;
@@ -91,6 +92,7 @@ export default function CareerJobDetailPage() {
     files: {} as Record<string, ApplyFile | undefined>,
   });
   const [applySubmitting, setApplySubmitting] = useState(false);
+  const [applyErrors, setApplyErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const parsed = parseOrgSlug(orgSlug);
@@ -117,6 +119,7 @@ export default function CareerJobDetailPage() {
   const closeApplyDialog = () => {
     setApplyDialogOpen(false);
     setApplyForm({ fullName: "", email: "", phone: "", answers: {}, files: {} });
+    setApplyErrors({});
   };
 
   const applicationSchema = (job?.application_form_schema ?? {}) as Record<string, unknown>;
@@ -201,16 +204,21 @@ export default function CareerJobDetailPage() {
     const resumeVisibility = fieldVisibility("resume", "hidden");
     const coverVisibility = fieldVisibility("cover_letter", "hidden");
 
+    const nextErrors: Record<string, string> = {};
     if (isRequired(fullNameVisibility) && !applyForm.fullName.trim())
-      return toast.error("Full name is required.");
+      nextErrors.fullName = "Full name is required.";
     if (isRequired(emailVisibility) && !applyForm.email.trim())
-      return toast.error("Email is required.");
+      nextErrors.email = "Email is required.";
+    if (applyForm.email.trim() && !isValidEmail(applyForm.email))
+      nextErrors.email = "Enter a valid email address.";
     if (isRequired(phoneVisibility) && !applyForm.phone.trim())
-      return toast.error("Phone is required.");
+      nextErrors.phone = "Phone is required.";
+    if (applyForm.phone.trim() && !isValidPhoneNumber(applyForm.phone))
+      nextErrors.phone = "Enter a valid phone number.";
     if (isRequired(resumeVisibility) && !applyForm.files.resume)
-      return toast.error("Resume is required.");
+      nextErrors.resume = "Resume is required.";
     if (isRequired(coverVisibility) && !applyForm.files.cover_letter) {
-      return toast.error("Cover letter is required.");
+      nextErrors.cover_letter = "Cover letter is required.";
     }
     if (Object.values(applyForm.files).some((f) => f?.uploading)) {
       return toast.error("Please wait for files to finish uploading.");
@@ -226,16 +234,18 @@ export default function CareerJobDetailPage() {
         if (type === "file_upload") {
           const fileMeta = applyForm.files[key];
           if (!fileMeta || (!fileMeta.url && !fileMeta.name)) {
-            return toast.error(`${label} is required.`);
+            nextErrors[`file:${key}`] = `${label} is required.`;
           }
         } else {
           const val = applyForm.answers[key];
           if (val == null || (typeof val === "string" && !val.trim())) {
-            return toast.error(`${label} is required.`);
+            nextErrors[`answer:${key}`] = `${label} is required.`;
           }
         }
       }
     }
+    setApplyErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) return;
 
     setApplySubmitting(true);
     (async () => {
@@ -271,9 +281,9 @@ export default function CareerJobDetailPage() {
           return;
         }
         await applyToPublicJob(parsedOrg.orgId, jobId, parsedOrg.orgName, {
-          full_name: applyForm.fullName,
-          email: applyForm.email,
-          phone: applyForm.phone || null,
+          full_name: applyForm.fullName.trim(),
+          email: normalizeEmail(applyForm.email),
+          phone: applyForm.phone.trim() || null,
           answers: payloadAnswers,
           files: Object.keys(payloadFiles).length ? payloadFiles : undefined,
         });
@@ -448,7 +458,10 @@ export default function CareerJobDetailPage() {
         open={applyDialogOpen}
         onOpenChange={(open) => {
           setApplyDialogOpen(open);
-          if (!open) setApplyForm({ fullName: "", email: "", phone: "", answers: {}, files: {} });
+          if (!open) {
+            setApplyForm({ fullName: "", email: "", phone: "", answers: {}, files: {} });
+            setApplyErrors({});
+          }
         }}
       >
         <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
@@ -468,10 +481,21 @@ export default function CareerJobDetailPage() {
                   </Label>
                   <InputField
                     value={applyForm.fullName}
-                    onChange={(e) => setApplyForm((f) => ({ ...f, fullName: e.target.value }))}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setApplyForm((f) => ({ ...f, fullName: value }));
+                      setApplyErrors((prev) => ({
+                        ...prev,
+                        fullName:
+                          isRequired(fieldVisibility("full_name", "required")) && !value.trim()
+                            ? "Full name is required."
+                            : "",
+                      }));
+                    }}
                     placeholder="Jane Doe"
                     className="mt-1.5 h-9 text-sm"
                     required={isRequired(fieldVisibility("full_name", "required"))}
+                    error={applyErrors.fullName || undefined}
                   />
                 </div>
               )}
@@ -484,10 +508,21 @@ export default function CareerJobDetailPage() {
                   <InputField
                     type="email"
                     value={applyForm.email}
-                    onChange={(e) => setApplyForm((f) => ({ ...f, email: e.target.value }))}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setApplyForm((f) => ({ ...f, email: value }));
+                      let emailError = "";
+                      if (isRequired(fieldVisibility("email", "required")) && !value.trim()) {
+                        emailError = "Email is required.";
+                      } else if (value.trim() && !isValidEmail(value)) {
+                        emailError = "Enter a valid email address.";
+                      }
+                      setApplyErrors((prev) => ({ ...prev, email: emailError }));
+                    }}
                     placeholder="jane@example.com"
                     className="mt-1.5 h-9 text-sm"
                     required={isRequired(fieldVisibility("email", "required"))}
+                    error={applyErrors.email || undefined}
                   />
                 </div>
               )}
@@ -497,13 +532,21 @@ export default function CareerJobDetailPage() {
                     {defaultFields.phone?.label ?? "Phone"}{" "}
                     {isRequired(fieldVisibility("phone", "optional")) ? "*" : "(optional)"}
                   </Label>
-                  <InputField
-                    type="tel"
-                    value={applyForm.phone}
-                    onChange={(e) => setApplyForm((f) => ({ ...f, phone: e.target.value }))}
-                    placeholder="+1 234 567 8900"
-                    className="mt-1.5 h-9 text-sm"
-                    required={isRequired(fieldVisibility("phone", "optional"))}
+                  <PhoneNumberField
+                    label=""
+                    value={applyForm.phone || undefined}
+                    onChange={(v) => {
+                      const value = v ?? "";
+                      setApplyForm((f) => ({ ...f, phone: value }));
+                      let phoneError = "";
+                      if (isRequired(fieldVisibility("phone", "optional")) && !value.trim()) {
+                        phoneError = "Phone is required.";
+                      } else if (value.trim() && !isValidPhoneNumber(value)) {
+                        phoneError = "Enter a valid phone number for the selected country.";
+                      }
+                      setApplyErrors((prev) => ({ ...prev, phone: phoneError }));
+                    }}
+                    error={applyErrors.phone || undefined}
                   />
                 </div>
               )}
@@ -523,10 +566,14 @@ export default function CareerJobDetailPage() {
                         className="sr-only"
                         onChange={(e) => {
                           void handleSelectAndUploadFile("resume", e.target.files?.[0] || null);
+                          setApplyErrors((prev) => ({ ...prev, resume: "" }));
                         }}
                       />
                     </label>
                   </div>
+                  {applyErrors.resume ? (
+                    <p className="mt-1 text-xs text-destructive">{applyErrors.resume}</p>
+                  ) : null}
                 </div>
               )}
               {isVisible(fieldVisibility("cover_letter", "hidden")) && (
@@ -550,10 +597,14 @@ export default function CareerJobDetailPage() {
                             "cover_letter",
                             e.target.files?.[0] || null,
                           );
+                          setApplyErrors((prev) => ({ ...prev, cover_letter: "" }));
                         }}
                       />
                     </label>
                   </div>
+                  {applyErrors.cover_letter ? (
+                    <p className="mt-1 text-xs text-destructive">{applyErrors.cover_letter}</p>
+                  ) : null}
                 </div>
               )}
               {profileLinkFields.some((f) => String(f.visibility ?? "hidden") !== "hidden") && (
@@ -579,15 +630,21 @@ export default function CareerJobDetailPage() {
                       <InputField
                         type="url"
                         value={String(value ?? "")}
-                        onChange={(e) =>
+                        onChange={(e) => {
                           setApplyForm((f) => ({
                             ...f,
                             answers: { ...f.answers, [key]: e.target.value },
-                          }))
-                        }
+                          }));
+                          setApplyErrors((prev) => ({ ...prev, [`answer:${key}`]: "" }));
+                        }}
                         placeholder="https://"
                         className="mt-1.5 h-9 text-sm"
                       />
+                      {applyErrors[`answer:${key}`] ? (
+                        <p className="mt-1 text-xs text-destructive">
+                          {applyErrors[`answer:${key}`]}
+                        </p>
+                      ) : null}
                     </div>
                   );
                 })}
@@ -616,12 +673,13 @@ export default function CareerJobDetailPage() {
                       {type === "long_text" ? (
                         <textarea
                           value={String(value ?? "")}
-                          onChange={(e) =>
+                          onChange={(e) => {
                             setApplyForm((f) => ({
                               ...f,
                               answers: { ...f.answers, [key]: e.target.value },
-                            }))
-                          }
+                            }));
+                            setApplyErrors((prev) => ({ ...prev, [`answer:${key}`]: "" }));
+                          }}
                           rows={3}
                           className={cn(
                             "mt-1.5 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background",
@@ -631,12 +689,13 @@ export default function CareerJobDetailPage() {
                       ) : type === "single_select" ? (
                         <select
                           value={String(value ?? "")}
-                          onChange={(e) =>
+                          onChange={(e) => {
                             setApplyForm((f) => ({
                               ...f,
                               answers: { ...f.answers, [key]: e.target.value },
-                            }))
-                          }
+                            }));
+                            setApplyErrors((prev) => ({ ...prev, [`answer:${key}`]: "" }));
+                          }}
                           className="mt-1.5 h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
                         >
                           <option value="">Select</option>
@@ -663,6 +722,7 @@ export default function CareerJobDetailPage() {
                                       ...f,
                                       answers: { ...f.answers, [key]: Array.from(next) },
                                     }));
+                                    setApplyErrors((prev) => ({ ...prev, [`answer:${key}`]: "" }));
                                   }}
                                 />
                                 {opt}
@@ -673,12 +733,13 @@ export default function CareerJobDetailPage() {
                       ) : type === "yes_no" ? (
                         <select
                           value={String(value ?? "")}
-                          onChange={(e) =>
+                          onChange={(e) => {
                             setApplyForm((f) => ({
                               ...f,
                               answers: { ...f.answers, [key]: e.target.value },
-                            }))
-                          }
+                            }));
+                            setApplyErrors((prev) => ({ ...prev, [`answer:${key}`]: "" }));
+                          }}
                           className="mt-1.5 h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
                         >
                           <option value="">Select</option>
@@ -697,6 +758,7 @@ export default function CareerJobDetailPage() {
                               className="sr-only"
                               onChange={(e) => {
                                 void handleSelectAndUploadFile(key, e.target.files?.[0] || null);
+                                setApplyErrors((prev) => ({ ...prev, [`file:${key}`]: "" }));
                               }}
                             />
                           </label>
@@ -713,15 +775,26 @@ export default function CareerJobDetailPage() {
                                   : "text"
                           }
                           value={String(value ?? "")}
-                          onChange={(e) =>
+                          onChange={(e) => {
                             setApplyForm((f) => ({
                               ...f,
                               answers: { ...f.answers, [key]: e.target.value },
-                            }))
-                          }
+                            }));
+                            setApplyErrors((prev) => ({ ...prev, [`answer:${key}`]: "" }));
+                          }}
                           className="mt-1.5 h-9 text-sm"
                         />
                       )}
+                      {type === "file_upload" && applyErrors[`file:${key}`] ? (
+                        <p className="mt-1 text-xs text-destructive">
+                          {applyErrors[`file:${key}`]}
+                        </p>
+                      ) : null}
+                      {type !== "file_upload" && applyErrors[`answer:${key}`] ? (
+                        <p className="mt-1 text-xs text-destructive">
+                          {applyErrors[`answer:${key}`]}
+                        </p>
+                      ) : null}
                     </div>
                   );
                 })}

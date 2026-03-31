@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { signupSchema, type SignupFormValues } from "@/lib/schemas/zodResolver";
 import { signup, getGoogleAuthEnabled, API_BASE_URL } from "@/api/index";
 import { useAuthSession } from "@/app/providers";
+import { normalizeEmail } from "@/lib/validation/contact";
 
 const PASSWORD_RULES = [
   { label: "At least 8 characters", test: (pw: string) => pw.length >= 8 },
@@ -64,7 +65,7 @@ export default function Signup() {
           return;
         }
         await signup({
-          email: data.email,
+          email: normalizeEmail(data.email),
           password: data.password,
           invite_token: inviteToken.trim(),
         });
@@ -76,10 +77,10 @@ export default function Signup() {
       }
 
       await signup({
-        email: data.email,
+        email: normalizeEmail(data.email),
         password: data.password,
       });
-      sessionStorage.setItem("signup_email", data.email);
+      sessionStorage.setItem("signup_email", normalizeEmail(data.email));
       router.replace("/verify");
       router.refresh();
     } catch (err) {

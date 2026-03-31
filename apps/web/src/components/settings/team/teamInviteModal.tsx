@@ -15,6 +15,7 @@ import { SelectField } from "@onehash/ui/select";
 import { Icon } from "@onehash/ui/icon";
 import { type Role, ASSIGNABLE_ROLES } from "@/components/settings/team/lib/permissonMatrix";
 import { BulkTextArea } from "@onehash/ui/textarea";
+import { isValidEmail, normalizeEmail } from "@/lib/validation/contact";
 
 interface TeamInviteModalProps {
   open: boolean;
@@ -33,8 +34,6 @@ export function TeamInviteModal({
   const [emailInput, setEmailInput] = useState("");
   const [emailError, setEmailError] = useState("");
   const [selectedRole, setSelectedRole] = useState<Role>("employee");
-
-  const isValidEmail = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim());
 
   const parseEmails = (input: string): string[] => {
     return input
@@ -60,7 +59,7 @@ export function TeamInviteModal({
       return;
     }
 
-    const uniqueEmails = [...new Set(parsedEmails)];
+    const uniqueEmails = [...new Set(parsedEmails.map((e) => normalizeEmail(e)))];
 
     try {
       await onSubmit(uniqueEmails, selectedRole);

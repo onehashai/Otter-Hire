@@ -100,7 +100,7 @@ export function ActionButtons({
     }
     try {
       setMovingToStageId(stageId);
-      await updateCandidateStage(candidateId, stageId);
+      await updateCandidateStage(candidateId, stageId, jobId);
       toast({ title: `Moved to ${stageName}` });
       if (onCandidateUpdated) {
         await onCandidateUpdated();
@@ -129,8 +129,8 @@ export function ActionButtons({
     }
     try {
       setMovingToStageId(rejectedStage.id);
-      await updateCandidateStage(candidateId, rejectedStage.id);
-      await updateCandidateStatus(candidateId, "rejected");
+      await updateCandidateStage(candidateId, rejectedStage.id, jobId);
+      await updateCandidateStatus(candidateId, "rejected", jobId);
       toast({ title: "Moved to Rejected" });
       if (onCandidateUpdated) {
         await onCandidateUpdated();
@@ -155,8 +155,8 @@ export function ActionButtons({
     }
     try {
       setMovingToStageId(stageId);
-      await updateCandidateStage(candidateId, stageId);
-      await updateCandidateStatus(candidateId, "active");
+      await updateCandidateStage(candidateId, stageId, jobId);
+      await updateCandidateStatus(candidateId, "active", jobId);
       toast({ title: `Reconsidered to ${stageName}` });
       if (onCandidateUpdated) {
         await onCandidateUpdated();
@@ -257,12 +257,6 @@ export function ActionButtons({
               </DropdownMenuSubContent>
             </DropdownMenuSub>
           )}
-          <DropdownMenuItem className="text-xs" onClick={() => toast({ title: "Email composed" })}>
-            <Icon name="Send" className="h-3.5 w-3.5 mr-2" /> Send Email
-          </DropdownMenuItem>
-          <DropdownMenuItem className="text-xs" onClick={() => toast({ title: "Offer created" })}>
-            <Icon name="ScrollText" className="h-3.5 w-3.5 mr-2" /> Create Offer
-          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem
             className="text-xs text-destructive focus:text-destructive"
@@ -313,7 +307,7 @@ export function ActionButtons({
                         setDeleting(true);
                         await deleteCandidate(candidateId);
                         toast({ title: "Candidate deleted" });
-                        router.push(jobId ? `/jobs/${encodeURIComponent(jobId)}` : "/talent-pool");
+                        router.push(jobId ? `/jobs/${encodeURIComponent(jobId)}` : "/candidates");
                       } catch (err) {
                         toast({
                           title: err instanceof Error ? err.message : "Failed to delete candidate",

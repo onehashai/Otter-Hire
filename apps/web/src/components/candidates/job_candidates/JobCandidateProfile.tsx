@@ -256,7 +256,7 @@ export function JobCandidateProfile({
       role: currentAssignment?.job_title ?? candidate.job_title ?? "—",
       email: candidate.email,
       phone: candidate.phone ?? "—",
-      location: candidate.location ?? "—",
+      location: candidate.address ?? "—",
       stage,
       source: candidate.source ?? "job_portal",
       appliedDate: candidate.created_at,

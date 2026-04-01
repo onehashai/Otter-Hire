@@ -1,10 +1,12 @@
+"""Run the Temporal worker: ``python -m app.temporal``."""
+
 from __future__ import annotations
 
 import asyncio
 import logging
 
 from app.core.logging import setup_logging
-from app.workers.email import run_worker
+from app.temporal.worker import run_worker
 
 if __name__ == "__main__":
     setup_logging()

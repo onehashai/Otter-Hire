@@ -6,9 +6,8 @@ from temporalio import workflow
 from temporalio.common import RetryPolicy
 from temporalio.exceptions import ActivityError
 
-# Only lightweight types here
 with workflow.unsafe.imports_passed_through():
-    from app.integrations.app_store.email_integration.temporal.types import (
+    from app.temporal.email.types import (
         InboundWorkflowInput,
         OutboundWorkflowInput,
     )

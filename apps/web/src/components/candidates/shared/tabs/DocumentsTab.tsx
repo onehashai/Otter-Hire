@@ -3,7 +3,8 @@
 import { Card, CardContent } from "@onehash/ui/card";
 import { Button } from "@onehash/ui/button";
 import { Icon } from "@onehash/ui/icon";
-
+import { useTranslation } from "react-i18next";
+import { formatThreadMessageTime } from "@/lib/format-date";
 interface Document {
   id?: string;
   name: string;
@@ -28,6 +29,7 @@ function formatDisplayFileName(rawName: string): string {
 }
 
 export function DocumentsTab({ documents, onUploadDocument, onDeleteDocument }: DocumentsTabProps) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-3">
       {documents.length === 0 ? (
@@ -53,28 +55,36 @@ export function DocumentsTab({ documents, onUploadDocument, onDeleteDocument }: 
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-medium truncate">{formatDisplayFileName(doc.name)}</p>
                   <p className="text-[10px] text-muted-foreground">
-                    {doc.type} · {doc.size} · {doc.date}
+                    {doc.size} · {formatThreadMessageTime(doc.date)}
                   </p>
                 </div>
-                {doc.url ? (
-                  <a
-                    className="text-xs text-muted-foreground hover:underline"
-                    href={doc.url}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    View
-                  </a>
-                ) : null}
-                {doc.id && onDeleteDocument ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 text-[10px]"
-                    onClick={() => onDeleteDocument(doc.id as string)}
-                  >
-                    Delete
-                  </Button>
+                {doc.url || (doc.id && onDeleteDocument) ? (
+                  <div className="flex shrink-0 items-center gap-0.5">
+                    {doc.url ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 w-8 p-0"
+                        onClick={() => window.open(doc.url, "_blank")}
+                        tooltip={t("view")}
+                      >
+                        <Icon name="Eye" className="h-4 w-4" />
+                      </Button>
+                    ) : null}
+                    {doc.id && onDeleteDocument ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 w-8 p-0"
+                        onClick={() => onDeleteDocument(doc.id as string)}
+                        tooltip={t("delete")}
+                      >
+                        <Icon name="Trash2" className="h-4 w-4" />
+                      </Button>
+                    ) : null}
+                  </div>
                 ) : null}
               </CardContent>
             </Card>

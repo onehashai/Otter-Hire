@@ -96,12 +96,18 @@ export async function applyToPublicJob(
   jobId: string,
   orgSlugPrefix: string,
   payload: PublicApplyPayload,
+  options?: { idempotencyKey?: string },
 ): Promise<PublicApplyResponse> {
+  const extra: Record<string, string> = {};
+  if (options?.idempotencyKey) {
+    extra["Idempotency-Key"] = options.idempotencyKey;
+  }
   return apiFetch<PublicApplyResponse>(
     `/orgs/${orgId}/jobs/${jobId}/apply${publicCareersQuery(orgSlugPrefix)}`,
     {
       method: "POST",
       body: payload,
+      headers: Object.keys(extra).length ? extra : undefined,
     },
   );
 }

@@ -5,8 +5,9 @@ export type CandidateListItemResponse = {
   name: string;
   email: string;
   phone: string | null;
-  location: string | null;
+  address: string | null;
   profile_links: Record<string, string>;
+  parsed_resume?: Record<string, unknown> | null;
   source: string | null;
   tags: string[];
   status: "active" | "rejected" | "hired";
@@ -57,7 +58,7 @@ export type CreateCandidatePayload = {
   name: string;
   email: string;
   phone?: string | null;
-  location?: string | null;
+  address?: string | null;
   profile_links?: Record<string, string>;
   stage_id?: string | null;
   source?: string | null;
@@ -196,7 +197,7 @@ export async function updateCandidate(
     name?: string;
     email?: string;
     phone?: string | null;
-    location?: string | null;
+    address?: string | null;
     profile_links?: Record<string, string>;
     job_id?: string | null;
     clear_job?: boolean;

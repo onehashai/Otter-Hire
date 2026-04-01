@@ -4,15 +4,15 @@ import logging
 
 import temporalio.exceptions
 
-from app.integrations.app_store.email_integration.temporal.types import (
+from app.temporal.client import get_temporal_client
+from app.temporal.email.types import (
     InboundWorkflowInput,
     OutboundWorkflowInput,
 )
-from app.integrations.app_store.email_integration.temporal.workflow import (
+from app.temporal.email.workflow import (
     InboundEmailWorkflow,
     OutboundEmailWorkflow,
 )
-from app.services.temporal_client import get_temporal_client
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +43,6 @@ async def enqueue_ses_raw_key(bucket: str, key: str) -> dict[str, str | bool]:
         )
         return {"workflow_id": str(handle.id), "started": True}
     except temporalio.exceptions.WorkflowAlreadyStartedError:
-        # SNS can deliver the same S3 event multiple times; workflow already running/completed
         logger.info(
             "Inbound workflow already started bucket=%s key=%s workflow_id=%s",
             bucket,

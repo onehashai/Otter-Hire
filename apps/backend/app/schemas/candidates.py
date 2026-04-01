@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
@@ -14,8 +14,9 @@ class CandidateListItemResponse(BaseModel):
     name: str
     email: str
     phone: Optional[str] = None
-    location: Optional[str] = None
-    profile_links: dict[str, str] = {}
+    address: Optional[str] = None
+    profile_links: dict[str, Any] = {}
+    parsed_resume: Optional[dict[str, Any]] = None
     source: Optional[str] = None
     tags: list[str] = []
     status: str
@@ -51,7 +52,7 @@ class CandidateCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     email: EmailStr
     phone: Optional[str] = None
-    location: Optional[str] = None
+    address: Optional[str] = None
     profile_links: dict[str, str] = {}
     stage_id: Optional[UUID] = None
     source: Optional[str] = Field(default="Manual", max_length=100)
@@ -88,7 +89,7 @@ class CandidateUpdateRequest(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=255)
     email: Optional[EmailStr] = None
     phone: Optional[str] = None
-    location: Optional[str] = None
+    address: Optional[str] = None
     profile_links: Optional[dict[str, str]] = None
     job_id: Optional[UUID] = None
     clear_job: bool = False

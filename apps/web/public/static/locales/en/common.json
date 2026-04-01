@@ -17,6 +17,7 @@
   "job_archived": "Job archived",
   "job_restored_to_draft": "Job restored to draft",
   "delete": "Delete",
+  "view": "View",
   "save": "Save",
   "cancel": "Cancel",
   "status": "Status",
@@ -218,5 +219,7 @@
   "delete_candidate_title": "Delete candidate?",
   "delete_candidate_description": "This will permanently remove {{name}} and their data from your organization.",
   "error": "Something went wrong",
-  "retry": "Retry"
+  "retry": "Retry",
+  "job_stage_title": "Job Stage",
+  "job_stage_subtitle": "Manage the stages of your hiring process."
 }

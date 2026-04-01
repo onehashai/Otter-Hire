@@ -12,7 +12,7 @@ import type { SuggestionKeyDownProps, SuggestionProps } from "@tiptap/suggestion
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { Button } from "../button";
 import { cn } from "../lib/utils";
-
+import "./mention-notes-editor.css";
 export interface NotesMentionableUser {
   id: string;
   name: string | null;
@@ -136,6 +136,50 @@ function collectMentionIds(editor: Editor): string[] {
     }
   });
   return [...new Set(ids)];
+}
+
+/**
+ * Resolves @labels in plain text to user ids (same rules as note display).
+ * Needed when someone types "@Name" without picking from the suggestion list — those are
+ * text nodes, not mention nodes, so collectMentionIds alone would miss them.
+ */
+function collectMentionIdsFromPlainText(
+  content: string,
+  users: NotesMentionableUser[],
+  labelByUserId: Map<string, string>,
+): string[] {
+  const ids = new Set<string>();
+  const sorted = [...users]
+    .filter((u) => u.status === "active")
+    .map((u) => ({
+      id: u.id,
+      label: (labelByUserId.get(u.id) || u.email).trim(),
+    }))
+    .filter((m) => m.label.length > 0)
+    .sort((a, b) => b.label.length - a.label.length);
+
+  let i = 0;
+  while (i < content.length) {
+    if (content[i] !== "@") {
+      i++;
+      continue;
+    }
+    let matched = false;
+    for (const m of sorted) {
+      const rest = content.slice(i + 1);
+      if (rest.startsWith(m.label)) {
+        const after = i + 1 + m.label.length;
+        if (after >= content.length || /\s/.test(content[after])) {
+          ids.add(m.id);
+          i = after;
+          matched = true;
+          break;
+        }
+      }
+    }
+    if (!matched) i++;
+  }
+  return [...ids];
 }
 
 export function MentionNotesEditor({
@@ -271,8 +315,9 @@ export function MentionNotesEditor({
       extensions,
       editorProps: {
         attributes: {
-          class:
-            "min-h-[60px] w-full resize-none px-3 py-2 text-xs leading-normal text-foreground outline-none focus:outline-none",
+          class: cn(
+            "tiptap min-h-[60px] w-full resize-none px-3 py-2 text-xs leading-normal text-foreground outline-none focus:outline-none",
+          ),
         },
       },
       onUpdate: () => setTick((n) => n + 1),
@@ -287,9 +332,16 @@ export function MentionNotesEditor({
     if (!editor || !onAddNote || !canSubmit) return;
     const content = serializeNote(editor);
     if (!content.trim()) return;
+    const fromNodes = collectMentionIds(editor);
+    const fromText = collectMentionIdsFromPlainText(
+      content,
+      mentionableForTags,
+      labelByUserId,
+    );
+    const mentionIds = [...new Set([...fromNodes, ...fromText])];
     try {
       setSubmitting(true);
-      await onAddNote(content, collectMentionIds(editor));
+      await onAddNote(content, mentionIds);
       editor.commands.clearContent();
     } finally {
       setSubmitting(false);

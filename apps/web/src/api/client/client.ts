@@ -192,9 +192,12 @@ export async function apiPost<T>(
 
 export async function apiFetch<T>(
   path: string,
-  options: { method: string; body?: unknown },
+  options: { method: string; body?: unknown; headers?: Record<string, string> },
 ): Promise<T> {
   const headers: Record<string, string> = { Accept: "application/json" };
+  if (options.headers) {
+    Object.assign(headers, options.headers);
+  }
 
   if (options.body !== undefined) {
     headers["Content-Type"] = "application/json";

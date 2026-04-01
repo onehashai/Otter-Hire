@@ -109,6 +109,10 @@ class Settings(BaseSettings):
     # Storage
     local_storage_root: str = Field(default="storage/local", validation_alias="LOCAL_STORAGE_ROOT")
     max_upload_bytes: int = Field(default=1024 * 1024, validation_alias="MAX_UPLOAD_BYTES")
+    public_job_apply_max_upload_bytes: int = Field(
+        default=10 * 1024 * 1024,
+        validation_alias="PUBLIC_JOB_APPLY_MAX_UPLOAD_BYTES",
+    )
     aws_s3_bucket: str | None = Field(default=None, validation_alias="AWS_S3_BUCKET")
     aws_s3_region: str | None = Field(default=None, validation_alias="AWS_S3_REGION")
     s3_root_prefix_raw: str = Field(default="", validation_alias="S3_ROOT_PREFIX")

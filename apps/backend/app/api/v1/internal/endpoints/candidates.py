@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 from datetime import datetime, timezone
+from typing import Any
 from pathlib import Path
 from uuid import UUID
 
@@ -272,8 +273,13 @@ async def _resolve_note_mentions(
     return resolved
 
 
-def _candidate_note_url(candidate_id: UUID) -> str:
-    return f"{settings.frontend_base_url.rstrip('/')}/candidates/{candidate_id}"
+def _candidate_note_url(candidate: Candidate) -> str:
+    """App routes: talent pool vs job workspace (there is no top-level /candidates/[id] page)."""
+    base = settings.frontend_base_url.rstrip("/")
+    cid = candidate.id
+    if candidate.job_id is not None:
+        return f"{base}/jobs/{candidate.job_id}/candidates/{cid}"
+    return f"{base}/talent-pool/{cid}"
 
 
 def _candidate_note_excerpt(content: str, limit: int = 280) -> str:
@@ -461,7 +467,7 @@ async def create_candidate(
         name=body.name.strip(),
         email=normalized_email,
         phone=(body.phone or "").strip() or None,
-        location=(body.location or "").strip() or None,
+        address=(body.address or "").strip() or None,
         profile_links=dict(body.profile_links or {}),
         source=(body.source or "Manual").strip() or "Manual",
         tags=list(body.tags or []),
@@ -594,7 +600,7 @@ async def import_candidates_csv(
             name=name,
             email=email,
             phone=phone,
-            location=None,
+            address=None,
             profile_links={},
             source=source,
             tags=[],
@@ -693,8 +699,9 @@ async def list_candidates(
             name=c.name,
             email=c.email,
             phone=c.phone,
-            location=c.location,
+            address=c.address,
             profile_links=dict(c.profile_links or {}),
+            parsed_resume=c.parsed_resume if isinstance(c.parsed_resume, dict) else None,
             source=c.source,
             tags=list(c.tags or []),
             status=c.status,
@@ -803,8 +810,9 @@ async def list_candidates_paginated(
                 name=c.name,
                 email=c.email,
                 phone=c.phone,
-                location=c.location,
-                profile_links=dict(c.profile_links or {}),
+                address=c.address,
+                profile_links=c.profile_links,
+                parsed_resume=c.parsed_resume if isinstance(c.parsed_resume, dict) else None,
                 source=c.source,
                 tags=list(c.tags or []),
                 status=c.status,
@@ -997,8 +1005,9 @@ async def get_candidate(
         name=c.name,
         email=c.email,
         phone=c.phone,
-        location=c.location,
+        address=c.address,
         profile_links=profile_links,
+        parsed_resume=c.parsed_resume if isinstance(c.parsed_resume, dict) else None,
         source=c.source,
         tags=list(c.tags or []),
         status=c.status,
@@ -1151,8 +1160,8 @@ async def update_candidate(
         candidate.email = body.email.strip().lower()
     if body.phone is not None:
         candidate.phone = body.phone.strip() or None
-    if body.location is not None:
-        candidate.location = body.location.strip() or None
+    if body.address is not None:
+        candidate.address = body.address.strip() or None
     if body.profile_links is not None:
         normalized_links: dict[str, str] = {}
         for k, v in (body.profile_links or {}).items():
@@ -1824,7 +1833,7 @@ async def create_candidate_note(
         },
     )
     await db.commit()
-    candidate_url = _candidate_note_url(candidate.id)
+    candidate_url = _candidate_note_url(candidate)
     note_excerpt = _candidate_note_excerpt(note.content)
     for mention in resolved_mentions:
         if mention.user_id == current_user.id:

@@ -9,7 +9,7 @@ import { Separator } from "@onehash/ui/separator";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@onehash/ui/dialog";
 import { Icon } from "@onehash/ui/icon";
 import { InputField, PhoneNumberField, isValidPhoneNumber } from "@onehash/ui/input";
-import { formatThreadMessageTime, formatTimestampToDateTime } from "@/lib/format-date";
+import { formatTimestamp } from "@/lib/format-date";
 import { Label } from "@onehash/ui/label";
 import { formatPhoneForDisplay, parseStoredPhone } from "@/lib/phone";
 import { getInitialsFromName } from "@/lib/name-initials";
@@ -304,7 +304,7 @@ export function SummaryPanel({
                 <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">
                   {t("candidates_table_created")}
                 </Label>
-                <p className="text-xs">{formatTimestampToDateTime(candidate.appliedDate)}</p>
+                <p className="text-xs">{formatTimestamp(candidate.appliedDate)}</p>
               </div>
             </>
           )}
@@ -495,7 +495,7 @@ export function SummaryPanel({
                     <div className="flex-1 min-w-0 pb-3">
                       <p className="text-xs font-medium">{item.action}</p>
                       <p className="text-[10px] text-muted-foreground tabular-nums">
-                        {formatThreadMessageTime(item.date)}
+                        {formatTimestamp(item.date)}
                       </p>
                     </div>
                   </div>

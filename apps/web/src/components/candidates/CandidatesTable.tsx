@@ -7,7 +7,7 @@ import { Badge } from "@onehash/ui/badge";
 import { Checkbox } from "@onehash/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@onehash/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@onehash/ui/tooltip";
-import { formatTimestampToDateTime } from "@/lib/format-date";
+import { formatTimestamp } from "@/lib/format-date";
 import { type CandidateListItemResponse, type JobListItemResponse } from "@/api";
 
 export const CANDIDATE_COLUMN_DEFS = {
@@ -292,7 +292,7 @@ export function CandidatesTable({
       return (
         <TableCell key={column} className="py-2 align-middle min-w-0 max-w-[200px] text-center">
           <span className="text-xs text-muted-foreground">
-            {formatTimestampToDateTime(c.created_at)}
+            {formatTimestamp(c.created_at, "en-GB", { showRelative: true })}
           </span>
         </TableCell>
       );
@@ -326,7 +326,7 @@ export function CandidatesTable({
       return (
         <TableCell key={column} className="py-2 align-middle min-w-0 max-w-[200px] text-center">
           <span className="text-xs text-muted-foreground">
-            {formatTimestampToDateTime(c.updated_at)}
+            {formatTimestamp(c.updated_at, "en-GB", { showRelative: true })}
           </span>
         </TableCell>
       );

@@ -4,7 +4,7 @@ import { Card, CardContent } from "@onehash/ui/card";
 import { Button } from "@onehash/ui/button";
 import { Icon } from "@onehash/ui/icon";
 import { useTranslation } from "react-i18next";
-import { formatThreadMessageTime } from "@/lib/format-date";
+import { formatTimestamp } from "@/lib/format-date";
 interface Document {
   id?: string;
   name: string;
@@ -55,7 +55,7 @@ export function DocumentsTab({ documents, onUploadDocument, onDeleteDocument }: 
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-medium truncate">{formatDisplayFileName(doc.name)}</p>
                   <p className="text-[10px] text-muted-foreground">
-                    {doc.size} · {formatThreadMessageTime(doc.date)}
+                    {doc.size} · {formatTimestamp(doc.date)}
                   </p>
                 </div>
                 {doc.url || (doc.id && onDeleteDocument) ? (

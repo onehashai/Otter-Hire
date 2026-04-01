@@ -318,7 +318,7 @@ export function CandidatesTable({
     if (column === "location") {
       return (
         <TableCell key={column} className="py-2 align-middle min-w-0 max-w-[220px] text-center">
-          <span className="text-xs text-muted-foreground truncate block">{c.location ?? "—"}</span>
+          <span className="text-xs text-muted-foreground truncate block">{c.address ?? "—"}</span>
         </TableCell>
       );
     }

@@ -50,10 +50,10 @@ from app.models.candidate_jobs import CandidateJobs
 from app.models.conversation import Conversation
 from app.models.document import CandidateDocument
 from app.models.email import InboundEmail
+from app.models.integration_credential import IntegrationCredential
 from app.models.job import Job
 from app.models.job_application import JobApplication
 from app.models.message import Message
-from app.models.integration_credential import IntegrationCredential
 from app.models.org_membership import OrgMembership
 from app.models.organization import Organization
 from app.models.stage import Stage

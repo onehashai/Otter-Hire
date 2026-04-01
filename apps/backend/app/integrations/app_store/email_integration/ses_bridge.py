@@ -27,7 +27,6 @@ from app.integrations.app_store.email_integration import credential_store
 from app.models.conversation import Conversation
 from app.models.email import InboundEmail
 from app.models.integration_credential import IntegrationCredential
-from app.models.job import Job
 
 logger = logging.getLogger(__name__)
 

@@ -9,8 +9,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.integrations.app_store.email_integration import credential_store
-from app.models.job import Job
 from app.models.integration_credential import IntegrationCredential
+from app.models.job import Job
 from app.schemas.jobs import (
     JobEmailActionResponse,
     JobEmailConfigResponse,

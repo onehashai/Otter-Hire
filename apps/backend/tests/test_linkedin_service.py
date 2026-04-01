@@ -1,5 +1,5 @@
-from app.integrations.linkedin.service import verify_linkedin_webhook_signature
 from app.core.config import settings
+from app.integrations.linkedin.service import verify_linkedin_webhook_signature
 
 
 def test_verify_linkedin_webhook_signature_with_secret() -> None:

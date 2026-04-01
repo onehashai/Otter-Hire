@@ -11,8 +11,8 @@ from app.core.config import settings
 from app.core.permissions import require_permission
 from app.db.session import get_db
 from app.deps.job_scope import ASSIGNED_ONLY_ROLES, require_job_access
-from app.integrations.linkedin import service as linkedin_service
 from app.integrations.app_store.email_integration import job_service as job_email_service
+from app.integrations.linkedin import service as linkedin_service
 from app.models.candidate import Candidate
 from app.models.candidate_jobs import CandidateJobs
 from app.models.job import Job
@@ -26,10 +26,10 @@ from app.schemas.jobs import (
     JobCreateRequest,
     JobDescriptionAiRequest,
     JobDescriptionAiResponse,
+    JobDetailResponse,
     JobEmailActionResponse,
     JobEmailConfigResponse,
     JobEmailConfigUpsertRequest,
-    JobDetailResponse,
     JobListItemResponse,
     JobUpdateRequest,
     JobWorkspaceCandidateResponse,

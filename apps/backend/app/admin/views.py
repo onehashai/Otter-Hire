@@ -1,7 +1,8 @@
-from sqladmin import ModelView
-from sqlalchemy import delete, select, update
-from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Any
+
+from sqladmin import ModelView
+from sqlalchemy import delete, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.activity import Activity
 from app.models.automation import Automation, AutomationExecution

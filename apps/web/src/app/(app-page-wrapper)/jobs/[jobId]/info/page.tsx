@@ -1,4 +1,4 @@
- "use client";
+"use client";
 
 import { useMemo, useState, useEffect } from "react";
 import { Button } from "@onehash/ui/button";

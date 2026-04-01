@@ -1,11 +1,11 @@
 /**
  * Format timestamp with smart relative dates (Today, Yesterday) and full datetime for older dates.
- * 
+ *
  * Examples:
  * - Today: "Today, 3pm" or "Today, 3:05pm"
  * - Yesterday: "Yesterday, 3pm" or "Yesterday, 3:05pm"
  * - Older: "13 Mar 2026, 3pm" or "13 Mar 2026, 3:05pm"
- * 
+ *
  * @param isoString - ISO 8601 date string
  * @param locale - Locale for month formatting (default: "en-GB")
  * @param options - Formatting options
@@ -22,7 +22,7 @@ export function formatTimestamp(
   },
 ): string {
   if (!isoString) return "";
-  
+
   const date = new Date(isoString);
   if (Number.isNaN(date.getTime())) return "";
 

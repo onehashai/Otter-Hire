@@ -12,7 +12,7 @@ import {
   type ConversationDetail,
   type MessageRead,
 } from "@/api/conversations";
-import { formatThreadMessageTime } from "@/lib/format-date";
+import { formatTimestamp } from "@/lib/format-date";
 import { toast } from "@onehash/ui/sonner";
 import { ComposeMessageBox } from "@/components/common/ComposeMessageBox";
 
@@ -282,7 +282,7 @@ export function CandidateMessagesTab({
             {(detail?.messages ?? []).map((msg) => {
               const outbound = msg.direction === "outbound";
               const preview = (msg.body_visible ?? msg.body ?? "").trim();
-              const when = formatThreadMessageTime(msg.created_at);
+              const when = formatTimestamp(msg.created_at);
               const subject = detail?.subject?.trim() || "(no subject)";
               const fromLabel = outbound
                 ? (msg.sender_name ?? msg.from_email)
@@ -326,9 +326,10 @@ export function CandidateMessagesTab({
                         </p>
                       </div>
                       <div className="bg-background px-3 py-2.5 text-xs">
-                        <p className="whitespace-pre-wrap break-words text-foreground leading-relaxed">
-                          {preview}
-                        </p>
+                        <div
+                          className="whitespace-pre-wrap break-words text-foreground leading-relaxed prose prose-sm max-w-none"
+                          dangerouslySetInnerHTML={{ __html: preview }}
+                        />
                         {msg.body_quoted ? <QuotedBodyToggle text={msg.body_quoted} /> : null}
                       </div>
                     </div>

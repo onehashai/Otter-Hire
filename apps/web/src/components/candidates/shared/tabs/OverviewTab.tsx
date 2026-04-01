@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@onehash/ui/card";
 import { Icon } from "@onehash/ui/icon";
 import { cn } from "@/lib/utils";
-import { formatThreadMessageTime } from "@/lib/format-date";
+import { formatTimestamp } from "@/lib/format-date";
 import { useAuthSession } from "@/app/providers";
 import { MentionNotesEditor } from "@onehash/ui/editor";
 interface TimelineItem {
@@ -145,7 +145,7 @@ export function OverviewTab({
                         <div className="min-w-0">
                           <p className="text-xs font-medium">{item.action}</p>
                           <p className="text-[10px] text-muted-foreground tabular-nums">
-                            {formatThreadMessageTime(item.date)}
+                            {formatTimestamp(item.date)}
                           </p>
                         </div>
                       </div>
@@ -184,7 +184,7 @@ export function OverviewTab({
                     dateTime={note.date}
                     title={note.date}
                   >
-                    {formatThreadMessageTime(note.date)}
+                    {formatTimestamp(note.date)}
                   </time>
                 </div>
                 <p className="text-xs leading-relaxed text-muted-foreground whitespace-pre-wrap [overflow-wrap:anywhere]">

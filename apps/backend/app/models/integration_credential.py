@@ -35,7 +35,9 @@ class IntegrationCredential(Base):
         nullable=False,
         index=True,
     )
-    integration_id = Column(UUID(as_uuid=True), ForeignKey("integrations.id"), nullable=False, index=True)
+    integration_id = Column(
+        UUID(as_uuid=True), ForeignKey("integrations.id"), nullable=False, index=True
+    )
     job_id = Column(UUID(as_uuid=True), ForeignKey("jobs.id", ondelete="CASCADE"), nullable=True)
     config = Column(JSONB, nullable=False, server_default="{}")
     status = Column(String(32), nullable=False, server_default="pending")

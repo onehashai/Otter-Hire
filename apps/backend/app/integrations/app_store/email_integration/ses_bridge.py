@@ -248,7 +248,9 @@ async def _find_inbox_secret(inbox_address: str) -> str | None:
     async with AsyncSessionLocal() as db:
         job_cred = await credential_store.get_job_credential_by_address(db, inbox_address)
         if job_cred is not None and (job_cred.status or "") in {"pending", "active"}:
-            return str((job_cred.config or {}).get("secret_hash") or settings.inbound_webhook_secret)
+            return str(
+                (job_cred.config or {}).get("secret_hash") or settings.inbound_webhook_secret
+            )
 
         org_cred = await credential_store.get_org_credential_by_address(db, inbox_address)
         if org_cred is None:

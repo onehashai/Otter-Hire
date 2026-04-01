@@ -23,7 +23,9 @@ def upgrade() -> None:
     op.add_column("jobs", sa.Column("email_inbound_address", sa.String(length=320), nullable=True))
     op.add_column(
         "jobs",
-        sa.Column("email_inbound_provider", sa.String(length=32), server_default="ses", nullable=False),
+        sa.Column(
+            "email_inbound_provider", sa.String(length=32), server_default="ses", nullable=False
+        ),
     )
     op.add_column(
         "jobs",
@@ -31,27 +33,51 @@ def upgrade() -> None:
             "email_inbound_status", sa.String(length=32), server_default="inactive", nullable=False
         ),
     )
-    op.add_column("jobs", sa.Column("email_inbound_secret_hash", sa.String(length=128), nullable=True))
+    op.add_column(
+        "jobs", sa.Column("email_inbound_secret_hash", sa.String(length=128), nullable=True)
+    )
     op.add_column(
         "jobs", sa.Column("email_verification_token_hash", sa.String(length=128), nullable=True)
     )
-    op.add_column("jobs", sa.Column("email_verification_expires_at", sa.DateTime(timezone=True), nullable=True))
+    op.add_column(
+        "jobs",
+        sa.Column("email_verification_expires_at", sa.DateTime(timezone=True), nullable=True),
+    )
     op.add_column("jobs", sa.Column("email_verified_at", sa.DateTime(timezone=True), nullable=True))
     op.add_column(
         "jobs",
         sa.Column(
-            "email_verification_status", sa.String(length=32), server_default="pending", nullable=False
+            "email_verification_status",
+            sa.String(length=32),
+            server_default="pending",
+            nullable=False,
         ),
     )
-    op.add_column("jobs", sa.Column("email_verification_provider", sa.String(length=32), nullable=True))
-    op.add_column("jobs", sa.Column("email_verification_email_id", postgresql.UUID(as_uuid=True), nullable=True))
-    op.add_column("jobs", sa.Column("email_verification_action_type", sa.String(length=32), nullable=True))
+    op.add_column(
+        "jobs", sa.Column("email_verification_provider", sa.String(length=32), nullable=True)
+    )
     op.add_column(
         "jobs",
-        sa.Column("email_verification_action_payload", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column("email_verification_email_id", postgresql.UUID(as_uuid=True), nullable=True),
     )
-    op.add_column("jobs", sa.Column("email_verification_detected_at", sa.DateTime(timezone=True), nullable=True))
-    op.add_column("jobs", sa.Column("email_verification_error", sa.String(length=1000), nullable=True))
+    op.add_column(
+        "jobs", sa.Column("email_verification_action_type", sa.String(length=32), nullable=True)
+    )
+    op.add_column(
+        "jobs",
+        sa.Column(
+            "email_verification_action_payload",
+            postgresql.JSONB(astext_type=sa.Text()),
+            nullable=True,
+        ),
+    )
+    op.add_column(
+        "jobs",
+        sa.Column("email_verification_detected_at", sa.DateTime(timezone=True), nullable=True),
+    )
+    op.add_column(
+        "jobs", sa.Column("email_verification_error", sa.String(length=1000), nullable=True)
+    )
 
     op.create_foreign_key(
         "fk_jobs_email_verification_email_id_inbound_emails",
@@ -79,7 +105,9 @@ def upgrade() -> None:
         postgresql_where=sa.text("email_inbound_address IS NOT NULL"),
     )
 
-    op.add_column("inbound_emails", sa.Column("job_id", postgresql.UUID(as_uuid=True), nullable=True))
+    op.add_column(
+        "inbound_emails", sa.Column("job_id", postgresql.UUID(as_uuid=True), nullable=True)
+    )
     op.create_foreign_key(
         "fk_inbound_emails_job_id_jobs",
         "inbound_emails",

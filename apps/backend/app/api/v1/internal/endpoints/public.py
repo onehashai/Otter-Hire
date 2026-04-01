@@ -1894,9 +1894,8 @@ async def ingest_inbound_email(
     )
     conversation_job_id = job_inbox.job_id if job_inbox is not None else None
     secret = (
-        (job_cfg.get("secret_hash") if job_inbox is not None else org_cfg.get("secret_hash"))
-        or settings.inbound_webhook_secret
-    )
+        job_cfg.get("secret_hash") if job_inbox is not None else org_cfg.get("secret_hash")
+    ) or settings.inbound_webhook_secret
     if not secret:
         raise HTTPException(status_code=503, detail="Inbound webhook secret is not configured")
     if not _verify_hmac_signature(signature, secret, raw_body):
@@ -1961,9 +1960,7 @@ async def ingest_inbound_email(
         if len(content) > settings.inbound_max_attachment_bytes:
             continue
         safe_name = _guess_file_name(att.filename, f"attachment_{idx + 1}.bin")
-        storage_key = (
-            f"orgs/{org_id}/inbox/attachments/{inbound_email.id}/{idx + 1}_{safe_name}"
-        )
+        storage_key = f"orgs/{org_id}/inbox/attachments/{inbound_email.id}/{idx + 1}_{safe_name}"
         await storage_service.write_bytes(
             storage_key, content, att.content_type or "application/octet-stream"
         )
@@ -1990,7 +1987,9 @@ async def ingest_inbound_email(
     inbound_email.attachment_primary_storage_key = (
         selected_primary.get("storage_key") if selected_primary else None
     )
-    inbound_email.attachment_primary_sha256 = selected_primary.get("sha256") if selected_primary else None
+    inbound_email.attachment_primary_sha256 = (
+        selected_primary.get("sha256") if selected_primary else None
+    )
     inbound_email.attachment_primary_filename = (
         selected_primary.get("filename") if selected_primary else None
     )

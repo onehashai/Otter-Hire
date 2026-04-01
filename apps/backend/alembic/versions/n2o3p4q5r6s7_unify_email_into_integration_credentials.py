@@ -20,7 +20,9 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column("integration_credentials", sa.Column("job_id", postgresql.UUID(as_uuid=True), nullable=True))
+    op.add_column(
+        "integration_credentials", sa.Column("job_id", postgresql.UUID(as_uuid=True), nullable=True)
+    )
     op.create_foreign_key(
         "fk_integration_credentials_job_id_jobs",
         "integration_credentials",
@@ -129,8 +131,12 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index("ix_integration_credentials_inbound_address", table_name="integration_credentials")
-    op.drop_index("ix_integration_credentials_integration_org_job", table_name="integration_credentials")
+    op.drop_index(
+        "ix_integration_credentials_inbound_address", table_name="integration_credentials"
+    )
+    op.drop_index(
+        "ix_integration_credentials_integration_org_job", table_name="integration_credentials"
+    )
     op.drop_index(
         "uq_integration_credentials_org_integration_org_scope",
         table_name="integration_credentials",

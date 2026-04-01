@@ -49,7 +49,9 @@ def _is_allowed_verification_url(value: str) -> bool:
     return any(host == suffix or host.endswith(f".{suffix}") for suffix in allowed_suffixes)
 
 
-def _to_job_inbox_response_from_cred(job: Job, cred: IntegrationCredential) -> JobEmailInboxResponse:
+def _to_job_inbox_response_from_cred(
+    job: Job, cred: IntegrationCredential
+) -> JobEmailInboxResponse:
     cfg = cred.config or {}
     action_payload = credential_store.cache_get_verify_action(cred.id) or {}
     action_type = str(action_payload.get("type") or cfg.get("verification_action_type") or "")
@@ -83,7 +85,9 @@ async def _get_job_or_404(db: AsyncSession, org_id: UUID, job_id: UUID) -> Job:
     return job
 
 
-async def get_job_email_config(db: AsyncSession, org_id: UUID, job_id: UUID) -> JobEmailConfigResponse:
+async def get_job_email_config(
+    db: AsyncSession, org_id: UUID, job_id: UUID
+) -> JobEmailConfigResponse:
     job = await _get_job_or_404(db, org_id, job_id)
     cred = await credential_store.get_credential(db, org_id=org_id, job_id=job.id)
     configured = bool((cred and (cred.config or {}).get("inbound_address")))
@@ -116,7 +120,9 @@ async def upsert_job_email_config(
 
     cred = await credential_store.get_credential(db, org_id=org_id, job_id=job.id)
     cfg = dict((cred.config if cred else {}) or {})
-    address_unchanged = (str(cfg.get("inbound_address") or "").strip().lower()) == normalized_address
+    address_unchanged = (
+        str(cfg.get("inbound_address") or "").strip().lower()
+    ) == normalized_address
     cfg["inbound_address"] = normalized_address
     cfg["provider"] = body.provider.strip().lower() or "ses"
     if not address_unchanged:

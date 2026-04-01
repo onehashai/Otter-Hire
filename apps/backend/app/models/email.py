@@ -62,5 +62,3 @@ class InboundEmail(Base):
 
     organization = relationship("Organization", foreign_keys=[org_id])
     parsed_candidate = relationship("Candidate")
-
-

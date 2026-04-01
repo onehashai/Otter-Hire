@@ -78,19 +78,17 @@ class OrganizationAdmin(ModelView, model=Organization):
     async def delete_model(self, request: Any, pk: str) -> None:
         """Override delete to handle cascade deletes."""
         print(f"\n=== delete_model called for org {pk} ===")
-        
+
         # Get the organization first
         session: AsyncSession = self.session_maker()
         try:
             # Fetch the organization
-            result = await session.execute(
-                select(Organization).where(Organization.id == pk)
-            )
+            result = await session.execute(select(Organization).where(Organization.id == pk))
             org = result.scalar_one_or_none()
             if not org:
                 print(f"Organization {pk} not found")
                 return
-            
+
             org_id = org.id
             print(f"Starting cascade delete for org {org_id}")
 
@@ -108,20 +106,22 @@ class OrganizationAdmin(ModelView, model=Organization):
             print("Deleting conversations...")
             await session.execute(delete(Conversation).where(Conversation.org_id == org_id))
             print("Deleting documents...")
-            await session.execute(delete(CandidateDocument).where(CandidateDocument.org_id == org_id))
+            await session.execute(
+                delete(CandidateDocument).where(CandidateDocument.org_id == org_id)
+            )
             print("Deleting job applications...")
             await session.execute(delete(JobApplication).where(JobApplication.org_id == org_id))
             print("Deleting candidate jobs...")
             await session.execute(delete(CandidateJobs).where(CandidateJobs.org_id == org_id))
-            
+
             # Delete inbound emails (attachments will cascade)
             print("Deleting inbound emails...")
             await session.execute(delete(InboundEmail).where(InboundEmail.org_id == org_id))
-            
+
             # Delete candidates
             print("Deleting candidates...")
             await session.execute(delete(Candidate).where(Candidate.org_id == org_id))
-            
+
             # Delete job-related records
             print("Deleting stages...")
             await session.execute(delete(Stage).where(Stage.org_id == org_id))
@@ -131,28 +131,31 @@ class OrganizationAdmin(ModelView, model=Organization):
             await session.execute(delete(Job).where(Job.org_id == org_id))
             print("Deleting job categories...")
             await session.execute(delete(JobCategory).where(JobCategory.org_id == org_id))
-            
+
             # Delete templates and automations
             print("Deleting templates...")
             await session.execute(delete(Template).where(Template.org_id == org_id))
             print("Deleting automation executions...")
-            await session.execute(delete(AutomationExecution).where(AutomationExecution.org_id == org_id))
+            await session.execute(
+                delete(AutomationExecution).where(AutomationExecution.org_id == org_id)
+            )
             print("Deleting automations...")
             await session.execute(delete(Automation).where(Automation.org_id == org_id))
-            
+
             # Delete integrations and memberships
             print("Deleting integration credentials...")
-            await session.execute(delete(IntegrationCredential).where(IntegrationCredential.org_id == org_id))
+            await session.execute(
+                delete(IntegrationCredential).where(IntegrationCredential.org_id == org_id)
+            )
             print("Deleting org memberships...")
             await session.execute(delete(OrgMembership).where(OrgMembership.org_id == org_id))
-            
+
             # Delete or update users - set org_id to NULL for users in this org
             print("Updating users to remove org reference...")
             from sqlalchemy import update
-            await session.execute(
-                update(User).where(User.org_id == org_id).values(org_id=None)
-            )
-            
+
+            await session.execute(update(User).where(User.org_id == org_id).values(org_id=None))
+
             # Finally delete the organization itself
             print("Deleting organization...")
             await session.execute(delete(Organization).where(Organization.id == org_id))
@@ -165,6 +168,7 @@ class OrganizationAdmin(ModelView, model=Organization):
             await session.rollback()
             print(f"\n!!! Error deleting organization {pk}: {e}")
             import traceback
+
             traceback.print_exc()
             raise
         finally:

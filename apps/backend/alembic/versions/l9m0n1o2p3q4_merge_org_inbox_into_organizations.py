@@ -29,7 +29,9 @@ def upgrade() -> None:
         "organizations",
         sa.Column("inbox_status", sa.String(length=32), nullable=False, server_default="inactive"),
     )
-    op.add_column("organizations", sa.Column("inbox_secret_hash", sa.String(length=128), nullable=True))
+    op.add_column(
+        "organizations", sa.Column("inbox_secret_hash", sa.String(length=128), nullable=True)
+    )
     op.add_column(
         "organizations",
         sa.Column("inbox_verification_token_hash", sa.String(length=128), nullable=True),
@@ -38,11 +40,16 @@ def upgrade() -> None:
         "organizations",
         sa.Column("inbox_verification_expires_at", sa.DateTime(timezone=True), nullable=True),
     )
-    op.add_column("organizations", sa.Column("inbox_verified_at", sa.DateTime(timezone=True), nullable=True))
+    op.add_column(
+        "organizations", sa.Column("inbox_verified_at", sa.DateTime(timezone=True), nullable=True)
+    )
     op.add_column(
         "organizations",
         sa.Column(
-            "inbox_verification_status", sa.String(length=32), nullable=False, server_default="pending"
+            "inbox_verification_status",
+            sa.String(length=32),
+            nullable=False,
+            server_default="pending",
         ),
     )
     op.add_column(
@@ -143,7 +150,9 @@ def downgrade() -> None:
         sa.Column("verification_token_hash", sa.String(length=128), nullable=True),
         sa.Column("verification_expires_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("verified_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("verification_status", sa.String(length=32), nullable=False, server_default="pending"),
+        sa.Column(
+            "verification_status", sa.String(length=32), nullable=False, server_default="pending"
+        ),
         sa.Column("verification_provider", sa.String(length=32), nullable=True),
         sa.Column("verification_email_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("verification_action_type", sa.String(length=32), nullable=True),
@@ -154,8 +163,12 @@ def downgrade() -> None:
         ),
         sa.Column("verification_detected_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("verification_error", sa.String(length=1000), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.ForeignKeyConstraint(["org_id"], ["organizations.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("org_id", name="uq_org_inboxes_org_id"),

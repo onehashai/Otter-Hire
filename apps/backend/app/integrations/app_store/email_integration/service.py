@@ -101,7 +101,9 @@ def to_org_inbox_response(org_id: UUID, cred: IntegrationCredential) -> OrgInbox
     )
 
 
-async def get_org_inbox(db: AsyncSession, owner: IntegrationOwnerContext) -> IntegrationCredential | None:
+async def get_org_inbox(
+    db: AsyncSession, owner: IntegrationOwnerContext
+) -> IntegrationCredential | None:
     return await credential_store.get_credential(db, org_id=owner.org_id, job_id=None)
 
 

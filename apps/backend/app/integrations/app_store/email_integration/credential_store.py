@@ -155,7 +155,9 @@ def _cache_key_lookup(inbound_address: str) -> str:
 
 def cache_set_verify_action(credential_id: UUID, payload: dict) -> None:
     try:
-        _redis_client().setex(_cache_key_action(credential_id), VERIFY_ACTION_TTL_SECONDS, json.dumps(payload))
+        _redis_client().setex(
+            _cache_key_action(credential_id), VERIFY_ACTION_TTL_SECONDS, json.dumps(payload)
+        )
     except Exception:
         return
 
@@ -170,7 +172,9 @@ def cache_get_verify_action(credential_id: UUID) -> dict | None:
 
 def cache_set_verify_token(credential_id: UUID, payload: dict) -> None:
     try:
-        _redis_client().setex(_cache_key_token(credential_id), VERIFY_TOKEN_TTL_SECONDS, json.dumps(payload))
+        _redis_client().setex(
+            _cache_key_token(credential_id), VERIFY_TOKEN_TTL_SECONDS, json.dumps(payload)
+        )
     except Exception:
         return
 
@@ -185,7 +189,9 @@ def cache_get_verify_token(credential_id: UUID) -> dict | None:
 
 def cache_set_verify_error(credential_id: UUID, message: str) -> None:
     try:
-        _redis_client().setex(_cache_key_error(credential_id), VERIFY_ERROR_TTL_SECONDS, message or "")
+        _redis_client().setex(
+            _cache_key_error(credential_id), VERIFY_ERROR_TTL_SECONDS, message or ""
+        )
     except Exception:
         return
 
@@ -199,7 +205,9 @@ def cache_get_verify_error(credential_id: UUID) -> str | None:
 
 def cache_set_inbound_lookup(inbound_address: str, payload: dict) -> None:
     try:
-        _redis_client().setex(_cache_key_lookup(inbound_address), INBOUND_LOOKUP_TTL_SECONDS, json.dumps(payload))
+        _redis_client().setex(
+            _cache_key_lookup(inbound_address), INBOUND_LOOKUP_TTL_SECONDS, json.dumps(payload)
+        )
     except Exception:
         return
 

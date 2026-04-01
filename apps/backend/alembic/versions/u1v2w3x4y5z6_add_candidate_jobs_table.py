@@ -27,12 +27,24 @@ def upgrade() -> None:
         sa.Column("candidate_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("job_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("stage_id", postgresql.UUID(as_uuid=True), nullable=True),
-        sa.Column("assignment_status", sa.String(length=32), nullable=False, server_default="active"),
+        sa.Column(
+            "assignment_status", sa.String(length=32), nullable=False, server_default="active"
+        ),
         sa.Column("source", sa.String(length=100), nullable=True),
         sa.Column("applied_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("assigned_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.CheckConstraint(
             "assignment_status IN ('active', 'rejected', 'hired', 'withdrawn')",
             name="ck_candidate_jobs_assignment_status",
@@ -44,9 +56,14 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("assigned_id"),
         sa.UniqueConstraint("candidate_id", "job_id", name="uq_candidate_jobs_candidate_job"),
     )
-    op.create_index("ix_candidate_jobs_org_job", "Candidate_jobs", ["org_id", "job_id"], unique=False)
     op.create_index(
-        "ix_candidate_jobs_org_candidate", "Candidate_jobs", ["org_id", "candidate_id"], unique=False
+        "ix_candidate_jobs_org_job", "Candidate_jobs", ["org_id", "job_id"], unique=False
+    )
+    op.create_index(
+        "ix_candidate_jobs_org_candidate",
+        "Candidate_jobs",
+        ["org_id", "candidate_id"],
+        unique=False,
     )
     op.create_index(
         "ix_candidate_jobs_org_status_updated",

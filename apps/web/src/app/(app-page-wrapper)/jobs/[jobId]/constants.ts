@@ -49,10 +49,10 @@ export function getCityDisplayName(city: string): string {
 const setupSectionDefs = [
   { slug: "info", key: "job_info" },
   { slug: "description", key: "job_description" },
-  { slug: "distribution", key: "distribution" },
   { slug: "application", key: "application_form" },
   { slug: "stages", key: "hiring_stages" },
   { slug: "team", key: "hiring_team" },
+  { slug: "integration", key: "integration" },
 ] as const;
 
 export type SetupStepSlug = (typeof setupSectionDefs)[number]["slug"];

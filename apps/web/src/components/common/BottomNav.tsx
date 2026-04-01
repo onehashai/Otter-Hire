@@ -1,6 +1,6 @@
 "use client";
 
-import { Briefcase, MoreHorizontal } from "lucide-react";
+import { Briefcase, MoreHorizontal, Users, Zap } from "lucide-react";
 // TODO(mvp-nav): Re-enable Home/Dashboard icon in bottom nav after MVP launch.
 // import { LayoutDashboard } from "lucide-react";
 import { NavLink } from "@/components/common/NavLink";
@@ -13,6 +13,8 @@ const primaryTabs = [
   // TODO(mvp-nav): Re-enable Home/Dashboard tab after MVP launch.
   // { title: "Home", url: "/", icon: LayoutDashboard },
   { title: "Jobs", url: "/jobs", icon: Briefcase },
+  { title: "Candidates", url: "/candidates", icon: Users },
+  { title: "Automations", url: "/automations", icon: Zap },
 ];
 
 export function BottomNav() {

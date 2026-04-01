@@ -9,9 +9,6 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@onehash/ui/dropdown-menu";
 import {
@@ -58,6 +55,8 @@ export function ActionButtons({
   const { toast } = useToast();
   const [movingToStageId, setMovingToStageId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [isMoveStageListOpen, setIsMoveStageListOpen] = useState(false);
+  const [isReconsiderListOpen, setIsReconsiderListOpen] = useState(false);
 
   const sortedStages = useMemo(
     () => [...(stages ?? [])].sort((a, b) => a.position - b.position),
@@ -100,7 +99,7 @@ export function ActionButtons({
     }
     try {
       setMovingToStageId(stageId);
-      await updateCandidateStage(candidateId, stageId);
+      await updateCandidateStage(candidateId, stageId, jobId);
       toast({ title: `Moved to ${stageName}` });
       if (onCandidateUpdated) {
         await onCandidateUpdated();
@@ -129,8 +128,8 @@ export function ActionButtons({
     }
     try {
       setMovingToStageId(rejectedStage.id);
-      await updateCandidateStage(candidateId, rejectedStage.id);
-      await updateCandidateStatus(candidateId, "rejected");
+      await updateCandidateStage(candidateId, rejectedStage.id, jobId);
+      await updateCandidateStatus(candidateId, "rejected", jobId);
       toast({ title: "Moved to Rejected" });
       if (onCandidateUpdated) {
         await onCandidateUpdated();
@@ -155,8 +154,8 @@ export function ActionButtons({
     }
     try {
       setMovingToStageId(stageId);
-      await updateCandidateStage(candidateId, stageId);
-      await updateCandidateStatus(candidateId, "active");
+      await updateCandidateStage(candidateId, stageId, jobId);
+      await updateCandidateStatus(candidateId, "active", jobId);
       toast({ title: `Reconsidered to ${stageName}` });
       if (onCandidateUpdated) {
         await onCandidateUpdated();
@@ -172,6 +171,16 @@ export function ActionButtons({
     } finally {
       setMovingToStageId(null);
     }
+  };
+
+  const toggleMoveStageList = () => {
+    setIsMoveStageListOpen((prev) => !prev);
+    setIsReconsiderListOpen(false);
+  };
+
+  const toggleReconsiderList = () => {
+    setIsReconsiderListOpen((prev) => !prev);
+    setIsMoveStageListOpen(false);
   };
 
   return (
@@ -195,74 +204,103 @@ export function ActionButtons({
             ? `Move to ${nextStage.name}`
             : "At final stage"}
       </Button>
-      <DropdownMenu>
+      <DropdownMenu
+        onOpenChange={(open) => {
+          if (!open) {
+            setIsMoveStageListOpen(false);
+            setIsReconsiderListOpen(false);
+          }
+        }}
+      >
         <DropdownMenuTrigger asChild>
           <Button variant="outline" size="sm" className="h-8 w-8 p-0">
             <Icon name="MoreHorizontal" className="h-3.5 w-3.5" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-48">
+        <DropdownMenuContent align="end" className="w-40">
           {isInRejectedStage ? (
-            <DropdownMenuSub>
-              <DropdownMenuSubTrigger className="text-xs cursor-pointer">
-                <Icon name="ArrowLeftRight" className="h-3.5 w-3.5 mr-2" /> Reconsider to stage
-              </DropdownMenuSubTrigger>
-              <DropdownMenuSubContent className="w-48">
-                {reconsiderTargets.length === 0 ? (
-                  <DropdownMenuItem disabled className="text-xs">
-                    No available stages
-                  </DropdownMenuItem>
-                ) : (
-                  reconsiderTargets.map((stage) => (
-                    <DropdownMenuItem
-                      key={stage.id}
-                      className="text-xs"
-                      disabled={Boolean(movingToStageId)}
-                      onClick={() => void handleReconsider(stage.id, stage.name)}
-                    >
-                      {movingToStageId === stage.id ? (
-                        <Icon name="Loader" className="h-3.5 w-3.5 mr-2 animate-spin" />
-                      ) : null}
-                      {stage.name}
+            <div
+              onMouseEnter={() => setIsReconsiderListOpen(true)}
+              onMouseLeave={() => setIsReconsiderListOpen(false)}
+            >
+              <DropdownMenuItem
+                className="text-xs cursor-pointer flex w-full items-center"
+                onSelect={(e) => e.preventDefault()}
+                onClick={(e) => {
+                  e.preventDefault();
+                  toggleReconsiderList();
+                }}
+              >
+                <Icon name="ArrowLeftRight" className="h-3.5 w-3.5 mr-2" />
+                <span>Reconsider to stage</span>
+                <Icon name="ChevronLeft" className="h-3.5 w-3.5 ml-1 rotate-[-90deg]" />
+              </DropdownMenuItem>
+              {isReconsiderListOpen ? (
+                <div className="pb-1">
+                  {reconsiderTargets.length === 0 ? (
+                    <DropdownMenuItem disabled className="text-xs pl-8">
+                      No available stages
                     </DropdownMenuItem>
-                  ))
-                )}
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
+                  ) : (
+                    reconsiderTargets.map((stage) => (
+                      <DropdownMenuItem
+                        key={stage.id}
+                        className="text-xs pl-8"
+                        disabled={Boolean(movingToStageId)}
+                        onClick={() => void handleReconsider(stage.id, stage.name)}
+                      >
+                        {movingToStageId === stage.id ? (
+                          <Icon name="Loader" className="h-3.5 w-3.5 mr-2 animate-spin" />
+                        ) : null}
+                        {stage.name}
+                      </DropdownMenuItem>
+                    ))
+                  )}
+                </div>
+              ) : null}
+            </div>
           ) : (
-            <DropdownMenuSub>
-              <DropdownMenuSubTrigger className="text-xs cursor-pointer">
-                <Icon name="ArrowLeftRight" className="h-3.5 w-3.5 mr-2" /> Move to stage
-              </DropdownMenuSubTrigger>
-              <DropdownMenuSubContent className="w-48">
-                {moveTargets.length === 0 ? (
-                  <DropdownMenuItem disabled className="text-xs">
-                    No other stages
-                  </DropdownMenuItem>
-                ) : (
-                  moveTargets.map((stage) => (
-                    <DropdownMenuItem
-                      key={stage.id}
-                      className="text-xs"
-                      disabled={Boolean(movingToStageId)}
-                      onClick={() => void handleMove(stage.id, stage.name)}
-                    >
-                      {movingToStageId === stage.id ? (
-                        <Icon name="Loader" className="h-3.5 w-3.5 mr-2 animate-spin" />
-                      ) : null}
-                      {stage.name}
+            <div
+              onMouseEnter={() => setIsMoveStageListOpen(true)}
+              onMouseLeave={() => setIsMoveStageListOpen(false)}
+            >
+              <DropdownMenuItem
+                className="text-xs cursor-pointer flex w-full items-center"
+                onSelect={(e) => e.preventDefault()}
+                onClick={(e) => {
+                  e.preventDefault();
+                  toggleMoveStageList();
+                }}
+              >
+                <Icon name="ArrowLeftRight" className="h-3.5 w-3.5 mr-2" />
+                <span>Move to stage</span>
+                <Icon name="ChevronLeft" className="h-3.5 w-3.5 ml-1 rotate-[-90deg]" />
+              </DropdownMenuItem>
+              {isMoveStageListOpen ? (
+                <div className="pb-1">
+                  {moveTargets.length === 0 ? (
+                    <DropdownMenuItem disabled className="text-xs pl-8">
+                      No other stages
                     </DropdownMenuItem>
-                  ))
-                )}
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
+                  ) : (
+                    moveTargets.map((stage) => (
+                      <DropdownMenuItem
+                        key={stage.id}
+                        className="text-xs pl-8"
+                        disabled={Boolean(movingToStageId)}
+                        onClick={() => void handleMove(stage.id, stage.name)}
+                      >
+                        {movingToStageId === stage.id ? (
+                          <Icon name="Loader" className="h-3.5 w-3.5 mr-2 animate-spin" />
+                        ) : null}
+                        {stage.name}
+                      </DropdownMenuItem>
+                    ))
+                  )}
+                </div>
+              ) : null}
+            </div>
           )}
-          <DropdownMenuItem className="text-xs" onClick={() => toast({ title: "Email composed" })}>
-            <Icon name="Send" className="h-3.5 w-3.5 mr-2" /> Send Email
-          </DropdownMenuItem>
-          <DropdownMenuItem className="text-xs" onClick={() => toast({ title: "Offer created" })}>
-            <Icon name="ScrollText" className="h-3.5 w-3.5 mr-2" /> Create Offer
-          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem
             className="text-xs text-destructive focus:text-destructive"
@@ -313,7 +351,7 @@ export function ActionButtons({
                         setDeleting(true);
                         await deleteCandidate(candidateId);
                         toast({ title: "Candidate deleted" });
-                        router.push(jobId ? `/jobs/${encodeURIComponent(jobId)}` : "/talent-pool");
+                        router.push(jobId ? `/jobs/${encodeURIComponent(jobId)}` : "/candidates");
                       } catch (err) {
                         toast({
                           title: err instanceof Error ? err.message : "Failed to delete candidate",

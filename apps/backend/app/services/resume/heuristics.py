@@ -176,9 +176,7 @@ def score_location(value: Optional[str]) -> int:
     return max(score, 0)
 
 
-def should_replace_location(
-    existing_location: Optional[str], new_location: Optional[str]
-) -> bool:
+def should_replace_location(existing_location: Optional[str], new_location: Optional[str]) -> bool:
     existing_score = score_location(existing_location)
     new_score = score_location(new_location)
     if new_location is None and existing_score <= 1:

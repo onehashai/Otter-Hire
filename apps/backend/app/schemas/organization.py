@@ -1,7 +1,9 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
+
+from app.schemas.validators import normalize_email
 
 
 class UpdateOrganizationRequest(BaseModel):
@@ -49,8 +51,13 @@ class OrgInboxResponse(BaseModel):
 
 
 class UpsertOrgInboxRequest(BaseModel):
-    inbox_address: str = Field(min_length=3, max_length=320)
+    inbox_address: EmailStr
     provider: str = Field(default="ses", min_length=2, max_length=32)
+
+    @field_validator("inbox_address")
+    @classmethod
+    def validate_inbox_address(cls, value: EmailStr) -> str:
+        return normalize_email(value)
 
 
 class OrgInboxActionResponse(BaseModel):

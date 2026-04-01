@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { MainPagesLayout } from "@/components/common/MainPagesLayout";
 import { useSetPageMetadata } from "@/hooks/useSetPageMetadata";
@@ -13,7 +13,16 @@ import {
   type JobListItemResponse,
 } from "@/api";
 import { importCandidatesCsv } from "@/api/candidates";
-import { TalentPoolCandidatesTable } from "@/components/candidates/talent_pool/TalentPoolCandidatesTable";
+import {
+  CANDIDATE_ALL_COLUMNS,
+  CANDIDATE_COLUMN_DEFS,
+  CANDIDATE_FIXED_COLUMNS,
+  type CandidateColumnKey,
+  CandidatesTable,
+  DEFAULT_VISIBLE_CANDIDATE_COLUMNS,
+  normalizeCandidateColumnOrder,
+  normalizeVisibleCandidateColumns,
+} from "@/components/candidates/CandidatesTable";
 import { Button } from "@onehash/ui/button";
 import { EmptyCard, ErrorCard } from "@onehash/ui/card";
 import { SelectField } from "@onehash/ui/select";
@@ -40,19 +49,29 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@onehash/ui/dropdown-menu";
+import { Checkbox } from "@onehash/ui/checkbox";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@onehash/ui/sheet";
 import { Icon } from "@onehash/ui/icon";
 import { toast } from "@onehash/ui/sonner";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { getMyPreferences, updateMyPreferences } from "@/api/users";
 
 const PAGE_SIZE = 25;
-const STATUS_ALL = "__all__";
+const ASSIGNMENT_ALL = "all";
+const ASSIGNMENT_ASSIGNED = "assigned";
+const ASSIGNMENT_UNASSIGNED = "unassigned";
 
-export default function TalentPoolPage() {
+export default function CandidatesPage() {
   const { t } = useTranslation();
+  const isMobile = useIsMobile();
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [status, setStatus] = useState<string>(STATUS_ALL);
+  const [assignment, setAssignment] = useState<string>(ASSIGNMENT_ALL);
   const [page, setPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [addOpen, setAddOpen] = useState(false);
@@ -67,13 +86,28 @@ export default function TalentPoolPage() {
 
   const [items, setItems] = useState<CandidateListItemResponse[]>([]);
   const [jobs, setJobs] = useState<JobListItemResponse[]>([]);
+  const [visibleColumns, setVisibleColumns] = useState<CandidateColumnKey[]>(
+    DEFAULT_VISIBLE_CANDIDATE_COLUMNS,
+  );
+  const [columnOrder, setColumnOrder] = useState<CandidateColumnKey[]>(CANDIDATE_ALL_COLUMNS);
+  const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
+  const [columnSubmenuOpen, setColumnSubmenuOpen] = useState(false);
+  const [columnPickerOpen, setColumnPickerOpen] = useState(false);
+  const [preferencesLoaded, setPreferencesLoaded] = useState(false);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const lastSavedColumnsRef = useRef<string>(
+    JSON.stringify(normalizeVisibleCandidateColumns(DEFAULT_VISIBLE_CANDIDATE_COLUMNS)),
+  );
+  const lastSavedOrderRef = useRef<string>(
+    JSON.stringify(normalizeCandidateColumnOrder(CANDIDATE_ALL_COLUMNS)),
+  );
+  const draggedColumnRef = useRef<CandidateColumnKey | null>(null);
 
   useSetPageMetadata({
-    title: t("talent_pool_title"),
-    subtitle: t("talent_pool_subtitle"),
+    title: t("candidates_title"),
+    subtitle: t("candidates_subtitle"),
   });
 
   useEffect(() => {
@@ -84,39 +118,105 @@ export default function TalentPoolPage() {
   useEffect(() => {
     setPage(1);
     setSelectedIds(new Set());
-  }, [debouncedSearch, status]);
+  }, [debouncedSearch, assignment]);
 
   useEffect(() => {
     setSelectedIds(new Set());
   }, [page]);
 
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await getMyPreferences();
+        const prefs = response.preferences as {
+          tables?: { candidates?: { visible_columns?: string[]; column_order?: string[] } };
+        };
+        const stored = prefs?.tables?.candidates?.visible_columns;
+        const storedOrder = prefs?.tables?.candidates?.column_order;
+        const normalized = normalizeVisibleCandidateColumns(stored);
+        const normalizedOrder = normalizeCandidateColumnOrder(storedOrder);
+        if (!cancelled) {
+          setVisibleColumns(normalized);
+          setColumnOrder(normalizedOrder);
+          lastSavedColumnsRef.current = JSON.stringify(normalized);
+          lastSavedOrderRef.current = JSON.stringify(normalizedOrder);
+        }
+      } catch {
+        // Keep defaults when preferences are unavailable.
+      } finally {
+        if (!cancelled) setPreferencesLoaded(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!preferencesLoaded) return;
+    const normalized = normalizeVisibleCandidateColumns(visibleColumns);
+    const normalizedOrder = normalizeCandidateColumnOrder(columnOrder);
+    const serialized = JSON.stringify(normalized);
+    const serializedOrder = JSON.stringify(normalizedOrder);
+    if (
+      serialized === lastSavedColumnsRef.current &&
+      serializedOrder === lastSavedOrderRef.current
+    ) {
+      return;
+    }
+    const id = setTimeout(() => {
+      void (async () => {
+        try {
+          await updateMyPreferences({
+            tables: {
+              candidates: {
+                visible_columns: normalized,
+                column_order: normalizedOrder,
+                version: 1,
+              },
+            },
+          });
+          lastSavedColumnsRef.current = serialized;
+          lastSavedOrderRef.current = serializedOrder;
+        } catch {
+          toast.error("Unable to save column preferences.");
+        }
+      })();
+    }, 300);
+    return () => clearTimeout(id);
+  }, [preferencesLoaded, visibleColumns, columnOrder]);
+
   const totalPages = useMemo(() => Math.max(1, Math.ceil(total / PAGE_SIZE)), [total]);
   const offset = (page - 1) * PAGE_SIZE;
   const selectedCount = selectedIds.size;
 
-  const hasActiveFilters = status !== STATUS_ALL;
-  const clearAllFilters = () => setStatus(STATUS_ALL);
+  const hasActiveFilters = assignment !== ASSIGNMENT_ALL;
+  const clearAllFilters = () => {
+    setAssignment(ASSIGNMENT_ALL);
+  };
 
-  const activeChips = hasActiveFilters
-    ? [
-        {
-          label: t(status),
-          clear: () => setStatus(STATUS_ALL),
-        },
-      ]
-    : [];
+  const assignmentChipLabel = () => {
+    if (assignment === ASSIGNMENT_ASSIGNED) return t("candidates_assignment_assigned");
+    if (assignment === ASSIGNMENT_UNASSIGNED) return t("candidates_assignment_unassigned");
+    return "";
+  };
+
+  const activeChips =
+    assignment !== ASSIGNMENT_ALL
+      ? [{ label: assignmentChipLabel(), clear: () => setAssignment(ASSIGNMENT_ALL) }]
+      : [];
 
   const filterContent = (
     <div className="space-y-4 p-1">
       <SelectField
-        label={t("status")}
-        value={status}
-        onValueChange={setStatus}
+        label={t("candidates_assignment")}
+        value={assignment}
+        onValueChange={setAssignment}
         options={[
-          { value: STATUS_ALL, label: t("all") },
-          { value: "active", label: t("active") },
-          { value: "rejected", label: t("rejected") },
-          { value: "hired", label: t("hired") },
+          { value: ASSIGNMENT_ALL, label: t("candidates_assignment_all") },
+          { value: ASSIGNMENT_ASSIGNED, label: t("candidates_assignment_assigned") },
+          { value: ASSIGNMENT_UNASSIGNED, label: t("candidates_assignment_unassigned") },
         ]}
       />
     </div>
@@ -127,9 +227,9 @@ export default function TalentPoolPage() {
     setLoading(true);
     try {
       const res = await getCandidatesPaginated({
-        talent_pool_only: true,
+        ...(assignment === ASSIGNMENT_UNASSIGNED ? { unassignedOnly: true } : {}),
+        ...(assignment === ASSIGNMENT_ASSIGNED ? { assigned_only: true } : {}),
         search: debouncedSearch || undefined,
-        status: status === STATUS_ALL ? undefined : status,
         limit: PAGE_SIZE,
         offset,
       });
@@ -140,7 +240,7 @@ export default function TalentPoolPage() {
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch, status, offset]);
+  }, [debouncedSearch, assignment, offset]);
 
   useEffect(() => {
     void refresh();
@@ -167,7 +267,16 @@ export default function TalentPoolPage() {
       return;
     }
 
-    const header = ["name", "email", "phone", "source", "status", "created_at"];
+    const header = [
+      "name",
+      "email",
+      "phone",
+      "source",
+      "status",
+      "job_title",
+      "stage_name",
+      "created_at",
+    ];
 
     const escape = (value: unknown) => {
       const s = value === null || value === undefined ? "" : String(value);
@@ -179,7 +288,16 @@ export default function TalentPoolPage() {
     const lines = [
       header.join(","),
       ...rows.map((c) =>
-        [c.name, c.email, c.phone ?? "", c.source ?? "", c.status ?? "", c.created_at]
+        [
+          c.name,
+          c.email,
+          c.phone ?? "",
+          c.source ?? "",
+          c.status ?? "",
+          c.job_title ?? "",
+          c.stage_name ?? "",
+          c.created_at,
+        ]
           .map(escape)
           .join(","),
       ),
@@ -198,10 +316,113 @@ export default function TalentPoolPage() {
   };
 
   const handleExport = () => {
-    exportCsv(items, `talent_pool_page_${page}.csv`);
+    exportCsv(items, `candidates_page_${page}.csv`);
   };
 
   const visibleIds = useMemo(() => items.map((c) => c.id), [items]);
+  const visibleColumnSet = useMemo(
+    () => new Set(normalizeVisibleCandidateColumns(visibleColumns)),
+    [visibleColumns],
+  );
+  const orderedColumns = useMemo(() => normalizeCandidateColumnOrder(columnOrder), [columnOrder]);
+  const toggleColumn = (columnKey: CandidateColumnKey, nextChecked: boolean) => {
+    if (CANDIDATE_FIXED_COLUMNS.includes(columnKey)) return;
+    setVisibleColumns((prev) => {
+      const next = new Set(normalizeVisibleCandidateColumns(prev));
+      if (nextChecked) next.add(columnKey);
+      else next.delete(columnKey);
+      for (const fixedKey of CANDIDATE_FIXED_COLUMNS) next.add(fixedKey);
+      return normalizeVisibleCandidateColumns(Array.from(next));
+    });
+  };
+  const resetColumns = () => {
+    setVisibleColumns(DEFAULT_VISIBLE_CANDIDATE_COLUMNS);
+    setColumnOrder(CANDIDATE_ALL_COLUMNS);
+  };
+  const moveColumn = (from: CandidateColumnKey, to: CandidateColumnKey) => {
+    if (from === to) return;
+    setColumnOrder((prev) => {
+      const normalized = normalizeCandidateColumnOrder(prev);
+      const fromIndex = normalized.indexOf(from);
+      const toIndex = normalized.indexOf(to);
+      if (fromIndex < 0 || toIndex < 0) return normalized;
+      const next = [...normalized];
+      const [removed] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, removed);
+      return next;
+    });
+  };
+  const handleDragStart = (columnKey: CandidateColumnKey) => {
+    draggedColumnRef.current = columnKey;
+  };
+  const handleDrop = (targetColumn: CandidateColumnKey) => {
+    const dragged = draggedColumnRef.current;
+    draggedColumnRef.current = null;
+    if (!dragged) return;
+    moveColumn(dragged, targetColumn);
+  };
+  const columnLabel = (columnKey: CandidateColumnKey) => {
+    if (columnKey === "assigned_jobs") return t("candidates_assigned_jobs");
+    if (columnKey === "created_at") return t("candidates_table_created");
+    return CANDIDATE_COLUMN_DEFS[columnKey].label;
+  };
+  const columnPickerContent = (
+    <div className="space-y-3">
+      <div className="space-y-2">
+        {orderedColumns.map((columnKey) => {
+          const fixed = CANDIDATE_COLUMN_DEFS[columnKey].fixed;
+          const checked = visibleColumnSet.has(columnKey);
+          return (
+            <label
+              key={columnKey}
+              draggable
+              onDragStart={() => handleDragStart(columnKey)}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={() => handleDrop(columnKey)}
+              onDragEnd={() => {
+                draggedColumnRef.current = null;
+              }}
+              className="flex items-center justify-between gap-2 rounded-md border border-border px-2.5 py-2 cursor-move"
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <Checkbox
+                  checked={checked}
+                  disabled={fixed}
+                  onCheckedChange={(v) => toggleColumn(columnKey, !!v)}
+                  aria-label={columnLabel(columnKey)}
+                />
+                <span className="text-xs truncate">{columnLabel(columnKey)}</span>
+              </div>
+              {fixed ? (
+                <span className="text-[10px] text-muted-foreground shrink-0">Required</span>
+              ) : null}
+            </label>
+          );
+        })}
+      </div>
+      <div className="flex items-center justify-between gap-2">
+        <Button variant="ghost" size="sm" className="h-7 text-xs px-2" onClick={resetColumns}>
+          Reset to default
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 text-xs px-2"
+          onClick={() => {
+            if (isMobile) {
+              setColumnPickerOpen(false);
+              return;
+            }
+            setColumnSubmenuOpen(false);
+            setActionsMenuOpen(false);
+          }}
+        >
+          Close
+        </Button>
+      </div>
+    </div>
+  );
+
   const toggleSelected = (candidateId: string, nextSelected: boolean) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -306,13 +527,37 @@ export default function TalentPoolPage() {
           <Button size="sm" className="h-9 md:h-8 text-xs gap-1.5" onClick={() => setAddOpen(true)}>
             <Icon name="Plus" className="h-3.5 w-3.5" /> Create
           </Button>
-          <DropdownMenu>
+          <DropdownMenu
+            open={actionsMenuOpen}
+            onOpenChange={(open) => {
+              setActionsMenuOpen(open);
+              if (!open) setColumnSubmenuOpen(false);
+            }}
+          >
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm" className="h-9 md:h-8 w-9 p-0">
                 <Icon name="MoreHorizontal" className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
+              {isMobile ? (
+                <DropdownMenuItem
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    setActionsMenuOpen(false);
+                    setColumnPickerOpen(true);
+                  }}
+                >
+                  Column picker
+                </DropdownMenuItem>
+              ) : (
+                <DropdownMenuSub open={columnSubmenuOpen} onOpenChange={setColumnSubmenuOpen}>
+                  <DropdownMenuSubTrigger>Column picker</DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent className="w-80">
+                    {columnPickerContent}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+              )}
               <DropdownMenuItem
                 onSelect={(e) => {
                   e.preventDefault();
@@ -344,16 +589,14 @@ export default function TalentPoolPage() {
           ))}
         </div>
       ) : items.length === 0 ? (
-        <EmptyCard
-          icon="Mail"
-          title={t("talent_pool_title")}
-          description={t("talent_pool_empty")}
-        />
+        <EmptyCard icon="Users" title={t("candidates_title")} description={t("candidates_empty")} />
       ) : (
         <>
-          <TalentPoolCandidatesTable
+          <CandidatesTable
             items={items}
             jobs={jobs}
+            visibleColumns={visibleColumns}
+            columnOrder={columnOrder}
             selectedIds={selectedIds}
             onToggleSelected={toggleSelected}
             onToggleAllVisible={toggleAllVisible}
@@ -384,49 +627,6 @@ export default function TalentPoolPage() {
               </Button>
             </div>
           </div>
-
-          <Dialog open={importOpen} onOpenChange={setImportOpen}>
-            <DialogContent className="sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle>Import Candidates</DialogTitle>
-                <DialogDescription>Upload CSV with required columns: name,email</DialogDescription>
-              </DialogHeader>
-              <div className="space-y-2">
-                <p className="text-xs text-muted-foreground">Optional columns: phone,source</p>
-                <input
-                  type="file"
-                  accept=".csv,text/csv"
-                  onChange={(e) => setImportFile(e.target.files?.[0] ?? null)}
-                  className="block w-full text-sm"
-                />
-              </div>
-              <DialogFooter>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setImportOpen(false)}
-                  disabled={importLoading}
-                >
-                  {t("cancel")}
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={() => void handleImport()}
-                  disabled={importLoading || !importFile}
-                  pending={importLoading}
-                >
-                  Import
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-          <AddCandidateDialog
-            open={addOpen}
-            onOpenChange={setAddOpen}
-            onAdded={() => void refresh()}
-          />
 
           {selectedCount > 0 ? (
             <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50">
@@ -507,6 +707,53 @@ export default function TalentPoolPage() {
           </AlertDialog>
         </>
       )}
+
+      <Dialog open={importOpen} onOpenChange={setImportOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Import Candidates</DialogTitle>
+            <DialogDescription>Upload CSV with required columns: name,email</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">Optional columns: phone,source</p>
+            <input
+              type="file"
+              accept=".csv,text/csv"
+              onChange={(e) => setImportFile(e.target.files?.[0] ?? null)}
+              className="block w-full text-sm"
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setImportOpen(false)}
+              disabled={importLoading}
+            >
+              {t("cancel")}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => void handleImport()}
+              disabled={importLoading || !importFile}
+              pending={importLoading}
+            >
+              Import
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Sheet open={columnPickerOpen} onOpenChange={setColumnPickerOpen}>
+        <SheetContent side="bottom" className="h-[70vh] rounded-t-2xl overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>Column picker</SheetTitle>
+          </SheetHeader>
+          <div className="mt-4">{columnPickerContent}</div>
+        </SheetContent>
+      </Sheet>
+      <AddCandidateDialog open={addOpen} onOpenChange={setAddOpen} onAdded={() => void refresh()} />
     </MainPagesLayout>
   );
 }

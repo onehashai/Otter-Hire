@@ -28,16 +28,16 @@ import { useTranslation } from "react-i18next";
 
 const navItems = [
   // TODO(mvp-nav): Re-enable Dashboard in sidebar after MVP launch.
-  // { title: "Dashboard", url: "/", icon: LayoutDashboard },
-  { title: "Jobs", url: "/jobs", icon: Briefcase },
-  { title: "Talent Pool", url: "/talent-pool", icon: Users },
-  { title: "Templates", url: "/templates", icon: FileText },
+  // { titleKey: "nav_dashboard", url: "/", icon: LayoutDashboard },
+  { titleKey: "jobs_title", url: "/jobs", icon: Briefcase },
+  { titleKey: "candidates_title", url: "/candidates", icon: Users },
+  { titleKey: "templates_title", url: "/templates", icon: FileText },
   // TODO(mvp-nav): Re-enable Interviews in sidebar post-messaging launch.
-  // { title: "Interviews", url: "/interviews", icon: Calendar },
-  { title: "Reports", url: "/reports", icon: BarChart3 },
-  { title: "Automations", url: "/automations", icon: Zap },
-  { title: "AI Assistant", url: "/ai-assistant", icon: Bot },
-  { title: "Settings", url: "/settings/profile", icon: Settings },
+  // { titleKey: "nav_interviews", url: "/interviews", icon: Calendar },
+  { titleKey: "reports_title", url: "/reports", icon: BarChart3 },
+  { titleKey: "automations_title", url: "/automations", icon: Zap },
+  { titleKey: "ai_assistant_title", url: "/ai-assistant", icon: Bot },
+  { titleKey: "settings_title", url: "/settings/profile", icon: Settings },
 ];
 
 interface AppSidebarProps {
@@ -94,10 +94,11 @@ export function AppSidebar({ collapsed, onToggle, onOpenCommandPalette }: AppSid
       <nav className="flex-1 overflow-y-auto py-2 px-2 space-y-0.5">
         {navItems.map((item) => {
           const isActive = item.url === "/" ? pathname === "/" : pathname.startsWith(item.url);
+          const label = t(item.titleKey);
 
           const link = (
             <NavLink
-              key={item.title}
+              key={item.url}
               href={item.url}
               end={item.url === "/"}
               className={cn(
@@ -108,16 +109,16 @@ export function AppSidebar({ collapsed, onToggle, onOpenCommandPalette }: AppSid
               activeClassName=""
             >
               <item.icon className="h-4 w-4 shrink-0" />
-              {!collapsed && <span>{item.title}</span>}
+              {!collapsed && <span>{label}</span>}
             </NavLink>
           );
 
           if (collapsed) {
             return (
-              <Tooltip key={item.title}>
+              <Tooltip key={item.url}>
                 <TooltipTrigger asChild>{link}</TooltipTrigger>
                 <TooltipContent side="right" className="text-xs">
-                  {item.title}
+                  {label}
                 </TooltipContent>
               </Tooltip>
             );

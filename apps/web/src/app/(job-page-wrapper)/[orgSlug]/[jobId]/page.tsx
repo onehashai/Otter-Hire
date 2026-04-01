@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@onehash/ui/button";
@@ -14,7 +14,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@onehash/ui/dialog";
-import { InputField } from "@onehash/ui/input";
+import { InputField, PhoneNumberField, isValidPhoneNumber } from "@onehash/ui/input";
 import { Label } from "@onehash/ui/label";
 import { Avatar } from "@onehash/ui/avatar";
 import { Icon } from "@onehash/ui/icon";
@@ -30,6 +30,7 @@ import {
 } from "@/api";
 import { PLATFORM_NAME } from "@/lib/constants";
 import { parseOrgSlug } from "@/lib/public-careers-org";
+import { isValidEmail, normalizeEmail } from "@/lib/validation/contact";
 
 type ApplyFile = {
   name: string;
@@ -38,14 +39,6 @@ type ApplyFile = {
   url?: string;
   uploading?: boolean;
 };
-
-function newIdempotencyKey(): string {
-  const c = typeof globalThis !== "undefined" ? globalThis.crypto : undefined;
-  if (c && typeof c.randomUUID === "function") {
-    return c.randomUUID();
-  }
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 11)}`;
-}
 
 function formatSalary(job: PublicJobDetail): string | null {
   const currencySymbol =
@@ -99,6 +92,7 @@ export default function CareerJobDetailPage() {
     files: {} as Record<string, ApplyFile | undefined>,
   });
   const [applySubmitting, setApplySubmitting] = useState(false);
+  const [applyErrors, setApplyErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const parsed = parseOrgSlug(orgSlug);
@@ -125,42 +119,116 @@ export default function CareerJobDetailPage() {
   const closeApplyDialog = () => {
     setApplyDialogOpen(false);
     setApplyForm({ fullName: "", email: "", phone: "", answers: {}, files: {} });
+    setApplyErrors({});
   };
 
   const applicationSchema = (job?.application_form_schema ?? {}) as Record<string, unknown>;
-  const defaultFields = (applicationSchema.default_fields ?? {}) as Record<
-    string,
-    { visibility?: string; label?: string }
-  >;
+
+  const defaultFields = useMemo(
+    () =>
+      (applicationSchema.default_fields ?? {}) as Record<
+        string,
+        { visibility?: string; label?: string }
+      >,
+    [applicationSchema.default_fields],
+  );
+
   const schemaProfileLinks = Array.isArray(applicationSchema.profile_links)
     ? (applicationSchema.profile_links as Array<Record<string, unknown>>)
     : [];
-  const schemaCustomFields = Array.isArray(applicationSchema.custom_fields)
-    ? (applicationSchema.custom_fields as Array<Record<string, unknown>>)
-    : [];
+
+  const schemaCustomFields = useMemo(
+    () =>
+      Array.isArray(applicationSchema.custom_fields)
+        ? (applicationSchema.custom_fields as Array<Record<string, unknown>>)
+        : [],
+    [applicationSchema.custom_fields],
+  );
+
   const profileLinkMap = new Map<string, Record<string, unknown>>();
   for (const linkField of schemaProfileLinks) {
     const key = String(linkField.key ?? linkField.id ?? "");
     if (key) profileLinkMap.set(key, linkField);
   }
-  const customFields: Array<Record<string, unknown>> = [];
-  for (const field of schemaCustomFields) {
-    const key = String(field.key ?? field.id ?? "");
-    if (key.startsWith("profile_link_")) {
-      profileLinkMap.set(key, field);
-      continue;
+
+  const customFields = useMemo(() => {
+    const fields: Array<Record<string, unknown>> = [];
+    for (const field of schemaCustomFields) {
+      const key = String(field.key ?? field.id ?? "");
+      if (key.startsWith("profile_link_")) {
+        continue;
+      }
+      fields.push(field);
     }
-    customFields.push(field);
-  }
+    return fields;
+  }, [schemaCustomFields]);
+
   const profileLinkFields = Array.from(profileLinkMap.values());
 
-  const fieldVisibility = (key: string, fallback: "required" | "optional" | "hidden" = "hidden") =>
-    (defaultFields[key]?.visibility as "required" | "optional" | "hidden" | undefined) ?? fallback;
+  const fieldVisibility = useCallback(
+    (key: string, fallback: "required" | "optional" | "hidden" = "hidden") =>
+      (defaultFields[key]?.visibility as "required" | "optional" | "hidden" | undefined) ??
+      fallback,
+    [defaultFields],
+  );
 
   const isRequired = (visibility: string) => visibility === "required";
   const isVisible = (visibility: string) => visibility !== "hidden";
 
-  const anyFileUploading = Object.values(applyForm.files).some((f) => f?.uploading);
+  const applyValidation = useMemo(() => {
+    const fullNameVisibility = fieldVisibility("full_name", "required");
+    const emailVisibility = fieldVisibility("email", "required");
+    const phoneVisibility = fieldVisibility("phone", "optional");
+    const resumeVisibility = fieldVisibility("resume", "hidden");
+    const coverVisibility = fieldVisibility("cover_letter", "hidden");
+
+    const errors: Record<string, string> = {};
+    if (isRequired(fullNameVisibility) && !applyForm.fullName.trim()) {
+      errors.fullName = "Full name is required.";
+    }
+    if (isRequired(emailVisibility) && !applyForm.email.trim()) {
+      errors.email = "Email is required.";
+    }
+    if (applyForm.email.trim() && !isValidEmail(applyForm.email)) {
+      errors.email = "Enter a valid email address.";
+    }
+    if (isRequired(phoneVisibility) && !applyForm.phone.trim()) {
+      errors.phone = "Phone is required.";
+    }
+    if (applyForm.phone.trim() && !isValidPhoneNumber(applyForm.phone)) {
+      errors.phone = "Enter a valid phone number.";
+    }
+    if (isRequired(resumeVisibility) && !applyForm.files.resume) {
+      errors.resume = "Resume is required.";
+    }
+    if (isRequired(coverVisibility) && !applyForm.files.cover_letter) {
+      errors.cover_letter = "Cover letter is required.";
+    }
+
+    for (const field of [...profileLinkFields, ...customFields]) {
+      const key = String(field.key ?? field.id ?? "");
+      const label = String(field.label ?? key);
+      const visibility = String(field.visibility ?? "hidden");
+      const type = String(field.type ?? "short_text");
+      if (!key || visibility === "hidden") continue;
+      if (visibility === "required") {
+        if (type === "file_upload") {
+          const fileMeta = applyForm.files[key];
+          if (!fileMeta || (!fileMeta.url && !fileMeta.name)) {
+            errors[`file:${key}`] = `${label} is required.`;
+          }
+        } else {
+          const val = applyForm.answers[key];
+          if (val == null || (typeof val === "string" && !val.trim())) {
+            errors[`answer:${key}`] = `${label} is required.`;
+          }
+        }
+      }
+    }
+
+    const hasUploadingFiles = Object.values(applyForm.files).some((f) => f?.uploading);
+    return { errors, hasUploadingFiles };
+  }, [applyForm, profileLinkFields, customFields, fieldVisibility]);
 
   const handleSelectAndUploadFile = async (key: string, file: File | null) => {
     if (!file) return;
@@ -205,47 +273,11 @@ export default function CareerJobDetailPage() {
 
   const handleApplySubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const fullNameVisibility = fieldVisibility("full_name", "required");
-    const emailVisibility = fieldVisibility("email", "required");
-    const phoneVisibility = fieldVisibility("phone", "optional");
-    const resumeVisibility = fieldVisibility("resume", "hidden");
-    const coverVisibility = fieldVisibility("cover_letter", "hidden");
-
-    if (isRequired(fullNameVisibility) && !applyForm.fullName.trim())
-      return toast.error("Full name is required.");
-    if (isRequired(emailVisibility) && !applyForm.email.trim())
-      return toast.error("Email is required.");
-    if (isRequired(phoneVisibility) && !applyForm.phone.trim())
-      return toast.error("Phone is required.");
-    if (isRequired(resumeVisibility) && !applyForm.files.resume)
-      return toast.error("Resume is required.");
-    if (isRequired(coverVisibility) && !applyForm.files.cover_letter) {
-      return toast.error("Cover letter is required.");
-    }
-    if (Object.values(applyForm.files).some((f) => f?.uploading)) {
+    if (applyValidation.hasUploadingFiles) {
       return toast.error("Please wait for files to finish uploading.");
     }
-
-    for (const field of [...profileLinkFields, ...customFields]) {
-      const key = String(field.key ?? field.id ?? "");
-      const label = String(field.label ?? key);
-      const visibility = String(field.visibility ?? "hidden");
-      const type = String(field.type ?? "short_text");
-      if (!key || visibility === "hidden") continue;
-      if (visibility === "required") {
-        if (type === "file_upload") {
-          const fileMeta = applyForm.files[key];
-          if (!fileMeta || (!fileMeta.url && !fileMeta.name)) {
-            return toast.error(`${label} is required.`);
-          }
-        } else {
-          const val = applyForm.answers[key];
-          if (val == null || (typeof val === "string" && !val.trim())) {
-            return toast.error(`${label} is required.`);
-          }
-        }
-      }
-    }
+    setApplyErrors(applyValidation.errors);
+    if (Object.keys(applyValidation.errors).length > 0) return;
 
     setApplySubmitting(true);
     (async () => {
@@ -280,19 +312,13 @@ export default function CareerJobDetailPage() {
           setApplySubmitting(false);
           return;
         }
-        await applyToPublicJob(
-          parsedOrg.orgId,
-          jobId,
-          parsedOrg.orgName,
-          {
-            full_name: applyForm.fullName,
-            email: applyForm.email,
-            phone: applyForm.phone || null,
-            answers: payloadAnswers,
-            files: Object.keys(payloadFiles).length ? payloadFiles : undefined,
-          },
-          { idempotencyKey: newIdempotencyKey() },
-        );
+        await applyToPublicJob(parsedOrg.orgId, jobId, parsedOrg.orgName, {
+          full_name: applyForm.fullName.trim(),
+          email: normalizeEmail(applyForm.email),
+          phone: applyForm.phone.trim() || null,
+          answers: payloadAnswers,
+          files: Object.keys(payloadFiles).length ? payloadFiles : undefined,
+        });
         setApplySubmitting(false);
         closeApplyDialog();
         toast.success("Application submitted. We'll be in touch!");
@@ -464,7 +490,10 @@ export default function CareerJobDetailPage() {
         open={applyDialogOpen}
         onOpenChange={(open) => {
           setApplyDialogOpen(open);
-          if (!open) setApplyForm({ fullName: "", email: "", phone: "", answers: {}, files: {} });
+          if (!open) {
+            setApplyForm({ fullName: "", email: "", phone: "", answers: {}, files: {} });
+            setApplyErrors({});
+          }
         }}
       >
         <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
@@ -484,10 +513,21 @@ export default function CareerJobDetailPage() {
                   </Label>
                   <InputField
                     value={applyForm.fullName}
-                    onChange={(e) => setApplyForm((f) => ({ ...f, fullName: e.target.value }))}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setApplyForm((f) => ({ ...f, fullName: value }));
+                      setApplyErrors((prev) => ({
+                        ...prev,
+                        fullName:
+                          isRequired(fieldVisibility("full_name", "required")) && !value.trim()
+                            ? "Full name is required."
+                            : "",
+                      }));
+                    }}
                     placeholder="Jane Doe"
                     className="mt-1.5 h-9 text-sm"
                     required={isRequired(fieldVisibility("full_name", "required"))}
+                    error={applyErrors.fullName || undefined}
                   />
                 </div>
               )}
@@ -500,10 +540,21 @@ export default function CareerJobDetailPage() {
                   <InputField
                     type="email"
                     value={applyForm.email}
-                    onChange={(e) => setApplyForm((f) => ({ ...f, email: e.target.value }))}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setApplyForm((f) => ({ ...f, email: value }));
+                      let emailError = "";
+                      if (isRequired(fieldVisibility("email", "required")) && !value.trim()) {
+                        emailError = "Email is required.";
+                      } else if (value.trim() && !isValidEmail(value)) {
+                        emailError = "Enter a valid email address.";
+                      }
+                      setApplyErrors((prev) => ({ ...prev, email: emailError }));
+                    }}
                     placeholder="jane@example.com"
                     className="mt-1.5 h-9 text-sm"
                     required={isRequired(fieldVisibility("email", "required"))}
+                    error={applyErrors.email || undefined}
                   />
                 </div>
               )}
@@ -513,13 +564,21 @@ export default function CareerJobDetailPage() {
                     {defaultFields.phone?.label ?? "Phone"}{" "}
                     {isRequired(fieldVisibility("phone", "optional")) ? "*" : "(optional)"}
                   </Label>
-                  <InputField
-                    type="tel"
-                    value={applyForm.phone}
-                    onChange={(e) => setApplyForm((f) => ({ ...f, phone: e.target.value }))}
-                    placeholder="+1 234 567 8900"
-                    className="mt-1.5 h-9 text-sm"
-                    required={isRequired(fieldVisibility("phone", "optional"))}
+                  <PhoneNumberField
+                    label=""
+                    value={applyForm.phone || undefined}
+                    onChange={(v) => {
+                      const value = v ?? "";
+                      setApplyForm((f) => ({ ...f, phone: value }));
+                      let phoneError = "";
+                      if (isRequired(fieldVisibility("phone", "optional")) && !value.trim()) {
+                        phoneError = "Phone is required.";
+                      } else if (value.trim() && !isValidPhoneNumber(value)) {
+                        phoneError = "Enter a valid phone number for the selected country.";
+                      }
+                      setApplyErrors((prev) => ({ ...prev, phone: phoneError }));
+                    }}
+                    error={applyErrors.phone || undefined}
                   />
                 </div>
               )}
@@ -530,41 +589,23 @@ export default function CareerJobDetailPage() {
                     {isRequired(fieldVisibility("resume", "hidden")) ? "*" : "(optional)"}
                   </Label>
                   <div className="mt-1.5 flex items-center gap-2">
-                    <label
-                      className={cn(
-                        "flex-1 flex items-center justify-center gap-2 rounded-lg border border-border border-dashed px-4 py-3 text-xs text-muted-foreground transition-colors",
-                        applyForm.files.resume?.uploading
-                          ? "cursor-wait opacity-80"
-                          : "hover:bg-muted/50 cursor-pointer",
-                      )}
-                      onDragOver={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                      }}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        const file = e.dataTransfer.files?.[0];
-                        if (file) void handleSelectAndUploadFile("resume", file);
-                      }}
-                    >
+                    <label className="flex-1 flex items-center justify-center gap-2 rounded-lg border border-border border-dashed px-4 py-3 text-xs text-muted-foreground hover:bg-muted/50 cursor-pointer transition-colors">
                       <Icon name="Upload" className="h-4 w-4 shrink-0" />
-                      <span>
-                        {applyForm.files.resume?.uploading
-                          ? "Uploading…"
-                          : (applyForm.files.resume?.name ?? "Choose file or drag and drop")}
-                      </span>
+                      <span>{applyForm.files.resume?.name ?? "Choose file or drag and drop"}</span>
                       <input
                         type="file"
                         accept=".pdf,.doc,.docx"
                         className="sr-only"
-                        disabled={applyForm.files.resume?.uploading}
                         onChange={(e) => {
                           void handleSelectAndUploadFile("resume", e.target.files?.[0] || null);
+                          setApplyErrors((prev) => ({ ...prev, resume: "" }));
                         }}
                       />
                     </label>
                   </div>
+                  {applyErrors.resume ? (
+                    <p className="mt-1 text-xs text-destructive">{applyErrors.resume}</p>
+                  ) : null}
                 </div>
               )}
               {isVisible(fieldVisibility("cover_letter", "hidden")) && (
@@ -574,44 +615,28 @@ export default function CareerJobDetailPage() {
                     {isRequired(fieldVisibility("cover_letter", "hidden")) ? "*" : "(optional)"}
                   </Label>
                   <div className="mt-1.5 flex items-center gap-2">
-                    <label
-                      className={cn(
-                        "flex-1 flex items-center justify-center gap-2 rounded-lg border border-border border-dashed px-4 py-3 text-xs text-muted-foreground transition-colors",
-                        applyForm.files.cover_letter?.uploading
-                          ? "cursor-wait opacity-80"
-                          : "hover:bg-muted/50 cursor-pointer",
-                      )}
-                      onDragOver={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                      }}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        const file = e.dataTransfer.files?.[0];
-                        if (file) void handleSelectAndUploadFile("cover_letter", file);
-                      }}
-                    >
+                    <label className="flex-1 flex items-center justify-center gap-2 rounded-lg border border-border border-dashed px-4 py-3 text-xs text-muted-foreground hover:bg-muted/50 cursor-pointer transition-colors">
                       <Icon name="Upload" className="h-4 w-4 shrink-0" />
                       <span>
-                        {applyForm.files.cover_letter?.uploading
-                          ? "Uploading…"
-                          : (applyForm.files.cover_letter?.name ?? "Choose file or drag and drop")}
+                        {applyForm.files.cover_letter?.name ?? "Choose file or drag and drop"}
                       </span>
                       <input
                         type="file"
-                        accept=".pdf,.docx,.txt"
+                        accept=".pdf,.doc,.docx,.txt"
                         className="sr-only"
-                        disabled={applyForm.files.cover_letter?.uploading}
                         onChange={(e) => {
                           void handleSelectAndUploadFile(
                             "cover_letter",
                             e.target.files?.[0] || null,
                           );
+                          setApplyErrors((prev) => ({ ...prev, cover_letter: "" }));
                         }}
                       />
                     </label>
                   </div>
+                  {applyErrors.cover_letter ? (
+                    <p className="mt-1 text-xs text-destructive">{applyErrors.cover_letter}</p>
+                  ) : null}
                 </div>
               )}
               {profileLinkFields.some((f) => String(f.visibility ?? "hidden") !== "hidden") && (
@@ -637,15 +662,21 @@ export default function CareerJobDetailPage() {
                       <InputField
                         type="url"
                         value={String(value ?? "")}
-                        onChange={(e) =>
+                        onChange={(e) => {
                           setApplyForm((f) => ({
                             ...f,
                             answers: { ...f.answers, [key]: e.target.value },
-                          }))
-                        }
+                          }));
+                          setApplyErrors((prev) => ({ ...prev, [`answer:${key}`]: "" }));
+                        }}
                         placeholder="https://"
                         className="mt-1.5 h-9 text-sm"
                       />
+                      {applyErrors[`answer:${key}`] ? (
+                        <p className="mt-1 text-xs text-destructive">
+                          {applyErrors[`answer:${key}`]}
+                        </p>
+                      ) : null}
                     </div>
                   );
                 })}
@@ -674,12 +705,13 @@ export default function CareerJobDetailPage() {
                       {type === "long_text" ? (
                         <textarea
                           value={String(value ?? "")}
-                          onChange={(e) =>
+                          onChange={(e) => {
                             setApplyForm((f) => ({
                               ...f,
                               answers: { ...f.answers, [key]: e.target.value },
-                            }))
-                          }
+                            }));
+                            setApplyErrors((prev) => ({ ...prev, [`answer:${key}`]: "" }));
+                          }}
                           rows={3}
                           className={cn(
                             "mt-1.5 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background",
@@ -689,12 +721,13 @@ export default function CareerJobDetailPage() {
                       ) : type === "single_select" ? (
                         <select
                           value={String(value ?? "")}
-                          onChange={(e) =>
+                          onChange={(e) => {
                             setApplyForm((f) => ({
                               ...f,
                               answers: { ...f.answers, [key]: e.target.value },
-                            }))
-                          }
+                            }));
+                            setApplyErrors((prev) => ({ ...prev, [`answer:${key}`]: "" }));
+                          }}
                           className="mt-1.5 h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
                         >
                           <option value="">Select</option>
@@ -721,6 +754,7 @@ export default function CareerJobDetailPage() {
                                       ...f,
                                       answers: { ...f.answers, [key]: Array.from(next) },
                                     }));
+                                    setApplyErrors((prev) => ({ ...prev, [`answer:${key}`]: "" }));
                                   }}
                                 />
                                 {opt}
@@ -731,12 +765,13 @@ export default function CareerJobDetailPage() {
                       ) : type === "yes_no" ? (
                         <select
                           value={String(value ?? "")}
-                          onChange={(e) =>
+                          onChange={(e) => {
                             setApplyForm((f) => ({
                               ...f,
                               answers: { ...f.answers, [key]: e.target.value },
-                            }))
-                          }
+                            }));
+                            setApplyErrors((prev) => ({ ...prev, [`answer:${key}`]: "" }));
+                          }}
                           className="mt-1.5 h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
                         >
                           <option value="">Select</option>
@@ -745,37 +780,17 @@ export default function CareerJobDetailPage() {
                         </select>
                       ) : type === "file_upload" ? (
                         <div className="mt-1.5 flex items-center gap-2">
-                          <label
-                            className={cn(
-                              "flex-1 flex items-center justify-center gap-2 rounded-lg border border-border border-dashed px-4 py-3 text-xs text-muted-foreground transition-colors",
-                              applyForm.files[key]?.uploading
-                                ? "cursor-wait opacity-80"
-                                : "hover:bg-muted/50 cursor-pointer",
-                            )}
-                            onDragOver={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                            }}
-                            onDrop={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              const file = e.dataTransfer.files?.[0];
-                              if (file) void handleSelectAndUploadFile(key, file);
-                            }}
-                          >
+                          <label className="flex-1 flex items-center justify-center gap-2 rounded-lg border border-border border-dashed px-4 py-3 text-xs text-muted-foreground hover:bg-muted/50 cursor-pointer transition-colors">
                             <Icon name="Upload" className="h-4 w-4 shrink-0" />
                             <span>
-                              {applyForm.files[key]?.uploading
-                                ? "Uploading…"
-                                : (applyForm.files[key]?.name ?? "Choose file or drag and drop")}
+                              {applyForm.files[key]?.name ?? "Choose file or drag and drop"}
                             </span>
                             <input
                               type="file"
-                              accept=".pdf,.docx,.txt"
                               className="sr-only"
-                              disabled={applyForm.files[key]?.uploading}
                               onChange={(e) => {
                                 void handleSelectAndUploadFile(key, e.target.files?.[0] || null);
+                                setApplyErrors((prev) => ({ ...prev, [`file:${key}`]: "" }));
                               }}
                             />
                           </label>
@@ -792,25 +807,44 @@ export default function CareerJobDetailPage() {
                                   : "text"
                           }
                           value={String(value ?? "")}
-                          onChange={(e) =>
+                          onChange={(e) => {
                             setApplyForm((f) => ({
                               ...f,
                               answers: { ...f.answers, [key]: e.target.value },
-                            }))
-                          }
+                            }));
+                            setApplyErrors((prev) => ({ ...prev, [`answer:${key}`]: "" }));
+                          }}
                           className="mt-1.5 h-9 text-sm"
                         />
                       )}
+                      {type === "file_upload" && applyErrors[`file:${key}`] ? (
+                        <p className="mt-1 text-xs text-destructive">
+                          {applyErrors[`file:${key}`]}
+                        </p>
+                      ) : null}
+                      {type !== "file_upload" && applyErrors[`answer:${key}`] ? (
+                        <p className="mt-1 text-xs text-destructive">
+                          {applyErrors[`answer:${key}`]}
+                        </p>
+                      ) : null}
                     </div>
                   );
                 })}
             </div>
-            <DialogFooter className="mt-4">
+            <DialogFooter className="mt-4 gap-2 sm:gap-2">
               <Button type="button" variant="outline" size="sm" onClick={closeApplyDialog}>
                 Cancel
               </Button>
-              <Button type="submit" size="sm" disabled={applySubmitting || anyFileUploading}>
-                {applySubmitting ? "Submitting" : "Submit application"}
+              <Button
+                type="submit"
+                size="sm"
+                disabled={
+                  applySubmitting ||
+                  applyValidation.hasUploadingFiles ||
+                  Object.keys(applyValidation.errors).length > 0
+                }
+              >
+                {applySubmitting ? "Submitting…" : "Submit application"}
               </Button>
             </DialogFooter>
           </form>

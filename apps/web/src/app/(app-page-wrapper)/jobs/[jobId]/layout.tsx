@@ -36,6 +36,7 @@ import {
 } from "../../../../lib/validations/setupValidation";
 import { useEffect, useState } from "react";
 import { useSetPageMetadata } from "@/hooks/useSetPageMetadata";
+import { JOB_WORKSPACE_PAGE_SUBTITLE, JOB_WORKSPACE_PAGE_TITLE } from "@/lib/job-page-metadata";
 
 function SetupLayoutInner({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -46,11 +47,6 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
   const orgName = user?.org_name;
   const isMobile = useIsMobile();
   const { t } = useTranslation();
-
-  useSetPageMetadata({
-    title: t("edit_job"),
-    subtitle: t("edit_job_subtitle"),
-  });
 
   const sections = SETUP_SECTIONS(t);
   const {
@@ -86,6 +82,11 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
     isSaving,
     isPublishing,
   } = useJobSetup();
+
+  useSetPageMetadata({
+    title: JOB_WORKSPACE_PAGE_TITLE,
+    subtitle: JOB_WORKSPACE_PAGE_SUBTITLE,
+  });
 
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {

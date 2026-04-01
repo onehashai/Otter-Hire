@@ -15,11 +15,26 @@ export type CandidateListItemResponse = {
   job_title: string | null;
   stage_id: string | null;
   stage_name: string | null;
+  assignments: CandidateAssignmentItemResponse[];
   created_at: string;
   updated_at: string;
 };
 
 export type CandidateDetailResponse = CandidateListItemResponse & {};
+
+export type CandidateAssignmentItemResponse = {
+  assigned_id: string;
+  job_id: string;
+  job_title: string | null;
+  stage_id: string | null;
+  stage_name: string | null;
+  assignment_status: "active" | "rejected" | "hired" | "withdrawn";
+  source: string | null;
+  applied_at: string | null;
+  assigned_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
 
 export type CandidatesPaginatedResponse = {
   items: CandidateListItemResponse[];
@@ -210,7 +225,9 @@ export async function getCandidatesPaginated(params?: {
   stage_id?: string;
   status?: string;
   source?: string;
-  talent_pool_only?: boolean;
+  /** Unassigned only (maps to API `talent_pool_only`). */
+  unassignedOnly?: boolean;
+  assigned_only?: boolean;
   limit?: number;
   offset?: number;
 }): Promise<CandidatesPaginatedResponse> {
@@ -220,7 +237,8 @@ export async function getCandidatesPaginated(params?: {
   if (params?.stage_id) searchParams.set("stage_id", params.stage_id);
   if (params?.status) searchParams.set("status", params.status);
   if (params?.source) searchParams.set("source", params.source);
-  if (params?.talent_pool_only) searchParams.set("talent_pool_only", "true");
+  if (params?.unassignedOnly) searchParams.set("talent_pool_only", "true");
+  if (params?.assigned_only) searchParams.set("assigned_only", "true");
   if (params?.limit !== undefined) searchParams.set("limit", String(params.limit));
   if (params?.offset !== undefined) searchParams.set("offset", String(params.offset));
   const query = searchParams.toString();
@@ -232,20 +250,22 @@ export async function getCandidatesPaginated(params?: {
 export async function updateCandidateStage(
   id: string,
   stageId: string,
+  jobId?: string,
 ): Promise<CandidateDetailResponse> {
   return apiFetch<CandidateDetailResponse>(`/candidates/${id}/stage`, {
     method: "PATCH",
-    body: { stage_id: stageId },
+    body: { stage_id: stageId, ...(jobId ? { job_id: jobId } : {}) },
   });
 }
 
 export async function updateCandidateStatus(
   id: string,
   status: "active" | "rejected" | "hired",
+  jobId?: string,
 ): Promise<CandidateDetailResponse> {
   return apiFetch<CandidateDetailResponse>(`/candidates/${id}/status`, {
     method: "PATCH",
-    body: { status },
+    body: { status, ...(jobId ? { job_id: jobId } : {}) },
   });
 }
 

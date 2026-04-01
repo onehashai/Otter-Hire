@@ -80,7 +80,7 @@ export function ProfileSettings({ user }: ProfileSettingsProps) {
     return () => {
       cancelled = true;
     };
-  }, [user?.id]);
+  }, [user?.id, user?.org_id]);
 
   const avatarDirty =
     pendingAvatarRemoved || pendingAvatarFile !== null || avatarUrl !== originalAvatarUrl;
@@ -266,7 +266,7 @@ export function ProfileSettings({ user }: ProfileSettingsProps) {
                 alt={name || "User"}
                 fallbackClassName="text-lg bg-gray-100 border border-gray-300 text-gray-700"
               >
-                {getInitialsFromName(name.trim(), 2, "U")}
+                {getInitialsFromName(name.trim(), "U")}
               </Avatar>
               <div className="flex items-center gap-2">
                 <input

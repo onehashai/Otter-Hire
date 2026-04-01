@@ -71,16 +71,20 @@ export function JobWorkspaceSidebar({
   const candidateCountByStage = (stageId: string) =>
     (workspace?.candidates ?? []).filter((c) => c.stage_id === stageId).length;
 
+  const jobTitleForBack = workspace?.title?.trim() ?? "";
+  const backLabel = jobTitleForBack || "Jobs";
+
   const backLink = (
     <Link
       href="/jobs"
+      title={jobTitleForBack || undefined}
       className={cn(
-        "flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm transition-colors text-sidebar-foreground hover:bg-sidebar-accent",
+        "flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm transition-colors text-sidebar-foreground hover:bg-sidebar-accent min-w-0",
         collapsed && "justify-center px-0",
       )}
     >
       <ChevronLeft className="h-4 w-4 shrink-0" />
-      {!collapsed && <span>Back to Jobs</span>}
+      {!collapsed && <span className="truncate">{backLabel}</span>}
     </Link>
   );
 
@@ -126,8 +130,8 @@ export function JobWorkspaceSidebar({
         {collapsed ? (
           <Tooltip>
             <TooltipTrigger asChild>{backLink}</TooltipTrigger>
-            <TooltipContent side="right" className="text-xs">
-              Back to Jobs
+            <TooltipContent side="right" className="text-xs max-w-xs">
+              {backLabel}
             </TooltipContent>
           </Tooltip>
         ) : (

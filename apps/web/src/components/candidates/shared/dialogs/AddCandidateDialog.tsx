@@ -12,7 +12,15 @@ import {
   DialogTitle,
 } from "@onehash/ui/dialog";
 import { toast } from "@onehash/ui/sonner";
+import { useTranslation } from "react-i18next";
 import { createCandidate } from "@/api";
+import {
+  isValidEmail,
+  isValidPhone,
+  normalizeEmail,
+  normalizePhone,
+  sanitizePhoneInput,
+} from "@/lib/validation/contact";
 
 export type AddCandidateDialogProps = {
   open: boolean;
@@ -31,6 +39,7 @@ export function AddCandidateDialog({
   stageId,
   onAdded,
 }: AddCandidateDialogProps) {
+  const { t } = useTranslation();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -38,13 +47,21 @@ export function AddCandidateDialog({
 
   const submit = async () => {
     if (!name.trim() || !email.trim()) return;
+    if (!isValidEmail(email)) {
+      toast.error("Enter a valid email address");
+      return;
+    }
+    if (phone.trim() && !isValidPhone(phone)) {
+      toast.error("Enter a valid phone number");
+      return;
+    }
     try {
       setLoading(true);
       await createCandidate({
         ...(jobId ? { job_id: jobId } : {}),
         name: name.trim(),
-        email: email.trim(),
-        phone: phone.trim() || null,
+        email: normalizeEmail(email),
+        phone: normalizePhone(phone) || null,
         source: "Manual",
         status: "active",
         stage_id: jobId ? (stageId ?? undefined) : undefined,
@@ -69,8 +86,8 @@ export function AddCandidateDialog({
           <DialogTitle>Add candidate</DialogTitle>
           <DialogDescription>
             {jobId && jobTitle
-              ? `Add a candidate to ${jobTitle}. They will appear in the current stage when possible.`
-              : "Add a candidate to Talent Pool. You can assign a job later."}
+              ? t("add_candidate_dialog_job_description", { jobTitle })
+              : t("add_candidate_dialog_pool_description")}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
@@ -92,7 +109,7 @@ export function AddCandidateDialog({
           <InputField
             label="Phone (optional)"
             value={phone}
-            onChange={(e) => setPhone(e.target.value)}
+            onChange={(e) => setPhone(sanitizePhoneInput(e.target.value))}
             placeholder="+1 …"
           />
         </div>
@@ -100,7 +117,16 @@ export function AddCandidateDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
             Cancel
           </Button>
-          <Button onClick={() => void submit()} disabled={loading || !name.trim() || !email.trim()}>
+          <Button
+            onClick={() => void submit()}
+            disabled={
+              loading ||
+              !name.trim() ||
+              !email.trim() ||
+              !isValidEmail(email) ||
+              Boolean(phone.trim() && !isValidPhone(phone))
+            }
+          >
             {loading ? "Adding…" : "Add candidate"}
           </Button>
         </DialogFooter>

@@ -140,7 +140,7 @@ async def test_automation_candidate_applied_trigger(
         created_by_user_id=test_user.id,
         candidate_id=test_candidate.id,
         job_id=test_job.id,
-        metadata={"source": "Job Board"},
+        metadata={"source": "job_portal"},
     )
 
     # Verify execution was logged

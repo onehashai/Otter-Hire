@@ -12,6 +12,7 @@ from PIL import Image
 OCR_MAX_PDF_PAGES = 8
 OCR_MAX_DOCX_IMAGES = 8
 
+
 def ocr_pdf_bytes(pdf_bytes: bytes) -> str:
     text_chunks: list[str] = []
     pdf = pdfium.PdfDocument(pdf_bytes)

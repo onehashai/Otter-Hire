@@ -121,6 +121,7 @@ The following items are implemented in the current codebase (including uncommitt
 
 7. Public apply (candidate ingestion):
    - `POST /public/orgs/{org_id}/jobs/{job_id}/apply` now also upserts candidate into `candidates`.
+   - New candidates from the public careers apply flow use `candidates.source = 'job_portal'`.
    - Candidate is created in first stage (by stage position) for that job when no existing candidate exists for same `org_id + job_id + email`.
    - Existing candidate is refreshed with latest name/phone/resume when applicable.
    - File: `apps/backend/app/api/v1/internal/endpoints/public.py`.
@@ -1438,7 +1439,7 @@ Before a job can transition to `open`, the following must be present:
 |---|---|---|
 | `internal` | Visible only within the organization | Org members only |
 | `careers` | Listed on the company careers page | Anyone with careers page access |
-| `public` | Listed on public job boards | Anyone on the internet |
+| `public` | Listed on the public job portal | Anyone on the internet |
 
 Visibility is independent of status — a `draft` job with `public` visibility is not shown anywhere until status = `open`.
 
@@ -2597,7 +2598,7 @@ getPublicJobs(orgId: string, orgSlugPrefix: string): Promise<PublicJobListItem[]
 getPublicJobDetail(orgId: string, jobId: string, orgSlugPrefix: string): Promise<PublicJobDetail>
 ```
 
-Calls must include query parameter `org_slug` matching the careers URL name segment (same normalization as the job board: lowercase org name with whitespace collapsed to hyphens). Wrong slug returns 404.
+Calls must include query parameter `org_slug` matching the careers URL name segment (same normalization as the job portal: lowercase org name with whitespace collapsed to hyphens). Wrong slug returns 404.
 
 ### Backend Endpoints (Required)
 

@@ -6,13 +6,15 @@ import { Button } from "@onehash/ui/button";
 import { Badge } from "@onehash/ui/badge";
 import { Avatar } from "@onehash/ui/avatar";
 import { Separator } from "@onehash/ui/separator";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@onehash/ui/dialog";
 import { Icon } from "@onehash/ui/icon";
 import { InputField, PhoneNumberField, isValidPhoneNumber } from "@onehash/ui/input";
-import { formatThreadMessageTime } from "@/lib/format-date";
+import { formatThreadMessageTime, formatTimestampToDateTime } from "@/lib/format-date";
 import { Label } from "@onehash/ui/label";
 import { formatPhoneForDisplay, parseStoredPhone } from "@/lib/phone";
 import { getInitialsFromName } from "@/lib/name-initials";
 import { useTranslation } from "react-i18next";
+import { isValidEmail, normalizeEmail, sanitizePhoneInput } from "@/lib/validation/contact";
 
 interface Document {
   id?: string;
@@ -28,13 +30,20 @@ interface CandidateSummary {
   role: string;
   email: string;
   phone: string;
-  address: string;
+  location: string;
   stage: string;
   source: string;
   appliedDate: string;
   documents: Document[];
   profileLinks?: Record<string, string>;
   tags: string[];
+}
+
+interface TimelineItem {
+  action: string;
+  date: string;
+  user: string;
+  icon: string;
 }
 
 interface ProfileLinkField {
@@ -45,21 +54,22 @@ interface ProfileLinkField {
 
 interface SummaryPanelProps {
   candidate: CandidateSummary;
-  /** Talent pool hides pipeline stage; job shows full hiring summary. */
-  variant?: "job" | "talent_pool";
+  /** Standalone /candidates profile hides pipeline stage; job workspace shows full hiring summary. */
+  variant?: "job" | "standalone";
   onSaveProfile: (payload: {
     name: string;
     email: string;
     phone: string | null;
-    address: string | null;
+    location: string | null;
   }) => Promise<void>;
   onSaveLinks: (payload: Record<string, string>) => Promise<void>;
   onReplaceResume?: (file: File) => Promise<void>;
   onRemoveResume?: () => Promise<void>;
-  // Backward-compatible props used in talent pool profile.
+  // Props used by standalone candidate profile (/candidates/[id]).
   onUploadDocument?: () => void;
   onDeleteDocument?: (documentId: string) => void;
   profileLinkFields?: ProfileLinkField[];
+  timeline?: TimelineItem[];
 }
 
 function formatDisplayFileName(rawName: string): string {
@@ -69,10 +79,12 @@ function formatDisplayFileName(rawName: string): string {
   return clean || base;
 }
 
-const stageVariant = (stage: string) => {
-  if (stage === "Hired") return "default" as const;
-  if (stage === "Rejected") return "destructive" as const;
-  return "secondary" as const;
+const TimelineIcon = ({ type }: { type: string }) => {
+  const cls = "h-3.5 w-3.5";
+  if (type === "apply") return <Icon name="Users" className={cls} />;
+  if (type === "move") return <Icon name="UserCheck" className={cls} />;
+  if (type === "feedback") return <Icon name="Send" className={cls} />;
+  return <Icon name="Clock" className={cls} />;
 };
 
 export function SummaryPanel({
@@ -85,6 +97,7 @@ export function SummaryPanel({
   onUploadDocument,
   onDeleteDocument,
   profileLinkFields,
+  timeline = [],
 }: SummaryPanelProps) {
   const { t } = useTranslation();
   const initials = getInitialsFromName(candidate.name);
@@ -93,12 +106,14 @@ export function SummaryPanel({
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingLinks, setSavingLinks] = useState(false);
   const [resumeFile, setResumeFile] = useState<File | null>(null);
+  const [timelineOpen, setTimelineOpen] = useState(false);
 
   const [name, setName] = useState(candidate.name);
   const [email, setEmail] = useState(candidate.email);
   const [phone, setPhone] = useState<string | undefined>(() => parseStoredPhone(candidate.phone));
   const [phoneError, setPhoneError] = useState<string | null>(null);
-  const [address, setAddress] = useState(candidate.address === "—" ? "" : candidate.address);
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [location, setLocation] = useState(candidate.location === "—" ? "" : candidate.location);
 
   const [linkDraft, setLinkDraft] = useState<Record<string, string>>(() => ({
     ...(candidate.profileLinks || {}),
@@ -109,7 +124,8 @@ export function SummaryPanel({
     setEmail(candidate.email);
     setPhone(parseStoredPhone(candidate.phone));
     setPhoneError(null);
-    setAddress(candidate.address === "—" ? "" : candidate.address);
+    setEmailError(null);
+    setLocation(candidate.location === "—" ? "" : candidate.location);
     setLinkDraft({ ...(candidate.profileLinks || {}) });
     setResumeFile(null);
   }, [candidate]);
@@ -167,19 +183,27 @@ export function SummaryPanel({
           {profileEdit ? (
             <div className="space-y-3">
               <InputField label="Name" value={name} onChange={(e) => setName(e.target.value)} />
-              <InputField label="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
+              <InputField
+                label="Email"
+                value={email}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  setEmailError(null);
+                }}
+                error={emailError ?? undefined}
+              />
               <PhoneNumberField
                 value={phone}
                 onChange={(v) => {
-                  setPhone(v);
+                  setPhone(v ? sanitizePhoneInput(v) : v);
                   setPhoneError(null);
                 }}
                 error={phoneError ?? undefined}
               />
               <InputField
-                label="Address"
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
+                label="Location"
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
               />
               <div className="flex gap-2">
                 <Button
@@ -189,9 +213,14 @@ export function SummaryPanel({
                     savingProfile ||
                     !name.trim() ||
                     !email.trim() ||
+                    !isValidEmail(email) ||
                     !!(phone && !isValidPhoneNumber(phone))
                   }
                   onClick={async () => {
+                    if (!isValidEmail(email)) {
+                      setEmailError("Enter a valid email address.");
+                      return;
+                    }
                     if (phone && !isValidPhoneNumber(phone)) {
                       setPhoneError("Enter a valid phone number for the selected country.");
                       return;
@@ -201,9 +230,9 @@ export function SummaryPanel({
                       setPhoneError(null);
                       await onSaveProfile({
                         name: name.trim(),
-                        email: email.trim(),
+                        email: normalizeEmail(email),
                         phone: phone ?? null,
-                        address: address.trim() || null,
+                        location: location.trim() || null,
                       });
                       setProfileEdit(false);
                     } finally {
@@ -224,7 +253,8 @@ export function SummaryPanel({
                     setEmail(candidate.email);
                     setPhone(parseStoredPhone(candidate.phone));
                     setPhoneError(null);
-                    setAddress(candidate.address === "—" ? "" : candidate.address);
+                    setEmailError(null);
+                    setLocation(candidate.location === "—" ? "" : candidate.location);
                   }}
                 >
                   Cancel
@@ -242,18 +272,24 @@ export function SummaryPanel({
                   {formatPhoneForDisplay(candidate.phone)}
                 </div>
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <Icon name="House" className="h-3.5 w-3.5" /> {candidate.address}
+                  <Icon name="House" className="h-3.5 w-3.5" /> {candidate.location}
                 </div>
               </div>
               <Separator />
               {variant === "job" ? (
-                <div className="flex flex-col gap-1">
+                <div className="flex flex-col gap-1.5">
                   <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">
-                    Stage
+                    Hiring Timeline
                   </Label>
-                  <Badge variant={stageVariant(candidate.stage)} className="text-[10px] w-fit">
-                    {candidate.stage}
-                  </Badge>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 w-fit text-xs gap-1.5"
+                    onClick={() => setTimelineOpen(true)}
+                  >
+                    <Icon name="Clock" className="h-3.5 w-3.5" />
+                    View timeline
+                  </Button>
                 </div>
               ) : null}
               <div className="flex flex-col gap-1">
@@ -266,9 +302,9 @@ export function SummaryPanel({
               </div>
               <div className="flex flex-col gap-1">
                 <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">
-                  {t("applied")}
+                  {t("candidates_table_created")}
                 </Label>
-                <p className="text-xs">{formatThreadMessageTime(candidate.appliedDate)}</p>
+                <p className="text-xs">{formatTimestampToDateTime(candidate.appliedDate)}</p>
               </div>
             </>
           )}
@@ -339,7 +375,7 @@ export function SummaryPanel({
                   </Button>
                 ) : null}
               </div>
-              <p className="text-[11px] text-muted-foreground min-w-0 max-w-full break-all">
+              <p className="text-[11px] text-muted-foreground">
                 Resume:{" "}
                 {resumeFile
                   ? resumeFile.name
@@ -437,6 +473,43 @@ export function SummaryPanel({
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={timelineOpen} onOpenChange={setTimelineOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Hiring Status Timeline</DialogTitle>
+          </DialogHeader>
+          <div className="max-h-[60vh] overflow-y-auto overflow-x-hidden pr-1">
+            {timeline.length === 0 ? (
+              <p className="text-xs text-muted-foreground">No hiring status updates yet.</p>
+            ) : (
+              <div className="space-y-3">
+                {timeline.map((item, i) => (
+                  <div key={`${item.date}-${i}`} className="flex gap-3">
+                    <div className="flex flex-col items-center">
+                      <div className="h-6 w-6 rounded-full bg-muted flex items-center justify-center shrink-0">
+                        <TimelineIcon type={item.icon} />
+                      </div>
+                      {i < timeline.length - 1 && <div className="w-px flex-1 bg-border mt-1" />}
+                    </div>
+                    <div className="flex-1 min-w-0 pb-3">
+                      <p className="text-xs font-medium">{item.action}</p>
+                      <p className="text-[10px] text-muted-foreground tabular-nums">
+                        {formatThreadMessageTime(item.date)}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <DialogFooter className="justify-end">
+            <Button size="sm" className="h-8 text-xs" onClick={() => setTimelineOpen(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

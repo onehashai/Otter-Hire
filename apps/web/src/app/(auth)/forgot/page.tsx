@@ -8,6 +8,7 @@ import { Label } from "@onehash/ui/label";
 import { Icon } from "@onehash/ui/icon";
 import { PRODUCT_LOGO_LETTER, PLATFORM_NAME } from "@/lib/constants";
 import { useTranslation } from "react-i18next";
+import { isValidEmail, normalizeEmail } from "@/lib/validation/contact";
 
 export default function ForgotPassword() {
   const { t } = useTranslation();
@@ -25,10 +26,12 @@ export default function ForgotPassword() {
       setError("Please enter your email address.");
       return;
     }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    if (!isValidEmail(email)) {
       setError("Please enter a valid email address.");
       return;
     }
+    const normalizedEmail = normalizeEmail(email);
+    setEmail(normalizedEmail);
     setLoading(true);
     await new Promise((r) => setTimeout(r, 1500));
     setLoading(false);

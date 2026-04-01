@@ -8,6 +8,7 @@ import logging
 from temporalio.worker import Worker
 
 from app.core.config import settings
+from app.temporal.client import get_temporal_client
 from app.temporal.email.activities import (
     download_and_extract_resume_activity,
     download_email_activity,
@@ -22,7 +23,6 @@ from app.temporal.email.workflow import (
     InboundEmailWorkflow,
     OutboundEmailWorkflow,
 )
-from app.temporal.client import get_temporal_client
 from app.temporal.resume_parsing.activities import parse_job_apply_resume_activity
 from app.temporal.resume_parsing.workflow import JobApplyResumeParseWorkflow
 

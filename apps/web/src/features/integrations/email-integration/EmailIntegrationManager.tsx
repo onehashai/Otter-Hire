@@ -24,6 +24,7 @@ import { Check, Copy, Loader2 } from "lucide-react";
 import { toast } from "@onehash/ui/sonner";
 
 import { copyToClipboard } from "@/lib/clipboard";
+import { isValidEmail, normalizeEmail } from "@/lib/validation/contact";
 
 type EmailIntegrationManagerProps = {
   onChanged?: () => Promise<void> | void;
@@ -112,8 +113,6 @@ export function EmailIntegrationManager({ onChanged }: EmailIntegrationManagerPr
       ? "active"
       : verificationStatus;
 
-  const isValidEmail = (value: string) =>
-    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim().toLowerCase());
   const canSaveInbox = !inboxSaving && !inboxLoading && isValidEmail(inboxAddress);
   const isVerificationReady = verificationStatus === "action_required";
   const isVerificationDone = verificationStatus === "verified" || inboxStatus === "active";
@@ -132,7 +131,7 @@ export function EmailIntegrationManager({ onChanged }: EmailIntegrationManagerPr
     setInboxSaving(true);
     try {
       const config = await upsertEmailIntegrationConfig({
-        inbox_address: inboxAddress.trim().toLowerCase(),
+        inbox_address: normalizeEmail(inboxAddress),
         provider: "ses",
       });
       await rotateEmailIntegrationSecret();
@@ -199,9 +198,9 @@ export function EmailIntegrationManager({ onChanged }: EmailIntegrationManagerPr
     if (ok) {
       setCopiedForwarding(true);
       setTimeout(() => setCopiedForwarding(false), 1500);
-      toast.success("Forwarding address copied");
+      toast.success("Copied to clipboard");
     } else {
-      toast.error("Failed to copy forwarding address");
+      toast.error("Failed to copy");
     }
   };
 
@@ -264,10 +263,10 @@ export function EmailIntegrationManager({ onChanged }: EmailIntegrationManagerPr
               />
               <button
                 type="button"
-                onClick={(e) => {
+                onClick={async (e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  handleCopyForwardingAddress();
+                  await handleCopyForwardingAddress();
                 }}
                 className="absolute inset-y-0 right-2 my-auto flex h-7 w-7 shrink-0 items-center justify-center rounded border-0 bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
                 aria-label="Copy forwarding address"

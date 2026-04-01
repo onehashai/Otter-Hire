@@ -1,10 +1,16 @@
+from typing import Any
+
 from sqladmin import ModelView
+from sqlalchemy import delete, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.activity import Activity
+from app.models.automation import Automation, AutomationExecution
 from app.models.candidate import Candidate
-from app.models.candidate_document import CandidateDocument
+from app.models.candidate_jobs import CandidateJobs
 from app.models.conversation import Conversation
-from app.models.email import Email, InboundEmail, InboundEmailAttachment
+from app.models.document import CandidateDocument
+from app.models.email import InboundEmail
 from app.models.feedback import Feedback
 from app.models.integration import Integration
 from app.models.integration_credential import IntegrationCredential
@@ -16,7 +22,7 @@ from app.models.job_team_member import JobTeamMember
 from app.models.message import Message
 from app.models.note import Note
 from app.models.org_membership import OrgMembership
-from app.models.organization import Organization, OrgInbox
+from app.models.organization import Organization
 from app.models.stage import Stage
 from app.models.template import Template
 from app.models.user import User
@@ -69,26 +75,105 @@ class OrganizationAdmin(ModelView, model=Organization):
     column_sortable_list = [Organization.name, Organization.created_at]
     column_default_sort = [(Organization.created_at, True)]
 
+    async def delete_model(self, request: Any, pk: str) -> None:
+        """Override delete to handle cascade deletes."""
+        print(f"\n=== delete_model called for org {pk} ===")
 
-class OrgInboxAdmin(ModelView, model=OrgInbox):
-    name = "Org Inbox"
-    name_plural = "Org Inboxes"
-    icon = "fa-solid fa-inbox"
+        # Get the organization first
+        session: AsyncSession = self.session_maker()
+        try:
+            # Fetch the organization
+            result = await session.execute(select(Organization).where(Organization.id == pk))
+            org = result.scalar_one_or_none()
+            if not org:
+                print(f"Organization {pk} not found")
+                return
 
-    column_list = [
-        OrgInbox.id,
-        OrgInbox.inbox_address,
-        OrgInbox.provider,
-        OrgInbox.status,
-        OrgInbox.verification_status,
-        OrgInbox.created_at,
-    ]
-    column_searchable_list = [OrgInbox.inbox_address]
-    column_sortable_list = [OrgInbox.inbox_address, OrgInbox.status, OrgInbox.created_at]
-    column_default_sort = [(OrgInbox.created_at, True)]
+            org_id = org.id
+            print(f"Starting cascade delete for org {org_id}")
 
-    form_excluded_columns = [OrgInbox.secret_hash, OrgInbox.verification_token_hash]
-    column_details_exclude_list = [OrgInbox.secret_hash, OrgInbox.verification_token_hash]
+            # Delete in order to respect foreign key constraints
+            print("Deleting activities...")
+            await session.execute(delete(Activity).where(Activity.org_id == org_id))
+            print("Deleting feedback...")
+            await session.execute(delete(Feedback).where(Feedback.org_id == org_id))
+            print("Deleting interviews...")
+            await session.execute(delete(Interview).where(Interview.org_id == org_id))
+            print("Deleting notes...")
+            await session.execute(delete(Note).where(Note.org_id == org_id))
+            print("Deleting messages...")
+            await session.execute(delete(Message).where(Message.org_id == org_id))
+            print("Deleting conversations...")
+            await session.execute(delete(Conversation).where(Conversation.org_id == org_id))
+            print("Deleting documents...")
+            await session.execute(
+                delete(CandidateDocument).where(CandidateDocument.org_id == org_id)
+            )
+            print("Deleting job applications...")
+            await session.execute(delete(JobApplication).where(JobApplication.org_id == org_id))
+            print("Deleting candidate jobs...")
+            await session.execute(delete(CandidateJobs).where(CandidateJobs.org_id == org_id))
+
+            # Delete inbound emails (attachments will cascade)
+            print("Deleting inbound emails...")
+            await session.execute(delete(InboundEmail).where(InboundEmail.org_id == org_id))
+
+            # Delete candidates
+            print("Deleting candidates...")
+            await session.execute(delete(Candidate).where(Candidate.org_id == org_id))
+
+            # Delete job-related records
+            print("Deleting stages...")
+            await session.execute(delete(Stage).where(Stage.org_id == org_id))
+            print("Deleting job team members...")
+            await session.execute(delete(JobTeamMember).where(JobTeamMember.org_id == org_id))
+            print("Deleting jobs...")
+            await session.execute(delete(Job).where(Job.org_id == org_id))
+            print("Deleting job categories...")
+            await session.execute(delete(JobCategory).where(JobCategory.org_id == org_id))
+
+            # Delete templates and automations
+            print("Deleting templates...")
+            await session.execute(delete(Template).where(Template.org_id == org_id))
+            print("Deleting automation executions...")
+            await session.execute(
+                delete(AutomationExecution).where(AutomationExecution.org_id == org_id)
+            )
+            print("Deleting automations...")
+            await session.execute(delete(Automation).where(Automation.org_id == org_id))
+
+            # Delete integrations and memberships
+            print("Deleting integration credentials...")
+            await session.execute(
+                delete(IntegrationCredential).where(IntegrationCredential.org_id == org_id)
+            )
+            print("Deleting org memberships...")
+            await session.execute(delete(OrgMembership).where(OrgMembership.org_id == org_id))
+
+            # Delete or update users - set org_id to NULL for users in this org
+            print("Updating users to remove org reference...")
+            from sqlalchemy import update
+
+            await session.execute(update(User).where(User.org_id == org_id).values(org_id=None))
+
+            # Finally delete the organization itself
+            print("Deleting organization...")
+            await session.execute(delete(Organization).where(Organization.id == org_id))
+
+            # Commit all deletes
+            print("Committing all deletes...")
+            await session.commit()
+            print(f"Successfully deleted org {org_id} and all related data")
+        except Exception as e:
+            await session.rollback()
+            print(f"\n!!! Error deleting organization {pk}: {e}")
+            import traceback
+
+            traceback.print_exc()
+            raise
+        finally:
+            await session.close()
+            print(f"=== delete_model completed for org {pk} ===\n")
 
 
 class OrgMembershipAdmin(ModelView, model=OrgMembership):
@@ -139,7 +224,6 @@ class IntegrationCredentialAdmin(ModelView, model=IntegrationCredential):
     name = "Integration Credential"
     name_plural = "Integration Credentials"
     icon = "fa-solid fa-key"
-    category = "People"
 
     column_list = [
         IntegrationCredential.id,
@@ -252,9 +336,35 @@ class CandidateAdmin(ModelView, model=Candidate):
     form_excluded_columns = [Candidate.profile_links, Candidate.parsed_resume, Candidate.tags]
 
 
+class CandidateJobsAdmin(ModelView, model=CandidateJobs):
+    name = "Candidate Job"
+    name_plural = "Candidate Jobs"
+    icon = "fa-solid fa-link"
+
+    column_list = [
+        CandidateJobs.assigned_id,
+        CandidateJobs.org_id,
+        CandidateJobs.candidate_id,
+        CandidateJobs.job_id,
+        CandidateJobs.stage_id,
+        CandidateJobs.assignment_status,
+        CandidateJobs.source,
+        CandidateJobs.applied_at,
+        CandidateJobs.assigned_at,
+        CandidateJobs.created_at,
+        CandidateJobs.updated_at,
+    ]
+    column_sortable_list = [
+        CandidateJobs.assignment_status,
+        CandidateJobs.created_at,
+        CandidateJobs.updated_at,
+    ]
+    column_default_sort = [(CandidateJobs.updated_at, True)]
+
+
 class CandidateDocumentAdmin(ModelView, model=CandidateDocument):
-    name = "Candidate Document"
-    name_plural = "Candidate Documents"
+    name = "Document"
+    name_plural = "Documents"
     icon = "fa-solid fa-file"
 
     column_list = [
@@ -357,27 +467,6 @@ class MessageAdmin(ModelView, model=Message):
     ]
 
 
-class EmailAdmin(ModelView, model=Email):
-    name = "Email"
-    name_plural = "Emails"
-    icon = "fa-solid fa-envelope"
-
-    column_list = [
-        Email.id,
-        Email.candidate_id,
-        Email.to_email,
-        Email.subject,
-        Email.direction,
-        Email.status,
-        Email.created_at,
-    ]
-    column_searchable_list = [Email.to_email, Email.subject]
-    column_sortable_list = [Email.subject, Email.direction, Email.status, Email.created_at]
-    column_default_sort = [(Email.created_at, True)]
-
-    form_excluded_columns = [Email.provider_message_id]
-
-
 class InboundEmailAdmin(ModelView, model=InboundEmail):
     name = "Inbound Email"
     name_plural = "Inbound Emails"
@@ -405,30 +494,6 @@ class InboundEmailAdmin(ModelView, model=InboundEmail):
     column_default_sort = [(InboundEmail.received_at, True)]
 
     form_excluded_columns = [InboundEmail.raw_storage_key, InboundEmail.message_id]
-
-
-class InboundEmailAttachmentAdmin(ModelView, model=InboundEmailAttachment):
-    name = "Inbound Email Attachment"
-    name_plural = "Inbound Email Attachments"
-    icon = "fa-solid fa-paperclip"
-
-    column_list = [
-        InboundEmailAttachment.id,
-        InboundEmailAttachment.inbound_email_id,
-        InboundEmailAttachment.filename,
-        InboundEmailAttachment.content_type,
-        InboundEmailAttachment.size_bytes,
-        InboundEmailAttachment.created_at,
-    ]
-    column_searchable_list = [InboundEmailAttachment.filename, InboundEmailAttachment.content_type]
-    column_sortable_list = [
-        InboundEmailAttachment.filename,
-        InboundEmailAttachment.size_bytes,
-        InboundEmailAttachment.created_at,
-    ]
-    column_default_sort = [(InboundEmailAttachment.created_at, True)]
-
-    form_excluded_columns = [InboundEmailAttachment.storage_key, InboundEmailAttachment.sha256]
 
 
 class TemplateAdmin(ModelView, model=Template):
@@ -518,3 +583,62 @@ class ActivityAdmin(ModelView, model=Activity):
     column_default_sort = [(Activity.created_at, True)]
 
     form_excluded_columns = [Activity.metadata_]
+
+
+class AutomationAdmin(ModelView, model=Automation):
+    name = "Automation"
+    name_plural = "Automations"
+    icon = "fa-solid fa-robot"
+
+    column_list = [
+        Automation.id,
+        Automation.org_id,
+        Automation.name,
+        Automation.status,
+        Automation.scope,
+        Automation.trigger_key,
+        Automation.job_id,
+        Automation.last_run_at,
+        Automation.execution_count,
+        Automation.created_at,
+    ]
+    column_searchable_list = [Automation.name, Automation.trigger_key]
+    column_sortable_list = [
+        Automation.name,
+        Automation.status,
+        Automation.scope,
+        Automation.last_run_at,
+        Automation.execution_count,
+        Automation.created_at,
+    ]
+    column_default_sort = [(Automation.created_at, True)]
+    form_excluded_columns = [
+        Automation.trigger_config,
+        Automation.conditions,
+        Automation.actions,
+    ]
+
+
+class AutomationExecutionAdmin(ModelView, model=AutomationExecution):
+    name = "Automation Execution"
+    name_plural = "Automation Executions"
+    icon = "fa-solid fa-list-check"
+
+    column_list = [
+        AutomationExecution.id,
+        AutomationExecution.org_id,
+        AutomationExecution.automation_id,
+        AutomationExecution.trigger_event,
+        AutomationExecution.candidate_id,
+        AutomationExecution.job_id,
+        AutomationExecution.status,
+        AutomationExecution.created_at,
+    ]
+    column_searchable_list = [AutomationExecution.trigger_event, AutomationExecution.status]
+    column_sortable_list = [
+        AutomationExecution.trigger_event,
+        AutomationExecution.status,
+        AutomationExecution.created_at,
+    ]
+    column_default_sort = [(AutomationExecution.created_at, True)]
+    form_excluded_columns = [AutomationExecution.message]

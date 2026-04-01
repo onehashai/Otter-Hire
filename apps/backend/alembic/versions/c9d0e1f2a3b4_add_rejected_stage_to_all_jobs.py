@@ -27,17 +27,21 @@ def upgrade() -> None:
     for job in jobs:
         job_id = job["id"]
         org_id = job["org_id"]
-        rows = conn.execute(
-            sa.text(
-                """
+        rows = (
+            conn.execute(
+                sa.text(
+                    """
                 SELECT id, name, position, is_required
                 FROM stages
                 WHERE job_id = :job_id
                 ORDER BY position ASC, created_at ASC
                 """
-            ),
-            {"job_id": job_id},
-        ).mappings().all()
+                ),
+                {"job_id": job_id},
+            )
+            .mappings()
+            .all()
+        )
         if not rows:
             continue
 
@@ -48,7 +52,9 @@ def upgrade() -> None:
         if applied is None:
             applied_id = uuid4()
             next_position = conn.execute(
-                sa.text("SELECT COALESCE(MAX(position), -1) + 1 FROM stages WHERE job_id = :job_id"),
+                sa.text(
+                    "SELECT COALESCE(MAX(position), -1) + 1 FROM stages WHERE job_id = :job_id"
+                ),
                 {"job_id": job_id},
             ).scalar_one()
             conn.execute(
@@ -65,7 +71,9 @@ def upgrade() -> None:
         if hired is None:
             hired_id = uuid4()
             next_position = conn.execute(
-                sa.text("SELECT COALESCE(MAX(position), -1) + 1 FROM stages WHERE job_id = :job_id"),
+                sa.text(
+                    "SELECT COALESCE(MAX(position), -1) + 1 FROM stages WHERE job_id = :job_id"
+                ),
                 {"job_id": job_id},
             ).scalar_one()
             conn.execute(
@@ -82,7 +90,9 @@ def upgrade() -> None:
         if rejected is None:
             rejected_id = uuid4()
             next_position = conn.execute(
-                sa.text("SELECT COALESCE(MAX(position), -1) + 1 FROM stages WHERE job_id = :job_id"),
+                sa.text(
+                    "SELECT COALESCE(MAX(position), -1) + 1 FROM stages WHERE job_id = :job_id"
+                ),
                 {"job_id": job_id},
             ).scalar_one()
             conn.execute(
@@ -96,17 +106,21 @@ def upgrade() -> None:
             )
             rejected = {"id": rejected_id, "name": "Rejected"}
 
-        rows = conn.execute(
-            sa.text(
-                """
+        rows = (
+            conn.execute(
+                sa.text(
+                    """
                 SELECT id, name, position
                 FROM stages
                 WHERE job_id = :job_id
                 ORDER BY position ASC, created_at ASC
                 """
-            ),
-            {"job_id": job_id},
-        ).mappings().all()
+                ),
+                {"job_id": job_id},
+            )
+            .mappings()
+            .all()
+        )
 
         required_ids = {
             str(applied["id"]),

@@ -146,3 +146,38 @@ class JobWorkspaceResponse(BaseModel):
     status: str
     stages: list[HiringStageResponse] = []
     candidates: list[JobWorkspaceCandidateResponse] = []
+
+
+class JobEmailInboxResponse(BaseModel):
+    job_id: UUID
+    org_id: UUID
+    inbox_address: str
+    provider: str
+    status: Literal["inactive", "pending", "active"]
+    verification_status: Literal["pending", "action_required", "verified", "failed"]
+    verification_provider: Optional[str] = None
+    verification_action_type: Optional[str] = None
+    verification_action_url: Optional[str] = None
+    verification_detected_at: Optional[datetime] = None
+    verification_error: Optional[str] = None
+    verified_at: Optional[datetime] = None
+    verification_expires_at: Optional[datetime] = None
+
+
+class JobEmailConfigResponse(BaseModel):
+    app_id: Literal["email_integration"] = "email_integration"
+    inbox: Optional[JobEmailInboxResponse] = None
+    configured: bool = False
+    status: str = "not_configured"
+
+
+class JobEmailConfigUpsertRequest(BaseModel):
+    inbox_address: str = Field(min_length=3, max_length=320)
+    provider: str = Field(default="ses", min_length=1, max_length=32)
+
+
+class JobEmailActionResponse(BaseModel):
+    app_id: Literal["email_integration"] = "email_integration"
+    status: str
+    message: str
+    action_url: Optional[str] = None

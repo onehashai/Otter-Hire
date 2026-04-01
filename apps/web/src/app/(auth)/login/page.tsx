@@ -15,6 +15,7 @@ import { PRODUCT_LOGO_LETTER, PLATFORM_NAME } from "@/lib/constants";
 import { loginSchema, type LoginFormValues } from "@/lib/schemas/zodResolver";
 import { getGoogleAuthEnabled, login, API_BASE_URL } from "@/api/index";
 import { useAuthSession } from "@/app/providers";
+import { normalizeEmail } from "@/lib/validation/contact";
 
 function isSafeRedirect(path: string): boolean {
   return path.startsWith("/invite/") && path.length > 8;
@@ -61,7 +62,7 @@ export default function Login() {
     form.clearErrors("root");
     try {
       await login({
-        email: data.email,
+        email: normalizeEmail(data.email),
         password: data.password,
       });
       const inviteToken = getInviteTokenFromRedirect(inviteRedirect);

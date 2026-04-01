@@ -114,3 +114,100 @@ export type IntegrationInboxActionResponse = {
   message: string;
   action_url?: string | null;
 };
+
+export type JobIntegrationEmailConfigResponse = {
+  app_id: "email_integration";
+  inbox: JobIntegrationInboxResponse | null;
+  configured: boolean;
+  status: string;
+};
+
+export type JobIntegrationEmailConfigUpsertRequest = {
+  inbox_address: string;
+  provider: string;
+};
+
+export type JobIntegrationInboxResponse = {
+  job_id: string;
+  org_id: string;
+  inbox_address: string;
+  provider: string;
+  status: "inactive" | "pending" | "active";
+  verification_status: "pending" | "action_required" | "verified" | "failed";
+  verification_provider: string | null;
+  verification_action_type: string | null;
+  verification_action_url: string | null;
+  verification_detected_at: string | null;
+  verification_error: string | null;
+  verified_at: string | null;
+  verification_expires_at: string | null;
+};
+
+export type JobIntegrationEmailActionResponse = {
+  app_id: "email_integration";
+  status: string;
+  message: string;
+  action_url?: string | null;
+};
+
+export function getJobEmailIntegrationConfig(
+  jobId: string,
+): Promise<JobIntegrationEmailConfigResponse> {
+  return apiFetch<JobIntegrationEmailConfigResponse>(`/jobs/${jobId}/integrations/email/config`, {
+    method: "GET",
+  });
+}
+
+export function upsertJobEmailIntegrationConfig(
+  jobId: string,
+  data: JobIntegrationEmailConfigUpsertRequest,
+): Promise<JobIntegrationEmailConfigResponse> {
+  return apiFetch<JobIntegrationEmailConfigResponse>(`/jobs/${jobId}/integrations/email/config`, {
+    method: "PUT",
+    body: data,
+  });
+}
+
+export function rotateJobEmailIntegrationSecret(
+  jobId: string,
+): Promise<JobIntegrationEmailActionResponse> {
+  return apiFetch<JobIntegrationEmailActionResponse>(
+    `/jobs/${jobId}/integrations/email/rotate-secret`,
+    {
+      method: "POST",
+    },
+  );
+}
+
+export function verifyNowJobEmailIntegration(
+  jobId: string,
+): Promise<JobIntegrationEmailActionResponse> {
+  return apiFetch<JobIntegrationEmailActionResponse>(
+    `/jobs/${jobId}/integrations/email/verify-now`,
+    {
+      method: "POST",
+    },
+  );
+}
+
+export function verifyCompleteJobEmailIntegration(
+  jobId: string,
+): Promise<JobIntegrationEmailActionResponse> {
+  return apiFetch<JobIntegrationEmailActionResponse>(
+    `/jobs/${jobId}/integrations/email/verify-complete`,
+    {
+      method: "POST",
+    },
+  );
+}
+
+export function disconnectJobEmailIntegration(
+  jobId: string,
+): Promise<{ status: string; message: string }> {
+  return apiFetch<{ status: string; message: string }>(
+    `/jobs/${jobId}/integrations/email/disconnect`,
+    {
+      method: "POST",
+    },
+  );
+}

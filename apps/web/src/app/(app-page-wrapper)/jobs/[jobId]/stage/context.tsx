@@ -12,7 +12,7 @@ import {
 import { useParams } from "next/navigation";
 import { getJobWorkspace, type JobWorkspaceResponse } from "@/api";
 import { useSetPageMetadata } from "@/hooks/useSetPageMetadata";
-import { useTranslation } from "react-i18next";
+import { JOB_WORKSPACE_PAGE_SUBTITLE, JOB_WORKSPACE_PAGE_TITLE } from "@/lib/job-page-metadata";
 
 type JobWorkspaceStageContextValue = {
   workspace: JobWorkspaceResponse | null;
@@ -26,7 +26,7 @@ const JobWorkspaceStageContext = createContext<JobWorkspaceStageContextValue | n
 export function JobWorkspaceStageProvider({ children }: { children: ReactNode }) {
   const params = useParams();
   const jobId = params?.jobId as string | undefined;
-  const { t } = useTranslation();
+
   const [workspace, setWorkspace] = useState<JobWorkspaceResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -61,8 +61,8 @@ export function JobWorkspaceStageProvider({ children }: { children: ReactNode })
   }, [jobId, reload]);
 
   useSetPageMetadata({
-    title: t("job_stage_title"),
-    subtitle: t("job_stage_subtitle"),
+    title: JOB_WORKSPACE_PAGE_TITLE,
+    subtitle: JOB_WORKSPACE_PAGE_SUBTITLE,
   });
 
   const value = useMemo(

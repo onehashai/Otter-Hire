@@ -18,8 +18,8 @@ import {
 } from "@/components/candidates/shared/tabs";
 import { SummaryPanel } from "@/components/candidates/shared/summary/SummaryPanel";
 import { ActionButtons } from "@/components/candidates/job_candidates/ActionButtons";
+import { cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
-import { useSetPageMetadata } from "@/hooks/useSetPageMetadata";
 import {
   getApiBase,
   addCandidateNote,
@@ -86,7 +86,7 @@ function mapHiringTimelineItem(activity: {
   if (activity.type === "candidate_created") {
     const source = String(metadata.source ?? "Manual");
     return {
-      action: source === "Job Board" ? "Applied from job board" : "Candidate added",
+      action: source === "job_portal" ? "Applied from job portal" : "Candidate added",
       user: actor,
       date,
       icon: "apply",
@@ -153,11 +153,6 @@ export function JobCandidateProfile({
   const [docType, setDocType] = useState("attachment");
   const [documentLoading, setDocumentLoading] = useState(false);
 
-  useSetPageMetadata({
-    title: t("job_candidate_edit_title"),
-    subtitle: t("job_candidate_edit_subtitle"),
-  });
-
   const loadAll = async (candidateId: string) => {
     const [candidateData, overviewData, documentsData, applicationResponsesData] =
       await Promise.all([
@@ -197,14 +192,6 @@ export function JobCandidateProfile({
   }, [id]);
 
   useEffect(() => {
-    if (!candidate || !jobRouteJobId || !id) return;
-    const cid = candidate.job_id;
-    if (cid && cid !== jobRouteJobId) {
-      router.replace(`/jobs/${encodeURIComponent(cid)}/candidates/${encodeURIComponent(id)}`);
-    }
-  }, [candidate, jobRouteJobId, id, router]);
-
-  useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
@@ -222,6 +209,10 @@ export function JobCandidateProfile({
   }, []);
 
   const currentJobId = jobRouteJobId ?? candidate?.job_id ?? null;
+  const currentAssignment = useMemo(() => {
+    if (!candidate || !currentJobId) return null;
+    return (candidate.assignments ?? []).find((a) => a.job_id === currentJobId) ?? null;
+  }, [candidate, currentJobId]);
 
   useEffect(() => {
     if (!currentJobId) {
@@ -254,7 +245,7 @@ export function JobCandidateProfile({
 
   const uiCandidate = useMemo(() => {
     if (!candidate) return null;
-    const stage = candidate.stage_name ?? "Applied";
+    const stage = currentAssignment?.stage_name ?? candidate.stage_name ?? "Applied";
 
     const timeline = (overview?.activities ?? [])
       .filter((a) => HIRING_TIMELINE_TYPES.has(a.type))
@@ -262,19 +253,19 @@ export function JobCandidateProfile({
 
     return {
       name: candidate.name,
-      role: candidate.job_title ?? "—",
+      role: currentAssignment?.job_title ?? candidate.job_title ?? "—",
       email: candidate.email,
       phone: candidate.phone ?? "—",
-      address: candidate.address ?? "—",
+      location: candidate.location ?? "—",
       stage,
-      source: candidate.source ?? "Job Board",
+      source: candidate.source ?? "job_portal",
       appliedDate: candidate.created_at,
       documents: [
         ...documents.map((d) => ({
           id: d.id,
           name: d.name,
           type: d.doc_type,
-          date: d.created_at,
+          date: new Date(d.created_at).toLocaleDateString(),
           size: d.size_label ?? "—",
           url: d.url,
         })),
@@ -290,7 +281,7 @@ export function JobCandidateProfile({
         mentions: n.mentions,
       })),
     };
-  }, [candidate, overview, documents]);
+  }, [candidate, currentAssignment, overview, documents]);
 
   const resumeDoc = useMemo(() => {
     const docs = uiCandidate?.documents ?? [];
@@ -382,7 +373,7 @@ export function JobCandidateProfile({
     name: string;
     email: string;
     phone: string | null;
-    address: string | null;
+    location: string | null;
   }) => {
     if (!id) return;
     try {
@@ -475,20 +466,34 @@ export function JobCandidateProfile({
           onClick={() =>
             jobRouteJobId
               ? router.push(`/jobs/${encodeURIComponent(jobRouteJobId)}`)
-              : router.push("/talent-pool")
+              : router.push("/candidates")
           }
         >
           <Icon name="ChevronLeft" className="h-3.5 w-3.5 mr-1.5" />{" "}
-          {jobRouteJobId ? "Back to job" : t("talent_pool_title")}
+          {jobRouteJobId ? "Back to job" : t("candidates_title")}
         </Button>
       </div>
     );
   }
 
+  const sourceBadgeLabel =
+    uiCandidate.source === "Manual"
+      ? "Manually Added"
+      : uiCandidate.source === "email_automation"
+        ? "Email Automation"
+        : uiCandidate.source === "job_portal"
+          ? "Job Portal"
+          : toTitle(uiCandidate.source).replaceAll("_", " ");
+
   return (
     <>
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
+        <div
+          className={cn(
+            "flex items-center justify-between gap-2",
+            isStageThreePane && isMobile && "px-3",
+          )}
+        >
           {isStageThreePane ? (
             <div className="flex items-center gap-2 min-w-0">
               <p className="text-sm font-medium truncate">{uiCandidate.name}</p>
@@ -497,15 +502,15 @@ export function JobCandidateProfile({
             <Button variant="ghost" size="sm" className="h-8 text-xs gap-1.5" asChild>
               <Link
                 href={
-                  jobRouteJobId && candidate?.stage_id
-                    ? `/jobs/${encodeURIComponent(jobRouteJobId)}/stage/${encodeURIComponent(candidate.stage_id)}`
+                  jobRouteJobId && (currentAssignment?.stage_id ?? candidate?.stage_id)
+                    ? `/jobs/${encodeURIComponent(jobRouteJobId)}/stage/${encodeURIComponent(currentAssignment?.stage_id ?? candidate?.stage_id ?? "")}`
                     : jobRouteJobId
                       ? `/jobs/${encodeURIComponent(jobRouteJobId)}`
-                      : "/talent-pool"
+                      : "/candidates"
                 }
               >
                 <Icon name="ChevronLeft" className="h-3.5 w-3.5" />{" "}
-                {jobRouteJobId ? "Job" : t("talent_pool_title")}
+                {jobRouteJobId ? "Job" : t("candidates_title")}
               </Link>
             </Button>
           )}
@@ -513,7 +518,7 @@ export function JobCandidateProfile({
             candidateName={uiCandidate.name}
             candidateId={candidate!.id}
             jobId={jobRouteJobId ?? candidate?.job_id ?? undefined}
-            currentStageId={candidate?.stage_id}
+            currentStageId={currentAssignment?.stage_id ?? candidate?.stage_id}
             stages={jobStages}
             onCandidateUpdated={async () => {
               if (id) await loadAll(id);
@@ -524,7 +529,12 @@ export function JobCandidateProfile({
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="h-9 w-full justify-start bg-transparent border-b rounded-none p-0 gap-0">
+          <TabsList
+            className={cn(
+              "h-9 w-full justify-start bg-transparent border-b rounded-none p-0 gap-0",
+              isStageThreePane && isMobile && "px-3",
+            )}
+          >
             {[
               { value: "overview", label: t("overview") },
               { value: "messages", label: t("messages") },
@@ -543,8 +553,14 @@ export function JobCandidateProfile({
             ))}
           </TabsList>
 
-          <div className={`mt-4 ${isMobile ? "space-y-4" : "grid grid-cols-[1fr_320px] gap-4"}`}>
-            <div>
+          <div
+            className={cn(
+              "mt-4 min-w-0 overflow-x-hidden",
+              isMobile ? "space-y-4" : "grid grid-cols-[1fr_320px] gap-4",
+              isStageThreePane && isMobile && "px-0",
+            )}
+          >
+            <div className="min-w-0 overflow-x-hidden">
               <TabsContent value="overview" className={`mt-0 ${isMobile ? "space-y-4" : ""}`}>
                 {isStageThreePane ? (
                   <div className="space-y-4">
@@ -558,7 +574,7 @@ export function JobCandidateProfile({
                           : null
                       }
                       resumeName={resumeDoc?.name ?? null}
-                      onUploadDocument={undefined}
+                      onUploadResumeFile={handleReplaceResume}
                     />
                     <OverviewTab
                       timeline={[]}
@@ -585,7 +601,7 @@ export function JobCandidateProfile({
                   candidateName={uiCandidate.name}
                   candidateEmail={candidate!.email}
                   jobId={jobRouteJobId ?? candidate?.job_id ?? null}
-                  jobTitle={candidate?.job_title ?? null}
+                  jobTitle={currentAssignment?.job_title ?? candidate?.job_title ?? null}
                 />
               </TabsContent>
               <TabsContent value="documents" className="mt-0">
@@ -613,6 +629,7 @@ export function JobCandidateProfile({
             <SummaryPanel
               variant="job"
               candidate={uiCandidate}
+              timeline={uiCandidate.timeline}
               onSaveProfile={handleSaveSummaryProfile}
               onSaveLinks={handleSaveSummaryLinks}
               onReplaceResume={handleReplaceResume}

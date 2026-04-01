@@ -15,7 +15,7 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from app.core.config import settings
 from app.models.candidate import Candidate
-from app.models.candidate_document import CandidateDocument
+from app.models.document import CandidateDocument
 from app.models.integration import Integration
 from app.models.integration_credential import IntegrationCredential
 from app.models.job import Job

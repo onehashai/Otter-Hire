@@ -5,7 +5,7 @@ One row per (org_id, integration_id). Stores config, status, and optional encryp
 Each org can connect to integrations defined in the integrations table.
 """
 
-from sqlalchemy import Column, DateTime, ForeignKey, String, UniqueConstraint
+from sqlalchemy import Column, DateTime, ForeignKey, Index, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -38,6 +38,7 @@ class IntegrationCredential(Base):
     integration_id = Column(
         UUID(as_uuid=True), ForeignKey("integrations.id"), nullable=False, index=True
     )
+    job_id = Column(UUID(as_uuid=True), ForeignKey("jobs.id", ondelete="CASCADE"), nullable=True)
     config = Column(JSONB, nullable=False, server_default="{}")
     status = Column(String(32), nullable=False, server_default="pending")
     encrypted_credentials = Column(String(4096), nullable=True)
@@ -48,7 +49,23 @@ class IntegrationCredential(Base):
 
     __table_args__ = (
         UniqueConstraint(
-            "org_id", "integration_id", name="uq_integration_credentials_org_integration"
+            "org_id",
+            "integration_id",
+            "job_id",
+            name="uq_integration_credentials_org_integration_job",
+        ),
+        Index(
+            "uq_integration_credentials_org_integration_org_scope",
+            "org_id",
+            "integration_id",
+            unique=True,
+            postgresql_where=(job_id.is_(None)),
+        ),
+        Index(
+            "ix_integration_credentials_integration_org_job",
+            "integration_id",
+            "org_id",
+            "job_id",
         ),
     )
 

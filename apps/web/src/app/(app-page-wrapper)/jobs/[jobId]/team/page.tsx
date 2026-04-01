@@ -93,7 +93,7 @@ export default function HiringTeamPage() {
               className="w-full flex items-center gap-3 rounded-lg p-2.5 text-left hover:bg-muted/50 transition-colors"
             >
               <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-xs font-medium text-muted-foreground shrink-0">
-                {user.name ? getInitialsFromName(user.name, 2, "U") : "U"}
+                {user.name ? getInitialsFromName(user.name, "U") : "U"}
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium truncate">{user.name ?? user.email}</p>

@@ -24,7 +24,9 @@ async def parse_job_apply_resume_activity(input_data: JobApplyResumeParseInput) 
 
     org_id = UUID(input_data.org_id)
     candidate_id = UUID(input_data.candidate_id)
-    mime_primary = (input_data.mime.split(";")[0].strip() if input_data.mime else "application/octet-stream")
+    mime_primary = (
+        input_data.mime.split(";")[0].strip() if input_data.mime else "application/octet-stream"
+    )
 
     try:
         content = await storage_service.read_bytes(input_data.object_key)

@@ -49,9 +49,7 @@ def _dedupe_skills(skills: list[Skill], limit: int = 80) -> list[Skill]:
         if key in seen:
             continue
         seen.add(key)
-        out.append(
-            Skill(name=name[:120], category=_trim(s.category, 80))
-        )
+        out.append(Skill(name=name[:120], category=_trim(s.category, 80)))
         if len(out) >= limit:
             break
     return out
@@ -112,11 +110,7 @@ def sanitize_resume_profile(profile: ResumeProfile) -> ResumeProfile:
             )
         )
 
-    section_map = {
-        k[:80]: v[:8000]
-        for k, v in list(profile.section_map.items())[:30]
-        if k and v
-    }
+    section_map = {k[:80]: v[:8000] for k, v in list(profile.section_map.items())[:30] if k and v}
 
     return ResumeProfile(
         personal=personal,

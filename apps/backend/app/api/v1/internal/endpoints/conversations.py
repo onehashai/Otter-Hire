@@ -12,8 +12,6 @@ from app.core.config import settings
 from app.core.logging import logger
 from app.core.permissions import require_permission
 from app.db.session import get_db
-from app.temporal.email.queue import enqueue_outbound_email
-from app.temporal.email.types import OutboundWorkflowInput
 from app.models.candidate import Candidate
 from app.models.conversation import Conversation
 from app.models.integration import Integration
@@ -28,6 +26,8 @@ from app.schemas.conversations import (
     MessageCreate,
     MessageRead,
 )
+from app.temporal.email.queue import enqueue_outbound_email
+from app.temporal.email.types import OutboundWorkflowInput
 from app.utils.uuid import uuid7
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])

@@ -43,14 +43,14 @@ async def handle_send_email_action(
         from datetime import datetime, timezone
 
         from app.core.config import settings
-        from app.temporal.email.queue import enqueue_outbound_email
-        from app.temporal.email.types import OutboundWorkflowInput
         from app.models.candidate import Candidate
         from app.models.conversation import Conversation
         from app.models.integration import Integration
         from app.models.integration_credential import IntegrationCredential
         from app.models.message import Message
         from app.models.organization import Organization
+        from app.temporal.email.queue import enqueue_outbound_email
+        from app.temporal.email.types import OutboundWorkflowInput
         from app.utils.uuid import uuid7
 
         # Extract template ID from config

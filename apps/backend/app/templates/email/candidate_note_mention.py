@@ -19,7 +19,7 @@ def build_candidate_note_mention_email(
     safe_recipient = recipient_name or "there"
     excerpt_block = (
         f'<p style="margin:0 0 24px;padding:12px 16px;border-left:3px solid #e8e8e8;'
-        f'background-color:#fafafa;font-size:14px;color:#555555;line-height:1.6;'
+        f"background-color:#fafafa;font-size:14px;color:#555555;line-height:1.6;"
         f'white-space:pre-wrap">{esc(note_excerpt)}</p>'
     )
     inner = f"""
@@ -48,4 +48,4 @@ def build_candidate_note_mention_email(
             Open candidate:
             {candidate_url}
             """,
-        )
+    )

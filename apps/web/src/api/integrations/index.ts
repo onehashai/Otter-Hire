@@ -150,7 +150,9 @@ export type JobIntegrationEmailActionResponse = {
   action_url?: string | null;
 };
 
-export function getJobEmailIntegrationConfig(jobId: string): Promise<JobIntegrationEmailConfigResponse> {
+export function getJobEmailIntegrationConfig(
+  jobId: string,
+): Promise<JobIntegrationEmailConfigResponse> {
   return apiFetch<JobIntegrationEmailConfigResponse>(`/jobs/${jobId}/integrations/email/config`, {
     method: "GET",
   });
@@ -180,9 +182,12 @@ export function rotateJobEmailIntegrationSecret(
 export function verifyNowJobEmailIntegration(
   jobId: string,
 ): Promise<JobIntegrationEmailActionResponse> {
-  return apiFetch<JobIntegrationEmailActionResponse>(`/jobs/${jobId}/integrations/email/verify-now`, {
-    method: "POST",
-  });
+  return apiFetch<JobIntegrationEmailActionResponse>(
+    `/jobs/${jobId}/integrations/email/verify-now`,
+    {
+      method: "POST",
+    },
+  );
 }
 
 export function verifyCompleteJobEmailIntegration(
@@ -199,7 +204,10 @@ export function verifyCompleteJobEmailIntegration(
 export function disconnectJobEmailIntegration(
   jobId: string,
 ): Promise<{ status: string; message: string }> {
-  return apiFetch<{ status: string; message: string }>(`/jobs/${jobId}/integrations/email/disconnect`, {
-    method: "POST",
-  });
+  return apiFetch<{ status: string; message: string }>(
+    `/jobs/${jobId}/integrations/email/disconnect`,
+    {
+      method: "POST",
+    },
+  );
 }

@@ -91,6 +91,7 @@ export function JobEmailIntegrationManager({ jobId, onChanged }: JobEmailIntegra
     if (!waitingForEmail) return;
     const timer = window.setInterval(refreshInboxStatus, 8000);
     return () => window.clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasInboxConfig, verificationStatus, inboxStatus]);
 
   useEffect(() => {
@@ -98,6 +99,7 @@ export function JobEmailIntegrationManager({ jobId, onChanged }: JobEmailIntegra
     if (!verifyDialogOpen || verificationDone) return;
     const timer = window.setInterval(refreshInboxStatus, 12000);
     return () => window.clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [verifyDialogOpen, verificationStatus, inboxStatus]);
 
   const forwardingDomain = process.env.NEXT_PUBLIC_INBOUND_EMAIL_DOMAIN || "inbound.smartats.in";

@@ -36,10 +36,7 @@ import {
 } from "../../../../lib/validations/setupValidation";
 import { useEffect, useState } from "react";
 import { useSetPageMetadata } from "@/hooks/useSetPageMetadata";
-import {
-  JOB_WORKSPACE_PAGE_SUBTITLE,
-  JOB_WORKSPACE_PAGE_TITLE,
-} from "@/lib/job-page-metadata";
+import { JOB_WORKSPACE_PAGE_SUBTITLE, JOB_WORKSPACE_PAGE_TITLE } from "@/lib/job-page-metadata";
 
 function SetupLayoutInner({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();

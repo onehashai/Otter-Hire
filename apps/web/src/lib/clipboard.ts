@@ -1,7 +1,7 @@
 export async function copyToClipboard(text: string): Promise<boolean> {
   const value = String(text ?? "").trim();
   if (!value) return false;
-  
+
   // Modern clipboard API (works in secure contexts - HTTPS)
   if (typeof window !== "undefined" && window.isSecureContext && window.navigator?.clipboard) {
     try {
@@ -11,7 +11,7 @@ export async function copyToClipboard(text: string): Promise<boolean> {
       // Fall through to fallback method
     }
   }
-  
+
   // Fallback for non-secure contexts (HTTP) or when modern API fails
   return new Promise((resolve) => {
     const textarea = document.createElement("textarea");
@@ -26,9 +26,9 @@ export async function copyToClipboard(text: string): Promise<boolean> {
     textarea.style.outline = "none";
     textarea.style.boxShadow = "none";
     textarea.style.background = "transparent";
-    
+
     document.body.appendChild(textarea);
-    
+
     let copyEventFired = false;
     const copyListener = (e: ClipboardEvent) => {
       copyEventFired = true;
@@ -37,23 +37,23 @@ export async function copyToClipboard(text: string): Promise<boolean> {
         e.clipboardData.setData("text/plain", value);
       }
     };
-    
+
     document.addEventListener("copy", copyListener);
-    
+
     textarea.focus();
     textarea.select();
     textarea.setSelectionRange(0, value.length);
-    
+
     let success = false;
     try {
       success = document.execCommand("copy");
     } catch (err) {
       // Ignore error
     }
-    
+
     document.removeEventListener("copy", copyListener);
     document.body.removeChild(textarea);
-    
+
     resolve(success || copyEventFired);
   });
 }

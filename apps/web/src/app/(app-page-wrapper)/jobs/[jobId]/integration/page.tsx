@@ -71,6 +71,7 @@ export default function IntegrationPage() {
   useEffect(() => {
     if (!jobId) return;
     void fetchEmailStatus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId]);
 
   return (

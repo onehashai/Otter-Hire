@@ -12,10 +12,7 @@ import {
 import { useParams } from "next/navigation";
 import { getJobWorkspace, type JobWorkspaceResponse } from "@/api";
 import { useSetPageMetadata } from "@/hooks/useSetPageMetadata";
-import {
-  JOB_WORKSPACE_PAGE_SUBTITLE,
-  JOB_WORKSPACE_PAGE_TITLE,
-} from "@/lib/job-page-metadata";
+import { JOB_WORKSPACE_PAGE_SUBTITLE, JOB_WORKSPACE_PAGE_TITLE } from "@/lib/job-page-metadata";
 
 type JobWorkspaceStageContextValue = {
   workspace: JobWorkspaceResponse | null;

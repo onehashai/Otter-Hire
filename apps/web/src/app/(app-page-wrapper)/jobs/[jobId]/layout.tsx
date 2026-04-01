@@ -36,6 +36,10 @@ import {
 } from "../../../../lib/validations/setupValidation";
 import { useEffect, useState } from "react";
 import { useSetPageMetadata } from "@/hooks/useSetPageMetadata";
+import {
+  JOB_WORKSPACE_PAGE_SUBTITLE,
+  JOB_WORKSPACE_PAGE_TITLE,
+} from "@/lib/job-page-metadata";
 
 function SetupLayoutInner({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -83,8 +87,8 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
   } = useJobSetup();
 
   useSetPageMetadata({
-    title: title || "",
-    subtitle: "Edit and manage candidates and jobs seamlessly in one place",
+    title: JOB_WORKSPACE_PAGE_TITLE,
+    subtitle: JOB_WORKSPACE_PAGE_SUBTITLE,
   });
 
   useEffect(() => {

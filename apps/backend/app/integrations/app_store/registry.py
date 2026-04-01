@@ -93,7 +93,7 @@ class LinkedInIntegrationModule(AppStoreIntegration):
     app_id: str = "linkedin"
     slug: str = "linkedin"
     name: str = "LinkedIn"
-    category: str = "job_board"
+    category: str = "job_portal"
 
     async def list_apps(
         self, db: AsyncSession, owner: IntegrationOwnerContext

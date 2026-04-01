@@ -12,9 +12,11 @@ from app.core.permissions import require_permission
 from app.db.session import get_db
 from app.deps.job_scope import ASSIGNED_ONLY_ROLES, require_job_access
 from app.integrations.linkedin import service as linkedin_service
+from app.integrations.app_store.email_integration import job_service as job_email_service
 from app.models.candidate import Candidate
 from app.models.candidate_jobs import CandidateJobs
 from app.models.job import Job
+from app.models.job_category import JobCategory
 from app.models.job_team_member import JobTeamMember
 from app.models.stage import Stage
 from app.models.user import User
@@ -24,6 +26,9 @@ from app.schemas.jobs import (
     JobCreateRequest,
     JobDescriptionAiRequest,
     JobDescriptionAiResponse,
+    JobEmailActionResponse,
+    JobEmailConfigResponse,
+    JobEmailConfigUpsertRequest,
     JobDetailResponse,
     JobListItemResponse,
     JobUpdateRequest,
@@ -250,11 +255,21 @@ async def create_job(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("jobs:create")),
 ):
+    default_category_name = "Software Development"
+    default_category_result = await db.execute(
+        select(JobCategory).where(
+            JobCategory.org_id == current_user.org_id,
+            JobCategory.name == default_category_name,
+        )
+    )
+    default_category = default_category_result.scalar_one_or_none()
+
     job = Job(
         org_id=current_user.org_id,
         created_by_user_id=current_user.id,
         title=body.title,
-        category="Software Development",
+        category=default_category_name,
+        category_id=default_category.id if default_category else None,
         workplace_type="remote",
         collect_resume=True,
         collect_cover=False,
@@ -303,6 +318,22 @@ async def update_job(
 
     update_data = body.model_dump(exclude_unset=True, exclude={"hiring_stages", "team_members"})
     _normalize_location_fields_for_update(job, update_data)
+
+    if "category" in update_data:
+        raw_category = update_data.get("category")
+        normalized_category = (raw_category or "").strip() if raw_category is not None else None
+        update_data["category"] = normalized_category or None
+        if normalized_category:
+            category_result = await db.execute(
+                select(JobCategory).where(
+                    JobCategory.org_id == current_user.org_id,
+                    JobCategory.name == normalized_category,
+                )
+            )
+            matched_category = category_result.scalar_one_or_none()
+            update_data["category_id"] = matched_category.id if matched_category else None
+        else:
+            update_data["category_id"] = None
 
     effective_wp = update_data.get("workplace_type", job.workplace_type)
     effective_country = update_data["country"] if "country" in update_data else job.country
@@ -473,6 +504,68 @@ async def get_job(
 ):
     job = await require_job_access(job_id, db, current_user)
     return _build_detail_response(job)
+
+
+@router.get("/{job_id}/integrations/email/config", response_model=JobEmailConfigResponse)
+async def get_job_email_integration_config(
+    job_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("jobs:update")),
+):
+    await require_job_access(job_id, db, current_user)
+    return await job_email_service.get_job_email_config(db, current_user.org_id, job_id)
+
+
+@router.put("/{job_id}/integrations/email/config", response_model=JobEmailConfigResponse)
+async def upsert_job_email_integration_config(
+    job_id: UUID,
+    body: JobEmailConfigUpsertRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("jobs:update")),
+):
+    await require_job_access(job_id, db, current_user)
+    return await job_email_service.upsert_job_email_config(db, current_user.org_id, job_id, body)
+
+
+@router.post("/{job_id}/integrations/email/rotate-secret", response_model=JobEmailActionResponse)
+async def rotate_job_email_integration_secret(
+    job_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("jobs:update")),
+):
+    await require_job_access(job_id, db, current_user)
+    return await job_email_service.rotate_job_email_secret(db, current_user.org_id, job_id)
+
+
+@router.post("/{job_id}/integrations/email/verify-now", response_model=JobEmailActionResponse)
+async def verify_job_email_integration_now(
+    job_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("jobs:update")),
+):
+    await require_job_access(job_id, db, current_user)
+    return await job_email_service.verify_now_job_email(db, current_user.org_id, job_id)
+
+
+@router.post("/{job_id}/integrations/email/verify-complete", response_model=JobEmailActionResponse)
+async def verify_job_email_integration_complete(
+    job_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("jobs:update")),
+):
+    await require_job_access(job_id, db, current_user)
+    return await job_email_service.verify_complete_job_email(db, current_user.org_id, job_id)
+
+
+@router.post("/{job_id}/integrations/email/disconnect")
+async def disconnect_job_email_integration(
+    job_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("jobs:update")),
+):
+    await require_job_access(job_id, db, current_user)
+    await job_email_service.disconnect_job_email(db, current_user.org_id, job_id)
+    return {"status": "disconnected", "message": "Job email integration disconnected"}
 
 
 @router.get("/{job_id}/workspace", response_model=JobWorkspaceResponse)

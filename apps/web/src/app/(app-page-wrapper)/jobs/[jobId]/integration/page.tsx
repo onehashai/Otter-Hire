@@ -4,15 +4,36 @@ import { useEffect, useState } from "react";
 import { Switch } from "@onehash/ui/switch";
 import { Badge } from "@onehash/ui/badge";
 import { Alert, AlertDescription } from "@onehash/ui/alert";
+import { Button } from "@onehash/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@onehash/ui/dialog";
+import { Clock, Trash2 } from "lucide-react";
+import { toast } from "@onehash/ui/sonner";
 import { useTranslation } from "react-i18next";
 import { useJobSetup } from "../context";
 import { getLinkedInStatus, type LinkedInStatus } from "@/api/linkedin";
+import {
+  disconnectJobEmailIntegration,
+  getJobEmailIntegrationConfig,
+  type JobIntegrationEmailConfigResponse,
+} from "@/api";
+import { JobEmailIntegrationManager } from "@/features/integrations/email-integration/JobEmailIntegrationManager";
 
 export default function IntegrationPage() {
   const { t } = useTranslation();
   const [linkedinStatus, setLinkedinStatus] = useState<LinkedInStatus | null>(null);
   const [loadingLinkedInStatus, setLoadingLinkedInStatus] = useState(true);
-  const { postToLinkedin, setPostToLinkedin } = useJobSetup();
+  const [emailStatus, setEmailStatus] = useState<JobIntegrationEmailConfigResponse | null>(null);
+  const [emailDialogOpen, setEmailDialogOpen] = useState(false);
+  const [disconnectConfirmOpen, setDisconnectConfirmOpen] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
+  const { jobId, isLoading, postToLinkedin, setPostToLinkedin } = useJobSetup();
 
   useEffect(() => {
     let mounted = true;
@@ -34,9 +55,63 @@ export default function IntegrationPage() {
 
   const isLinkedInReady = Boolean(linkedinStatus?.connected && linkedinStatus?.setup_complete);
 
+  const fetchEmailStatus = async () => {
+    if (!jobId) {
+      setEmailStatus(null);
+      return;
+    }
+    try {
+      const status = await getJobEmailIntegrationConfig(jobId);
+      setEmailStatus(status);
+    } catch {
+      setEmailStatus(null);
+    }
+  };
+
+  useEffect(() => {
+    if (!jobId) return;
+    void fetchEmailStatus();
+  }, [jobId]);
+
   return (
     <div className="relative">
       <div className="space-y-5">
+        <div className="rounded-lg border border-border p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-medium">Email Integration</p>
+                <Badge variant={emailStatus?.status === "active" ? "default" : "secondary"}>
+                  {emailStatus?.status === "active" ? t("connected") : t("not_connected")}
+                </Badge>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Connect a job-specific inbound mailbox to auto-create and assign candidates.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              {emailStatus?.configured ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8"
+                  onClick={() => setDisconnectConfirmOpen(true)}
+                  disabled={disconnecting}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              ) : null}
+              <Button
+                size="sm"
+                className="h-8"
+                onClick={() => setEmailDialogOpen(true)}
+                disabled={isLoading || !jobId}
+              >
+                {emailStatus?.configured ? "Manage" : "Connect"}
+              </Button>
+            </div>
+          </div>
+        </div>
         <div className="rounded-lg border border-border p-4">
           <div className="flex items-start justify-between gap-3">
             <div className="space-y-1">
@@ -59,10 +134,82 @@ export default function IntegrationPage() {
                 </Alert>
               ) : null}
             </div>
-            <Switch checked={postToLinkedin} onCheckedChange={setPostToLinkedin} />
+            {/* TODO(job-integrations): Remove the sr-only Switch + Coming Soon Button; render only <Switch checked={postToLinkedin} onCheckedChange={setPostToLinkedin} /> in this flex (same wrapper as Email row). */}
+            <div className="flex items-center gap-2">
+              <span className="sr-only">
+                <Switch checked={postToLinkedin} onCheckedChange={setPostToLinkedin} />
+              </span>
+              <Button
+                type="button"
+                size="sm"
+                className="h-8 gap-1.5 disabled:opacity-100"
+                disabled
+                tabIndex={-1}
+              >
+                <Clock className="h-4 w-4 shrink-0" aria-hidden />
+                Coming soon
+              </Button>
+            </div>
           </div>
         </div>
       </div>
+
+      <Dialog open={emailDialogOpen} onOpenChange={setEmailDialogOpen}>
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Job Email Integration</DialogTitle>
+            <DialogDescription>
+              Configure inbound email integration for this specific job.
+            </DialogDescription>
+          </DialogHeader>
+          {jobId ? (
+            <JobEmailIntegrationManager
+              jobId={jobId}
+              onChanged={async () => {
+                await fetchEmailStatus();
+              }}
+            />
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={disconnectConfirmOpen} onOpenChange={setDisconnectConfirmOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Disconnect Job Email Integration?</DialogTitle>
+            <DialogDescription>
+              This will disable email ingestion for this job-specific inbound address.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDisconnectConfirmOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              pending={disconnecting}
+              onClick={async () => {
+                setDisconnecting(true);
+                try {
+                  if (!jobId) throw new Error("Job is still loading");
+                  await disconnectJobEmailIntegration(jobId);
+                  toast.success("Job email integration disconnected");
+                  setDisconnectConfirmOpen(false);
+                  await fetchEmailStatus();
+                } catch (error) {
+                  const message =
+                    error instanceof Error ? error.message : "Failed to disconnect integration";
+                  toast.error(message);
+                } finally {
+                  setDisconnecting(false);
+                }
+              }}
+            >
+              Disconnect
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -28,14 +28,14 @@ class _AdminAuth(AuthenticationBackend):
 def setup_admin(app: FastAPI) -> Admin:
     from app.admin.views import (
         ActivityAdmin,
+        AutomationAdmin,
+        AutomationExecutionAdmin,
         CandidateAdmin,
         CandidateDocumentAdmin,
         CandidateJobsAdmin,
         ConversationAdmin,
-        EmailAdmin,
         FeedbackAdmin,
         InboundEmailAdmin,
-        InboundEmailAttachmentAdmin,
         IntegrationAdmin,
         IntegrationCredentialAdmin,
         InterviewAdmin,
@@ -46,7 +46,6 @@ def setup_admin(app: FastAPI) -> Admin:
         MessageAdmin,
         NoteAdmin,
         OrganizationAdmin,
-        OrgInboxAdmin,
         OrgMembershipAdmin,
         StageAdmin,
         TemplateAdmin,
@@ -63,7 +62,6 @@ def setup_admin(app: FastAPI) -> Admin:
 
     admin.add_view(UserAdmin)
     admin.add_view(OrganizationAdmin)
-    admin.add_view(OrgInboxAdmin)
     admin.add_view(OrgMembershipAdmin)
     admin.add_view(IntegrationAdmin)
     admin.add_view(IntegrationCredentialAdmin)
@@ -77,13 +75,13 @@ def setup_admin(app: FastAPI) -> Admin:
     admin.add_view(JobApplicationAdmin)
     admin.add_view(ConversationAdmin)
     admin.add_view(MessageAdmin)
-    admin.add_view(EmailAdmin)
     admin.add_view(InboundEmailAdmin)
-    admin.add_view(InboundEmailAttachmentAdmin)
     admin.add_view(TemplateAdmin)
     admin.add_view(InterviewAdmin)
     admin.add_view(FeedbackAdmin)
     admin.add_view(NoteAdmin)
     admin.add_view(ActivityAdmin)
+    admin.add_view(AutomationAdmin)
+    admin.add_view(AutomationExecutionAdmin)
 
     return admin

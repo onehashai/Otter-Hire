@@ -141,7 +141,7 @@ export function StandaloneCandidateProfile({
       phone: candidate.phone ?? "—",
       location: candidate.location ?? "—",
       stage,
-      source: candidate.source ?? "job_board",
+      source: candidate.source ?? "job_portal",
       appliedDate: candidate.created_at,
       documents: documents.map((d) => ({
         id: d.id,

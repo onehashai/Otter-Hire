@@ -16,8 +16,10 @@ from app.integrations.app_store.email_integration.temporal.queue import enqueue_
 from app.integrations.app_store.email_integration.temporal.types import OutboundWorkflowInput
 from app.models.candidate import Candidate
 from app.models.conversation import Conversation
+from app.models.integration import Integration
+from app.models.integration_credential import IntegrationCredential
 from app.models.message import Message
-from app.models.organization import Organization, OrgInbox
+from app.models.organization import Organization
 from app.models.user import User
 from app.schemas.conversations import (
     CandidateSnippet,
@@ -119,12 +121,20 @@ async def _append_outbound_message(
         )
 
     org_name: str | None = None
-    inbox_result = await db.execute(select(OrgInbox).where(OrgInbox.org_id == current_user.org_id))
-    org_inbox = inbox_result.scalar_one_or_none()
+    inbox_result = await db.execute(
+        select(IntegrationCredential)
+        .join(Integration, Integration.id == IntegrationCredential.integration_id)
+        .where(
+            IntegrationCredential.org_id == current_user.org_id,
+            IntegrationCredential.job_id.is_(None),
+            Integration.slug == "email",
+        )
+    )
+    inbox = inbox_result.scalar_one_or_none()
     reply_to = _reply_address_for_conversation(
         conv.id,
         fixed_domain=settings.inbound_email_domain,
-        inbox_address=org_inbox.inbox_address if org_inbox else None,
+        inbox_address=(inbox.config or {}).get("inbound_address") if inbox else None,
     )
     org_result = await db.execute(
         select(Organization).where(Organization.id == current_user.org_id)
@@ -329,12 +339,20 @@ async def create_conversation(
     await db.flush()
 
     org_name: str | None = None
-    inbox_result = await db.execute(select(OrgInbox).where(OrgInbox.org_id == current_user.org_id))
-    org_inbox = inbox_result.scalar_one_or_none()
+    inbox_result = await db.execute(
+        select(IntegrationCredential)
+        .join(Integration, Integration.id == IntegrationCredential.integration_id)
+        .where(
+            IntegrationCredential.org_id == current_user.org_id,
+            IntegrationCredential.job_id.is_(None),
+            Integration.slug == "email",
+        )
+    )
+    inbox = inbox_result.scalar_one_or_none()
     reply_to = _reply_address_for_conversation(
         conv.id,
         fixed_domain=settings.inbound_email_domain,
-        inbox_address=org_inbox.inbox_address if org_inbox else None,
+        inbox_address=(inbox.config or {}).get("inbound_address") if inbox else None,
     )
     org_result = await db.execute(
         select(Organization).where(Organization.id == current_user.org_id)

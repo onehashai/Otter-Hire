@@ -51,8 +51,10 @@ async def handle_send_email_action(
         )
         from app.models.candidate import Candidate
         from app.models.conversation import Conversation
+        from app.models.integration import Integration
+        from app.models.integration_credential import IntegrationCredential
         from app.models.message import Message
-        from app.models.organization import Organization, OrgInbox
+        from app.models.organization import Organization
         from app.utils.uuid import uuid7
 
         # Extract template ID from config
@@ -148,7 +150,15 @@ async def handle_send_email_action(
         org_name = org.name if org else None
 
         # Get inbox for reply-to address
-        inbox_stmt = select(OrgInbox).where(OrgInbox.org_id == org_id)
+        inbox_stmt = (
+            select(IntegrationCredential)
+            .join(Integration, Integration.id == IntegrationCredential.integration_id)
+            .where(
+                IntegrationCredential.org_id == org_id,
+                IntegrationCredential.job_id.is_(None),
+                Integration.slug == "email",
+            )
+        )
         inbox_result = await db.execute(inbox_stmt)
         org_inbox = inbox_result.scalar_one_or_none()
 
@@ -156,8 +166,8 @@ async def handle_send_email_action(
         reply_to_address = None
         if settings.inbound_email_domain:
             reply_to_address = f"reply+{conversation.id}@{settings.inbound_email_domain}"
-        elif org_inbox and org_inbox.inbox_address and "@" in org_inbox.inbox_address:
-            domain = org_inbox.inbox_address.split("@")[1]
+        elif org_inbox and (org_inbox.config or {}).get("inbound_address"):
+            domain = str((org_inbox.config or {}).get("inbound_address")).split("@")[1]
             reply_to_address = f"reply+{conversation.id}@{domain}"
 
         if not reply_to_address:

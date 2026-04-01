@@ -23,9 +23,11 @@ from sqlalchemy import delete, select
 
 from app.core.config import settings
 from app.db.session import AsyncSessionLocal
+from app.integrations.app_store.email_integration import credential_store
 from app.models.conversation import Conversation
 from app.models.email import InboundEmail
-from app.models.organization import OrgInbox
+from app.models.integration_credential import IntegrationCredential
+from app.models.job import Job
 
 logger = logging.getLogger(__name__)
 
@@ -245,11 +247,14 @@ async def _is_key_already_processed(raw_key: str) -> bool:
 
 async def _find_inbox_secret(inbox_address: str) -> str | None:
     async with AsyncSessionLocal() as db:
-        result = await db.execute(select(OrgInbox).where(OrgInbox.inbox_address == inbox_address))
-        inbox = result.scalar_one_or_none()
-        if inbox is None:
+        job_cred = await credential_store.get_job_credential_by_address(db, inbox_address)
+        if job_cred is not None and (job_cred.status or "") in {"pending", "active"}:
+            return str((job_cred.config or {}).get("secret_hash") or settings.inbound_webhook_secret)
+
+        org_cred = await credential_store.get_org_credential_by_address(db, inbox_address)
+        if org_cred is None:
             return None
-        return inbox.secret_hash or settings.inbound_webhook_secret
+        return str((org_cred.config or {}).get("secret_hash") or settings.inbound_webhook_secret)
 
 
 def _extract_org_id_from_forwarding_address(inbox_address: str) -> str | None:
@@ -259,6 +264,19 @@ def _extract_org_id_from_forwarding_address(inbox_address: str) -> str | None:
     """
     value = (inbox_address or "").strip().lower()
     match = re.match(r"^org-([0-9a-f]{32})@", value)
+    if not match:
+        return None
+    hex_id = match.group(1)
+    return f"{hex_id[0:8]}-{hex_id[8:12]}-{hex_id[12:16]}-{hex_id[16:20]}-{hex_id[20:32]}"
+
+
+def _extract_job_id_from_forwarding_address(inbox_address: str) -> str | None:
+    """
+    Parse forwarding alias format:
+    job-<32hex>@inbound.domain -> UUID string with dashes
+    """
+    value = (inbox_address or "").strip().lower()
+    match = re.match(r"^job-([0-9a-f]{32})@", value)
     if not match:
         return None
     hex_id = match.group(1)
@@ -277,33 +295,61 @@ async def _resolve_inbox_context(
 ) -> tuple[str, str, str | None] | None:
     """
     Resolve secret + canonical inbox address + optional reply_to_conversation_id.
-    1) Direct match on org_inboxes.inbox_address
-    2) Fallback for forwarding alias org-<orgid>@inbound.domain -> lookup by org_id
-    3) Fallback for reply+<conversation_id>@... -> lookup conversation, then org_inbox by org_id
+    1) Direct match on jobs.email_inbound_address
+    2) Fallback for forwarding alias job-<jobid>@inbound.domain -> lookup by job_id
+    3) Direct match on organizations.inbox_address
+    4) Fallback for forwarding alias org-<orgid>@inbound.domain -> lookup by org_id
+    5) Fallback for reply+<conversation_id>@... -> lookup conversation, then org_inbox by org_id
     Returns (secret, canonical_inbox_address, reply_to_conversation_id_str or None).
     """
     async with AsyncSessionLocal() as db:
-        direct_result = await db.execute(
-            select(OrgInbox).where(OrgInbox.inbox_address == inbox_address)
-        )
-        direct_inbox = direct_result.scalar_one_or_none()
+        # Job-level inbox direct match
+        job_cred = await credential_store.get_job_credential_by_address(db, inbox_address)
+        if job_cred is not None:
+            cfg = job_cred.config or {}
+            secret = cfg.get("secret_hash") or settings.inbound_webhook_secret
+            canonical = cfg.get("inbound_address") or inbox_address
+            if secret and (job_cred.status or "") in {"pending", "active"}:
+                return str(secret), str(canonical), None
+
+        job_id = _extract_job_id_from_forwarding_address(inbox_address)
+        if job_id:
+            cred_by_job_result = await db.execute(
+                select(IntegrationCredential).where(IntegrationCredential.job_id == job_id)
+            )
+            by_id = cred_by_job_result.scalar_one_or_none()
+            if by_id is not None:
+                cfg = by_id.config or {}
+                secret = cfg.get("secret_hash") or settings.inbound_webhook_secret
+                canonical = cfg.get("inbound_address") or inbox_address
+                if secret and (by_id.status or "") in {"pending", "active"}:
+                    return str(secret), str(canonical), None
+
+        direct_inbox = await credential_store.get_org_credential_by_address(db, inbox_address)
         if direct_inbox is not None:
-            secret = direct_inbox.secret_hash or settings.inbound_webhook_secret
+            cfg = direct_inbox.config or {}
+            secret = cfg.get("secret_hash") or settings.inbound_webhook_secret
             if secret:
                 reply_conv_id = None
                 m = _REPLY_CONVERSATION_PATTERN.match((inbox_address or "").strip().lower())
                 if m:
                     reply_conv_id = m.group(1)
-                return secret, direct_inbox.inbox_address, reply_conv_id
+                return str(secret), str(cfg.get("inbound_address") or inbox_address), reply_conv_id
 
         org_id = _extract_org_id_from_forwarding_address(inbox_address)
         if org_id:
-            org_result = await db.execute(select(OrgInbox).where(OrgInbox.org_id == org_id))
-            org_inbox = org_result.scalar_one_or_none()
+            cred_result = await db.execute(
+                select(IntegrationCredential).where(
+                    IntegrationCredential.org_id == org_id,
+                    IntegrationCredential.job_id.is_(None),
+                )
+            )
+            org_inbox = cred_result.scalar_one_or_none()
             if org_inbox is not None:
-                secret = org_inbox.secret_hash or settings.inbound_webhook_secret
+                cfg = org_inbox.config or {}
+                secret = cfg.get("secret_hash") or settings.inbound_webhook_secret
                 if secret:
-                    return secret, org_inbox.inbox_address, None
+                    return str(secret), str(cfg.get("inbound_address") or inbox_address), None
 
         # reply+<conversation_id>@... -> resolve via conversation
         m = _REPLY_CONVERSATION_PATTERN.match((inbox_address or "").strip().lower())
@@ -318,14 +364,20 @@ async def _resolve_inbox_context(
         conv = conv_result.scalar_one_or_none()
         if conv is None:
             return None
-        org_result = await db.execute(select(OrgInbox).where(OrgInbox.org_id == conv.org_id))
+        org_result = await db.execute(
+            select(IntegrationCredential).where(
+                IntegrationCredential.org_id == conv.org_id,
+                IntegrationCredential.job_id.is_(None),
+            )
+        )
         org_inbox = org_result.scalar_one_or_none()
         if org_inbox is None:
             return None
-        secret = org_inbox.secret_hash or settings.inbound_webhook_secret
+        cfg = org_inbox.config or {}
+        secret = cfg.get("secret_hash") or settings.inbound_webhook_secret
         if not secret:
             return None
-        return secret, org_inbox.inbox_address, conv_id_str
+        return str(secret), str(cfg.get("inbound_address") or inbox_address), conv_id_str
 
 
 async def _cleanup_ignored_inbound_records(s3_client, bucket: str) -> None:

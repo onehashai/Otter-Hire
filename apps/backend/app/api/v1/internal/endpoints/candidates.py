@@ -20,7 +20,6 @@ from app.models.automation import AutomationExecution
 from app.models.candidate import Candidate
 from app.models.candidate_jobs import CandidateJobs
 from app.models.document import CandidateDocument
-from app.models.email import Email
 from app.models.feedback import Feedback
 from app.models.interview import Interview
 from app.models.job import Job
@@ -173,7 +172,7 @@ async def _upsert_candidate_job_assignment(
         existing.assignment_status = assignment_status
         if source:
             existing.source = source
-        if applied_at is not None:
+        if applied_at is not None and existing.applied_at is None:
             existing.applied_at = applied_at
         if assigned_at is not None:
             existing.assigned_at = assigned_at
@@ -481,7 +480,7 @@ async def create_candidate(
             if candidate.status in {"active", "rejected", "hired"}
             else "active",
             source=candidate.source,
-            applied_at=candidate.created_at if candidate.source == "job_board" else None,
+            applied_at=candidate.created_at if candidate.source == "job_portal" else None,
             assigned_at=candidate.updated_at,
         )
     await _log_activity(
@@ -1303,7 +1302,6 @@ async def delete_candidate(
 
     await db.execute(delete(Activity).where(Activity.candidate_id == candidate_id))
     await db.execute(delete(Note).where(Note.candidate_id == candidate_id))
-    await db.execute(delete(Email).where(Email.candidate_id == candidate_id))
     await db.execute(
         delete(CandidateJobs).where(
             CandidateJobs.org_id == current_user.org_id, CandidateJobs.candidate_id == candidate_id

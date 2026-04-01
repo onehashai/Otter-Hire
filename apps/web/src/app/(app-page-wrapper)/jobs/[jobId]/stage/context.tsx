@@ -12,6 +12,10 @@ import {
 import { useParams } from "next/navigation";
 import { getJobWorkspace, type JobWorkspaceResponse } from "@/api";
 import { useSetPageMetadata } from "@/hooks/useSetPageMetadata";
+import {
+  JOB_WORKSPACE_PAGE_SUBTITLE,
+  JOB_WORKSPACE_PAGE_TITLE,
+} from "@/lib/job-page-metadata";
 
 type JobWorkspaceStageContextValue = {
   workspace: JobWorkspaceResponse | null;
@@ -60,8 +64,8 @@ export function JobWorkspaceStageProvider({ children }: { children: ReactNode })
   }, [jobId, reload]);
 
   useSetPageMetadata({
-    title: workspace?.title ?? "",
-    subtitle: "Edit and manage candidates and jobs seamlessly in one place",
+    title: JOB_WORKSPACE_PAGE_TITLE,
+    subtitle: JOB_WORKSPACE_PAGE_SUBTITLE,
   });
 
   const value = useMemo(

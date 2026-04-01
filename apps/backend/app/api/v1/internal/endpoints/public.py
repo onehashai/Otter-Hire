@@ -43,17 +43,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.security import verify_access_token
 from app.db.session import get_db
+from app.integrations.app_store.email_integration import credential_store
 from app.integrations.app_store.email_integration.temporal.queue import enqueue_ses_raw_key
 from app.models.candidate import Candidate
 from app.models.candidate_jobs import CandidateJobs
 from app.models.conversation import Conversation
 from app.models.document import CandidateDocument
-from app.models.email import InboundEmail, InboundEmailAttachment
+from app.models.email import InboundEmail
 from app.models.job import Job
 from app.models.job_application import JobApplication
 from app.models.message import Message
+from app.models.integration_credential import IntegrationCredential
 from app.models.org_membership import OrgMembership
-from app.models.organization import Organization, OrgInbox
+from app.models.organization import Organization
 from app.models.stage import Stage
 from app.schemas.public_jobs import (
     InboundEmailPayload,
@@ -112,7 +114,7 @@ async def _upsert_candidate_job_assignment(
         existing.assignment_status = assignment_status
         if source:
             existing.source = source
-        if applied_at is not None:
+        if applied_at is not None and existing.applied_at is None:
             existing.applied_at = applied_at
         if assigned_at is not None:
             existing.assigned_at = assigned_at
@@ -121,7 +123,7 @@ async def _upsert_candidate_job_assignment(
 
 
 def _careers_public_org_slug_prefix(org_name: str) -> str:
-    """Match apps/web job board: lowercase, each run of whitespace -> single hyphen."""
+    """Match apps/web job portal URLs: lowercase, each run of whitespace -> single hyphen."""
     return re.sub(r"\s+", "-", (org_name or "").strip().lower())
 
 
@@ -1289,7 +1291,7 @@ async def apply_public_job(
             name=body.full_name.strip(),
             email=body.email.strip().lower(),
             phone=(body.phone or "").strip() or None,
-            source="job_board",
+            source="job_portal",
             tags=[],
         )
         db.add(candidate)
@@ -1382,7 +1384,7 @@ async def apply_public_job(
         candidate_id=candidate.id,
         job_id=job_uuid,
         metadata={
-            "source": "job_board",
+            "source": "job_portal",
             "stage_name": stage_name,
             "assigned_id": str(assigned_id) if assigned_id else None,
         },
@@ -1508,7 +1510,7 @@ async def _process_resume_link_fallback(
     org_id: UUID,
     inbound_email_id: UUID,
     db: "AsyncSession",
-) -> tuple["InboundEmailAttachment", bytes] | None:
+) -> tuple[dict, bytes] | None:
     """Try to resolve and store resume from links in email body.
 
     Returns (attachment_row, content) if successful, None otherwise.
@@ -1548,17 +1550,13 @@ async def _process_resume_link_fallback(
         storage_key, content, content_type or "application/octet-stream"
     )
 
-    # Create attachment record
-    resume_attachment = InboundEmailAttachment(
-        inbound_email_id=inbound_email_id,
-        filename=safe_name,
-        content_type=content_type or "application/octet-stream",
-        storage_key=storage_key,
-        size_bytes=len(content),
-        sha256=hashlib.sha256(content).hexdigest(),
-    )
-    db.add(resume_attachment)
-
+    resume_attachment = {
+        "filename": safe_name,
+        "content_type": content_type or "application/octet-stream",
+        "storage_key": storage_key,
+        "size_bytes": len(content),
+        "sha256": hashlib.sha256(content).hexdigest(),
+    }
     return (resume_attachment, content)
 
 
@@ -1583,10 +1581,25 @@ def _parse_reply_conversation_id(inbox_address: str) -> UUID | None:
         return None
 
 
+def _parse_job_forwarding_id(inbox_address: str) -> UUID | None:
+    """If inbox_address is job-<32hex>@..., return that UUID else None."""
+    if not inbox_address:
+        return None
+    addr = inbox_address.strip().lower()
+    m = re.match(r"^job-([0-9a-f]{32})@", addr)
+    if not m:
+        return None
+    raw = m.group(1)
+    try:
+        return UUID(f"{raw[0:8]}-{raw[8:12]}-{raw[12:16]}-{raw[16:20]}-{raw[20:32]}")
+    except (ValueError, TypeError):
+        return None
+
+
 async def _resolve_org_inbox_for_reply_address(
     db: "AsyncSession", inbox_address: str
-) -> tuple["OrgInbox", UUID] | None:
-    """When inbox_address is reply+<conv_id>@..., resolve OrgInbox via conversation lookup."""
+) -> tuple["IntegrationCredential", UUID] | None:
+    """When inbox_address is reply+<conv_id>@..., resolve org inbox via conversation lookup."""
     conv_id = _parse_reply_conversation_id(inbox_address)
     if conv_id is None:
         return None
@@ -1594,8 +1607,7 @@ async def _resolve_org_inbox_for_reply_address(
     conv = conv_result.scalar_one_or_none()
     if conv is None:
         return None
-    inbox_result = await db.execute(select(OrgInbox).where(OrgInbox.org_id == conv.org_id))
-    org_inbox = inbox_result.scalar_one_or_none()
+    org_inbox = await credential_store.get_credential(db, org_id=conv.org_id, job_id=None)
     if org_inbox is None:
         return None
     return org_inbox, conv_id
@@ -1603,10 +1615,12 @@ async def _resolve_org_inbox_for_reply_address(
 
 async def _route_inbound_to_conversation(
     db: "AsyncSession",
-    org_inbox: "OrgInbox",
+    org_id: UUID,
+    inbox_address: str,
     payload: "InboundEmailPayload",
     reply_to_conversation_id: UUID | None = None,
     candidate_override: Optional["Candidate"] = None,
+    conversation_job_id: UUID | None = None,
 ) -> tuple[str, str, UUID | None, bool] | None:
     """Attach the inbound email to an existing or new conversation.
 
@@ -1619,11 +1633,9 @@ async def _route_inbound_to_conversation(
     """
     from app.utils.uuid import uuid7
 
-    org_id: UUID = org_inbox.org_id
     from_email = (payload.from_email or "").strip().lower()
     body_text = (payload.text_body or "").strip() or (payload.html_body or "").strip()
     subject = (payload.subject or "").strip() or "(no subject)"
-    inbox_address = org_inbox.inbox_address
 
     if not from_email:
         return None
@@ -1688,7 +1700,7 @@ async def _route_inbound_to_conversation(
                 id=uuid7(),
                 org_id=org_id,
                 candidate_id=candidate.id,
-                job_id=None,
+                job_id=conversation_job_id,
                 subject=subject,
                 channel="email",
                 status="open",
@@ -1841,18 +1853,29 @@ async def ingest_inbound_email(
     )
 
     inbox_address = payload.inbox_address.strip().lower()
-    inbox_result = await db.execute(select(OrgInbox).where(OrgInbox.inbox_address == inbox_address))
-    org_inbox = inbox_result.scalar_one_or_none()
+    job_inbox = await credential_store.get_job_credential_by_address(db, inbox_address)
+    org_inbox = None
     reply_to_conv_id: UUID | None = None
 
-    if org_inbox is None:
+    if job_inbox is None:
+        forward_job_id = _parse_job_forwarding_id(inbox_address)
+        if forward_job_id is not None:
+            job_by_id_result = await db.execute(
+                select(IntegrationCredential).where(IntegrationCredential.job_id == forward_job_id)
+            )
+            job_inbox = job_by_id_result.scalar_one_or_none()
+
+    if job_inbox is None:
+        org_inbox = await credential_store.get_org_credential_by_address(db, inbox_address)
+
+    if org_inbox is None and job_inbox is None:
         # To: reply+<conversation_id>@... → resolve org_inbox via conversation lookup
         resolved = await _resolve_org_inbox_for_reply_address(db, inbox_address)
         if resolved is not None:
             org_inbox, reply_to_conv_id = resolved
         else:
             raise HTTPException(status_code=404, detail="Inbox configuration not found")
-    else:
+    elif org_inbox is not None:
         # Exact match: still use reply+ conversation id from address or payload
         reply_to_conv_id = _parse_reply_conversation_id(inbox_address)
         if reply_to_conv_id is None and getattr(payload, "reply_to_conversation_id", None):
@@ -1861,7 +1884,19 @@ async def ingest_inbound_email(
             except (ValueError, TypeError):
                 pass
 
-    secret = org_inbox.secret_hash or settings.inbound_webhook_secret
+    org_id = job_inbox.org_id if job_inbox is not None else org_inbox.org_id
+    job_cfg = dict(job_inbox.config or {}) if job_inbox is not None else {}
+    org_cfg = dict(org_inbox.config or {}) if org_inbox is not None else {}
+    resolved_inbox_status = (
+        (job_inbox.status or "inactive")
+        if job_inbox is not None
+        else (org_inbox.status or "inactive")
+    )
+    conversation_job_id = job_inbox.job_id if job_inbox is not None else None
+    secret = (
+        (job_cfg.get("secret_hash") if job_inbox is not None else org_cfg.get("secret_hash"))
+        or settings.inbound_webhook_secret
+    )
     if not secret:
         raise HTTPException(status_code=503, detail="Inbound webhook secret is not configured")
     if not _verify_hmac_signature(signature, secret, raw_body):
@@ -1869,7 +1904,7 @@ async def ingest_inbound_email(
     if payload.message_id:
         existing_result = await db.execute(
             select(InboundEmail).where(
-                InboundEmail.org_id == org_inbox.org_id,
+                InboundEmail.org_id == org_id,
                 InboundEmail.message_id == payload.message_id,
             )
         )
@@ -1879,14 +1914,15 @@ async def ingest_inbound_email(
                 "status": "ok",
                 "message": "Already processed",
                 "inbound_email_id": str(existing.id),
-                "org_id": str(org_inbox.org_id),
+                "org_id": str(org_id),
             }
 
     has_resume = any(
         _is_resume_attachment(att.filename, att.content_type) for att in (payload.attachments or [])
     )
     inbound_email = InboundEmail(
-        org_id=org_inbox.org_id,
+        org_id=org_id,
+        job_id=job_inbox.job_id if job_inbox is not None else None,
         inbox_address=inbox_address,
         from_email=(payload.from_email or "").strip().lower() or None,
         from_name=(payload.from_name or "").strip() or None,
@@ -1911,7 +1947,10 @@ async def ingest_inbound_email(
     ).strip()
 
     # Store attachments but DON'T parse yet (optimization: parse only after validation)
-    stored_attachments: list[tuple[InboundEmailAttachment, bytes]] = []
+    stored_attachments: list[tuple[dict, bytes]] = []
+    attachment_count = 0
+    primary_attachment: dict | None = None
+    primary_resume_attachment: dict | None = None
     for idx, att in enumerate(payload.attachments or []):
         if not att.content_base64:
             continue
@@ -1923,25 +1962,44 @@ async def ingest_inbound_email(
             continue
         safe_name = _guess_file_name(att.filename, f"attachment_{idx + 1}.bin")
         storage_key = (
-            f"orgs/{org_inbox.org_id}/inbox/attachments/{inbound_email.id}/{idx + 1}_{safe_name}"
+            f"orgs/{org_id}/inbox/attachments/{inbound_email.id}/{idx + 1}_{safe_name}"
         )
         await storage_service.write_bytes(
             storage_key, content, att.content_type or "application/octet-stream"
         )
-        attachment_row = InboundEmailAttachment(
-            inbound_email_id=inbound_email.id,
-            filename=safe_name,
-            content_type=att.content_type or "application/octet-stream",
-            storage_key=storage_key,
-            size_bytes=len(content),
-            sha256=hashlib.sha256(content).hexdigest(),
-        )
-        db.add(attachment_row)
+        attachment_row = {
+            "filename": safe_name,
+            "content_type": att.content_type or "application/octet-stream",
+            "storage_key": storage_key,
+            "size_bytes": len(content),
+            "sha256": hashlib.sha256(content).hexdigest(),
+        }
         stored_attachments.append((attachment_row, content))
+        attachment_count += 1
+        if primary_attachment is None:
+            primary_attachment = attachment_row
 
         # Mark if resume attachment exists (but don't parse yet)
         if _is_resume_attachment(safe_name, att.content_type):
             has_resume = True
+            if primary_resume_attachment is None:
+                primary_resume_attachment = attachment_row
+
+    selected_primary = primary_resume_attachment or primary_attachment
+    inbound_email.attachment_count = attachment_count
+    inbound_email.attachment_primary_storage_key = (
+        selected_primary.get("storage_key") if selected_primary else None
+    )
+    inbound_email.attachment_primary_sha256 = selected_primary.get("sha256") if selected_primary else None
+    inbound_email.attachment_primary_filename = (
+        selected_primary.get("filename") if selected_primary else None
+    )
+    inbound_email.attachment_primary_content_type = (
+        selected_primary.get("content_type") if selected_primary else None
+    )
+    inbound_email.attachment_primary_size_bytes = (
+        selected_primary.get("size_bytes") if selected_primary else None
+    )
 
     inbound_from_email = (inbound_email.from_email or "").strip()
     inbound_subject = (inbound_email.subject or "").strip()
@@ -1954,7 +2012,7 @@ async def ingest_inbound_email(
                     "Skipping weak verification match "
                     "inbox=%s from=%s subject=%s provider=%s action_type=%s"
                 ),
-                org_inbox.inbox_address,
+                inbox_address,
                 inbound_from_email,
                 inbound_subject,
                 provider,
@@ -1964,17 +2022,27 @@ async def ingest_inbound_email(
             inbound_email.email_kind = "verification"
             inbound_email.parse_status = "ignored"
             inbound_email.parse_error = "Verification email captured"
-            org_inbox.verification_status = "action_required"
-            org_inbox.verification_provider = provider or "unknown"
-            org_inbox.verification_email_id = inbound_email.id
-            org_inbox.verification_action_type = action.get("type")
-            org_inbox.verification_action_payload = action
-            org_inbox.verification_detected_at = datetime.now(timezone.utc)
-            org_inbox.verification_error = None
-            org_inbox.status = "pending"
+            if job_inbox is not None:
+                job_cfg["verification_status"] = "action_required"
+                job_cfg["verification_provider"] = provider or "unknown"
+                job_cfg["verification_email_id"] = str(inbound_email.id)
+                job_inbox.status = "pending"
+                job_inbox.config = job_cfg
+                credential_store.cache_set_verify_action(
+                    job_inbox.id, {"type": action.get("type"), "url": action.get("url")}
+                )
+            else:
+                org_cfg["verification_status"] = "action_required"
+                org_cfg["verification_provider"] = provider or "unknown"
+                org_cfg["verification_email_id"] = str(inbound_email.id)
+                org_inbox.status = "pending"
+                org_inbox.config = org_cfg
+                credential_store.cache_set_verify_action(
+                    org_inbox.id, {"type": action.get("type"), "url": action.get("url")}
+                )
             logger.info(
                 "Verification email detected inbox=%s provider=%s action_type=%s",
-                org_inbox.inbox_address,
+                inbox_address,
                 provider,
                 action.get("type"),
             )
@@ -1983,10 +2051,10 @@ async def ingest_inbound_email(
                 "status": "ok",
                 "message": "Verification email detected",
                 "inbound_email_id": str(inbound_email.id),
-                "org_id": str(org_inbox.org_id),
+                "org_id": str(org_id),
             }
 
-    if org_inbox.status != "active":
+    if resolved_inbox_status != "active":
         inbound_email.parse_status = "ignored"
         inbound_email.parse_error = "Inbox is pending verification"
         await db.commit()
@@ -1994,7 +2062,7 @@ async def ingest_inbound_email(
             "status": "ok",
             "message": "Ignored: inbox pending verification",
             "inbound_email_id": str(inbound_email.id),
-            "org_id": str(org_inbox.org_id),
+            "org_id": str(org_id),
         }
 
     # --- Spam / noise filter ---
@@ -2007,14 +2075,19 @@ async def ingest_inbound_email(
             "status": "ok",
             "message": "Ignored: automated email",
             "inbound_email_id": str(inbound_email.id),
-            "org_id": str(org_inbox.org_id),
+            "org_id": str(org_id),
         }
 
     # Handle reply to existing conversation (no resume required for replies)
     conversation_ids: tuple[str, str] | None = None
     if reply_to_conv_id is not None:
         conversation_result = await _route_inbound_to_conversation(
-            db, org_inbox, payload, reply_to_conversation_id=reply_to_conv_id
+            db,
+            org_id,
+            inbox_address,
+            payload,
+            reply_to_conversation_id=reply_to_conv_id,
+            conversation_job_id=conversation_job_id,
         )
         if conversation_result is not None:
             conv_id, msg_id, _, _ = conversation_result
@@ -2035,7 +2108,7 @@ async def ingest_inbound_email(
                 "inbound_email_id": str(inbound_email.id),
                 "conversation_id": conv_id,
                 "message_id": msg_id,
-                "org_id": str(org_inbox.org_id),
+                "org_id": str(org_id),
             }
 
     # --- Job inquiry validation (for new conversations only) ---
@@ -2052,7 +2125,7 @@ async def ingest_inbound_email(
             "status": "ok",
             "message": "Ignored: not job-related",
             "inbound_email_id": str(inbound_email.id),
-            "org_id": str(org_inbox.org_id),
+            "org_id": str(org_id),
         }
 
     # Check if resume attachment exists (before expensive parsing)
@@ -2060,7 +2133,7 @@ async def ingest_inbound_email(
         # Try resume link from body as fallback
         link_resume = await _process_resume_link_fallback(
             body_text,
-            org_inbox.org_id,
+            org_id,
             inbound_email.id,
             db,
         )
@@ -2080,7 +2153,7 @@ async def ingest_inbound_email(
                 "status": "ok",
                 "message": "Ignored: no resume attachment",
                 "inbound_email_id": str(inbound_email.id),
-                "org_id": str(org_inbox.org_id),
+                "org_id": str(org_id),
             }
 
         # Resume link found and stored
@@ -2088,18 +2161,33 @@ async def ingest_inbound_email(
         stored_attachments.append((resume_attachment, content))
         has_resume = True
         inbound_email.has_resume_attachment = True
+        inbound_email.attachment_count = max(int(inbound_email.attachment_count or 0), 1)
+        inbound_email.attachment_primary_storage_key = str(
+            resume_attachment.get("storage_key") or ""
+        )
+        inbound_email.attachment_primary_sha256 = str(resume_attachment.get("sha256") or "")
+        inbound_email.attachment_primary_filename = str(resume_attachment.get("filename") or "")
+        inbound_email.attachment_primary_content_type = str(
+            resume_attachment.get("content_type") or "application/octet-stream"
+        )
+        inbound_email.attachment_primary_size_bytes = int(resume_attachment.get("size_bytes") or 0)
 
     # NOW parse resume (after all validation filters passed)
-    resume_attachment: InboundEmailAttachment | None = None
+    resume_attachment: dict | None = None
     resume_text: str = ""
     parse_error: str | None = None
 
     for attachment_row, content in stored_attachments:
-        if _is_resume_attachment(attachment_row.filename, attachment_row.content_type):
+        if _is_resume_attachment(
+            str(attachment_row.get("filename") or ""),
+            str(attachment_row.get("content_type") or ""),
+        ):
             resume_attachment = attachment_row
             try:
                 resume_text = _parse_resume_bytes(
-                    attachment_row.filename, attachment_row.content_type, content
+                    str(attachment_row.get("filename") or ""),
+                    str(attachment_row.get("content_type") or ""),
+                    content,
                 )
             except Exception as exc:
                 parse_error = f"Resume parse failed: {exc}"
@@ -2113,7 +2201,7 @@ async def ingest_inbound_email(
             "status": "ok",
             "message": "Stored with parse failure",
             "inbound_email_id": str(inbound_email.id),
-            "org_id": str(org_inbox.org_id),
+            "org_id": str(org_id),
         }
 
     extracted_email = _extract_email(resume_text) or inbound_email.from_email
@@ -2138,14 +2226,22 @@ async def ingest_inbound_email(
             "status": "ok",
             "message": "Ignored: low resume confidence",
             "inbound_email_id": str(inbound_email.id),
-            "org_id": str(org_inbox.org_id),
+            "org_id": str(org_id),
         }
 
     candidate_query = None
-    if extracted_email:
+    if job_inbox is not None and extracted_email and extracted_name:
         candidate_query = await db.execute(
             select(Candidate).where(
-                Candidate.org_id == org_inbox.org_id,
+                Candidate.org_id == org_id,
+                func.lower(Candidate.email) == extracted_email.lower(),
+                func.lower(func.trim(Candidate.name)) == extracted_name.strip().lower(),
+            )
+        )
+    elif extracted_email:
+        candidate_query = await db.execute(
+            select(Candidate).where(
+                Candidate.org_id == org_id,
                 func.lower(Candidate.email) == extracted_email.lower(),
             )
         )
@@ -2154,7 +2250,7 @@ async def ingest_inbound_email(
         if normalized_phone:
             candidate_query = await db.execute(
                 select(Candidate).where(
-                    Candidate.org_id == org_inbox.org_id,
+                    Candidate.org_id == org_id,
                     Candidate.phone.is_not(None),
                     func.regexp_replace(Candidate.phone, r"\\D", "", "g") == normalized_phone,
                 )
@@ -2164,8 +2260,8 @@ async def ingest_inbound_email(
     candidate_created = False
     if candidate is None:
         candidate = Candidate(
-            org_id=org_inbox.org_id,
-            job_id=None,
+            org_id=org_id,
+            job_id=job_inbox.job_id if job_inbox is not None else None,
             stage_id=None,
             status="active",
             name=extracted_name,
@@ -2189,47 +2285,65 @@ async def ingest_inbound_email(
 
     latest_version_result = await db.execute(
         select(func.max(CandidateDocument.version)).where(
-            CandidateDocument.org_id == org_inbox.org_id,
+            CandidateDocument.org_id == org_id,
             CandidateDocument.candidate_id == candidate.id,
             CandidateDocument.field_key == "resume",
         )
     )
     latest_version = latest_version_result.scalar_one_or_none() or 0
-    existing_hash_result = await db.execute(
-        select(InboundEmailAttachment.sha256)
-        .join(
-            CandidateDocument,
-            CandidateDocument.object_key == InboundEmailAttachment.storage_key,
-        )
+    existing_key_result = await db.execute(
+        select(CandidateDocument.object_key)
         .where(
-            CandidateDocument.org_id == org_inbox.org_id,
+            CandidateDocument.org_id == org_id,
             CandidateDocument.candidate_id == candidate.id,
             CandidateDocument.field_key == "resume",
         )
         .order_by(CandidateDocument.created_at.desc())
         .limit(1)
     )
-    latest_resume_hash = existing_hash_result.scalar_one_or_none()
-    if latest_resume_hash != resume_attachment.sha256:
-        resume_url = await storage_service.resolve_url(resume_attachment.storage_key)
+    latest_resume_key = existing_key_result.scalar_one_or_none()
+    current_resume_key = str(resume_attachment.get("storage_key") or "")
+    if latest_resume_key != current_resume_key:
+        resume_url = await storage_service.resolve_url(current_resume_key)
         db.add(
             CandidateDocument(
-                org_id=org_inbox.org_id,
+                org_id=org_id,
                 candidate_id=candidate.id,
-                job_id=None,
+                job_id=job_inbox.job_id if job_inbox is not None else None,
                 field_key="resume",
                 field_label_snapshot="Resume",
                 doc_type="resume",
-                name=resume_attachment.filename,
+                name=str(resume_attachment.get("filename") or "resume.bin"),
                 url=resume_url,
-                object_key=resume_attachment.storage_key,
-                mime_type=resume_attachment.content_type,
-                size_bytes=resume_attachment.size_bytes,
+                object_key=current_resume_key,
+                mime_type=str(resume_attachment.get("content_type") or "application/octet-stream"),
+                size_bytes=int(resume_attachment.get("size_bytes") or 0),
                 uploaded_by_user_id=None,
                 version=int(latest_version) + 1,
             )
         )
     parsed_candidate = candidate
+
+    if job_inbox is not None:
+        first_stage_result = await db.execute(
+            select(Stage)
+            .where(Stage.org_id == org_id, Stage.job_id == job_inbox.job_id)
+            .order_by(Stage.position.asc())
+            .limit(1)
+        )
+        first_stage = first_stage_result.scalar_one_or_none()
+        inbound_assignment_at = datetime.now(timezone.utc)
+        await _upsert_candidate_job_assignment(
+            db,
+            org_id=org_id,
+            candidate_id=parsed_candidate.id,
+            job_id=job_inbox.job_id,
+            stage_id=first_stage.id if first_stage else None,
+            assignment_status="active",
+            source=parsed_candidate.source,
+            applied_at=inbound_assignment_at,
+            assigned_at=inbound_assignment_at,
+        )
 
     # Create conversation ONLY for new candidates, append to existing for updates
     if conversation_ids is None:
@@ -2237,10 +2351,12 @@ async def ingest_inbound_email(
             # New candidate → Create new conversation
             conversation_result = await _route_inbound_to_conversation(
                 db,
-                org_inbox,
+                org_id,
+                inbox_address,
                 payload,
                 reply_to_conversation_id=None,
                 candidate_override=parsed_candidate,
+                conversation_job_id=conversation_job_id,
             )
             if conversation_result is not None:
                 conv_id, msg_id, _, _ = conversation_result
@@ -2256,7 +2372,7 @@ async def ingest_inbound_email(
             # Existing candidate → Find existing conversation and append message
             existing_conv_result = await db.execute(
                 select(Conversation).where(
-                    Conversation.org_id == org_inbox.org_id,
+                    Conversation.org_id == org_id,
                     Conversation.candidate_id == parsed_candidate.id,
                 )
             )
@@ -2271,13 +2387,13 @@ async def ingest_inbound_email(
 
                 inbound_msg = Message(
                     id=uuid7(),
-                    org_id=org_inbox.org_id,
+                    org_id=org_id,
                     conversation_id=existing_conv.id,
                     direction="inbound",
                     sender_type="candidate",
                     sender_user_id=None,
                     from_email=(payload.from_email or "").strip().lower(),
-                    to_email=org_inbox.inbox_address,
+                    to_email=inbox_address,
                     body=body_text or "(empty)",
                     html_body=payload.html_body or None,
                     status="received",
@@ -2306,10 +2422,12 @@ async def ingest_inbound_email(
                 # No conversation row yet for this candidate
                 conversation_result = await _route_inbound_to_conversation(
                     db,
-                    org_inbox,
+                    org_id,
+                    inbox_address,
                     payload,
                     reply_to_conversation_id=None,
                     candidate_override=parsed_candidate,
+                    conversation_job_id=conversation_job_id,
                 )
                 if conversation_result is not None:
                     conv_id, msg_id, _, _ = conversation_result
@@ -2331,17 +2449,30 @@ async def ingest_inbound_email(
     # Use candidate_email_received trigger for email inbound candidates
     if candidate is not None:
         try:
-            await execute_automations_for_trigger(
-                db=db,
-                trigger_key="candidate_email_received",
-                org_id=org_inbox.org_id,
-                candidate_id=parsed_candidate.id,
-                job_id=None,  # Email inbound candidates don't have job context initially
-                metadata={
-                    "source": "email_inbound",
-                    "stage_name": None,
-                },
-            )
+            if job_inbox is not None:
+                await execute_automations_for_trigger(
+                    db=db,
+                    trigger_key="candidate_applied",
+                    org_id=org_id,
+                    candidate_id=parsed_candidate.id,
+                    job_id=job_inbox.job_id,
+                    metadata={
+                        "source": "email_inbound_job",
+                        "stage_name": None,
+                    },
+                )
+            else:
+                await execute_automations_for_trigger(
+                    db=db,
+                    trigger_key="candidate_email_received",
+                    org_id=org_id,
+                    candidate_id=parsed_candidate.id,
+                    job_id=None,
+                    metadata={
+                        "source": "email_inbound",
+                        "stage_name": None,
+                    },
+                )
         except Exception as e:
             # Log but don't fail the inbound email processing
             logger.error(
@@ -2354,7 +2485,7 @@ async def ingest_inbound_email(
         "message": "Processed",
         "inbound_email_id": str(inbound_email.id),
         "candidate_id": str(parsed_candidate.id),
-        "org_id": str(org_inbox.org_id),
+        "org_id": str(org_id),
     }
     if conversation_ids:
         conv_id, msg_id = conversation_ids

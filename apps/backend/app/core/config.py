@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     # Domain configuration
     # APP_DOMAIN     — root domain, e.g. "localhost.com" (dev) or "onehash.ai" (prod)
     # APP_SUBDOMAIN  — main app subdomain,      e.g. "app"
-    # JOBS_SUBDOMAIN — public job board subdomain, e.g. "jobs"
+    # JOBS_SUBDOMAIN — public job portal (careers) subdomain, e.g. "jobs"
     app_domain: str = Field(default="localhost.com", validation_alias="APP_DOMAIN")
     app_subdomain: str = Field(default="app", validation_alias="APP_SUBDOMAIN")
     jobs_subdomain: str = Field(default="jobs", validation_alias="JOBS_SUBDOMAIN")

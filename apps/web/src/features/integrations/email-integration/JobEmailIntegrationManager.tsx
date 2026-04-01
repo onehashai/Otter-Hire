@@ -1,13 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useAuthSession } from "@/app/providers";
+import { useEffect, useState } from "react";
 import {
-  getEmailIntegrationConfig,
-  rotateEmailIntegrationSecret,
-  upsertEmailIntegrationConfig,
-  verifyCompleteEmailIntegration,
-  verifyNowEmailIntegration,
+  getJobEmailIntegrationConfig,
+  rotateJobEmailIntegrationSecret,
+  upsertJobEmailIntegrationConfig,
+  verifyCompleteJobEmailIntegration,
+  verifyNowJobEmailIntegration,
 } from "@/api";
 import { Button } from "@onehash/ui/button";
 import {
@@ -26,12 +25,12 @@ import { toast } from "@onehash/ui/sonner";
 import { copyToClipboard } from "@/lib/clipboard";
 import { isValidEmail, normalizeEmail } from "@/lib/validation/contact";
 
-type EmailIntegrationManagerProps = {
+type JobEmailIntegrationManagerProps = {
+  jobId: string;
   onChanged?: () => Promise<void> | void;
 };
 
-export function EmailIntegrationManager({ onChanged }: EmailIntegrationManagerProps) {
-  const { user } = useAuthSession();
+export function JobEmailIntegrationManager({ jobId, onChanged }: JobEmailIntegrationManagerProps) {
   const [inboxAddress, setInboxAddress] = useState("");
   const [inboxStatus, setInboxStatus] = useState<"inactive" | "pending" | "active">("inactive");
   const [verificationStatus, setVerificationStatus] = useState<
@@ -47,11 +46,25 @@ export function EmailIntegrationManager({ onChanged }: EmailIntegrationManagerPr
   const [hasInboxConfig, setHasInboxConfig] = useState(false);
   const [copiedForwarding, setCopiedForwarding] = useState(false);
 
+  const refreshInboxStatus = async () => {
+    try {
+      const config = await getJobEmailIntegrationConfig(jobId);
+      const inbox = config.inbox;
+      if (!inbox) return;
+      setInboxStatus(inbox.status ?? "inactive");
+      setVerificationStatus(inbox.verification_status ?? "pending");
+      setVerificationError(inbox.verification_error ?? null);
+      setVerificationActionUrl(inbox.verification_action_url ?? null);
+    } catch {
+      // ignore
+    }
+  };
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const config = await getEmailIntegrationConfig();
+        const config = await getJobEmailIntegrationConfig(jobId);
         const inbox = config.inbox;
         if (!cancelled && inbox) {
           setHasInboxConfig(true);
@@ -70,23 +83,8 @@ export function EmailIntegrationManager({ onChanged }: EmailIntegrationManagerPr
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [jobId]);
 
-  const refreshInboxStatus = async () => {
-    try {
-      const config = await getEmailIntegrationConfig();
-      const inbox = config.inbox;
-      if (!inbox) return;
-      setInboxStatus(inbox.status ?? "inactive");
-      setVerificationStatus(inbox.verification_status ?? "pending");
-      setVerificationError(inbox.verification_error ?? null);
-      setVerificationActionUrl(inbox.verification_action_url ?? null);
-    } catch {
-      // ignore
-    }
-  };
-
-  // Poll while the main view is waiting for action_required (verification email not yet arrived).
   useEffect(() => {
     const verificationDone = verificationStatus === "verified" || inboxStatus === "active";
     const waitingForEmail = hasInboxConfig && !verificationDone && verificationStatus === "pending";
@@ -95,7 +93,6 @@ export function EmailIntegrationManager({ onChanged }: EmailIntegrationManagerPr
     return () => window.clearInterval(timer);
   }, [hasInboxConfig, verificationStatus, inboxStatus]);
 
-  // Poll while the verify dialog is open (waiting for user to complete verification).
   useEffect(() => {
     const verificationDone = verificationStatus === "verified" || inboxStatus === "active";
     if (!verifyDialogOpen || verificationDone) return;
@@ -104,24 +101,10 @@ export function EmailIntegrationManager({ onChanged }: EmailIntegrationManagerPr
   }, [verifyDialogOpen, verificationStatus, inboxStatus]);
 
   const forwardingDomain = process.env.NEXT_PUBLIC_INBOUND_EMAIL_DOMAIN || "inbound.smartats.in";
-  const forwardingAddress = user?.org_id
-    ? `org-${user.org_id.replace(/-/g, "")}@${forwardingDomain}`
-    : `org-<org-id>@${forwardingDomain}`;
-  const displayedInboxStatus = inboxLoading
-    ? "loading"
-    : inboxStatus === "active"
-      ? "active"
-      : verificationStatus;
-
+  const forwardingAddress = `job-${jobId.replace(/-/g, "")}@${forwardingDomain}`;
   const canSaveInbox = !inboxSaving && !inboxLoading && isValidEmail(inboxAddress);
   const isVerificationReady = verificationStatus === "action_required";
   const isVerificationDone = verificationStatus === "verified" || inboxStatus === "active";
-
-  const statusLabel = useMemo(() => {
-    if (isVerificationDone) return "Configured";
-    if (displayedInboxStatus === "loading") return "Loading";
-    return "Pending";
-  }, [displayedInboxStatus, isVerificationDone]);
 
   const handleInboxSave = async () => {
     if (!inboxAddress.trim()) {
@@ -130,11 +113,11 @@ export function EmailIntegrationManager({ onChanged }: EmailIntegrationManagerPr
     }
     setInboxSaving(true);
     try {
-      const config = await upsertEmailIntegrationConfig({
+      const config = await upsertJobEmailIntegrationConfig(jobId, {
         inbox_address: normalizeEmail(inboxAddress),
         provider: "ses",
       });
-      await rotateEmailIntegrationSecret();
+      await rotateJobEmailIntegrationSecret(jobId);
       const inbox = config.inbox;
       if (inbox) {
         setHasInboxConfig(true);
@@ -143,7 +126,7 @@ export function EmailIntegrationManager({ onChanged }: EmailIntegrationManagerPr
         setVerificationError(inbox.verification_error ?? null);
       }
       setVerificationActionUrl(null);
-      toast.success("Email integration saved");
+      toast.success("Job email integration saved");
       await onChanged?.();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to save inbox";
@@ -156,7 +139,7 @@ export function EmailIntegrationManager({ onChanged }: EmailIntegrationManagerPr
   const handleVerifyNow = async () => {
     setInboxVerifying(true);
     try {
-      const resp = await verifyNowEmailIntegration();
+      const resp = await verifyNowJobEmailIntegration(jobId);
       if (resp.action_url) {
         setVerificationActionUrl(resp.action_url);
         window.open(resp.action_url, "_blank", "noopener,noreferrer");
@@ -176,7 +159,7 @@ export function EmailIntegrationManager({ onChanged }: EmailIntegrationManagerPr
   const handleVerificationComplete = async () => {
     setInboxActivating(true);
     try {
-      const resp = await verifyCompleteEmailIntegration();
+      const resp = await verifyCompleteJobEmailIntegration(jobId);
       if (resp.status === "active") {
         setInboxStatus("active");
         setVerificationStatus("verified");
@@ -259,7 +242,7 @@ export function EmailIntegrationManager({ onChanged }: EmailIntegrationManagerPr
               <input
                 readOnly
                 value={forwardingAddress}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 pr-11 text-sm font-mono text-base placeholder:text-muted-foreground focus-visible:outline-none focus-visible:border-muted-foreground disabled:cursor-not-allowed disabled:opacity-50 transition-colors md:text-sm"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 pr-11 text-sm font-mono placeholder:text-muted-foreground focus-visible:outline-none focus-visible:border-muted-foreground disabled:cursor-not-allowed disabled:opacity-50 transition-colors md:text-sm"
               />
               <button
                 type="button"
@@ -303,7 +286,7 @@ export function EmailIntegrationManager({ onChanged }: EmailIntegrationManagerPr
             </div>
           ) : (
             <div className="text-xs text-green-600 font-medium">
-              Verified and active. Email ingestion is enabled.
+              Verified and active. Job email ingestion is enabled.
             </div>
           )}
         </>

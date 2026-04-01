@@ -68,12 +68,12 @@ export default function JobsPage() {
     return `${slug}-${user.org_id}`;
   };
 
-  const openJobBoard = (e?: React.MouseEvent) => {
+  const openJobPortal = (e?: React.MouseEvent) => {
     e?.preventDefault();
     e?.stopPropagation();
     const orgSlug = generateOrgSlug();
     if (!orgSlug) {
-      toast.error("Unable to open job board");
+      toast.error("Unable to open job portal");
       return;
     }
     const url = `${getJobsBaseUrl()}/${orgSlug}`;
@@ -305,9 +305,9 @@ export default function JobsPage() {
       actionLabel={t("create")}
       actionIcon="Plus"
       onAction={() => setCreateOpen(true)}
-      secondaryActionLabel="Job Board"
+      secondaryActionLabel="Job Portal"
       secondaryActionIcon="Link"
-      onSecondaryAction={openJobBoard}
+      onSecondaryAction={openJobPortal}
       filterContent={filterContent}
       hasActiveFilters={hasFilters}
       activeChips={activeChips}

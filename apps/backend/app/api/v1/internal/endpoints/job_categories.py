@@ -24,7 +24,8 @@ async def list_categories(
         select(JobCategory, sa_func.count(Job.id).label("usage_count"))
         .outerjoin(
             Job,
-            (Job.org_id == current_user.org_id) & (Job.category == JobCategory.name),
+            (Job.org_id == current_user.org_id)
+            & ((Job.category_id == JobCategory.id) | (Job.category == JobCategory.name)),
         )
         .where(JobCategory.org_id == current_user.org_id)
         .group_by(JobCategory.id)
@@ -97,7 +98,8 @@ async def delete_category(
 
     usage_count = await db.scalar(
         select(sa_func.count(Job.id)).where(
-            Job.org_id == current_user.org_id, Job.category == category.name
+            Job.org_id == current_user.org_id,
+            (Job.category_id == category.id) | (Job.category == category.name),
         )
     )
     if usage_count > 0:

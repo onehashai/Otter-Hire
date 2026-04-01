@@ -81,7 +81,7 @@ type Props = {
 
 function formatSourceLabel(source: string | null | undefined, t: (key: string) => string): string {
   if (!source) return "—";
-  if (source === "job_board") return t("candidates_source_job_portal");
+  if (source === "job_portal") return t("candidates_source_job_portal");
   if (source === "email_automation") return "Email";
   if (source === "Manual" || source === "manual") return "Manual";
   return source

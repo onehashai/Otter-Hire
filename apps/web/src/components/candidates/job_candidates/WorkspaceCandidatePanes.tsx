@@ -64,7 +64,7 @@ function mapHiringTimelineItem(activity: {
   if (activity.type === "candidate_created") {
     const source = String(metadata.source ?? "Manual");
     return {
-      action: source === "job_board" ? "Applied from job board" : "Candidate added",
+      action: source === "job_portal" ? "Applied from job portal" : "Candidate added",
       user: actor,
       date,
       icon: "apply",

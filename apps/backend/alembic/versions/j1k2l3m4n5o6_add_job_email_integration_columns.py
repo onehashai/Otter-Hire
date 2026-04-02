@@ -20,103 +20,123 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column("jobs", sa.Column("email_inbound_address", sa.String(length=320), nullable=True))
-    op.add_column(
-        "jobs",
-        sa.Column(
-            "email_inbound_provider", sa.String(length=32), server_default="ses", nullable=False
-        ),
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    jobs_columns = [col['name'] for col in inspector.get_columns('jobs')]
+    inbound_emails_columns = [col['name'] for col in inspector.get_columns('inbound_emails')]
+    
+    # Add columns to jobs table if they don't exist
+    if 'email_inbound_address' not in jobs_columns:
+        op.add_column("jobs", sa.Column("email_inbound_address", sa.String(length=320), nullable=True))
+    if 'email_inbound_provider' not in jobs_columns:
+        op.add_column(
+            "jobs",
+            sa.Column(
+                "email_inbound_provider", sa.String(length=32), server_default="ses", nullable=False
+            ),
+        )
+    if 'email_inbound_status' not in jobs_columns:
+        op.add_column(
+            "jobs",
+            sa.Column(
+                "email_inbound_status", sa.String(length=32), server_default="inactive", nullable=False
+            ),
+        )
+    if 'email_inbound_secret_hash' not in jobs_columns:
+        op.add_column(
+            "jobs", sa.Column("email_inbound_secret_hash", sa.String(length=128), nullable=True)
+        )
+    if 'email_verification_token_hash' not in jobs_columns:
+        op.add_column(
+            "jobs", sa.Column("email_verification_token_hash", sa.String(length=128), nullable=True)
+        )
+    if 'email_verification_expires_at' not in jobs_columns:
+        op.add_column(
+            "jobs",
+            sa.Column("email_verification_expires_at", sa.DateTime(timezone=True), nullable=True),
+        )
+    if 'email_verified_at' not in jobs_columns:
+        op.add_column("jobs", sa.Column("email_verified_at", sa.DateTime(timezone=True), nullable=True))
+    if 'email_verification_status' not in jobs_columns:
+        op.add_column(
+            "jobs",
+            sa.Column(
+                "email_verification_status",
+                sa.String(length=32),
+                server_default="pending",
+                nullable=False,
+            ),
+        )
+    if 'email_verification_provider' not in jobs_columns:
+        op.add_column(
+            "jobs", sa.Column("email_verification_provider", sa.String(length=32), nullable=True)
+        )
+    if 'email_verification_email_id' not in jobs_columns:
+        op.add_column(
+            "jobs",
+            sa.Column("email_verification_email_id", postgresql.UUID(as_uuid=True), nullable=True),
+        )
+    if 'email_verification_action_type' not in jobs_columns:
+        op.add_column(
+            "jobs", sa.Column("email_verification_action_type", sa.String(length=32), nullable=True)
+        )
+    if 'email_verification_action_payload' not in jobs_columns:
+        op.add_column(
+            "jobs",
+            sa.Column(
+                "email_verification_action_payload",
+                postgresql.JSONB(astext_type=sa.Text()),
+                nullable=True,
+            ),
+        )
+    if 'email_verification_detected_at' not in jobs_columns:
+        op.add_column(
+            "jobs",
+            sa.Column("email_verification_detected_at", sa.DateTime(timezone=True), nullable=True),
+        )
+    if 'email_verification_error' not in jobs_columns:
+        op.add_column(
+            "jobs", sa.Column("email_verification_error", sa.String(length=1000), nullable=True)
+        )
+
+    op.execute(
+        "DO $$ BEGIN "
+        "IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_jobs_email_verification_email_id_inbound_emails') THEN "
+        "ALTER TABLE jobs ADD CONSTRAINT fk_jobs_email_verification_email_id_inbound_emails "
+        "FOREIGN KEY (email_verification_email_id) REFERENCES inbound_emails (id) ON DELETE SET NULL; "
+        "END IF; END $$"
     )
-    op.add_column(
-        "jobs",
-        sa.Column(
-            "email_inbound_status", sa.String(length=32), server_default="inactive", nullable=False
-        ),
+    op.execute(
+        "DO $$ BEGIN "
+        "IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ck_jobs_email_inbound_status') THEN "
+        "ALTER TABLE jobs ADD CONSTRAINT ck_jobs_email_inbound_status "
+        "CHECK (email_inbound_status IN ('inactive', 'pending', 'active')); "
+        "END IF; END $$"
     )
-    op.add_column(
-        "jobs", sa.Column("email_inbound_secret_hash", sa.String(length=128), nullable=True)
+    op.execute(
+        "DO $$ BEGIN "
+        "IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ck_jobs_email_verification_status') THEN "
+        "ALTER TABLE jobs ADD CONSTRAINT ck_jobs_email_verification_status "
+        "CHECK (email_verification_status IN ('pending', 'action_required', 'verified', 'failed')); "
+        "END IF; END $$"
     )
-    op.add_column(
-        "jobs", sa.Column("email_verification_token_hash", sa.String(length=128), nullable=True)
-    )
-    op.add_column(
-        "jobs",
-        sa.Column("email_verification_expires_at", sa.DateTime(timezone=True), nullable=True),
-    )
-    op.add_column("jobs", sa.Column("email_verified_at", sa.DateTime(timezone=True), nullable=True))
-    op.add_column(
-        "jobs",
-        sa.Column(
-            "email_verification_status",
-            sa.String(length=32),
-            server_default="pending",
-            nullable=False,
-        ),
-    )
-    op.add_column(
-        "jobs", sa.Column("email_verification_provider", sa.String(length=32), nullable=True)
-    )
-    op.add_column(
-        "jobs",
-        sa.Column("email_verification_email_id", postgresql.UUID(as_uuid=True), nullable=True),
-    )
-    op.add_column(
-        "jobs", sa.Column("email_verification_action_type", sa.String(length=32), nullable=True)
-    )
-    op.add_column(
-        "jobs",
-        sa.Column(
-            "email_verification_action_payload",
-            postgresql.JSONB(astext_type=sa.Text()),
-            nullable=True,
-        ),
-    )
-    op.add_column(
-        "jobs",
-        sa.Column("email_verification_detected_at", sa.DateTime(timezone=True), nullable=True),
-    )
-    op.add_column(
-        "jobs", sa.Column("email_verification_error", sa.String(length=1000), nullable=True)
+    op.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS ix_jobs_email_inbound_address_not_null "
+        "ON jobs (email_inbound_address) WHERE email_inbound_address IS NOT NULL"
     )
 
-    op.create_foreign_key(
-        "fk_jobs_email_verification_email_id_inbound_emails",
-        "jobs",
-        "inbound_emails",
-        ["email_verification_email_id"],
-        ["id"],
-        ondelete="SET NULL",
+    if 'job_id' not in inbound_emails_columns:
+        op.add_column(
+            "inbound_emails", sa.Column("job_id", postgresql.UUID(as_uuid=True), nullable=True)
+        )
+    op.execute(
+        "DO $$ BEGIN "
+        "IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_inbound_emails_job_id_jobs') THEN "
+        "ALTER TABLE inbound_emails ADD CONSTRAINT fk_inbound_emails_job_id_jobs "
+        "FOREIGN KEY (job_id) REFERENCES jobs (id) ON DELETE SET NULL; "
+        "END IF; END $$"
     )
-    op.create_check_constraint(
-        "ck_jobs_email_inbound_status",
-        "jobs",
-        "email_inbound_status IN ('inactive', 'pending', 'active')",
-    )
-    op.create_check_constraint(
-        "ck_jobs_email_verification_status",
-        "jobs",
-        "email_verification_status IN ('pending', 'action_required', 'verified', 'failed')",
-    )
-    op.create_index(
-        "ix_jobs_email_inbound_address_not_null",
-        "jobs",
-        ["email_inbound_address"],
-        unique=True,
-        postgresql_where=sa.text("email_inbound_address IS NOT NULL"),
-    )
-
-    op.add_column(
-        "inbound_emails", sa.Column("job_id", postgresql.UUID(as_uuid=True), nullable=True)
-    )
-    op.create_foreign_key(
-        "fk_inbound_emails_job_id_jobs",
-        "inbound_emails",
-        "jobs",
-        ["job_id"],
-        ["id"],
-        ondelete="SET NULL",
-    )
-    op.create_index("ix_inbound_emails_job_id", "inbound_emails", ["job_id"], unique=False)
+    op.execute("CREATE INDEX IF NOT EXISTS ix_inbound_emails_job_id ON inbound_emails (job_id)")
 
 
 def downgrade() -> None:

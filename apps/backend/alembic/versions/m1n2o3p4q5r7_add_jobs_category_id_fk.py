@@ -20,17 +20,22 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column("jobs", sa.Column("category_id", postgresql.UUID(as_uuid=True), nullable=True))
-    op.create_foreign_key(
-        "fk_jobs_category_id_job_categories",
-        "jobs",
-        "job_categories",
-        ["category_id"],
-        ["id"],
-        ondelete="SET NULL",
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    jobs_columns = [col['name'] for col in inspector.get_columns('jobs')]
+    
+    if 'category_id' not in jobs_columns:
+        op.add_column("jobs", sa.Column("category_id", postgresql.UUID(as_uuid=True), nullable=True))
+    
+    op.execute(
+        "DO $$ BEGIN "
+        "IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_jobs_category_id_job_categories') THEN "
+        "ALTER TABLE jobs ADD CONSTRAINT fk_jobs_category_id_job_categories "
+        "FOREIGN KEY (category_id) REFERENCES job_categories (id) ON DELETE SET NULL; "
+        "END IF; END $$"
     )
-    op.create_index("ix_jobs_category_id", "jobs", ["category_id"], unique=False)
-    op.create_index("ix_jobs_org_category_id", "jobs", ["org_id", "category_id"], unique=False)
+    op.execute("CREATE INDEX IF NOT EXISTS ix_jobs_category_id ON jobs (category_id)")
+    op.execute("CREATE INDEX IF NOT EXISTS ix_jobs_org_category_id ON jobs (org_id, category_id)")
 
     op.execute(
         """
@@ -40,6 +45,7 @@ def upgrade() -> None:
         WHERE j.org_id = jc.org_id
           AND j.category IS NOT NULL
           AND btrim(j.category) = jc.name
+          AND j.category_id IS NULL
         """
     )
 

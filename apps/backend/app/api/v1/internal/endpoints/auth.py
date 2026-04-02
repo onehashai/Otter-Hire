@@ -2,6 +2,7 @@ import secrets
 import urllib.parse
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
+from uuid import UUID
 
 import httpx
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response, status
@@ -16,7 +17,6 @@ from app.core.security import (
     create_access_token,
     create_refresh_token,
     hash_password,
-    verify_access_token,
     verify_password,
     verify_refresh_token,
 )

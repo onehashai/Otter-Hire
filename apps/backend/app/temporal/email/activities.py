@@ -260,7 +260,8 @@ async def publish_update_activity(event_payload: dict) -> None:
 
 @activity.defn(name="send_outbound_email_activity")
 async def send_outbound_email_activity(input_data: OutboundWorkflowInput) -> dict:
-    from sqlalchemy import select, update as sa_update
+    from sqlalchemy import select
+    from sqlalchemy import update as sa_update
 
     from app.db.session import AsyncSessionLocal
     from app.integrations.app_store.email_integration.outbound_service import (

@@ -23,7 +23,9 @@ def create_access_token(data: dict[str, Any], expires_delta: timedelta | None = 
     if expires_delta:
         expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.now(timezone.utc) + timedelta(minutes=settings.access_token_expire_minutes)
+        expire = datetime.now(timezone.utc) + timedelta(
+            minutes=settings.access_token_expire_minutes
+        )
     payload.update({"exp": expire, "iat": datetime.now(timezone.utc).timestamp()})
     return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
 
@@ -32,7 +34,9 @@ def create_refresh_token(data: dict[str, Any]) -> str:
     """Create long-lived refresh token (7 days)."""
     payload = data.copy()
     expire = datetime.now(timezone.utc) + timedelta(days=7)
-    payload.update({"exp": expire, "iat": datetime.now(timezone.utc).timestamp(), "type": "refresh"})
+    payload.update(
+        {"exp": expire, "iat": datetime.now(timezone.utc).timestamp(), "type": "refresh"}
+    )
     return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
 
 

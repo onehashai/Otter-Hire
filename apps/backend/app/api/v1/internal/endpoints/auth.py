@@ -154,7 +154,9 @@ async def signup(
         await db.refresh(membership)
 
         token = _create_session_token(user, membership)
-        refresh_token = create_refresh_token({"user_id": str(user.id), "org_id": str(membership.org_id)})
+        refresh_token = create_refresh_token(
+            {"user_id": str(user.id), "org_id": str(membership.org_id)}
+        )
         _set_access_cookie(response, token)
         _set_refresh_cookie(response, refresh_token)
         return _to_user_response(user, membership)
@@ -207,7 +209,9 @@ async def signup(
     await send_verification_email(user.email, verify_url)
 
     token = _create_session_token(user, membership)
-    refresh_token = create_refresh_token({"user_id": str(user.id), "org_id": str(membership.org_id)})
+    refresh_token = create_refresh_token(
+        {"user_id": str(user.id), "org_id": str(membership.org_id)}
+    )
     _set_access_cookie(response, token)
     _set_refresh_cookie(response, refresh_token)
     return _to_user_response(user, membership)
@@ -268,7 +272,9 @@ async def login(
         )
 
     token = _create_session_token(user, membership)
-    refresh_token = create_refresh_token({"user_id": str(user.id), "org_id": str(membership.org_id)})
+    refresh_token = create_refresh_token(
+        {"user_id": str(user.id), "org_id": str(membership.org_id)}
+    )
     _set_access_cookie(response, token)
     _set_refresh_cookie(response, refresh_token)
     return _to_user_response(user, membership)
@@ -346,7 +352,10 @@ async def refresh_token(
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"code": "AUTH_INVALID_REFRESH_TOKEN", "message": "Invalid or expired refresh token."},
+            detail={
+                "code": "AUTH_INVALID_REFRESH_TOKEN",
+                "message": "Invalid or expired refresh token.",
+            },
         ) from exc
 
     result = await db.execute(select(User).where(User.id == user_id))
@@ -509,7 +518,9 @@ async def onboarding(
     await db.refresh(membership)
 
     token = _create_session_token(current_user, membership)
-    refresh_token_value = create_refresh_token({"user_id": str(current_user.id), "org_id": str(membership.org_id)})
+    refresh_token_value = create_refresh_token(
+        {"user_id": str(current_user.id), "org_id": str(membership.org_id)}
+    )
     _set_access_cookie(response, token)
     _set_refresh_cookie(response, refresh_token_value)
     return _to_user_response(current_user, membership)
@@ -561,7 +572,9 @@ async def accept_invite(
     await db.refresh(membership)
 
     token = _create_session_token(user, membership)
-    refresh_token_value = create_refresh_token({"user_id": str(user.id), "org_id": str(membership.org_id)})
+    refresh_token_value = create_refresh_token(
+        {"user_id": str(user.id), "org_id": str(membership.org_id)}
+    )
     _set_access_cookie(response, token)
     _set_refresh_cookie(response, refresh_token_value)
     return _to_user_response(user, membership)
@@ -617,7 +630,9 @@ async def accept_existing_invite(
     await db.refresh(membership)
 
     token_value = _create_session_token(invited_user, membership)
-    refresh_token_value = create_refresh_token({"user_id": str(invited_user.id), "org_id": str(membership.org_id)})
+    refresh_token_value = create_refresh_token(
+        {"user_id": str(invited_user.id), "org_id": str(membership.org_id)}
+    )
     _set_access_cookie(response, token_value)
     _set_refresh_cookie(response, refresh_token_value)
     return _to_user_response(invited_user, membership)
@@ -880,7 +895,9 @@ async def google_oauth_callback(
             await db.refresh(membership)
 
             session_token = _create_session_token(user, membership)
-            refresh_token_value = create_refresh_token({"user_id": str(user.id), "org_id": str(membership.org_id)})
+            refresh_token_value = create_refresh_token(
+                {"user_id": str(user.id), "org_id": str(membership.org_id)}
+            )
             redir = RedirectResponse(
                 url=f"{settings.frontend_base_url}/onboarding",
                 status_code=status.HTTP_302_FOUND,
@@ -910,7 +927,9 @@ async def google_oauth_callback(
         else settings.frontend_base_url
     )
     session_token = _create_session_token(user, membership)
-    refresh_token_value = create_refresh_token({"user_id": str(user.id), "org_id": str(membership.org_id)})
+    refresh_token_value = create_refresh_token(
+        {"user_id": str(user.id), "org_id": str(membership.org_id)}
+    )
     redir = RedirectResponse(url=dest, status_code=status.HTTP_302_FOUND)
     _set_access_cookie(redir, session_token)
     _set_refresh_cookie(redir, refresh_token_value)

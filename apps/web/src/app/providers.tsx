@@ -15,7 +15,7 @@ import { ThemeProvider } from "@/components/common/ThemeProvider";
 import { Toaster } from "@onehash/ui/toaster";
 import { SonnerToaster } from "@onehash/ui/sonner";
 import { TooltipProvider } from "@onehash/ui/tooltip";
-import { getAuthSession, type AuthSessionResponse } from "@/api/index";
+import { getAuthSession, refreshSession as refreshAuthSession, type AuthSessionResponse } from "@/api/index";
 
 import "@/i18n";
 
@@ -54,17 +54,41 @@ export function Providers({ children }: { children: React.ReactNode }) {
   const searchParams = useSearchParams();
   const inflightRef = useRef<Promise<AuthSessionResponse | null> | null>(null);
 
+  const clearSession = useCallback(() => {
+    inflightRef.current = null;
+    setUser(null);
+    localStorage.removeItem("session_updated");
+  }, []);
+
   const refreshSession = useCallback(
     async (force?: boolean): Promise<AuthSessionResponse | null> => {
       if (!force && inflightRef.current) return inflightRef.current;
       if (force) inflightRef.current = null;
       const promise = (async () => {
         try {
-          const me = await getAuthSession();
+          // Try to refresh token first if session seems expired
+          let me = await getAuthSession();
+          
+          // If 401, try refresh token
+          if (!me) {
+            me = await refreshAuthSession();
+          }
+          
           setUser(me);
           return me;
-        } catch {
+        } catch (error) {
+          // Clear session on any auth error
           setUser(null);
+          clearSession();
+          
+          // If on protected route, redirect to login
+          if (!AUTH_ROUTES.includes(pathname) && !LIFECYCLE_ROUTES.includes(pathname)) {
+            const isInvite = isInvitePath(pathname);
+            if (!isInvite) {
+              router.replace('/login?session_expired=true');
+            }
+          }
+          
           return null;
         } finally {
           setLoading(false);
@@ -75,14 +99,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
       inflightRef.current = promise;
       return promise;
     },
-    [],
+    [pathname, router, clearSession],
   );
-
-  const clearSession = useCallback(() => {
-    inflightRef.current = null;
-    setUser(null);
-    localStorage.removeItem("session_updated");
-  }, []);
 
   useEffect(() => {
     void refreshSession();

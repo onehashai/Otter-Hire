@@ -32,6 +32,26 @@ export function getApiBase(): string {
 }
 
 /* =========================
+   Global 401 Handler
+========================= */
+
+let isHandling401 = false;
+
+async function handle401Response(): Promise<void> {
+  if (isHandling401) return;
+  isHandling401 = true;
+
+  // Clear cookies
+  document.cookie = "access_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+  document.cookie = "refresh_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+  localStorage.removeItem("session_updated");
+
+  // Redirect to login with return URL
+  const returnUrl = encodeURIComponent(window.location.pathname + window.location.search);
+  window.location.href = `/login?redirect=${returnUrl}&session_expired=true`;
+}
+
+/* =========================
    Error Handling
 ========================= */
 
@@ -155,6 +175,11 @@ export async function apiGet<T>(path: string, options: ApiGetOptions = {}): Prom
     credentials,
   });
 
+  if (res.status === 401) {
+    await handle401Response();
+    throw new ApiError("Session expired", 401, "AUTH_SESSION_EXPIRED");
+  }
+
   if (!res.ok) {
     const err = await toApiError(res, `GET failed: ${res.status}`);
     throw err;
@@ -180,6 +205,11 @@ export async function apiPost<T>(
     credentials,
     body: JSON.stringify(body),
   });
+
+  if (res.status === 401) {
+    await handle401Response();
+    throw new ApiError("Session expired", 401, "AUTH_SESSION_EXPIRED");
+  }
 
   if (!res.ok) {
     throw await toApiError(res, `POST failed: ${res.status}`);
@@ -211,6 +241,11 @@ export async function apiFetch<T>(
     cache: "no-store",
   });
 
+  if (res.status === 401) {
+    await handle401Response();
+    throw new ApiError("Session expired", 401, "AUTH_SESSION_EXPIRED");
+  }
+
   if (!res.ok) {
     throw await toApiError(res, `Request failed: ${res.status}`);
   }
@@ -226,6 +261,11 @@ export async function apiDelete(path: string): Promise<void> {
     headers: { Accept: "application/json" },
     credentials: "include",
   });
+
+  if (res.status === 401) {
+    await handle401Response();
+    throw new ApiError("Session expired", 401, "AUTH_SESSION_EXPIRED");
+  }
 
   if (!res.ok) {
     throw await toApiError(res, `DELETE failed: ${res.status}`);

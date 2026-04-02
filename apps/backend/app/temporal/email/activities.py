@@ -260,7 +260,7 @@ async def publish_update_activity(event_payload: dict) -> None:
 
 @activity.defn(name="send_outbound_email_activity")
 async def send_outbound_email_activity(input_data: OutboundWorkflowInput) -> dict:
-    from sqlalchemy import update as sa_update
+    from sqlalchemy import select, update as sa_update
 
     from app.db.session import AsyncSessionLocal
     from app.integrations.app_store.email_integration.outbound_service import (
@@ -307,6 +307,22 @@ async def send_outbound_email_activity(input_data: OutboundWorkflowInput) -> dic
 
         html_body = input_data.html_body
 
+        # Build References header chain for proper email threading
+        references_header = input_data.references
+        if input_data.conversation_id:
+            result = await db.execute(
+                select(Message.email_message_id)
+                .where(
+                    Message.conversation_id == UUID(input_data.conversation_id),
+                    Message.email_message_id.isnot(None),
+                    Message.id != message_id,
+                )
+                .order_by(Message.created_at)
+            )
+            previous_message_ids = [row[0] for row in result.fetchall()]
+            if previous_message_ids:
+                references_header = " ".join([f"<{mid}>" for mid in previous_message_ids])
+
         ses_message_id = await asyncio.to_thread(
             send_email_via_ses,
             from_email=from_email_addr,
@@ -317,7 +333,7 @@ async def send_outbound_email_activity(input_data: OutboundWorkflowInput) -> dic
             html_body=html_body,
             reply_to=None,
             in_reply_to=input_data.in_reply_to,
-            references=input_data.references,
+            references=references_header,
             message_id_tag=input_data.message_id,
             org_id_tag=input_data.org_id,
         )

@@ -201,6 +201,7 @@ async def handle_send_email_action(
                     from_name="OneHash ATS",
                     org_name=org_name,
                     reply_to=reply_to_address,
+                    conversation_id=str(conversation.id),
                 )
             )
             logger.info(

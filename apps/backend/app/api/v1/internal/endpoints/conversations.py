@@ -202,6 +202,7 @@ async def _append_outbound_message(
                 reply_to=reply_to,
                 in_reply_to=in_reply_to_msg_id,
                 references=references_val,
+                conversation_id=str(conv.id),
             )
         )
     except Exception:
@@ -393,6 +394,7 @@ async def create_conversation(
                 from_name=current_user.name,
                 org_name=org_name,
                 reply_to=reply_to,
+                conversation_id=str(conv.id),
             )
         )
     except Exception:

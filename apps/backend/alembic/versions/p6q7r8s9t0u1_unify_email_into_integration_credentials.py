@@ -20,47 +20,44 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "integration_credentials", sa.Column("job_id", postgresql.UUID(as_uuid=True), nullable=True)
-    )
-    op.create_foreign_key(
-        "fk_integration_credentials_job_id_jobs",
-        "integration_credentials",
-        "jobs",
-        ["job_id"],
-        ["id"],
-        ondelete="CASCADE",
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    ic_columns = [col['name'] for col in inspector.get_columns('integration_credentials')]
+    
+    if 'job_id' not in ic_columns:
+        op.add_column(
+            "integration_credentials", sa.Column("job_id", postgresql.UUID(as_uuid=True), nullable=True)
+        )
+    
+    op.execute(
+        "DO $$ BEGIN "
+        "IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_integration_credentials_job_id_jobs') THEN "
+        "ALTER TABLE integration_credentials ADD CONSTRAINT fk_integration_credentials_job_id_jobs "
+        "FOREIGN KEY (job_id) REFERENCES jobs (id) ON DELETE CASCADE; "
+        "END IF; END $$"
     )
 
-    op.drop_constraint(
-        "uq_integration_credentials_org_integration",
-        "integration_credentials",
-        type_="unique",
+    op.execute(
+        "ALTER TABLE integration_credentials DROP CONSTRAINT IF EXISTS uq_integration_credentials_org_integration"
     )
-    op.create_unique_constraint(
-        "uq_integration_credentials_org_integration_job",
-        "integration_credentials",
-        ["org_id", "integration_id", "job_id"],
+    op.execute(
+        "DO $$ BEGIN "
+        "IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_integration_credentials_org_integration_job') THEN "
+        "ALTER TABLE integration_credentials ADD CONSTRAINT uq_integration_credentials_org_integration_job "
+        "UNIQUE (org_id, integration_id, job_id); "
+        "END IF; END $$"
     )
-    op.create_index(
-        "uq_integration_credentials_org_integration_org_scope",
-        "integration_credentials",
-        ["org_id", "integration_id"],
-        unique=True,
-        postgresql_where=sa.text("job_id IS NULL"),
+    op.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_integration_credentials_org_integration_org_scope "
+        "ON integration_credentials (org_id, integration_id) WHERE job_id IS NULL"
     )
-    op.create_index(
-        "ix_integration_credentials_integration_org_job",
-        "integration_credentials",
-        ["integration_id", "org_id", "job_id"],
-        unique=False,
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS ix_integration_credentials_integration_org_job "
+        "ON integration_credentials (integration_id, org_id, job_id)"
     )
-    op.create_index(
-        "ix_integration_credentials_inbound_address",
-        "integration_credentials",
-        [sa.text("((config->>'inbound_address'))")],
-        unique=False,
-        postgresql_where=sa.text("config ? 'inbound_address'"),
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS ix_integration_credentials_inbound_address "
+        "ON integration_credentials ((config->>'inbound_address')) WHERE config ? 'inbound_address'"
     )
 
     op.execute(

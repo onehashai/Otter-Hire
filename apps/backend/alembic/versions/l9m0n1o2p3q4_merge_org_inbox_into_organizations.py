@@ -8,6 +8,7 @@ Create Date: 2026-04-01
 from typing import Sequence, Union
 
 import sqlalchemy as sa
+from sqlalchemy import text
 from sqlalchemy.dialects import postgresql
 
 from alembic import op
@@ -20,119 +21,144 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column("organizations", sa.Column("inbox_address", sa.String(length=320), nullable=True))
-    op.add_column(
-        "organizations",
-        sa.Column("inbox_provider", sa.String(length=32), nullable=False, server_default="ses"),
-    )
-    op.add_column(
-        "organizations",
-        sa.Column("inbox_status", sa.String(length=32), nullable=False, server_default="inactive"),
-    )
-    op.add_column(
-        "organizations", sa.Column("inbox_secret_hash", sa.String(length=128), nullable=True)
-    )
-    op.add_column(
-        "organizations",
-        sa.Column("inbox_verification_token_hash", sa.String(length=128), nullable=True),
-    )
-    op.add_column(
-        "organizations",
-        sa.Column("inbox_verification_expires_at", sa.DateTime(timezone=True), nullable=True),
-    )
-    op.add_column(
-        "organizations", sa.Column("inbox_verified_at", sa.DateTime(timezone=True), nullable=True)
-    )
-    op.add_column(
-        "organizations",
-        sa.Column(
-            "inbox_verification_status",
-            sa.String(length=32),
-            nullable=False,
-            server_default="pending",
-        ),
-    )
-    op.add_column(
-        "organizations",
-        sa.Column("inbox_verification_provider", sa.String(length=32), nullable=True),
-    )
-    op.add_column(
-        "organizations",
-        sa.Column("inbox_verification_email_id", postgresql.UUID(as_uuid=True), nullable=True),
-    )
-    op.add_column(
-        "organizations",
-        sa.Column("inbox_verification_action_type", sa.String(length=32), nullable=True),
-    )
-    op.add_column(
-        "organizations",
-        sa.Column(
-            "inbox_verification_action_payload",
-            postgresql.JSONB(astext_type=sa.Text()),
-            nullable=True,
-        ),
-    )
-    op.add_column(
-        "organizations",
-        sa.Column("inbox_verification_detected_at", sa.DateTime(timezone=True), nullable=True),
-    )
-    op.add_column(
-        "organizations",
-        sa.Column("inbox_verification_error", sa.String(length=1000), nullable=True),
-    )
-
-    op.create_foreign_key(
-        "fk_organizations_inbox_verification_email_id",
-        "organizations",
-        "inbound_emails",
-        ["inbox_verification_email_id"],
-        ["id"],
-        ondelete="SET NULL",
-    )
-    op.create_check_constraint(
-        "ck_organizations_inbox_status",
-        "organizations",
-        "inbox_status IN ('inactive', 'pending', 'active')",
-    )
-    op.create_check_constraint(
-        "ck_organizations_inbox_verification_status",
-        "organizations",
-        "inbox_verification_status IN ('pending', 'action_required', 'verified', 'failed')",
-    )
-    op.create_index(
-        "ix_organizations_inbox_address_not_null",
-        "organizations",
-        ["inbox_address"],
-        unique=True,
-        postgresql_where=sa.text("inbox_address IS NOT NULL"),
-    )
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    org_columns = [col['name'] for col in inspector.get_columns('organizations')]
+    
+    # Add columns if they don't exist
+    if 'inbox_address' not in org_columns:
+        op.add_column("organizations", sa.Column("inbox_address", sa.String(length=320), nullable=True))
+    if 'inbox_provider' not in org_columns:
+        op.add_column(
+            "organizations",
+            sa.Column("inbox_provider", sa.String(length=32), nullable=False, server_default="ses"),
+        )
+    if 'inbox_status' not in org_columns:
+        op.add_column(
+            "organizations",
+            sa.Column("inbox_status", sa.String(length=32), nullable=False, server_default="inactive"),
+        )
+    if 'inbox_secret_hash' not in org_columns:
+        op.add_column(
+            "organizations", sa.Column("inbox_secret_hash", sa.String(length=128), nullable=True)
+        )
+    if 'inbox_verification_token_hash' not in org_columns:
+        op.add_column(
+            "organizations",
+            sa.Column("inbox_verification_token_hash", sa.String(length=128), nullable=True),
+        )
+    if 'inbox_verification_expires_at' not in org_columns:
+        op.add_column(
+            "organizations",
+            sa.Column("inbox_verification_expires_at", sa.DateTime(timezone=True), nullable=True),
+        )
+    if 'inbox_verified_at' not in org_columns:
+        op.add_column(
+            "organizations", sa.Column("inbox_verified_at", sa.DateTime(timezone=True), nullable=True)
+        )
+    if 'inbox_verification_status' not in org_columns:
+        op.add_column(
+            "organizations",
+            sa.Column(
+                "inbox_verification_status",
+                sa.String(length=32),
+                nullable=False,
+                server_default="pending",
+            ),
+        )
+    if 'inbox_verification_provider' not in org_columns:
+        op.add_column(
+            "organizations",
+            sa.Column("inbox_verification_provider", sa.String(length=32), nullable=True),
+        )
+    if 'inbox_verification_email_id' not in org_columns:
+        op.add_column(
+            "organizations",
+            sa.Column("inbox_verification_email_id", postgresql.UUID(as_uuid=True), nullable=True),
+        )
+    if 'inbox_verification_action_type' not in org_columns:
+        op.add_column(
+            "organizations",
+            sa.Column("inbox_verification_action_type", sa.String(length=32), nullable=True),
+        )
+    if 'inbox_verification_action_payload' not in org_columns:
+        op.add_column(
+            "organizations",
+            sa.Column(
+                "inbox_verification_action_payload",
+                postgresql.JSONB(astext_type=sa.Text()),
+                nullable=True,
+            ),
+        )
+    if 'inbox_verification_detected_at' not in org_columns:
+        op.add_column(
+            "organizations",
+            sa.Column("inbox_verification_detected_at", sa.DateTime(timezone=True), nullable=True),
+        )
+    if 'inbox_verification_error' not in org_columns:
+        op.add_column(
+            "organizations",
+            sa.Column("inbox_verification_error", sa.String(length=1000), nullable=True),
+        )
 
     op.execute(
-        """
-        UPDATE organizations o
-        SET
-            inbox_address = oi.inbox_address,
-            inbox_provider = oi.provider,
-            inbox_status = oi.status::text,
-            inbox_secret_hash = oi.secret_hash,
-            inbox_verification_token_hash = oi.verification_token_hash,
-            inbox_verification_expires_at = oi.verification_expires_at,
-            inbox_verified_at = oi.verified_at,
-            inbox_verification_status = oi.verification_status,
-            inbox_verification_provider = oi.verification_provider,
-            inbox_verification_email_id = oi.verification_email_id,
-            inbox_verification_action_type = oi.verification_action_type,
-            inbox_verification_action_payload = oi.verification_action_payload,
-            inbox_verification_detected_at = oi.verification_detected_at,
-            inbox_verification_error = oi.verification_error
-        FROM org_inboxes oi
-        WHERE o.id = oi.org_id
-        """
+        "DO $$ BEGIN "
+        "IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_organizations_inbox_verification_email_id') THEN "
+        "ALTER TABLE organizations ADD CONSTRAINT fk_organizations_inbox_verification_email_id "
+        "FOREIGN KEY (inbox_verification_email_id) REFERENCES inbound_emails (id) ON DELETE SET NULL; "
+        "END IF; END $$"
+    )
+    op.execute(
+        "DO $$ BEGIN "
+        "IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ck_organizations_inbox_status') THEN "
+        "ALTER TABLE organizations ADD CONSTRAINT ck_organizations_inbox_status "
+        "CHECK (inbox_status IN ('inactive', 'pending', 'active')); "
+        "END IF; END $$"
+    )
+    op.execute(
+        "DO $$ BEGIN "
+        "IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ck_organizations_inbox_verification_status') THEN "
+        "ALTER TABLE organizations ADD CONSTRAINT ck_organizations_inbox_verification_status "
+        "CHECK (inbox_verification_status IN ('pending', 'action_required', 'verified', 'failed')); "
+        "END IF; END $$"
+    )
+    op.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS ix_organizations_inbox_address_not_null "
+        "ON organizations (inbox_address) WHERE inbox_address IS NOT NULL"
     )
 
-    op.drop_constraint("fk_org_inboxes_verification_email_id", "org_inboxes", type_="foreignkey")
-    op.drop_table("org_inboxes")
-    op.execute("DROP TYPE IF EXISTS org_inbox_status")
+    # Only migrate data if org_inboxes table exists
+    result = conn.execute(sa.text(
+        "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'org_inboxes')"
+    ))
+    org_inboxes_exists = result.scalar()
+    
+    if org_inboxes_exists:
+        op.execute(
+            """
+            UPDATE organizations o
+            SET
+                inbox_address = oi.inbox_address,
+                inbox_provider = oi.provider,
+                inbox_status = oi.status::text,
+                inbox_secret_hash = oi.secret_hash,
+                inbox_verification_token_hash = oi.verification_token_hash,
+                inbox_verification_expires_at = oi.verification_expires_at,
+                inbox_verified_at = oi.verified_at,
+                inbox_verification_status = oi.verification_status,
+                inbox_verification_provider = oi.verification_provider,
+                inbox_verification_email_id = oi.verification_email_id,
+                inbox_verification_action_type = oi.verification_action_type,
+                inbox_verification_action_payload = oi.verification_action_payload,
+                inbox_verification_detected_at = oi.verification_detected_at,
+                inbox_verification_error = oi.verification_error
+            FROM org_inboxes oi
+            WHERE o.id = oi.org_id
+            """
+        )
+        op.execute("ALTER TABLE org_inboxes DROP CONSTRAINT IF EXISTS fk_org_inboxes_verification_email_id")
+        op.drop_table("org_inboxes")
+        op.execute("DROP TYPE IF EXISTS org_inbox_status")
 
 
 def downgrade() -> None:

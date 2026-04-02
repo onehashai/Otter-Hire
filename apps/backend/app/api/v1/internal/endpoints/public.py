@@ -44,7 +44,6 @@ from app.core.config import settings
 from app.core.security import verify_access_token
 from app.db.session import get_db
 from app.integrations.app_store.email_integration import credential_store
-from app.integrations.app_store.email_integration.temporal.queue import enqueue_ses_raw_key
 from app.models.candidate import Candidate
 from app.models.candidate_jobs import CandidateJobs
 from app.models.conversation import Conversation
@@ -69,6 +68,7 @@ from app.schemas.public_jobs import (
 from app.services.automation import execute_automations_for_trigger
 from app.services.resume_links import resolve_resume_from_body
 from app.services.storage import storage_service
+from app.temporal.email.queue import enqueue_ses_raw_key
 from app.utils.uuid import uuid7
 
 router = APIRouter()
@@ -2266,7 +2266,7 @@ async def ingest_inbound_email(
             name=extracted_name,
             email=extracted_email or f"unknown+{inbound_email.id}@invalid.local",
             phone=extracted_phone,
-            location=extracted_location,
+            address=extracted_location,
             profile_links={},
             source="Email",
             tags=[],
@@ -2279,8 +2279,8 @@ async def ingest_inbound_email(
             candidate.name = extracted_name
         if _should_replace_phone(candidate.phone, extracted_phone):
             candidate.phone = extracted_phone
-        if _should_replace_location(candidate.location, extracted_location):
-            candidate.location = extracted_location
+        if _should_replace_location(candidate.address, extracted_location):
+            candidate.address = extracted_location
 
     latest_version_result = await db.execute(
         select(func.max(CandidateDocument.version)).where(

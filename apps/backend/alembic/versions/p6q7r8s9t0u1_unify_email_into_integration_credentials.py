@@ -1,6 +1,6 @@
 """unify email integration into integration_credentials
 
-Revision ID: n2o3p4q5r6s7
+Revision ID: p6q7r8s9t0u1
 Revises: m1n2o3p4q5r7
 Create Date: 2026-04-01
 """
@@ -13,7 +13,7 @@ from sqlalchemy.dialects import postgresql
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "n2o3p4q5r6s7"
+revision: str = "p6q7r8s9t0u1"
 down_revision: Union[str, Sequence[str], None] = "m1n2o3p4q5r7"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None

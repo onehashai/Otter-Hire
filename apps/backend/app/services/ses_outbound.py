@@ -140,6 +140,7 @@ async def record_ses_event(
         .where(
             IntegrationCredential.org_id == org_id,
             Integration.slug == "email",
+            IntegrationCredential.job_id.is_(None),
         )
     )
     row: IntegrationCredential | None = result.scalar_one_or_none()

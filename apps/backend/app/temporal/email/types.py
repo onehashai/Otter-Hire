@@ -24,3 +24,4 @@ class OutboundWorkflowInput:
     reply_to: str | None = None
     in_reply_to: str | None = None  # Message-ID of the email we're replying to (for threading)
     references: str | None = None  # Space-separated Message-IDs for thread (References header)
+    conversation_id: str | None = None  # Conversation ID to build References chain

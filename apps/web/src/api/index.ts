@@ -14,6 +14,7 @@ export {
   signup,
   logout,
   getAuthSession,
+  refreshSession,
   getGoogleAuthEnabled,
   getMe,
   verifyEmail,

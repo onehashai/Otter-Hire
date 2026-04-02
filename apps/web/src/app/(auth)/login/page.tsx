@@ -36,6 +36,7 @@ export default function Login() {
   const redirectTo = searchParams.get("redirect");
   const inviteEmail = searchParams.get("invite_email");
   const oauthError = searchParams.get("oauth_error");
+  const sessionExpired = searchParams.get("session_expired");
   const inviteRedirect =
     typeof redirectTo === "string" && isSafeRedirect(redirectTo) ? redirectTo : null;
   const signupHref = inviteRedirect
@@ -134,6 +135,13 @@ export default function Login() {
             {oauthError && (
               <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-sm text-destructive mb-4">
                 {oauthError}
+              </div>
+            )}
+
+            {/* Session expired message */}
+            {sessionExpired && (
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2.5 text-sm text-amber-700 dark:text-amber-400 mb-4">
+                Your session has expired. Please sign in again.
               </div>
             )}
 

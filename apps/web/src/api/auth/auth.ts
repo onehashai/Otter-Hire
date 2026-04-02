@@ -74,6 +74,31 @@ export async function logout(): Promise<void> {
   }
 }
 
+export async function refreshSession(): Promise<AuthSessionResponse | null> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
+      method: "POST",
+      headers: { Accept: "application/json" },
+      credentials: "include",
+      cache: "no-store",
+    });
+
+    if (res.status === 401) {
+      return null;
+    }
+
+    if (!res.ok) {
+      throw new Error(`Refresh failed: ${res.status} ${res.statusText}`);
+    }
+
+    const raw = (await res.json()) as Record<string, unknown>;
+    const session = normalizeAuthSessionPayload(raw);
+    return { ...session, org_avatar_url: normalizeApiUrl(session.org_avatar_url) };
+  } catch {
+    return null;
+  }
+}
+
 export async function getAuthSession(): Promise<AuthSessionResponse | null> {
   const res = await fetch(`${API_BASE_URL}/auth/me`, {
     method: "GET",

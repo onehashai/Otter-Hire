@@ -51,6 +51,10 @@ class Settings(BaseSettings):
     # APP_SUBDOMAIN, APP_DOMAIN, and IS_PRODUCTION.
     frontend_base_url: str = Field(default="", validation_alias="FRONTEND_BASE_URL")
 
+    # Optional absolute URL to PNG (or https) logo for transactional emails. If empty,
+    # logo URL defaults to {FRONTEND_BASE_URL}/brand/logo.png when FRONTEND_BASE_URL is set.
+    email_logo_url: str = Field(default="", validation_alias="EMAIL_LOGO_URL")
+
     # Public API base URL (OAuth callbacks, etc.). If API_BASE_URL is unset/empty, derived at
     # load time from APP_SUBDOMAIN, APP_DOMAIN, and IS_PRODUCTION (port :8000 in non-prod).
     api_base_url: str = Field(default="", validation_alias="API_BASE_URL")

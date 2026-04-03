@@ -143,7 +143,7 @@ export function TopBar() {
             alt={PLATFORM_NAME}
             width={90}
             height={20}
-            className="object-contain"
+            className="object-contain dark:invert dark:contrast-200"
           />
         </Link>
         <div className="hidden min-w-0 flex-1 flex-col justify-center md:flex">

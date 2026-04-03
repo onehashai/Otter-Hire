@@ -101,7 +101,7 @@ export default function Login() {
               alt={PLATFORM_NAME}
               width={480}
               height={262}
-              className="-ml-2 h-24 w-auto max-w-[min(100%,400px)] object-contain object-left self-start"
+              className="-ml-2 h-24 w-auto max-w-[min(100%,400px)] object-contain object-left self-start dark:invert dark:contrast-200"
               priority
             />
             <h1 className="text-3xl lg:text-4xl font-bold tracking-tight leading-tight">
@@ -126,7 +126,7 @@ export default function Login() {
               alt={PLATFORM_NAME}
               width={140}
               height={42}
-              className="object-contain"
+              className="object-contain dark:invert dark:contrast-200"
               priority
             />
           </div>

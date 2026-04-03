@@ -165,7 +165,7 @@ function VerifyEmailContent() {
             alt="Otter"
             width={140}
             height={42}
-            className="object-contain block"
+            className="object-contain block dark:invert dark:contrast-200"
             priority
           />
         </div>

@@ -23,8 +23,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     segments[2] === "stage" &&
     Boolean(segments[3]);
 
-  const isCandidatesListRoute = segments[0] === "candidates";
-
   return (
     <PageMetadataProvider>
       <div className="flex min-h-screen w-full bg-background">
@@ -51,9 +49,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               className={
                 isJobStageWorkspaceRoute
                   ? "py-0 pb-0 md:pb-0 min-h-0"
-                  : isCandidatesListRoute
+                  : segments[0] === "candidates"
                     ? "mx-auto max-w-[1400px] px-4 md:px-6 py-4 md:py-6 pb-20 md:pb-6 w-full"
-                    : "mx-auto max-w-6xl px-4 md:px-6 py-4 md:py-6 pb-20 md:pb-6"
+                    : "mx-auto max-w-[1400px] px-4 md:px-6 py-4 md:py-6 pb-20 md:pb-6 w-full"
               }
             >
               {children}

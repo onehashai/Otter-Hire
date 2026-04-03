@@ -1,11 +1,12 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import Image from "next/image";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Icon } from "@onehash/ui/icon";
 import {
   createOrganization,
-  getMyOrganization,
   getOrganizationMemberships,
   logout,
   switchOrganization,
@@ -35,16 +36,14 @@ import {
   DialogTitle,
 } from "@onehash/ui/dialog";
 import { InputField } from "@onehash/ui/input";
-import { getOrganizationNameInitials } from "@/lib/name-initials";
-import { useIsMobile } from "@/hooks/use-mobile";
-import { cn } from "@/lib/utils";
+import { getPersonNameInitials } from "@/lib/name-initials";
+import { LOGO_SVG_PATH, PLATFORM_NAME } from "@/lib/constants";
 
 export function TopBar() {
   const router = useRouter();
   const { user, clearSession, refreshSession } = useAuthSession();
   const { metadata } = usePageMetadata();
   const { t } = useTranslation();
-  const isMobile = useIsMobile();
   const [createOpen, setCreateOpen] = useState(false);
   const [newOrgName, setNewOrgName] = useState("");
   const [memberships, setMemberships] = useState<OrganizationMembership[]>([]);
@@ -52,7 +51,6 @@ export function TopBar() {
   const [creatingOrg, setCreatingOrg] = useState(false);
   const [switchingOrgId, setSwitchingOrgId] = useState<string | null>(null);
   const [orgError, setOrgError] = useState<string | null>(null);
-  const [orgAvatarUrl, setOrgAvatarUrl] = useState<string | null>(null);
 
   const loadMemberships = async () => {
     setMenuLoadingMemberships(true);
@@ -70,29 +68,6 @@ export function TopBar() {
   useEffect(() => {
     void loadMemberships();
   }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      if (!user?.org_id) {
-        setOrgAvatarUrl(null);
-        return;
-      }
-      try {
-        const org = await getMyOrganization();
-        if (!cancelled) {
-          setOrgAvatarUrl(org.avatar_url ?? null);
-        }
-      } catch {
-        if (!cancelled) {
-          setOrgAvatarUrl(user.org_avatar_url ?? null);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [user?.org_id, user?.org_avatar_url]);
 
   const handleMenuOpenChange = (open: boolean) => {
     if (open) {
@@ -155,40 +130,53 @@ export function TopBar() {
     }
   };
 
-  const initials = getOrganizationNameInitials(user?.org_name, "U");
+  const userLabel = (user?.name?.trim() || user?.email || "").trim() || "Account";
+  const initialsSource = user?.name?.trim() || user?.email;
+  const initials = getPersonNameInitials(initialsSource, "U");
 
   return (
-    <header
-      className={cn(
-        "border-b border-border flex justify-between px-4 md:px-6 bg-background shrink-0 gap-2",
-        isMobile ? "h-12 items-center" : "h-12 items-center",
-      )}
-    >
-      <div className="flex flex-col justify-center flex-1 min-w-0 pr-2 md:pr-3">
-        <h1 className="text-sm font-semibold text-foreground leading-snug break-words">
-          {metadata.title}
-        </h1>
-        {metadata.subtitle && (
-          <p className="hidden md:block text-xs text-muted-foreground leading-snug break-words mt-0.5 md:line-clamp-none">
-            {metadata.subtitle}
-          </p>
-        )}
+    <header className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-border bg-background px-4 md:px-6">
+      <div className="flex min-w-0 flex-1 items-center pr-2 md:pr-3">
+        <Link href="/" className="-ml-2 flex items-center md:ml-0 md:hidden">
+          <Image
+            src={LOGO_SVG_PATH}
+            alt={PLATFORM_NAME}
+            width={90}
+            height={20}
+            className="object-contain"
+          />
+        </Link>
+        <div className="hidden min-w-0 flex-1 flex-col justify-center md:flex">
+          <h1 className="break-words text-sm font-semibold leading-snug text-foreground">
+            {metadata.title}
+          </h1>
+          {metadata.subtitle && (
+            <p className="mt-0.5 break-words text-xs leading-snug text-muted-foreground md:line-clamp-none">
+              {metadata.subtitle}
+            </p>
+          )}
+        </div>
       </div>
 
       <DropdownMenu onOpenChange={handleMenuOpenChange}>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" className="h-8 w-32 shrink-0">
+          <Button
+            variant="ghost"
+            className="h-8 w-8 shrink-0 gap-0 p-0 justify-center md:h-8 md:w-auto md:max-w-[12rem] md:gap-2 md:px-2 md:justify-start"
+            aria-label={userLabel}
+          >
             <Avatar
-              className="h-6 w-6 border border-border"
-              src={orgAvatarUrl}
-              alt={user?.org_name || "Organization"}
+              key={`${user?.id ?? ""}-${user?.avatar_url ?? ""}`}
+              className="h-6 w-6 border border-border shrink-0"
+              src={user?.avatar_url ?? undefined}
+              alt={userLabel}
               fallbackClassName="text-[10px] bg-muted text-muted-foreground"
             >
               {initials}
             </Avatar>
-            <div className="flex flex-col items-start min-w-0 flex-1">
-              <span className="text-[10px] text-muted-foreground truncate max-w-full">
-                {user?.org_name}
+            <div className="hidden min-w-0 flex-1 flex-col items-start md:flex">
+              <span className="max-w-full truncate text-xs font-medium text-foreground">
+                {userLabel}
               </span>
             </div>
           </Button>

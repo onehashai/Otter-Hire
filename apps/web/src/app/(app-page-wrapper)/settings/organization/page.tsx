@@ -17,6 +17,7 @@ import { Avatar } from "@onehash/ui/avatar";
 import { Trash2, Upload } from "lucide-react";
 import { toast } from "@onehash/ui/sonner";
 import { useTranslation } from "react-i18next";
+import { ImageCropDialog } from "@/components/common/ImageCropDialog";
 
 export default function OrganizationSettings() {
   const { t } = useTranslation();
@@ -35,6 +36,8 @@ export default function OrganizationSettings() {
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
   const previewObjectUrlRef = useRef<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [cropDialogOpen, setCropDialogOpen] = useState(false);
+  const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
 
   useEffect(() => {
     if (searchParams.get("tab") === "careers") {
@@ -123,8 +126,33 @@ export default function OrganizationSettings() {
     }
   };
 
-  const handleAvatarChange = (file: File | undefined) => {
+  const handleCropDialogOpenChange = (open: boolean) => {
+    if (!open) {
+      if (cropImageSrc) {
+        URL.revokeObjectURL(cropImageSrc);
+        setCropImageSrc(null);
+      }
+      if (avatarInputRef.current) avatarInputRef.current.value = "";
+    }
+    setCropDialogOpen(open);
+  };
+
+  const handleAvatarFileSelected = (file: File | undefined) => {
     if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please choose an image file");
+      return;
+    }
+    const src = URL.createObjectURL(file);
+    setCropImageSrc(src);
+    setCropDialogOpen(true);
+  };
+
+  const handleAvatarCropped = (file: File) => {
+    if (cropImageSrc) {
+      URL.revokeObjectURL(cropImageSrc);
+      setCropImageSrc(null);
+    }
     if (previewObjectUrlRef.current) {
       URL.revokeObjectURL(previewObjectUrlRef.current);
     }
@@ -154,6 +182,14 @@ export default function OrganizationSettings() {
 
   return (
     <>
+      <ImageCropDialog
+        open={cropDialogOpen}
+        onOpenChange={handleCropDialogOpenChange}
+        imageSrc={cropImageSrc}
+        title="Adjust organization logo"
+        onCropComplete={handleAvatarCropped}
+      />
+
       <h2 className="text-base md:text-lg font-semibold mb-1">Organization</h2>
       <p className="text-xs text-muted-foreground mb-4 md:mb-6">
         Manage your organization profile settings
@@ -175,7 +211,7 @@ export default function OrganizationSettings() {
                 type="file"
                 accept="image/*"
                 className="sr-only"
-                onChange={(e) => handleAvatarChange(e.target.files?.[0])}
+                onChange={(e) => handleAvatarFileSelected(e.target.files?.[0])}
               />
               <Button
                 size="sm"

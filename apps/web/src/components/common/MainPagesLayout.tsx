@@ -95,7 +95,10 @@ export const MainPagesLayout = ({
                   {hasActiveFilters && <span className="h-1.5 w-1.5 rounded-full bg-foreground" />}
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-72 max-h-[70vh] overflow-y-auto" align="start">
+              <PopoverContent
+                className="w-80 max-h-[min(70vh,520px)] overflow-y-auto overflow-x-hidden p-3"
+                align="start"
+              >
                 {filterContent}
               </PopoverContent>
             </Popover>

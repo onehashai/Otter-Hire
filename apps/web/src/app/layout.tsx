@@ -7,7 +7,38 @@ import "../styles/globals.css";
 
 export const metadata: Metadata = {
   title: PLATFORM_NAME,
-  description: "Applicant Tracking System",
+  description: "AI-powered, open source modern ATS to recruit top talent faster and smarter.",
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/favicon.svg", type: "image/svg+xml" },
+      { url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
+    ],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+  },
+  manifest: "/site.webmanifest",
+  openGraph: {
+    title: "Otter - AI-Powered Modern ATS",
+    description: "AI-powered, open source modern ATS to recruit top talent faster and smarter.",
+    url: "https://smartats.in",
+    siteName: "Otter",
+    images: [
+      {
+        url: "/social_media/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "Otter - AI-powered, open source modern ATS",
+      },
+    ],
+    locale: "en_US",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Otter - AI-Powered Modern ATS",
+    description: "AI-powered, open source modern ATS to recruit top talent faster and smarter.",
+    images: ["/social_media/og-image.png"],
+  },
 };
 
 function isJobsSubdomain(host: string): boolean {

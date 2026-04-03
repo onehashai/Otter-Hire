@@ -2,6 +2,7 @@
 
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect } from "react";
 import { Button } from "@onehash/ui/button";
@@ -10,7 +11,7 @@ import { Form, FormField, FormItem, FormControl } from "@onehash/ui/form";
 import { Icon } from "@onehash/ui/icon";
 import { onboardingSchema, type OnboardingFormValues } from "@/lib/schemas/zodResolver";
 import { useTranslation } from "react-i18next";
-import { PRODUCT_LOGO_LETTER, PLATFORM_NAME } from "@/lib/constants";
+import { LOGO_SVG_PATH, PLATFORM_NAME } from "@/lib/constants";
 import { completeOnboarding } from "@/api/index";
 import { useAuthSession } from "@/app/providers";
 
@@ -61,11 +62,15 @@ export default function Onboarding() {
     <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12">
       <div className="w-full max-w-[480px]">
         {/* Logo */}
-        <div className="flex items-center gap-2.5 mb-10 justify-center">
-          <div className="h-9 w-9 rounded-lg bg-foreground flex items-center justify-center">
-            <span className="text-background text-sm font-bold">{PRODUCT_LOGO_LETTER}</span>
-          </div>
-          <span className="text-lg font-semibold tracking-tight">{PLATFORM_NAME}</span>
+        <div className="flex items-center justify-center mb-0 leading-none">
+          <Image
+            src={LOGO_SVG_PATH}
+            alt="Otter"
+            width={140}
+            height={42}
+            className="object-contain block"
+            priority
+          />
         </div>
 
         <div className="rounded-xl border border-border bg-card p-8 shadow-sm">

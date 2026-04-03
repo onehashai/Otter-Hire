@@ -19,6 +19,7 @@ class AuthUserResponse(BaseModel):
     id: UUID
     email: EmailStr
     name: str
+    avatar_url: str | None = None
     role: str  # account: "user" | "admin"
     membership_role: str
     status: str

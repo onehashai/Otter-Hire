@@ -3,6 +3,7 @@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useEffect } from "react";
 import { Button } from "@onehash/ui/button";
@@ -11,7 +12,7 @@ import { Checkbox } from "@onehash/ui/checkbox";
 import { Form, FormField, FormItem, FormControl } from "@onehash/ui/form";
 import { Icon } from "@onehash/ui/icon";
 import { useTranslation } from "react-i18next";
-import { PRODUCT_LOGO_LETTER, PLATFORM_NAME } from "@/lib/constants";
+import { LOGO_SVG_PATH, PLATFORM_NAME } from "@/lib/constants";
 import { loginSchema, type LoginFormValues } from "@/lib/schemas/zodResolver";
 import { getGoogleAuthEnabled, login, API_BASE_URL } from "@/api/index";
 import { useAuthSession } from "@/app/providers";
@@ -93,22 +94,25 @@ export default function Login() {
             backgroundSize: "24px 24px",
           }}
         />
-        <div className="relative z-10 max-w-md px-12">
-          <div className="flex items-center gap-2.5 mb-8">
-            <div className="h-9 w-9 rounded-lg bg-foreground flex items-center justify-center">
-              <span className="text-background text-sm font-bold">{PRODUCT_LOGO_LETTER}</span>
-            </div>
-            <span className="text-lg font-semibold tracking-tight">{PLATFORM_NAME}</span>
+        <div className="relative z-10 w-full max-w-md px-12 text-left">
+          <div className="flex flex-col items-start gap-3">
+            <Image
+              src={LOGO_SVG_PATH}
+              alt={PLATFORM_NAME}
+              width={480}
+              height={262}
+              className="-ml-2 h-24 w-auto max-w-[min(100%,400px)] object-contain object-left self-start"
+              priority
+            />
+            <h1 className="text-3xl lg:text-4xl font-bold tracking-tight leading-tight">
+              Recruit top talent
+              <br />
+              faster and smarter.
+            </h1>
+            <p className="text-muted-foreground text-sm leading-relaxed">
+              AI-powered, open source modern ATS to recruit top talent faster and smarter.
+            </p>
           </div>
-          <h1 className="text-3xl font-semibold tracking-tight leading-tight mb-3">
-            Modern hiring,
-            <br />
-            simplified.
-          </h1>
-          <p className="text-muted-foreground text-sm leading-relaxed">
-            Streamline your recruitment workflow with an intuitive, distraction-free experience
-            built for modern teams.
-          </p>
         </div>
       </div>
 
@@ -116,11 +120,15 @@ export default function Login() {
       <div className="flex-1 flex items-center justify-center px-4 py-12 sm:px-8">
         <div className="w-full max-w-[420px]">
           {/* Mobile logo */}
-          <div className="lg:hidden flex items-center gap-2.5 mb-10 justify-center">
-            <div className="h-9 w-9 rounded-lg bg-foreground flex items-center justify-center">
-              <span className="text-background text-sm font-bold">{PRODUCT_LOGO_LETTER}</span>
-            </div>
-            <span className="text-lg font-semibold tracking-tight">{PLATFORM_NAME}</span>
+          <div className="lg:hidden flex items-center mb-10 justify-center">
+            <Image
+              src={LOGO_SVG_PATH}
+              alt={PLATFORM_NAME}
+              width={140}
+              height={42}
+              className="object-contain"
+              priority
+            />
           </div>
 
           <div className="lg:rounded-xl lg:border lg:border-border lg:bg-card lg:p-8 lg:shadow-sm">

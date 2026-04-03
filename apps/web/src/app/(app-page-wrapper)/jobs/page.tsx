@@ -240,13 +240,13 @@ export default function JobsPage() {
           ))}
         </div>
         {datePreset === "custom" && (
-          <div className="mt-2">
+          <div className="mt-3 border-t border-border pt-3">
             <Calendar
               mode="range"
               selected={dateRange.from ? { from: dateRange.from, to: dateRange.to } : undefined}
               onSelect={(range) => setDateRange(range ? { from: range.from, to: range.to } : {})}
               numberOfMonths={1}
-              className="rounded-md border p-2 pointer-events-auto"
+              className="w-full max-w-full rounded-md border bg-card p-3 shadow-none pointer-events-auto"
             />
           </div>
         )}

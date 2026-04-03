@@ -23,7 +23,6 @@ class Integration(Base):
     name = Column(String(100), nullable=False)  # "Email", "LinkedIn", "Indeed"
     slug = Column(String(50), unique=True, nullable=False)  # "email", "linkedin", "indeed"
     category = Column(String(50), nullable=False)  # "email", "job_portal", "calendar"
-    logo_url = Column(Text)
     description = Column(Text)
     is_active = Column(Boolean, default=True, nullable=False)
     config = Column(JSONB, default={}, nullable=False)  # Integration-specific config

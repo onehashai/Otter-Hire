@@ -50,6 +50,7 @@ def _to_user_response(user: User, membership: OrgMembership) -> AuthUserResponse
         id=user.id,
         email=user.email,
         name=user.name,
+        avatar_url=user.avatar_url,
         role=user.role,
         membership_role=membership.role,
         status=membership.status,

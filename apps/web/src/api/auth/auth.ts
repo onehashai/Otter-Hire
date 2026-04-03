@@ -11,6 +11,7 @@ export type AuthSessionResponse = {
   id: string;
   email: string;
   name: string;
+  avatar_url?: string | null;
   role: string;
   membership_role: string;
   status: string;
@@ -51,14 +52,18 @@ export function signup(payload: AuthPayload): Promise<unknown> {
 /** Normalize `/auth/me` payload: older APIs used `role` for org membership only. */
 function normalizeAuthSessionPayload(raw: Record<string, unknown>): AuthSessionResponse {
   const base = raw as unknown as AuthSessionResponse;
-  if (typeof raw.membership_role === "string") {
-    return base;
-  }
-  const legacyMembership = String(raw.role ?? "");
+  const withRoles =
+    typeof raw.membership_role === "string"
+      ? base
+      : {
+          ...base,
+          role: "user",
+          membership_role: String(raw.role ?? ""),
+        };
   return {
-    ...base,
-    role: "user",
-    membership_role: legacyMembership,
+    ...withRoles,
+    org_avatar_url: normalizeApiUrl(withRoles.org_avatar_url),
+    avatar_url: normalizeApiUrl(withRoles.avatar_url),
   };
 }
 
@@ -92,8 +97,7 @@ export async function refreshSession(): Promise<AuthSessionResponse | null> {
     }
 
     const raw = (await res.json()) as Record<string, unknown>;
-    const session = normalizeAuthSessionPayload(raw);
-    return { ...session, org_avatar_url: normalizeApiUrl(session.org_avatar_url) };
+    return normalizeAuthSessionPayload(raw);
   } catch {
     return null;
   }
@@ -116,8 +120,7 @@ export async function getAuthSession(): Promise<AuthSessionResponse | null> {
   }
 
   const raw = (await res.json()) as Record<string, unknown>;
-  const session = normalizeAuthSessionPayload(raw);
-  return { ...session, org_avatar_url: normalizeApiUrl(session.org_avatar_url) };
+  return normalizeAuthSessionPayload(raw);
 }
 
 export function getMe(): Promise<MeResponse> {

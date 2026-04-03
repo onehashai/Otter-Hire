@@ -165,7 +165,14 @@ export default function InvitePage() {
         <div className="flex-1 flex items-center justify-center px-4 py-12">
           <div className="w-full max-w-[420px]">
             <div className="lg:hidden flex items-center mb-10 justify-center">
-              <Image src={LOGO_SVG_PATH} alt={PLATFORM_NAME} width={140} height={42} className="object-contain" priority />
+              <Image
+                src={LOGO_SVG_PATH}
+                alt={PLATFORM_NAME}
+                width={140}
+                height={42}
+                className="object-contain"
+                priority
+              />
             </div>
             <div className="rounded-xl border border-border bg-card p-8 shadow-sm text-center">
               <div className="mx-auto h-12 w-12 rounded-full bg-destructive/10 flex items-center justify-center mb-5">
@@ -222,7 +229,14 @@ export default function InvitePage() {
       <div className="flex-1 flex items-center justify-center px-4 py-12 sm:px-8">
         <div className="w-full max-w-[420px]">
           <div className="lg:hidden flex items-center mb-10 justify-center">
-            <Image src={LOGO_SVG_PATH} alt={PLATFORM_NAME} width={140} height={42} className="object-contain" priority />
+            <Image
+              src={LOGO_SVG_PATH}
+              alt={PLATFORM_NAME}
+              width={140}
+              height={42}
+              className="object-contain"
+              priority
+            />
           </div>
 
           <div className="lg:rounded-xl lg:border lg:border-border lg:bg-card lg:p-8 lg:shadow-sm">

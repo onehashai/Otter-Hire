@@ -103,7 +103,14 @@ export default function ResetPassword() {
       <div className="w-full max-w-[420px]">
         {/* Logo */}
         <div className="flex items-center mb-10 justify-center">
-          <Image src={LOGO_SVG_PATH} alt="Otter" width={140} height={42} className="object-contain" priority />
+          <Image
+            src={LOGO_SVG_PATH}
+            alt="Otter"
+            width={140}
+            height={42}
+            className="object-contain"
+            priority
+          />
         </div>
 
         <div className="rounded-xl border border-border bg-card p-8 shadow-sm">

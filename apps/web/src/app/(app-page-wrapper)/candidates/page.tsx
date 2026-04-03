@@ -260,17 +260,17 @@ export default function CandidatesPage() {
     applyLastActivityPreset(null);
   };
 
-  const assignmentChipLabel = () => {
-    if (assignment === ASSIGNMENT_ASSIGNED) return t("candidates_assignment_assigned");
-    if (assignment === ASSIGNMENT_UNASSIGNED) return t("candidates_assignment_unassigned");
-    return "";
-  };
-
   const activeChips = useMemo(() => {
     const chips: { label: string; clear: () => void }[] = [];
     if (assignment !== ASSIGNMENT_ALL) {
+      const assignmentLabel =
+        assignment === ASSIGNMENT_ASSIGNED
+          ? t("candidates_assignment_assigned")
+          : assignment === ASSIGNMENT_UNASSIGNED
+            ? t("candidates_assignment_unassigned")
+            : "";
       chips.push({
-        label: assignmentChipLabel(),
+        label: assignmentLabel,
         clear: () => setAssignment(ASSIGNMENT_ALL),
       });
     }
@@ -293,7 +293,14 @@ export default function CandidatesPage() {
       });
     }
     return chips;
-  }, [assignment, lastActivityPreset, lastActivityRange.from, lastActivityRange.to, t, applyLastActivityPreset]);
+  }, [
+    assignment,
+    lastActivityPreset,
+    lastActivityRange.from,
+    lastActivityRange.to,
+    t,
+    applyLastActivityPreset,
+  ]);
 
   const filterContent = (
     <div className="space-y-5 p-1">
@@ -324,9 +331,7 @@ export default function CandidatesPage() {
               size="sm"
               className="h-7 text-xs"
               type="button"
-              onClick={() =>
-                applyLastActivityPreset(lastActivityPreset === p.key ? null : p.key)
-              }
+              onClick={() => applyLastActivityPreset(lastActivityPreset === p.key ? null : p.key)}
             >
               {p.label}
             </Button>

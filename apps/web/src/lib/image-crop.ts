@@ -36,12 +36,9 @@ export async function getCroppedImageBlob(
   );
 
   return new Promise((resolve, reject) => {
-    canvas.toBlob(
-      (blob) => {
-        if (!blob) reject(new Error("Crop failed"));
-        else resolve(blob);
-      },
-      "image/png",
-    );
+    canvas.toBlob((blob) => {
+      if (!blob) reject(new Error("Crop failed"));
+      else resolve(blob);
+    }, "image/png");
   });
 }

@@ -105,7 +105,12 @@ export function ImageCropDialog({
         </div>
 
         <DialogFooter className="mt-0 sm:justify-end">
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={applying}>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={applying}
+          >
             Cancel
           </Button>
           <Button

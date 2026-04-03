@@ -99,7 +99,14 @@ export default function ForgotPassword() {
         <div className="w-full max-w-[420px]">
           {/* Mobile logo */}
           <div className="lg:hidden flex items-center mb-10 justify-center">
-            <Image src={LOGO_SVG_PATH} alt={PLATFORM_NAME} width={140} height={42} className="object-contain" priority />
+            <Image
+              src={LOGO_SVG_PATH}
+              alt={PLATFORM_NAME}
+              width={140}
+              height={42}
+              className="object-contain"
+              priority
+            />
           </div>
 
           <div className="lg:rounded-xl lg:border lg:border-border lg:bg-card lg:p-8 lg:shadow-sm">

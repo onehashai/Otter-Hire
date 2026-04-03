@@ -73,7 +73,7 @@ export function AppSidebar({ collapsed, onToggle, onOpenCommandPalette }: AppSid
               alt="Otter"
               width={90}
               height={20}
-              className="object-contain"
+              className="object-contain dark:invert dark:contrast-200"
             />
           </Link>
         )}

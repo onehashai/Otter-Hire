@@ -31,7 +31,7 @@ def build_verification_email(
         subject=f"Verify your {platform_name} account",
         html=html_body,
         text=f"""
-                Welcome to {platform_name}!
+                Welcome to {platform_name}.
 
                 Please verify your email address by clicking the link in this email.
 

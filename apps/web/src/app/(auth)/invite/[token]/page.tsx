@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { Button } from "@onehash/ui/button";
 import { Icon } from "@onehash/ui/icon";
 import {
@@ -11,7 +12,7 @@ import {
   declineInvite,
   type InviteDetailsResponse,
 } from "@/api/index";
-import { PRODUCT_LOGO_LETTER, PLATFORM_NAME } from "@/lib/constants";
+import { LOGO_SVG_PATH, PLATFORM_NAME } from "@/lib/constants";
 import { useAuthSession } from "@/app/providers";
 
 export default function InvitePage() {
@@ -163,11 +164,8 @@ export default function InvitePage() {
       <div className="min-h-screen flex bg-background">
         <div className="flex-1 flex items-center justify-center px-4 py-12">
           <div className="w-full max-w-[420px]">
-            <div className="lg:hidden flex items-center gap-2.5 mb-10 justify-center">
-              <div className="h-9 w-9 rounded-lg bg-foreground flex items-center justify-center">
-                <span className="text-background text-sm font-bold">{PRODUCT_LOGO_LETTER}</span>
-              </div>
-              <span className="text-lg font-semibold tracking-tight">{PLATFORM_NAME}</span>
+            <div className="lg:hidden flex items-center mb-10 justify-center">
+              <Image src={LOGO_SVG_PATH} alt={PLATFORM_NAME} width={140} height={42} className="object-contain" priority />
             </div>
             <div className="rounded-xl border border-border bg-card p-8 shadow-sm text-center">
               <div className="mx-auto h-12 w-12 rounded-full bg-destructive/10 flex items-center justify-center mb-5">
@@ -199,32 +197,32 @@ export default function InvitePage() {
             backgroundSize: "24px 24px",
           }}
         />
-        <div className="relative z-10 max-w-md px-12">
-          <div className="flex items-center gap-2.5 mb-8">
-            <div className="h-9 w-9 rounded-lg bg-foreground flex items-center justify-center">
-              <span className="text-background text-sm font-bold">{PRODUCT_LOGO_LETTER}</span>
-            </div>
-            <span className="text-lg font-semibold tracking-tight">{PLATFORM_NAME}</span>
+        <div className="relative z-10 w-full max-w-md px-12 text-left">
+          <div className="flex flex-col items-start gap-3">
+            <Image
+              src={LOGO_SVG_PATH}
+              alt={PLATFORM_NAME}
+              width={480}
+              height={262}
+              className="-ml-2 h-24 w-auto max-w-[min(100%,400px)] object-contain object-left self-start"
+              priority
+            />
+            <h1 className="text-3xl lg:text-4xl font-bold tracking-tight leading-tight">
+              Join the team
+              <br />
+              and start recruiting.
+            </h1>
+            <p className="text-muted-foreground text-sm leading-relaxed">
+              Accept your invitation to access the AI-powered ATS built for modern hiring teams.
+            </p>
           </div>
-          <h1 className="text-3xl font-semibold tracking-tight leading-tight mb-3">
-            You&apos;re invited
-            <br />
-            to join the team.
-          </h1>
-          <p className="text-muted-foreground text-sm leading-relaxed">
-            Create an account or sign in to accept this invitation. You won&apos;t need to create an
-            organization—you&apos;ll join the existing one.
-          </p>
         </div>
       </div>
 
       <div className="flex-1 flex items-center justify-center px-4 py-12 sm:px-8">
         <div className="w-full max-w-[420px]">
-          <div className="lg:hidden flex items-center gap-2.5 mb-10 justify-center">
-            <div className="h-9 w-9 rounded-lg bg-foreground flex items-center justify-center">
-              <span className="text-background text-sm font-bold">{PRODUCT_LOGO_LETTER}</span>
-            </div>
-            <span className="text-lg font-semibold tracking-tight">{PLATFORM_NAME}</span>
+          <div className="lg:hidden flex items-center mb-10 justify-center">
+            <Image src={LOGO_SVG_PATH} alt={PLATFORM_NAME} width={140} height={42} className="object-contain" priority />
           </div>
 
           <div className="lg:rounded-xl lg:border lg:border-border lg:bg-card lg:p-8 lg:shadow-sm">

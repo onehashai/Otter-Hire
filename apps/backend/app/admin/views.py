@@ -218,6 +218,7 @@ class IntegrationAdmin(ModelView, model=Integration):
         Integration.created_at,
     ]
     column_default_sort = [(Integration.name, False)]
+    column_details_exclude_list = []  # Explicitly exclude removed columns from details view
 
 
 class IntegrationCredentialAdmin(ModelView, model=IntegrationCredential):

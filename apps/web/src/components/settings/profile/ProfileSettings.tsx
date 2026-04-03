@@ -27,7 +27,9 @@ import { Trash2, Upload } from "lucide-react";
 import { toast } from "@onehash/ui/sonner";
 import { useTranslation } from "react-i18next";
 import { useRouter } from "next/navigation";
+import { useAuthSession } from "@/app/providers";
 import { getInitialsFromName } from "@/lib/name-initials";
+import { ImageCropDialog } from "@/components/common/ImageCropDialog";
 
 type ProfileSettingsProps = {
   user: AuthSessionResponse | null;
@@ -36,6 +38,7 @@ type ProfileSettingsProps = {
 export function ProfileSettings({ user }: ProfileSettingsProps) {
   const { t } = useTranslation();
   const router = useRouter();
+  const { refreshSession } = useAuthSession();
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -51,6 +54,8 @@ export function ProfileSettings({ user }: ProfileSettingsProps) {
   const [pendingBackNavigation, setPendingBackNavigation] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
   const previewObjectUrlRef = useRef<string | null>(null);
+  const [cropDialogOpen, setCropDialogOpen] = useState(false);
+  const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -61,6 +66,12 @@ export function ProfileSettings({ user }: ProfileSettingsProps) {
       setOriginalName(userName);
     }
   }, [user]);
+
+  // Profile loads avatar from `/users/me/profile`; the header uses auth session (`/auth/me`).
+  // Refetch session when opening this page so `avatar_url` matches what Profile shows.
+  useEffect(() => {
+    void refreshSession(true);
+  }, [refreshSession]);
 
   useEffect(() => {
     let cancelled = false;
@@ -116,6 +127,8 @@ export function ProfileSettings({ user }: ProfileSettingsProps) {
       }
       if (avatarInputRef.current) avatarInputRef.current.value = "";
 
+      await refreshSession(true);
+
       toast.success("Profile updated successfully");
 
       if (pendingBackNavigation) {
@@ -137,10 +150,35 @@ export function ProfileSettings({ user }: ProfileSettingsProps) {
     }
   };
 
-  const handleAvatarChange = async (file: File | undefined) => {
+  const handleCropDialogOpenChange = (open: boolean) => {
+    if (!open) {
+      if (cropImageSrc) {
+        URL.revokeObjectURL(cropImageSrc);
+        setCropImageSrc(null);
+      }
+      if (avatarInputRef.current) avatarInputRef.current.value = "";
+    }
+    setCropDialogOpen(open);
+  };
+
+  const handleAvatarFileSelected = (file: File | undefined) => {
     if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please choose an image file");
+      return;
+    }
+    const src = URL.createObjectURL(file);
+    setCropImageSrc(src);
+    setCropDialogOpen(true);
+  };
+
+  const handleAvatarCropped = (file: File) => {
     try {
       setAvatarUploading(true);
+      if (cropImageSrc) {
+        URL.revokeObjectURL(cropImageSrc);
+        setCropImageSrc(null);
+      }
       if (previewObjectUrlRef.current) {
         URL.revokeObjectURL(previewObjectUrlRef.current);
       }
@@ -151,7 +189,7 @@ export function ProfileSettings({ user }: ProfileSettingsProps) {
       setPendingAvatarRemoved(false);
       toast.success("Avatar selected. Click Save to apply.");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to upload avatar");
+      toast.error(err instanceof Error ? err.message : "Failed to prepare avatar");
     } finally {
       setAvatarUploading(false);
     }
@@ -274,7 +312,7 @@ export function ProfileSettings({ user }: ProfileSettingsProps) {
                   type="file"
                   accept="image/*"
                   className="sr-only"
-                  onChange={(e) => handleAvatarChange(e.target.files?.[0])}
+                  onChange={(e) => handleAvatarFileSelected(e.target.files?.[0])}
                   disabled={avatarUploading}
                 />
                 <Button
@@ -336,6 +374,14 @@ export function ProfileSettings({ user }: ProfileSettingsProps) {
           </CardContent>
         </Card>
       </div>
+      <ImageCropDialog
+        open={cropDialogOpen}
+        onOpenChange={handleCropDialogOpenChange}
+        imageSrc={cropImageSrc}
+        title="Adjust profile photo"
+        onCropComplete={handleAvatarCropped}
+      />
+
       <AlertDialog open={showUnsavedDialog} onOpenChange={setShowUnsavedDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>

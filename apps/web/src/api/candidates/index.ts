@@ -228,6 +228,10 @@ export async function getCandidatesPaginated(params?: {
   /** Unassigned only (maps to API `talent_pool_only`). */
   unassignedOnly?: boolean;
   assigned_only?: boolean;
+  /** ISO 8601: filter by candidate `updated_at` (last activity), inclusive lower bound. */
+  updated_from?: string;
+  /** ISO 8601: filter by candidate `updated_at` (last activity), inclusive upper bound. */
+  updated_to?: string;
   limit?: number;
   offset?: number;
 }): Promise<CandidatesPaginatedResponse> {
@@ -239,6 +243,8 @@ export async function getCandidatesPaginated(params?: {
   if (params?.source) searchParams.set("source", params.source);
   if (params?.unassignedOnly) searchParams.set("talent_pool_only", "true");
   if (params?.assigned_only) searchParams.set("assigned_only", "true");
+  if (params?.updated_from) searchParams.set("updated_from", params.updated_from);
+  if (params?.updated_to) searchParams.set("updated_to", params.updated_to);
   if (params?.limit !== undefined) searchParams.set("limit", String(params.limit));
   if (params?.offset !== undefined) searchParams.set("offset", String(params.offset));
   const query = searchParams.toString();

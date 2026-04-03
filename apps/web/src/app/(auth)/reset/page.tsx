@@ -2,12 +2,13 @@
 
 import { useState, useMemo } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Button } from "@onehash/ui/button";
 import { InputField } from "@onehash/ui/input";
 import { Label } from "@onehash/ui/label";
 import { Icon } from "@onehash/ui/icon";
-import { PRODUCT_LOGO_LETTER, PLATFORM_NAME } from "@/lib/constants";
+import { LOGO_SVG_PATH, PLATFORM_NAME } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
 
@@ -101,11 +102,8 @@ export default function ResetPassword() {
     <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12">
       <div className="w-full max-w-[420px]">
         {/* Logo */}
-        <div className="flex items-center gap-2.5 mb-10 justify-center">
-          <div className="h-9 w-9 rounded-lg bg-foreground flex items-center justify-center">
-            <span className="text-background text-sm font-bold">{PRODUCT_LOGO_LETTER}</span>
-          </div>
-          <span className="text-lg font-semibold tracking-tight">{PLATFORM_NAME}</span>
+        <div className="flex items-center mb-10 justify-center">
+          <Image src={LOGO_SVG_PATH} alt="Otter" width={140} height={42} className="object-contain" priority />
         </div>
 
         <div className="rounded-xl border border-border bg-card p-8 shadow-sm">

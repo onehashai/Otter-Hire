@@ -2,13 +2,14 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { ChevronsLeft, ChevronLeft, Search, Sun, Moon } from "lucide-react";
 import { Button } from "@onehash/ui/button";
 import { Icon } from "@onehash/ui/icon";
 import { Separator } from "@onehash/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@onehash/ui/tooltip";
-import { PRODUCT_LOGO_LETTER, PLATFORM_NAME } from "@/lib/constants";
+import { LOGO_SVG_PATH, PLATFORM_NAME } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "@/components/common/ThemeProvider";
@@ -97,21 +98,19 @@ export function JobWorkspaceSidebar({
     >
       <div
         className={cn(
-          "flex items-center h-12 px-3",
+          "flex items-center h-12 pl-1",
           collapsed ? "justify-center" : "justify-between",
         )}
       >
         {!collapsed && (
-          <Link href="/" className="flex items-center gap-2 min-w-0">
-            <div className="h-6 w-6 rounded-md bg-foreground flex items-center justify-center shrink-0">
-              <span className="text-background text-xs font-bold">{PRODUCT_LOGO_LETTER}</span>
-            </div>
-            <span
-              className="text-sm font-semibold text-foreground truncate max-w-[10rem]"
-              title={PLATFORM_NAME}
-            >
-              {PLATFORM_NAME}
-            </span>
+          <Link href="/" className="flex items-center min-w-0">
+            <Image
+              src={LOGO_SVG_PATH}
+              alt="Otter"
+              width={90}
+              height={20}
+              className="object-contain"
+            />
           </Link>
         )}
         <Button

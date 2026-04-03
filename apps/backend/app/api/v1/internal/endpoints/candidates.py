@@ -69,6 +69,26 @@ from app.utils.uuid import uuid7
 router = APIRouter(prefix="/candidates", tags=["candidates"])
 
 
+def _parse_optional_iso_datetime_query(value: str | None) -> datetime | None:
+    """Parse ISO 8601 datetimes from query strings (including Z from JS Date.toISOString())."""
+    if value is None:
+        return None
+    raw = value.strip()
+    if not raw:
+        return None
+    normalized = raw[:-1] + "+00:00" if raw.endswith("Z") else raw
+    try:
+        dt = datetime.fromisoformat(normalized)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Invalid updated_from or updated_to (expected ISO 8601 datetime).",
+        ) from exc
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
 def _object_key_from_stored_file_url(url: str) -> str | None:
     """Extract storage object key from URLs produced by storage_service.resolve_url."""
     clean = (url or "").strip()
@@ -728,6 +748,14 @@ async def list_candidates_paginated(
     talent_pool_only: bool = Query(default=False),
     assigned_only: bool = Query(default=False),
     tag: str | None = Query(default=None, max_length=100),
+    updated_from: str | None = Query(
+        default=None,
+        description="Inclusive lower bound on candidate updated_at (last activity), ISO 8601.",
+    ),
+    updated_to: str | None = Query(
+        default=None,
+        description="Inclusive upper bound on candidate updated_at (last activity), ISO 8601.",
+    ),
     sort_by: str = Query(
         default="updated_at", pattern=r"^(updated_at|created_at|name|status|job_title|stage_name)$"
     ),
@@ -735,6 +763,9 @@ async def list_candidates_paginated(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ):
+    updated_from_dt = _parse_optional_iso_datetime_query(updated_from)
+    updated_to_dt = _parse_optional_iso_datetime_query(updated_to)
+
     sort_expr_map = {
         "updated_at": Candidate.updated_at,
         "created_at": Candidate.created_at,
@@ -792,6 +823,12 @@ async def list_candidates_paginated(
     if tag:
         stmt = stmt.where(Candidate.tags.contains([tag]))
         count_stmt = count_stmt.where(Candidate.tags.contains([tag]))
+    if updated_from_dt is not None:
+        stmt = stmt.where(Candidate.updated_at >= updated_from_dt)
+        count_stmt = count_stmt.where(Candidate.updated_at >= updated_from_dt)
+    if updated_to_dt is not None:
+        stmt = stmt.where(Candidate.updated_at <= updated_to_dt)
+        count_stmt = count_stmt.where(Candidate.updated_at <= updated_to_dt)
 
     result = await db.execute(stmt)
     rows = result.all()

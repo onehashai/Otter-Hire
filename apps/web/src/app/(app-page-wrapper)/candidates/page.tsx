@@ -25,7 +25,10 @@ import {
 } from "@/components/candidates/CandidatesTable";
 import { Button } from "@onehash/ui/button";
 import { EmptyCard, ErrorCard } from "@onehash/ui/card";
+import { Label } from "@onehash/ui/label";
+import { Calendar } from "@onehash/ui/calendar";
 import { SelectField } from "@onehash/ui/select";
+import { format, subDays, startOfDay, endOfDay } from "date-fns";
 import { AddCandidateDialog } from "@/components/candidates/shared/dialogs/AddCandidateDialog";
 import {
   Dialog,
@@ -66,12 +69,16 @@ const ASSIGNMENT_ALL = "all";
 const ASSIGNMENT_ASSIGNED = "assigned";
 const ASSIGNMENT_UNASSIGNED = "unassigned";
 
+type LastActivityPreset = "today" | "7d" | "30d" | "custom" | null;
+
 export default function CandidatesPage() {
   const { t } = useTranslation();
   const isMobile = useIsMobile();
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [assignment, setAssignment] = useState<string>(ASSIGNMENT_ALL);
+  const [lastActivityPreset, setLastActivityPreset] = useState<LastActivityPreset>(null);
+  const [lastActivityRange, setLastActivityRange] = useState<{ from?: Date; to?: Date }>({});
   const [page, setPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [addOpen, setAddOpen] = useState(false);
@@ -115,14 +122,70 @@ export default function CandidatesPage() {
     return () => clearTimeout(id);
   }, [search]);
 
+  const lastActivityFilterKey = useMemo(
+    () =>
+      JSON.stringify({
+        p: lastActivityPreset,
+        f: lastActivityRange.from?.toISOString(),
+        t: lastActivityRange.to?.toISOString(),
+      }),
+    [lastActivityPreset, lastActivityRange.from, lastActivityRange.to],
+  );
+
   useEffect(() => {
     setPage(1);
     setSelectedIds(new Set());
-  }, [debouncedSearch, assignment]);
+  }, [debouncedSearch, assignment, lastActivityFilterKey]);
 
   useEffect(() => {
     setSelectedIds(new Set());
   }, [page]);
+
+  const applyLastActivityPreset = useCallback((preset: LastActivityPreset) => {
+    setLastActivityPreset(preset);
+    if (preset === "today") {
+      setLastActivityRange({ from: startOfDay(new Date()), to: new Date() });
+    } else if (preset === "7d") {
+      setLastActivityRange({ from: subDays(new Date(), 7), to: new Date() });
+    } else if (preset === "30d") {
+      setLastActivityRange({ from: subDays(new Date(), 30), to: new Date() });
+    } else if (preset === null) {
+      setLastActivityRange({});
+    }
+  }, []);
+
+  const lastActivityApiParams = useMemo(() => {
+    if (!lastActivityPreset) return {};
+    if (lastActivityPreset === "custom") {
+      if (!lastActivityRange.from) return {};
+      return {
+        updated_from: startOfDay(lastActivityRange.from).toISOString(),
+        ...(lastActivityRange.to
+          ? { updated_to: endOfDay(lastActivityRange.to).toISOString() }
+          : {}),
+      };
+    }
+    const now = new Date();
+    if (lastActivityPreset === "today") {
+      return {
+        updated_from: startOfDay(now).toISOString(),
+        updated_to: now.toISOString(),
+      };
+    }
+    if (lastActivityPreset === "7d") {
+      return {
+        updated_from: subDays(now, 7).toISOString(),
+        updated_to: now.toISOString(),
+      };
+    }
+    if (lastActivityPreset === "30d") {
+      return {
+        updated_from: subDays(now, 30).toISOString(),
+        updated_to: now.toISOString(),
+      };
+    }
+    return {};
+  }, [lastActivityPreset, lastActivityRange.from, lastActivityRange.to]);
 
   useEffect(() => {
     let cancelled = false;
@@ -191,9 +254,10 @@ export default function CandidatesPage() {
   const offset = (page - 1) * PAGE_SIZE;
   const selectedCount = selectedIds.size;
 
-  const hasActiveFilters = assignment !== ASSIGNMENT_ALL;
+  const hasActiveFilters = assignment !== ASSIGNMENT_ALL || lastActivityPreset !== null;
   const clearAllFilters = () => {
     setAssignment(ASSIGNMENT_ALL);
+    applyLastActivityPreset(null);
   };
 
   const assignmentChipLabel = () => {
@@ -202,13 +266,37 @@ export default function CandidatesPage() {
     return "";
   };
 
-  const activeChips =
-    assignment !== ASSIGNMENT_ALL
-      ? [{ label: assignmentChipLabel(), clear: () => setAssignment(ASSIGNMENT_ALL) }]
-      : [];
+  const activeChips = useMemo(() => {
+    const chips: { label: string; clear: () => void }[] = [];
+    if (assignment !== ASSIGNMENT_ALL) {
+      chips.push({
+        label: assignmentChipLabel(),
+        clear: () => setAssignment(ASSIGNMENT_ALL),
+      });
+    }
+    if (lastActivityPreset) {
+      let dateLabel: string;
+      if (lastActivityPreset === "custom" && lastActivityRange.from) {
+        dateLabel = lastActivityRange.to
+          ? `${format(lastActivityRange.from, "d MMM, yyyy")} – ${format(lastActivityRange.to, "d MMM, yyyy")}`
+          : format(lastActivityRange.from, "d MMM, yyyy");
+      } else if (lastActivityPreset === "custom") {
+        dateLabel = t("custom");
+      } else if (lastActivityPreset === "today") {
+        dateLabel = t("today");
+      } else {
+        dateLabel = t("last_n_days", { count: lastActivityPreset === "7d" ? 7 : 30 });
+      }
+      chips.push({
+        label: dateLabel,
+        clear: () => applyLastActivityPreset(null),
+      });
+    }
+    return chips;
+  }, [assignment, lastActivityPreset, lastActivityRange.from, lastActivityRange.to, t, applyLastActivityPreset]);
 
   const filterContent = (
-    <div className="space-y-4 p-1">
+    <div className="space-y-5 p-1">
       <SelectField
         label={t("candidates_assignment")}
         value={assignment}
@@ -219,6 +307,60 @@ export default function CandidatesPage() {
           { value: ASSIGNMENT_UNASSIGNED, label: t("candidates_assignment_unassigned") },
         ]}
       />
+      <div className="space-y-2">
+        <Label className="text-xs font-medium text-muted-foreground">{t("last_activity")}</Label>
+        <div className="flex flex-wrap gap-1.5">
+          {(
+            [
+              { key: "today" as const, label: t("today") },
+              { key: "7d" as const, label: t("last_n_days", { count: 7 }) },
+              { key: "30d" as const, label: t("last_n_days", { count: 30 }) },
+              { key: "custom" as const, label: t("custom") },
+            ] as const
+          ).map((p) => (
+            <Button
+              key={p.key}
+              variant={lastActivityPreset === p.key ? "default" : "outline"}
+              size="sm"
+              className="h-7 text-xs"
+              type="button"
+              onClick={() =>
+                applyLastActivityPreset(lastActivityPreset === p.key ? null : p.key)
+              }
+            >
+              {p.label}
+            </Button>
+          ))}
+        </div>
+        {lastActivityPreset === "custom" ? (
+          <div className="mt-3 border-t border-border pt-3">
+            <Calendar
+              mode="range"
+              selected={
+                lastActivityRange.from
+                  ? { from: lastActivityRange.from, to: lastActivityRange.to }
+                  : undefined
+              }
+              onSelect={(range) =>
+                setLastActivityRange(range ? { from: range.from, to: range.to } : {})
+              }
+              numberOfMonths={1}
+              className="w-full max-w-full rounded-md border bg-card p-3 shadow-none pointer-events-auto"
+            />
+          </div>
+        ) : null}
+      </div>
+      {hasActiveFilters ? (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-full text-xs h-8 text-muted-foreground"
+          type="button"
+          onClick={clearAllFilters}
+        >
+          {t("clear_all")}
+        </Button>
+      ) : null}
     </div>
   );
 
@@ -229,6 +371,7 @@ export default function CandidatesPage() {
       const res = await getCandidatesPaginated({
         ...(assignment === ASSIGNMENT_UNASSIGNED ? { unassignedOnly: true } : {}),
         ...(assignment === ASSIGNMENT_ASSIGNED ? { assigned_only: true } : {}),
+        ...lastActivityApiParams,
         search: debouncedSearch || undefined,
         limit: PAGE_SIZE,
         offset,
@@ -236,11 +379,13 @@ export default function CandidatesPage() {
       setItems(res.items);
       setTotal(res.total);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load candidates");
+      const message = err instanceof Error ? err.message : "Failed to load candidates";
+      setError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch, assignment, offset]);
+  }, [debouncedSearch, assignment, offset, lastActivityApiParams]);
 
   useEffect(() => {
     void refresh();

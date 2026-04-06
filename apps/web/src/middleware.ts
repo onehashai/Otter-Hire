@@ -1,9 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import {
-  isCareersUuidSegment,
-  parseLegacyCareersOrgSlug,
-} from "@/lib/public-careers-org";
+import { isCareersUuidSegment, parseLegacyCareersOrgSlug } from "@/lib/public-careers-org";
 
 const AUTH_ROUTES = new Set(["/login", "/signup"]);
 const LIFECYCLE_ROUTES = new Set(["/verify", "/onboarding"]);

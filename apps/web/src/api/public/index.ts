@@ -70,10 +70,7 @@ export async function getPublicJobs(orgId: string): Promise<PublicJobsListRespon
   return { ...data, org_avatar_url: normalizeApiUrl(data.org_avatar_url) };
 }
 
-export async function getPublicJobDetail(
-  orgId: string,
-  jobId: string,
-): Promise<PublicJobDetail> {
+export async function getPublicJobDetail(orgId: string, jobId: string): Promise<PublicJobDetail> {
   const data = await apiGet<PublicJobDetail>(`/orgs/${orgId}/jobs/${jobId}`);
   return { ...data, org_avatar_url: normalizeApiUrl(data.org_avatar_url) };
 }
@@ -88,14 +85,11 @@ export async function applyToPublicJob(
   if (options?.idempotencyKey) {
     extra["Idempotency-Key"] = options.idempotencyKey;
   }
-  return apiFetch<PublicApplyResponse>(
-    `/orgs/${orgId}/jobs/${jobId}/apply`,
-    {
-      method: "POST",
-      body: payload,
-      headers: Object.keys(extra).length ? extra : undefined,
-    },
-  );
+  return apiFetch<PublicApplyResponse>(`/orgs/${orgId}/jobs/${jobId}/apply`, {
+    method: "POST",
+    body: payload,
+    headers: Object.keys(extra).length ? extra : undefined,
+  });
 }
 
 export async function uploadPublicApplicationFile(
@@ -108,14 +102,11 @@ export async function uploadPublicApplicationFile(
   form.append("field_key", fieldKey);
   form.append("file", file);
 
-  const res = await fetch(
-    `${API_BASE_URL}/orgs/${orgId}/jobs/${jobId}/apply/upload`,
-    {
-      method: "POST",
-      credentials: "include",
-      body: form,
-    },
-  );
+  const res = await fetch(`${API_BASE_URL}/orgs/${orgId}/jobs/${jobId}/apply/upload`, {
+    method: "POST",
+    credentials: "include",
+    body: form,
+  });
   if (!res.ok) {
     let message = `Upload failed: ${res.status} ${res.statusText}`;
     try {

@@ -65,36 +65,22 @@ export type PublicApplyFileUploadResponse = {
   url: string;
 };
 
-function publicCareersQuery(orgSlugPrefix: string): string {
-  const q = new URLSearchParams({ org_slug: orgSlugPrefix });
-  return `?${q.toString()}`;
-}
-
-export async function getPublicJobs(
-  orgSlugPrefix: string,
-  orgId: string,
-): Promise<PublicJobsListResponse> {
-  const data = await apiGet<PublicJobsListResponse>(
-    `/orgs/${orgId}/jobs${publicCareersQuery(orgSlugPrefix)}`,
-  );
+export async function getPublicJobs(orgId: string): Promise<PublicJobsListResponse> {
+  const data = await apiGet<PublicJobsListResponse>(`/orgs/${orgId}/jobs`);
   return { ...data, org_avatar_url: normalizeApiUrl(data.org_avatar_url) };
 }
 
 export async function getPublicJobDetail(
   orgId: string,
   jobId: string,
-  orgSlugPrefix: string,
 ): Promise<PublicJobDetail> {
-  const data = await apiGet<PublicJobDetail>(
-    `/orgs/${orgId}/jobs/${jobId}${publicCareersQuery(orgSlugPrefix)}`,
-  );
+  const data = await apiGet<PublicJobDetail>(`/orgs/${orgId}/jobs/${jobId}`);
   return { ...data, org_avatar_url: normalizeApiUrl(data.org_avatar_url) };
 }
 
 export async function applyToPublicJob(
   orgId: string,
   jobId: string,
-  orgSlugPrefix: string,
   payload: PublicApplyPayload,
   options?: { idempotencyKey?: string },
 ): Promise<PublicApplyResponse> {
@@ -103,7 +89,7 @@ export async function applyToPublicJob(
     extra["Idempotency-Key"] = options.idempotencyKey;
   }
   return apiFetch<PublicApplyResponse>(
-    `/orgs/${orgId}/jobs/${jobId}/apply${publicCareersQuery(orgSlugPrefix)}`,
+    `/orgs/${orgId}/jobs/${jobId}/apply`,
     {
       method: "POST",
       body: payload,
@@ -115,7 +101,6 @@ export async function applyToPublicJob(
 export async function uploadPublicApplicationFile(
   orgId: string,
   jobId: string,
-  orgSlugPrefix: string,
   fieldKey: string,
   file: File,
 ): Promise<PublicApplyFileUploadResponse> {
@@ -124,7 +109,7 @@ export async function uploadPublicApplicationFile(
   form.append("file", file);
 
   const res = await fetch(
-    `${API_BASE_URL}/orgs/${orgId}/jobs/${jobId}/apply/upload${publicCareersQuery(orgSlugPrefix)}`,
+    `${API_BASE_URL}/orgs/${orgId}/jobs/${jobId}/apply/upload`,
     {
       method: "POST",
       credentials: "include",

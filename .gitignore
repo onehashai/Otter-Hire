@@ -34,6 +34,10 @@ next-env.d.ts
 *.sw?
 apps/backend/venv/
 venv/
+
+# Pre-squash Alembic history kept locally only (active revisions: apps/backend/alembic/versions/)
+apps/backend/alembic/archived_migrations/
+
 __pycache__/
 *.pyc
 apps/backend/storage/local/*

@@ -29,7 +29,7 @@ import {
   type PublicJobDetail,
 } from "@/api";
 import { PLATFORM_NAME } from "@/lib/constants";
-import { parseOrgSlug } from "@/lib/public-careers-org";
+import { parseCareersOrgId } from "@/lib/public-careers-org";
 import { isValidEmail, normalizeEmail } from "@/lib/validation/contact";
 
 type ApplyFile = {
@@ -75,13 +75,12 @@ export default function CareerJobDetailPage() {
   const params = useParams();
   const router = useRouter();
   const isMobile = useIsMobile();
-  const orgSlug = params?.orgSlug as string;
+  const orgIdParam = params?.orgId as string;
   const jobId = params?.jobId as string;
 
   const [job, setJob] = useState<PublicJobDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [orgName, setOrgName] = useState("");
 
   const [applyDialogOpen, setApplyDialogOpen] = useState(false);
   const [applyForm, setApplyForm] = useState({
@@ -95,16 +94,14 @@ export default function CareerJobDetailPage() {
   const [applyErrors, setApplyErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    const parsed = parseOrgSlug(orgSlug);
-    if (!parsed) {
+    const orgId = parseCareersOrgId(orgIdParam);
+    if (!orgId) {
       setError("Invalid organization");
       setLoading(false);
       return;
     }
 
-    setOrgName(parsed.orgName);
-
-    getPublicJobDetail(parsed.orgId, jobId, parsed.orgName)
+    getPublicJobDetail(orgId, jobId)
       .then((data) => {
         setJob(data);
         setLoading(false);
@@ -113,7 +110,7 @@ export default function CareerJobDetailPage() {
         setError(err instanceof Error ? err.message : "Job not found");
         setLoading(false);
       });
-  }, [orgSlug, jobId]);
+  }, [orgIdParam, jobId]);
 
   const openApplyDialog = () => setApplyDialogOpen(true);
   const closeApplyDialog = () => {
@@ -232,8 +229,8 @@ export default function CareerJobDetailPage() {
 
   const handleSelectAndUploadFile = async (key: string, file: File | null) => {
     if (!file) return;
-    const parsedOrg = parseOrgSlug(orgSlug);
-    if (!parsedOrg) {
+    const orgId = parseCareersOrgId(orgIdParam);
+    if (!orgId) {
       toast.error("Invalid organization");
       return;
     }
@@ -245,13 +242,7 @@ export default function CareerJobDetailPage() {
       },
     }));
     try {
-      const uploaded = await uploadPublicApplicationFile(
-        parsedOrg.orgId,
-        jobId,
-        parsedOrg.orgName,
-        key,
-        file,
-      );
+      const uploaded = await uploadPublicApplicationFile(orgId, jobId, key, file);
       setApplyForm((s) => ({
         ...s,
         files: {
@@ -306,13 +297,13 @@ export default function CareerJobDetailPage() {
           payloadFiles[key] = fileMeta.url ?? fileMeta.name;
         }
 
-        const parsedOrg = parseOrgSlug(orgSlug);
-        if (!parsedOrg) {
+        const orgId = parseCareersOrgId(orgIdParam);
+        if (!orgId) {
           toast.error("Invalid organization");
           setApplySubmitting(false);
           return;
         }
-        await applyToPublicJob(parsedOrg.orgId, jobId, parsedOrg.orgName, {
+        await applyToPublicJob(orgId, jobId, {
           full_name: applyForm.fullName.trim(),
           email: normalizeEmail(applyForm.email),
           phone: applyForm.phone.trim() || null,
@@ -349,7 +340,7 @@ export default function CareerJobDetailPage() {
             variant="outline"
             size="sm"
             className="text-xs mt-4"
-            onClick={() => router.push(`/${orgSlug}`)}
+            onClick={() => router.push(`/${orgIdParam}`)}
           >
             <Icon name="ChevronLeft" className="h-3.5 w-3.5 mr-1.5" /> View all positions
           </Button>
@@ -374,7 +365,7 @@ export default function CareerJobDetailPage() {
     job.category && { iconName: "Building2", label: job.category },
   ].filter(Boolean) as { iconName: IconName; label: string }[];
 
-  const listHref = `/${orgSlug}`;
+  const listHref = `/${orgIdParam}`;
 
   return (
     <div className="min-h-screen bg-background">
@@ -404,7 +395,7 @@ export default function CareerJobDetailPage() {
             <Avatar
               className="h-7 w-7 shrink-0 rounded-md"
               src={job.org_avatar_url}
-              alt={job.org_name || orgName}
+              alt={job.org_name}
               imageClassName="rounded-md object-cover"
               fallbackClassName="rounded-md bg-foreground text-background text-[10px] font-bold"
             />

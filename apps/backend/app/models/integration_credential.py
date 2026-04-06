@@ -5,7 +5,7 @@ One row per (org_id, integration_id). Stores config, status, and optional encryp
 Each org can connect to integrations defined in the integrations table.
 """
 
-from sqlalchemy import Column, DateTime, ForeignKey, Index, String, UniqueConstraint
+from sqlalchemy import Column, DateTime, ForeignKey, Index, String, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -66,6 +66,11 @@ class IntegrationCredential(Base):
             "integration_id",
             "org_id",
             "job_id",
+        ),
+        Index(
+            "ix_integration_credentials_inbound_address",
+            text("(config->>'inbound_address')"),
+            postgresql_where=text("config ? 'inbound_address'"),
         ),
     )
 

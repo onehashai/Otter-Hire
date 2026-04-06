@@ -8,7 +8,7 @@ import { Badge } from "@onehash/ui/badge";
 import { SelectField } from "@onehash/ui/select";
 import { Search, MapPin, Briefcase, Clock, DollarSign, ArrowRight } from "lucide-react";
 import { getPublicJobs, type PublicJobListItem } from "@/api";
-import { parseOrgSlug } from "@/lib/public-careers-org";
+import { parseCareersOrgId } from "@/lib/public-careers-org";
 import { Avatar } from "@onehash/ui/avatar";
 import { PLATFORM_NAME } from "@/lib/constants";
 
@@ -43,7 +43,7 @@ function formatEmploymentType(type: string): string {
 
 export default function CareersListPage() {
   const params = useParams();
-  const orgSlug = params?.orgSlug as string;
+  const orgIdParam = params?.orgId as string;
 
   const [jobs, setJobs] = useState<PublicJobListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -55,14 +55,14 @@ export default function CareersListPage() {
   const [locationFilter, setLocationFilter] = useState("all");
 
   useEffect(() => {
-    const parsed = parseOrgSlug(orgSlug);
-    if (!parsed) {
+    const orgId = parseCareersOrgId(orgIdParam);
+    if (!orgId) {
       setError("Invalid organization");
       setLoading(false);
       return;
     }
 
-    getPublicJobs(parsed.orgName, parsed.orgId)
+    getPublicJobs(orgId)
       .then((data) => {
         setJobs(data.jobs);
         setOrgName(data.org_name);
@@ -73,7 +73,7 @@ export default function CareersListPage() {
         setError(err instanceof Error ? err.message : "Failed to load jobs");
         setLoading(false);
       });
-  }, [orgSlug]);
+  }, [orgIdParam]);
 
   const allCategories = useMemo(() => {
     const depts = jobs.map((j) => j.category).filter((c): c is string => c != null && c !== "");
@@ -221,7 +221,7 @@ export default function CareersListPage() {
                 return (
                   <Link
                     key={job.id}
-                    href={`/${orgSlug}/${job.id}`}
+                    href={`/${orgIdParam}/${job.id}`}
                     className="w-full text-left group rounded-lg border border-border bg-card p-4 hover:border-foreground/20 hover:shadow-sm transition-all block"
                   >
                     <div className="flex items-start justify-between gap-6">

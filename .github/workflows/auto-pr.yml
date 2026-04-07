@@ -91,12 +91,77 @@ jobs:
             echo "$t"
           }
 
+          # Try to derive a compliant title from commit subjects in the range.
+          # Returns a title string (may be empty if none suitable).
+          title_from_commits() {
+            local from_ref="$1"
+            local subjects
+            subjects="$(git log --pretty=%s "${from_ref}..HEAD" 2>/dev/null | head -n 50 || true)"
+
+            # 1) Prefer any already-valid subject.
+            while IFS= read -r s; do
+              s="$(normalize_title "${s}")"
+              if [ -n "${s}" ] && validate_title "${s}"; then
+                echo "${s}"
+                return 0
+              fi
+            done <<< "${subjects}"
+
+            # 2) Try to normalize casing in a CC-ish subject (lowercase description) and re-validate.
+            while IFS= read -r s; do
+              s="$(normalize_title "${s}")"
+              if [ -z "${s}" ]; then
+                continue
+              fi
+              # Lowercase only the description (after ": ").
+              s="$(printf "%s" "${s}" | sed -E 's/^((feat|fix|chore|refactor|docs|test)(\\([^)]+\\))?(!)?: )[[:space:]]*(.*)$/\\1\\L\\5/')"
+              if validate_title "${s}"; then
+                echo "${s}"
+                return 0
+              fi
+            done <<< "${subjects}"
+
+            echo ""
+          }
+
           # Ask Claude for a title+body; then strictly validate/repair title before PR creation.
           generate_with_claude() {
             local base="$1"
             local merge_base="$2"
             local log_text="$3"
             local diff_stat="$4"
+            local file_list="$5"
+
+            call_anthropic() {
+              # Prints response body to stdout. On non-200, prints snippet to stderr and returns non-zero.
+              local payload="$1"
+              local tmp_body tmp_code http_code body
+              tmp_body="$(mktemp)"
+              tmp_code="$(mktemp)"
+
+              # Don't use -f: we want the error body for debugging.
+              curl -sS "https://api.anthropic.com/v1/messages" \
+                -H "x-api-key: ${ANTHROPIC_API_KEY}" \
+                -H "anthropic-version: 2023-06-01" \
+                -H "content-type: application/json" \
+                --data-binary "${payload}" \
+                -o "${tmp_body}" -w "%{http_code}" > "${tmp_code}" || true
+
+              http_code="$(cat "${tmp_code}" 2>/dev/null || echo "")"
+              body="$(cat "${tmp_body}" 2>/dev/null || echo "")"
+              rm -f "${tmp_body}" "${tmp_code}"
+
+              if [ "${http_code}" != "200" ] && [ "${http_code}" != "201" ]; then
+                echo "Anthropic API request failed (http=${http_code})." >&2
+                printf "%s" "${body}" | head -c 1200 >&2 || true
+                echo "" >&2
+                printf "%s" "${body}"
+                return 1
+              fi
+
+              printf "%s" "${body}"
+              return 0
+            }
 
             local prompt
             prompt=$'You are generating a GitHub Pull Request title and description.\n\nOUTPUT FORMAT (STRICT):\nReturn ONLY a JSON object with exactly these keys:\n  - title: string\n  - body: string\n\nTITLE RULES (STRICT):\n- Must be a Conventional Commits v1.0.0 header: <type>(<scope>)?!: <description>\n- type MUST be one of: feat, fix, chore, refactor, docs, test\n- scope is optional, lowercase, short (e.g. api, ui, auth)\n- optional ! only if breaking\n- description must be short and lowercase\n- no trailing period\n\nBODY RULES (STRICT):\nMust be exactly this structure (use markdown headings):\n\n## Summary\n<short explanation>\n\n## Changes\n- <bullet points>\n\n## Testing Notes\n- <how to test>\n\nIf breaking, append after a blank line:\nBREAKING CHANGE: <what breaks and what to do>\n'
@@ -106,6 +171,7 @@ jobs:
               # Writes compact JSON to stdout; returns non-zero on failure.
               local raw="$1"
               local candidate=""
+              local cleaned=""
 
               # 1) Already valid JSON?
               if candidate="$(printf "%s" "${raw}" | jq -e -c . 2>/dev/null)"; then
@@ -113,8 +179,15 @@ jobs:
                 return 0
               fi
 
+              # 1b) Strip common ```json fences and retry.
+              cleaned="$(printf "%s" "${raw}" | tr -d '\r' | sed -E 's/^```[a-zA-Z0-9_-]*[[:space:]]*//; s/[[:space:]]*```$//')"
+              if candidate="$(printf "%s" "${cleaned}" | jq -e -c . 2>/dev/null)"; then
+                printf "%s" "${candidate}"
+                return 0
+              fi
+
               # 2) Try to slice from first '{' to last '}'.
-              candidate="$(printf "%s" "${raw}" | tr -d '\r' | sed -n 's/^[^{]*\\({.*\\}\\)[^}]*$/\\1/p' | head -n 1)"
+              candidate="$(printf "%s" "${cleaned:-$raw}" | tr -d '\r' | sed -n 's/^[^{]*\\({.*\\}\\)[^}]*$/\\1/p' | head -n 1)"
               if [ -n "${candidate}" ] && candidate="$(printf "%s" "${candidate}" | jq -e -c . 2>/dev/null)"; then
                 printf "%s" "${candidate}"
                 return 0
@@ -129,6 +202,7 @@ jobs:
               --arg head "${head_branch}" \
               --arg sha "${short_sha}" \
               --arg log "${log_text}" \
+              --arg files "${file_list}" \
               --arg diff "${diff_stat}" \
               --arg prompt "${prompt}" \
               '{
@@ -142,7 +216,7 @@ jobs:
                     content: [
                       {
                         type: "text",
-                        text: ("Target base: " + $base + "\nHead branch: " + $head + "\nCommit: " + $sha + "\n\nRecent commits:\n" + $log + "\n\nDiff stat:\n" + $diff + "\n")
+                        text: ("Target base: " + $base + "\nHead branch: " + $head + "\nCommit: " + $sha + "\n\nRecent commits:\n" + $log + "\n\nChanged files (name-only):\n" + $files + "\n\nDiff stat:\n" + $diff + "\n")
                       }
                     ]
                   }
@@ -151,23 +225,25 @@ jobs:
             )"
 
             local resp
-            resp="$(curl -fsS https://api.anthropic.com/v1/messages \
-              -H "x-api-key: ${ANTHROPIC_API_KEY}" \
-              -H "anthropic-version: 2023-06-01" \
-              -H "content-type: application/json" \
-              --data-binary "${user_payload}"
-            )"
+            if ! resp="$(call_anthropic "${user_payload}")"; then
+              echo "Falling back: Anthropic API error." >&2
+            fi
 
             # Extract the first text block.
             local text
-            text="$(printf "%s" "${resp}" | jq -r '.content[] | select(.type=="text") | .text' | head -n 1)"
+            text="$(printf "%s" "${resp}" | jq -r '.content[]? | select(.type=="text") | .text' 2>/dev/null | head -n 1 || true)"
 
             # The model must return JSON; tolerate extra wrapper text.
             local parsed
             if ! parsed="$(extract_json_object "${text}")"; then
               # Deterministic fallback object; caller still validates title/body.
-              jq -n --arg title "chore(pr): sync branch $(sanitize_slug "${head_branch}")" \
-                    --arg body $'## Summary\nAuto-generated PR.\n\n## Changes\n- Updates from branch.\n\n## Testing Notes\n- Review and run CI.\n' \
+              fallback_title="$(title_from_commits "${merge_base}")"
+              if [ -z "${fallback_title}" ]; then
+                fallback_title="chore(pr): sync branch $(sanitize_slug "${head_branch}")"
+              fi
+              echo "Falling back: could not parse Claude JSON (text length: ${#text})." >&2
+              jq -n --arg title "${fallback_title}" \
+                    --arg body "$(printf "## Summary\nAuto-generated PR (Claude output could not be parsed).\n\n## Changes\n- Changed files:\n%s\n\n- Diff summary:\n%s\n\n## Testing Notes\n- Review and run CI.\n" "$(printf "%s" "${file_list}" | sed -E 's/^/- /')" "$(printf "%s" "${diff_stat}" | sed -E 's/^/- /')")" \
                     '{title:$title, body:$body}'
               return 0
             fi
@@ -268,40 +344,40 @@ jobs:
 
             local log_text diff_stat
             log_text="$(git log --oneline -n 20 "${merge_base}..HEAD" || true)"
-            diff_stat="$(git diff --stat "${merge_base}..HEAD" || true)"
+            diff_stat="$(git diff --stat "${merge_base}..HEAD" | head -n 200 || true)"
+            file_list="$(git diff --name-only "${merge_base}..HEAD" | head -n 200 || true)"
 
             local gen title body
-            gen="$(generate_with_claude "${base}" "${merge_base}" "${log_text}" "${diff_stat}")"
+            gen="$(generate_with_claude "${base}" "${merge_base}" "${log_text}" "${diff_stat}" "${file_list}")"
             title="$(printf "%s" "${gen}" | jq -r '.title')"
             body="$(printf "%s" "${gen}" | jq -r '.body')"
 
             title="$(normalize_title "${title}")"
 
             if ! validate_title "${title}"; then
-              echo "Claude title invalid; attempting one repair."
+              echo "Claude title invalid; attempting one repair." >&2
               title="$(repair_title_with_claude "${title}")"
             fi
 
             if ! validate_title "${title}"; then
-              echo "Title still invalid after repair; using deterministic fallback."
-              # Prefer last commit subject if it already matches the strict regex.
-              last_subject="$(git log -1 --pretty=%s 2>/dev/null || true)"
-              last_subject="$(normalize_title "${last_subject}")"
-              if validate_title "${last_subject}"; then
-                title="${last_subject}"
+              echo "Title still invalid after repair; using deterministic fallback." >&2
+              fallback_title="$(title_from_commits "${merge_base}")"
+              if [ -n "${fallback_title}" ]; then
+                title="${fallback_title}"
               else
                 title="chore(pr): sync branch $(sanitize_slug "${head_branch}")"
               fi
             fi
 
             if ! validate_body_shape "${body}"; then
-              echo "Claude body invalid; attempting one repair."
+              echo "Claude body invalid; attempting one repair." >&2
               body="$(repair_body_with_claude "${base}" "${merge_base}" "${log_text}" "${diff_stat}" "${body}")"
             fi
 
             # Ensure required body sections exist; if still invalid, use deterministic fallback.
             if ! validate_body_shape "${body}"; then
-              body=$'## Summary\nAuto-generated PR.\n\n## Changes\n- Updates from branch.\n\n## Testing Notes\n- Review and run CI.\n'
+              echo "Body still invalid after repair; using deterministic fallback body." >&2
+              body="$(printf "## Summary\nAuto-generated PR.\n\n## Changes\n- Changed files:\n%s\n\n- Diff summary:\n%s\n\n## Testing Notes\n- Review and run CI.\n" "$(printf "%s" "${file_list}" | sed -E 's/^/- /')" "$(printf "%s" "${diff_stat}" | sed -E 's/^/- /')")"
             fi
 
             local existing

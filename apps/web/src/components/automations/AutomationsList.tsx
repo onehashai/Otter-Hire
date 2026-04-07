@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@onehash/ui/card";
 import { Button } from "@onehash/ui/button";
 import { Badge } from "@onehash/ui/badge";
 import { Switch } from "@onehash/ui/switch";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@onehash/ui/tooltip";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,13 +21,29 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@onehash/ui/dialog";
-import { Plus, Zap, MoreHorizontal, Copy, Trash2, Pencil } from "lucide-react";
+import {
+  Plus,
+  Zap,
+  MoreHorizontal,
+  Copy,
+  Trash2,
+  Pencil,
+  AlertCircle,
+  CheckCircle2,
+  Briefcase,
+} from "lucide-react";
 import { AutomationTemplatesDialog } from "./AutomationTemplatesDialog";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { toast } from "@onehash/ui/sonner";
 import { EmptyCard } from "@onehash/ui/card";
 import { useTranslation } from "react-i18next";
-import { deleteAutomation, updateAutomation, createAutomation } from "@/api/automations";
+import {
+  createAutomation,
+  deleteAutomation,
+  getAutomationById,
+  updateAutomation,
+} from "@/api/automations";
+import { getJobs } from "@/api";
 
 export type AutomationStatus = "active" | "paused";
 export type TriggerType = "candidate";
@@ -96,6 +113,14 @@ export const triggerTypeLabel = (t: TriggerType): string => "Candidate";
 
 const statusVariant = (s: AutomationStatus) => (s === "active" ? "default" : "secondary");
 
+function splitLabelRows(label?: string): string[] {
+  if (!label) return [];
+  return label
+    .split(/\s*(?:\n|→|,|;|\|)\s*/g)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
 export interface AutomationsListProps {
   filtered: Automation[];
   automations: Automation[];
@@ -127,6 +152,9 @@ export function AutomationsList({
   const router = useRouter();
   const [deleteDialog, setDeleteDialog] = useState<string | null>(null);
   const [templatesOpenInternal, setTemplatesOpenInternal] = useState(false);
+  const [jobTitlesById, setJobTitlesById] = useState<Record<string, string>>({});
+  const [automationJobNames, setAutomationJobNames] = useState<Record<string, string[]>>({});
+  const loadingAutomationDetailsRef = useRef<Set<string>>(new Set());
   const templatesOpen = templatesOpenProp ?? templatesOpenInternal;
   const setTemplatesOpen = onTemplatesOpenChange ?? setTemplatesOpenInternal;
 
@@ -210,6 +238,56 @@ export function AutomationsList({
     }
   };
 
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const jobs = await getJobs();
+        if (cancelled) return;
+        setJobTitlesById(
+          jobs.reduce<Record<string, string>>((acc, job) => {
+            acc[job.id] = job.title;
+            return acc;
+          }, {}),
+        );
+      } catch {
+        // Keep list usable if jobs lookup fails.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    const specificScopeAutomations = automations.filter(
+      (automation) =>
+        automation.scope === "specific_job" &&
+        !automationJobNames[automation.id] &&
+        !loadingAutomationDetailsRef.current.has(automation.id),
+    );
+    if (specificScopeAutomations.length === 0) return;
+
+    specificScopeAutomations.forEach((automation) => {
+      loadingAutomationDetailsRef.current.add(automation.id);
+      void getAutomationById(automation.id)
+        .then((detail) => {
+          if (!detail.job_id) {
+            setAutomationJobNames((prev) => ({ ...prev, [automation.id]: ["Specific job"] }));
+            return;
+          }
+          const resolvedName = jobTitlesById[detail.job_id] || "Specific job";
+          setAutomationJobNames((prev) => ({ ...prev, [automation.id]: [resolvedName] }));
+        })
+        .catch(() => {
+          setAutomationJobNames((prev) => ({ ...prev, [automation.id]: ["Specific job"] }));
+        })
+        .finally(() => {
+          loadingAutomationDetailsRef.current.delete(automation.id);
+        });
+    });
+  }, [automations, automationJobNames, jobTitlesById]);
+
   if (showEmptyState) {
     return (
       <>
@@ -240,7 +318,7 @@ export function AutomationsList({
           >
             <CardContent className="p-4 py-3">
               <div className="flex items-start justify-between gap-4">
-                <div className="flex-1 min-w-0 space-y-2">
+                <div className="flex-1 min-w-0 space-y-1.5">
                   <div className="flex items-center gap-2">
                     <h3 className="text-sm font-semibold truncate">{a.name}</h3>
                     <Badge
@@ -250,19 +328,117 @@ export function AutomationsList({
                       {a.status}
                     </Badge>
                   </div>
-                  <div className="space-y-0.5 text-xs">
-                    <p>
-                      <span className="font-medium text-foreground">Trigger:</span>{" "}
-                      <span className="text-muted-foreground">{a.triggerLabel}</span>
-                    </p>
-                    <p>
-                      <span className="font-medium text-foreground">Actions:</span>{" "}
-                      <span className="text-muted-foreground">{a.actionLabel}</span>
-                    </p>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          className="inline-flex"
+                          onClick={(e) => e.stopPropagation()}
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onTouchStart={(e) => e.stopPropagation()}
+                          aria-label="Show trigger details"
+                        >
+                          <Badge
+                            variant="secondary"
+                            className="h-5 px-2 text-[10px] font-medium gap-1 bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                          >
+                            <AlertCircle className="h-3 w-3" />
+                            {splitLabelRows(a.triggerLabel).length > 1
+                              ? `${splitLabelRows(a.triggerLabel).length} triggers applied`
+                              : "Trigger applied"}
+                          </Badge>
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-xs p-2">
+                        <div className="space-y-1">
+                          {(splitLabelRows(a.triggerLabel).length
+                            ? splitLabelRows(a.triggerLabel)
+                            : [a.triggerLabel || "No trigger details"]
+                          ).map((row) => (
+                            <p key={`${a.id}-trigger-${row}`} className="text-xs leading-4">
+                              {row}
+                            </p>
+                          ))}
+                        </div>
+                      </TooltipContent>
+                    </Tooltip>
+
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          className="inline-flex"
+                          onClick={(e) => e.stopPropagation()}
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onTouchStart={(e) => e.stopPropagation()}
+                          aria-label="Show action details"
+                        >
+                          <Badge
+                            variant="secondary"
+                            className="h-5 px-2 text-[10px] font-medium gap-1 bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                          >
+                            <CheckCircle2 className="h-3 w-3" />
+                            {(() => {
+                              const actionCount = Math.max(splitLabelRows(a.actionLabel).length, 1);
+                              return `${actionCount} action${actionCount > 1 ? "s" : ""} applied`;
+                            })()}
+                          </Badge>
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-xs p-2">
+                        <div className="space-y-1">
+                          {(splitLabelRows(a.actionLabel).length
+                            ? splitLabelRows(a.actionLabel)
+                            : [a.actionLabel || "No action details"]
+                          ).map((row) => (
+                            <p key={`${a.id}-action-${row}`} className="text-xs leading-4">
+                              {row}
+                            </p>
+                          ))}
+                        </div>
+                      </TooltipContent>
+                    </Tooltip>
+
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          className="inline-flex"
+                          onClick={(e) => e.stopPropagation()}
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onTouchStart={(e) => e.stopPropagation()}
+                          aria-label="Show jobs details"
+                        >
+                          <Badge
+                            variant="secondary"
+                            className="h-5 px-2 text-[10px] font-medium gap-1 bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                          >
+                            <Briefcase className="h-3 w-3" />
+                            {(() => {
+                              const jobCount =
+                                a.scope === "all"
+                                  ? null
+                                  : (automationJobNames[a.id]?.length ?? (a.scope ? 1 : 0));
+                              return `Jobs: ${jobCount == null ? "All" : jobCount}`;
+                            })()}
+                          </Badge>
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-xs p-2">
+                        <div className="space-y-1">
+                          {(a.scope === "all"
+                            ? ["Applies to all jobs"]
+                            : (automationJobNames[a.id] ?? ["Specific job"])
+                          ).map((jobName) => (
+                            <p key={`${a.id}-job-${jobName}`} className="text-xs leading-4">
+                              {jobName}
+                            </p>
+                          ))}
+                        </div>
+                      </TooltipContent>
+                    </Tooltip>
                   </div>
-                  <p className="text-[11px] text-muted-foreground">
-                    {a.scope ?? "All jobs"} · {a.createdBy} · {a.lastTriggered ?? "Never"}
-                  </p>
                 </div>
                 <div
                   className="flex items-center gap-2 shrink-0"

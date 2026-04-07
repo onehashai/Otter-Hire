@@ -1,0 +1,342 @@
+name: Auto PR (develop + main)
+
+on:
+  push:
+    branches:
+      - "**"
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: auto-pr-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  auto-pr:
+    name: Create/Update PRs to develop and main
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/heads/')
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      ANTHROPIC_MODEL: claude-sonnet-4-20250514
+      # Strict validator compatibility: keep this aligned with your semantic PR rules.
+      # Conventional Commits v1.0.0 header: <type>(<scope>)?!: <description>
+      # Here we enforce an allowlist of types for deterministic passing:
+      TITLE_REGEX: '^(feat|fix|chore|refactor|docs|test)(\([a-z0-9._/-]+\))?(!)?: [a-z0-9][a-z0-9 ._,/+-]*$'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Ensure tools
+        run: |
+          set -euo pipefail
+          command -v gh >/dev/null
+          command -v jq >/dev/null || (sudo apt-get update && sudo apt-get install -y jq)
+          command -v curl >/dev/null
+
+      - name: Fetch base branches
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --prune origin develop main
+
+      - name: Create or update PRs
+        run: |
+          set -euo pipefail
+
+          if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
+            echo "Missing required secret ANTHROPIC_API_KEY."
+            exit 1
+          fi
+
+          head_branch="${GITHUB_REF#refs/heads/}"
+          short_sha="${GITHUB_SHA:0:7}"
+
+          sanitize_slug() {
+            echo "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9._-]+/-/g; s/^-+|-+$//g' | cut -c1-48
+          }
+
+          ensure_label() {
+            local label="$1"
+            # Create label if missing; tolerate races.
+            if ! gh label list --limit 200 --json name --jq ".[] | select(.name==\"${label}\") | .name" | grep -qx "${label}"; then
+              gh label create "${label}" --description "Auto PR target: ${label}" --color "0E8A16" || true
+            fi
+          }
+
+          validate_title() {
+            local t="$1"
+            echo "$t" | grep -Eq "${TITLE_REGEX}"
+          }
+
+          validate_body_shape() {
+            local b="$1"
+            printf "%s\n" "${b}" | grep -q '^## Summary' \
+              && printf "%s\n" "${b}" | grep -q '^## Changes' \
+              && printf "%s\n" "${b}" | grep -q '^## Testing Notes'
+          }
+
+          normalize_title() {
+            local t="$1"
+            t="$(printf "%s" "$t" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
+            t="$(printf "%s" "$t" | sed -E 's/^["“”]+//; s/["“”]+$//')"
+            t="$(printf "%s" "$t" | tr '\r' '\n' | head -n 1)"
+            # normalize spaces around colon
+            t="$(printf "%s" "$t" | sed -E 's/[[:space:]]*:[[:space:]]*/: /')"
+            echo "$t"
+          }
+
+          # Ask Claude for a title+body; then strictly validate/repair title before PR creation.
+          generate_with_claude() {
+            local base="$1"
+            local merge_base="$2"
+            local log_text="$3"
+            local diff_stat="$4"
+
+            local prompt
+            prompt="$(cat <<'EOF'
+You are generating a GitHub Pull Request title and description.
+
+OUTPUT FORMAT (STRICT):
+Return ONLY a JSON object with exactly these keys:
+  - title: string
+  - body: string
+
+TITLE RULES (STRICT):
+- Must be a Conventional Commits v1.0.0 header: <type>(<scope>)?!: <description>
+- type MUST be one of: feat, fix, chore, refactor, docs, test
+- scope is optional, lowercase, short (e.g. api, ui, auth)
+- optional ! only if breaking
+- description must be short and lowercase
+- no trailing period
+
+BODY RULES (STRICT):
+Must be exactly this structure (use markdown headings):
+
+## Summary
+<short explanation>
+
+## Changes
+- <bullet points>
+
+## Testing Notes
+- <how to test>
+
+If breaking, append after a blank line:
+BREAKING CHANGE: <what breaks and what to do>
+EOF
+)"
+
+            local user_payload
+            user_payload="$(jq -n \
+              --arg base "${base}" \
+              --arg head "${head_branch}" \
+              --arg sha "${short_sha}" \
+              --arg log "${log_text}" \
+              --arg diff "${diff_stat}" \
+              --arg prompt "${prompt}" \
+              '{
+                model: env.ANTHROPIC_MODEL,
+                max_tokens: 900,
+                temperature: 0.2,
+                system: $prompt,
+                messages: [
+                  {
+                    role: "user",
+                    content: [
+                      {
+                        type: "text",
+                        text: ("Target base: " + $base + "\nHead branch: " + $head + "\nCommit: " + $sha + "\n\nRecent commits:\n" + $log + "\n\nDiff stat:\n" + $diff + "\n")
+                      }
+                    ]
+                  }
+                ]
+              }'
+            )"
+
+            local resp
+            resp="$(curl -fsS https://api.anthropic.com/v1/messages \
+              -H "x-api-key: ${ANTHROPIC_API_KEY}" \
+              -H "anthropic-version: 2023-06-01" \
+              -H "content-type: application/json" \
+              --data-binary "${user_payload}"
+            )"
+
+            # Extract the first text block.
+            local text
+            text="$(printf "%s" "${resp}" | jq -r '.content[] | select(.type=="text") | .text' | head -n 1)"
+
+            # The model must return JSON; parse strictly.
+            printf "%s" "${text}" | jq -c '{title, body}'
+          }
+
+          repair_title_with_claude() {
+            local bad_title="$1"
+            local resp payload text
+
+            payload="$(jq -n \
+              --arg bad "${bad_title}" \
+              '{
+                model: env.ANTHROPIC_MODEL,
+                max_tokens: 120,
+                temperature: 0.0,
+                system: "Return ONLY one line: a corrected Conventional Commits v1.0.0 header. Type must be one of feat, fix, chore, refactor, docs, test. Optional scope in parentheses. Optional ! before :. Description must be short and lowercase. No trailing period.",
+                messages: [
+                  { role: "user", content: [ { type: "text", text: ("Fix this title:\n" + $bad) } ] }
+                ]
+              }'
+            )"
+
+            resp="$(curl -fsS https://api.anthropic.com/v1/messages \
+              -H "x-api-key: ${ANTHROPIC_API_KEY}" \
+              -H "anthropic-version: 2023-06-01" \
+              -H "content-type: application/json" \
+              --data-binary "${payload}"
+            )"
+
+            text="$(printf "%s" "${resp}" | jq -r '.content[] | select(.type=="text") | .text' | head -n 1)"
+            normalize_title "${text}"
+          }
+
+          repair_body_with_claude() {
+            local base="$1"
+            local merge_base="$2"
+            local log_text="$3"
+            local diff_stat="$4"
+            local bad_body="$5"
+
+            local prompt
+            prompt="$(cat <<'EOF'
+Fix this GitHub Pull Request body to match the required format exactly.
+
+OUTPUT FORMAT (STRICT):
+Return ONLY a JSON object with exactly this key:
+  - body: string
+
+BODY RULES (STRICT):
+Must be exactly this structure (use markdown headings):
+
+## Summary
+<short explanation>
+
+## Changes
+- <bullet points>
+
+## Testing Notes
+- <how to test>
+
+If breaking, append after a blank line:
+BREAKING CHANGE: <what breaks and what to do>
+EOF
+)"
+
+            local payload resp text
+            payload="$(jq -n \
+              --arg base "${base}" \
+              --arg head "${head_branch}" \
+              --arg sha "${short_sha}" \
+              --arg log "${log_text}" \
+              --arg diff "${diff_stat}" \
+              --arg bad "${bad_body}" \
+              --arg prompt "${prompt}" \
+              '{
+                model: env.ANTHROPIC_MODEL,
+                max_tokens: 900,
+                temperature: 0.2,
+                system: $prompt,
+                messages: [
+                  {
+                    role: "user",
+                    content: [
+                      { type: "text", text: ("Target base: " + $base + "\nHead branch: " + $head + "\nCommit: " + $sha + "\n\nRecent commits:\n" + $log + "\n\nDiff stat:\n" + $diff + "\n\nCurrent body (fix this):\n" + $bad + "\n") }
+                    ]
+                  }
+                ]
+              }'
+            )"
+
+            resp="$(curl -fsS https://api.anthropic.com/v1/messages \
+              -H "x-api-key: ${ANTHROPIC_API_KEY}" \
+              -H "anthropic-version: 2023-06-01" \
+              -H "content-type: application/json" \
+              --data-binary "${payload}"
+            )"
+
+            text="$(printf "%s" "${resp}" | jq -r '.content[] | select(.type=="text") | .text' | head -n 1)"
+            printf "%s" "${text}" | jq -r '.body'
+          }
+
+          upsert_pr() {
+            local base="$1"
+            local label="$2"
+
+            if [ "${head_branch}" = "${base}" ]; then
+              echo "Skip PR to ${base}: head == base (${head_branch})."
+              return 0
+            fi
+
+            ensure_label "${label}"
+
+            local merge_base
+            merge_base="$(git merge-base "origin/${base}" HEAD 2>/dev/null || true)"
+            if [ -z "${merge_base}" ]; then
+              merge_base="$(git rev-list --max-parents=0 HEAD | tail -n 1)"
+            fi
+
+            local log_text diff_stat
+            log_text="$(git log --oneline -n 20 "${merge_base}..HEAD" || true)"
+            diff_stat="$(git diff --stat "${merge_base}..HEAD" || true)"
+
+            local gen title body
+            gen="$(generate_with_claude "${base}" "${merge_base}" "${log_text}" "${diff_stat}")"
+            title="$(printf "%s" "${gen}" | jq -r '.title')"
+            body="$(printf "%s" "${gen}" | jq -r '.body')"
+
+            title="$(normalize_title "${title}")"
+
+            if ! validate_title "${title}"; then
+              echo "Claude title invalid; attempting one repair."
+              title="$(repair_title_with_claude "${title}")"
+            fi
+
+            if ! validate_title "${title}"; then
+              echo "Title still invalid after repair; using deterministic fallback."
+              title="chore(pr): sync branch $(sanitize_slug "${head_branch}")"
+            fi
+
+            if ! validate_body_shape "${body}"; then
+              echo "Claude body invalid; attempting one repair."
+              body="$(repair_body_with_claude "${base}" "${merge_base}" "${log_text}" "${diff_stat}" "${body}")"
+            fi
+
+            # Ensure required body sections exist; if still invalid, use deterministic fallback.
+            if ! validate_body_shape "${body}"; then
+              body=$'## Summary\nAuto-generated PR.\n\n## Changes\n- Updates from branch.\n\n## Testing Notes\n- Review and run CI.\n'
+            fi
+
+            local existing
+            existing="$(gh pr list --head "${head_branch}" --base "${base}" --state open --json number --jq '.[0].number' || true)"
+
+            if [ -n "${existing}" ] && [ "${existing}" != "null" ]; then
+              echo "Updating existing PR #${existing} (${head_branch} -> ${base})."
+              gh pr edit "${existing}" --title "${title}" --body "${body}"
+              gh pr edit "${existing}" --add-label "${label}" || true
+              echo "PR updated: #${existing}"
+            else
+              echo "Creating PR (${head_branch} -> ${base})."
+              # gh pr create prints URL on success; capture for summary.
+              pr_url="$(gh pr create --base "${base}" --head "${head_branch}" --title "${title}" --body "${body}")"
+              # Label after creation to keep create minimal.
+              gh pr edit "${pr_url}" --add-label "${label}" || true
+              echo "PR created: ${pr_url}"
+            fi
+          }
+
+          upsert_pr develop develop
+          upsert_pr main main
+

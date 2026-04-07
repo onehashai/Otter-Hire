@@ -242,12 +242,6 @@ export default function CareersListPage() {
                           )}
                         </div>
 
-                        {job.description && (
-                          <p className="text-xs text-muted-foreground line-clamp-1">
-                            {job.description.replace(/<[^>]*>/g, "").substring(0, 100)}
-                          </p>
-                        )}
-
                         <div className="flex flex-wrap gap-x-3 gap-y-1">
                           <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
                             <MapPin className="h-3 w-3" /> {location}

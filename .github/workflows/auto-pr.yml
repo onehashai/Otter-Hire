@@ -99,38 +99,7 @@ jobs:
             local diff_stat="$4"
 
             local prompt
-            prompt="$(cat <<'EOF'
-You are generating a GitHub Pull Request title and description.
-
-OUTPUT FORMAT (STRICT):
-Return ONLY a JSON object with exactly these keys:
-  - title: string
-  - body: string
-
-TITLE RULES (STRICT):
-- Must be a Conventional Commits v1.0.0 header: <type>(<scope>)?!: <description>
-- type MUST be one of: feat, fix, chore, refactor, docs, test
-- scope is optional, lowercase, short (e.g. api, ui, auth)
-- optional ! only if breaking
-- description must be short and lowercase
-- no trailing period
-
-BODY RULES (STRICT):
-Must be exactly this structure (use markdown headings):
-
-## Summary
-<short explanation>
-
-## Changes
-- <bullet points>
-
-## Testing Notes
-- <how to test>
-
-If breaking, append after a blank line:
-BREAKING CHANGE: <what breaks and what to do>
-EOF
-)"
+            prompt=$'You are generating a GitHub Pull Request title and description.\n\nOUTPUT FORMAT (STRICT):\nReturn ONLY a JSON object with exactly these keys:\n  - title: string\n  - body: string\n\nTITLE RULES (STRICT):\n- Must be a Conventional Commits v1.0.0 header: <type>(<scope>)?!: <description>\n- type MUST be one of: feat, fix, chore, refactor, docs, test\n- scope is optional, lowercase, short (e.g. api, ui, auth)\n- optional ! only if breaking\n- description must be short and lowercase\n- no trailing period\n\nBODY RULES (STRICT):\nMust be exactly this structure (use markdown headings):\n\n## Summary\n<short explanation>\n\n## Changes\n- <bullet points>\n\n## Testing Notes\n- <how to test>\n\nIf breaking, append after a blank line:\nBREAKING CHANGE: <what breaks and what to do>\n'
 
             local user_payload
             user_payload="$(jq -n \
@@ -211,29 +180,7 @@ EOF
             local bad_body="$5"
 
             local prompt
-            prompt="$(cat <<'EOF'
-Fix this GitHub Pull Request body to match the required format exactly.
-
-OUTPUT FORMAT (STRICT):
-Return ONLY a JSON object with exactly this key:
-  - body: string
-
-BODY RULES (STRICT):
-Must be exactly this structure (use markdown headings):
-
-## Summary
-<short explanation>
-
-## Changes
-- <bullet points>
-
-## Testing Notes
-- <how to test>
-
-If breaking, append after a blank line:
-BREAKING CHANGE: <what breaks and what to do>
-EOF
-)"
+            prompt=$'Fix this GitHub Pull Request body to match the required format exactly.\n\nOUTPUT FORMAT (STRICT):\nReturn ONLY a JSON object with exactly this key:\n  - body: string\n\nBODY RULES (STRICT):\nMust be exactly this structure (use markdown headings):\n\n## Summary\n<short explanation>\n\n## Changes\n- <bullet points>\n\n## Testing Notes\n- <how to test>\n\nIf breaking, append after a blank line:\nBREAKING CHANGE: <what breaks and what to do>\n'
 
             local payload resp text
             payload="$(jq -n \
@@ -339,4 +286,3 @@ EOF
 
           upsert_pr develop develop
           upsert_pr main main
-

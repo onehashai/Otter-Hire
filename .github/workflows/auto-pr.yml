@@ -231,7 +231,8 @@ jobs:
 
             # Extract the first text block.
             local text
-            text="$(printf "%s" "${resp}" | jq -r '.content[]? | select(.type=="text") | .text' 2>/dev/null | head -n 1 || true)"
+            # Join all text blocks (Claude may wrap JSON in ```json fences across lines).
+            text="$(printf "%s" "${resp}" | jq -r '[.content[]? | select(.type=="text") | .text] | join("\n")' 2>/dev/null || true)"
 
             # The model must return JSON; tolerate extra wrapper text.
             local parsed

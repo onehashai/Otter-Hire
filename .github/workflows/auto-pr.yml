@@ -101,6 +101,28 @@ jobs:
             local prompt
             prompt=$'You are generating a GitHub Pull Request title and description.\n\nOUTPUT FORMAT (STRICT):\nReturn ONLY a JSON object with exactly these keys:\n  - title: string\n  - body: string\n\nTITLE RULES (STRICT):\n- Must be a Conventional Commits v1.0.0 header: <type>(<scope>)?!: <description>\n- type MUST be one of: feat, fix, chore, refactor, docs, test\n- scope is optional, lowercase, short (e.g. api, ui, auth)\n- optional ! only if breaking\n- description must be short and lowercase\n- no trailing period\n\nBODY RULES (STRICT):\nMust be exactly this structure (use markdown headings):\n\n## Summary\n<short explanation>\n\n## Changes\n- <bullet points>\n\n## Testing Notes\n- <how to test>\n\nIf breaking, append after a blank line:\nBREAKING CHANGE: <what breaks and what to do>\n'
 
+            extract_json_object() {
+              # Best-effort: accept pure JSON or JSON embedded in other text.
+              # Writes compact JSON to stdout; returns non-zero on failure.
+              local raw="$1"
+              local candidate=""
+
+              # 1) Already valid JSON?
+              if candidate="$(printf "%s" "${raw}" | jq -e -c . 2>/dev/null)"; then
+                printf "%s" "${candidate}"
+                return 0
+              fi
+
+              # 2) Try to slice from first '{' to last '}'.
+              candidate="$(printf "%s" "${raw}" | tr -d '\r' | sed -n 's/^[^{]*\\({.*\\}\\)[^}]*$/\\1/p' | head -n 1)"
+              if [ -n "${candidate}" ] && candidate="$(printf "%s" "${candidate}" | jq -e -c . 2>/dev/null)"; then
+                printf "%s" "${candidate}"
+                return 0
+              fi
+
+              return 1
+            }
+
             local user_payload
             user_payload="$(jq -n \
               --arg base "${base}" \
@@ -140,8 +162,17 @@ jobs:
             local text
             text="$(printf "%s" "${resp}" | jq -r '.content[] | select(.type=="text") | .text' | head -n 1)"
 
-            # The model must return JSON; parse strictly.
-            printf "%s" "${text}" | jq -c '{title, body}'
+            # The model must return JSON; tolerate extra wrapper text.
+            local parsed
+            if ! parsed="$(extract_json_object "${text}")"; then
+              # Deterministic fallback object; caller still validates title/body.
+              jq -n --arg title "chore(pr): sync branch $(sanitize_slug "${head_branch}")" \
+                    --arg body $'## Summary\nAuto-generated PR.\n\n## Changes\n- Updates from branch.\n\n## Testing Notes\n- Review and run CI.\n' \
+                    '{title:$title, body:$body}'
+              return 0
+            fi
+
+            printf "%s" "${parsed}" | jq -c '{title, body}'
           }
 
           repair_title_with_claude() {
@@ -253,7 +284,14 @@ jobs:
 
             if ! validate_title "${title}"; then
               echo "Title still invalid after repair; using deterministic fallback."
-              title="chore(pr): sync branch $(sanitize_slug "${head_branch}")"
+              # Prefer last commit subject if it already matches the strict regex.
+              last_subject="$(git log -1 --pretty=%s 2>/dev/null || true)"
+              last_subject="$(normalize_title "${last_subject}")"
+              if validate_title "${last_subject}"; then
+                title="${last_subject}"
+              else
+                title="chore(pr): sync branch $(sanitize_slug "${head_branch}")"
+              fi
             fi
 
             if ! validate_body_shape "${body}"; then

@@ -330,7 +330,7 @@ export function EmailIntegrationManager({ onChanged }: EmailIntegrationManagerPr
               {verificationError ? <div className="text-red-600">{verificationError}</div> : null}
             </div>
           )}
-          <DialogFooter className="gap-2 sm:gap-0">
+          <DialogFooter>
             {!isVerificationDone && verificationActionUrl ? (
               <Button
                 type="button"

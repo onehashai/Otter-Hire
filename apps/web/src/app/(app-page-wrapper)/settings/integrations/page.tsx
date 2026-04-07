@@ -45,7 +45,7 @@ function IntegrationAppIcon({ slug, name }: { slug: string; name: string }) {
         width={32}
         height={32}
         unoptimized
-        className="h-full w-full object-contain"
+        className="h-full w-full object-contain dark:invert"
         onError={() => {
           if (src !== "/favicon.ico") setSrc("/favicon.ico");
         }}

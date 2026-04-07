@@ -53,7 +53,6 @@ const toTitle = (value: string) =>
 
 const HIRING_TIMELINE_TYPES = new Set([
   "candidate_created",
-  "candidate_updated",
   "stage_changed",
   "status_changed",
   "bulk_stage_changed",
@@ -93,14 +92,20 @@ function mapHiringTimelineItem(activity: {
     };
   }
   if (activity.type === "candidate_updated") {
-    if ("job_id" in metadata) {
-      const hasJob = Boolean(metadata.job_id);
-      return {
-        action: hasJob ? "Job assigned" : "Job unassigned",
-        user: actor,
-        date,
-        icon: "move",
-      };
+    if (metadata.job_changed === true) {
+      const oldJobId = metadata.old_job_id;
+      const newJobId = metadata.new_job_id;
+      const hadJob = Boolean(oldJobId);
+      const hasJob = Boolean(newJobId);
+      if (!hadJob && hasJob) {
+        return { action: "Job assigned", user: actor, date, icon: "move" };
+      }
+      if (hadJob && !hasJob) {
+        return { action: "Job unassigned", user: actor, date, icon: "move" };
+      }
+      if (hadJob && hasJob && oldJobId !== newJobId) {
+        return { action: "Job changed", user: actor, date, icon: "move" };
+      }
     }
     return { action: "Candidate details updated", user: actor, date, icon: "feedback" };
   }
@@ -256,7 +261,7 @@ export function JobCandidateProfile({
       role: currentAssignment?.job_title ?? candidate.job_title ?? "—",
       email: candidate.email,
       phone: candidate.phone ?? "—",
-      location: candidate.address ?? "—",
+      address: candidate.address ?? "—",
       stage,
       source: candidate.source ?? "job_portal",
       appliedDate: candidate.created_at,
@@ -373,7 +378,7 @@ export function JobCandidateProfile({
     name: string;
     email: string;
     phone: string | null;
-    location: string | null;
+    address: string | null;
   }) => {
     if (!id) return;
     try {

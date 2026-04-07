@@ -58,6 +58,10 @@ export function normalizeCandidateColumnOrder(
 export function normalizeVisibleCandidateColumns(
   visibleColumns: string[] | CandidateColumnKey[] | null | undefined,
 ): CandidateColumnKey[] {
+  // If no saved preference exists yet, use the product default column set.
+  if (!Array.isArray(visibleColumns) || visibleColumns.length === 0) {
+    return DEFAULT_VISIBLE_CANDIDATE_COLUMNS;
+  }
   const incoming = new Set(
     (visibleColumns ?? []).filter((v): v is CandidateColumnKey => v in CANDIDATE_COLUMN_DEFS),
   );

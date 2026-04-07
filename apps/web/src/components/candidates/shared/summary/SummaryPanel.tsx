@@ -15,6 +15,7 @@ import { formatPhoneForDisplay, parseStoredPhone } from "@/lib/phone";
 import { getInitialsFromName } from "@/lib/name-initials";
 import { useTranslation } from "react-i18next";
 import { isValidEmail, normalizeEmail, sanitizePhoneInput } from "@/lib/validation/contact";
+import { Dribbble, Github, Globe, Link2, Linkedin, Palette, Twitter } from "lucide-react";
 
 interface Document {
   id?: string;
@@ -30,7 +31,7 @@ interface CandidateSummary {
   role: string;
   email: string;
   phone: string;
-  location: string;
+  address: string;
   stage: string;
   source: string;
   appliedDate: string;
@@ -60,7 +61,7 @@ interface SummaryPanelProps {
     name: string;
     email: string;
     phone: string | null;
-    location: string | null;
+    address: string | null;
   }) => Promise<void>;
   onSaveLinks: (payload: Record<string, string>) => Promise<void>;
   onReplaceResume?: (file: File) => Promise<void>;
@@ -77,6 +78,48 @@ function formatDisplayFileName(rawName: string): string {
   const withoutUuidPrefix = base.replace(/^[0-9a-f]{8,}-[0-9a-f-]{20,}_(.+)$/i, "$1");
   const clean = withoutUuidPrefix.replace(/^tmp-\d+-\d+_(.+)$/i, "$1");
   return clean || base;
+}
+
+function resolveProfileLinkIcon(key: string, value: string) {
+  const normalizedKey = key.toLowerCase();
+  const raw = (value || "").trim();
+  const href = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+  let hostname = "";
+  try {
+    hostname = new URL(href).hostname.toLowerCase();
+  } catch {
+    hostname = "";
+  }
+
+  if (normalizedKey.includes("github") || hostname.includes("github.com")) {
+    return <Github className="h-3.5 w-3.5" />;
+  }
+  if (normalizedKey.includes("linkedin") || hostname.includes("linkedin.com")) {
+    return <Linkedin className="h-3.5 w-3.5" />;
+  }
+  if (
+    normalizedKey.includes("twitter") ||
+    normalizedKey.includes("twitter_x") ||
+    hostname.includes("twitter.com") ||
+    hostname === "x.com" ||
+    hostname.endsWith(".x.com")
+  ) {
+    return <Twitter className="h-3.5 w-3.5" />;
+  }
+  if (normalizedKey.includes("dribbble") || hostname.includes("dribbble.com")) {
+    return <Dribbble className="h-3.5 w-3.5" />;
+  }
+  if (normalizedKey.includes("behance") || hostname.includes("behance.net")) {
+    return <Palette className="h-3.5 w-3.5" />;
+  }
+  if (
+    normalizedKey.includes("portfolio") ||
+    normalizedKey.includes("website") ||
+    normalizedKey.includes("site")
+  ) {
+    return <Globe className="h-3.5 w-3.5" />;
+  }
+  return <Link2 className="h-3.5 w-3.5" />;
 }
 
 const TimelineIcon = ({ type }: { type: string }) => {
@@ -113,7 +156,7 @@ export function SummaryPanel({
   const [phone, setPhone] = useState<string | undefined>(() => parseStoredPhone(candidate.phone));
   const [phoneError, setPhoneError] = useState<string | null>(null);
   const [emailError, setEmailError] = useState<string | null>(null);
-  const [location, setLocation] = useState(candidate.location === "—" ? "" : candidate.location);
+  const [address, setAddress] = useState(candidate.address === "—" ? "" : candidate.address);
 
   const [linkDraft, setLinkDraft] = useState<Record<string, string>>(() => ({
     ...(candidate.profileLinks || {}),
@@ -125,7 +168,7 @@ export function SummaryPanel({
     setPhone(parseStoredPhone(candidate.phone));
     setPhoneError(null);
     setEmailError(null);
-    setLocation(candidate.location === "—" ? "" : candidate.location);
+    setAddress(candidate.address === "—" ? "" : candidate.address);
     setLinkDraft({ ...(candidate.profileLinks || {}) });
     setResumeFile(null);
   }, [candidate]);
@@ -201,9 +244,9 @@ export function SummaryPanel({
                 error={phoneError ?? undefined}
               />
               <InputField
-                label="Location"
-                value={location}
-                onChange={(e) => setLocation(e.target.value)}
+                label="Address"
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
               />
               <div className="flex gap-2">
                 <Button
@@ -232,7 +275,7 @@ export function SummaryPanel({
                         name: name.trim(),
                         email: normalizeEmail(email),
                         phone: phone ?? null,
-                        location: location.trim() || null,
+                        address: address.trim() || null,
                       });
                       setProfileEdit(false);
                     } finally {
@@ -254,7 +297,7 @@ export function SummaryPanel({
                     setPhone(parseStoredPhone(candidate.phone));
                     setPhoneError(null);
                     setEmailError(null);
-                    setLocation(candidate.location === "—" ? "" : candidate.location);
+                    setAddress(candidate.address === "—" ? "" : candidate.address);
                   }}
                 >
                   Cancel
@@ -272,7 +315,7 @@ export function SummaryPanel({
                   {formatPhoneForDisplay(candidate.phone)}
                 </div>
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <Icon name="House" className="h-3.5 w-3.5" /> {candidate.location}
+                  <Icon name="House" className="h-3.5 w-3.5" /> {candidate.address}
                 </div>
               </div>
               <Separator />
@@ -451,9 +494,7 @@ export function SummaryPanel({
                 </Button>
               ) : null}
               {nonEmptyProfileLinks.map(([key, value]) => {
-                const label =
-                  editableProfileLinkFields.find((f) => f.key === key)?.label ??
-                  key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+                const icon = resolveProfileLinkIcon(key, value);
                 return (
                   <Button
                     key={key}
@@ -463,8 +504,8 @@ export function SummaryPanel({
                     asChild
                   >
                     <a href={value} target="_blank" rel="noreferrer">
-                      <Icon name="Link" className="h-3.5 w-3.5" />
-                      <span className="truncate flex-1 text-left">{`${label}: ${value}`}</span>
+                      {icon}
+                      <span className="truncate flex-1 text-left">{value}</span>
                     </a>
                   </Button>
                 );

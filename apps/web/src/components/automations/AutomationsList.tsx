@@ -22,7 +22,6 @@ import {
   DialogFooter,
 } from "@onehash/ui/dialog";
 import {
-  Plus,
   Zap,
   MoreHorizontal,
   Copy,
@@ -33,7 +32,6 @@ import {
   Briefcase,
 } from "lucide-react";
 import { AutomationTemplatesDialog } from "./AutomationTemplatesDialog";
-import { useIsMobile } from "@/hooks/use-mobile";
 import { toast } from "@onehash/ui/sonner";
 import { EmptyCard } from "@onehash/ui/card";
 import { useTranslation } from "react-i18next";
@@ -148,7 +146,6 @@ export function AutomationsList({
   onCreateClick,
 }: AutomationsListProps) {
   const { t } = useTranslation();
-  const isMobile = useIsMobile();
   const router = useRouter();
   const [deleteDialog, setDeleteDialog] = useState<string | null>(null);
   const [templatesOpenInternal, setTemplatesOpenInternal] = useState(false);
@@ -486,17 +483,6 @@ export function AutomationsList({
           </p>
         )}
       </div>
-
-      {/* Mobile FAB */}
-      {isMobile && (
-        <Button
-          size="icon"
-          className="fixed bottom-20 right-4 h-12 w-12 rounded-full shadow-lg md:hidden"
-          onClick={onCreateClick}
-        >
-          <Plus className="h-5 w-5" />
-        </Button>
-      )}
 
       {/* Delete confirmation */}
       <Dialog open={!!deleteDialog} onOpenChange={() => setDeleteDialog(null)}>

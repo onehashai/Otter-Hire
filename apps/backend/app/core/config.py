@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     jwt_secret_key: str = Field(validation_alias="JWT_SECRET_KEY")
     jwt_algorithm: str = Field(default="HS256", validation_alias="JWT_ALGORITHM")
     access_token_expire_minutes: int = Field(
-        default=60 * 24 * 7, validation_alias="ACCESS_TOKEN_EXPIRE_MINUTES"
+        default=15, validation_alias="ACCESS_TOKEN_EXPIRE_MINUTES"
     )
     refresh_token_expire_days: int = Field(default=30, validation_alias="REFRESH_TOKEN_EXPIRE_DAYS")
     log_level: str = "INFO"

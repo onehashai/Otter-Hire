@@ -95,6 +95,11 @@ export function middleware(request: NextRequest) {
 
   if (AUTH_ROUTES.has(pathname)) {
     if (hasAccessToken) {
+      const isExpiredSessionRecovery =
+        pathname === "/login" && request.nextUrl.searchParams.get("session_expired") === "true";
+      if (isExpiredSessionRecovery) {
+        return NextResponse.next();
+      }
       // Dashboard route is intentionally disabled for MVP; use root landing.
       return NextResponse.redirect(new URL("/", request.url));
     }

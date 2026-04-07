@@ -1,4 +1,6 @@
+import secrets as _secrets
 from datetime import datetime, timedelta, timezone
+from hashlib import sha256
 from typing import Any
 
 from jose import JWTError, jwt
@@ -30,34 +32,22 @@ def create_access_token(data: dict[str, Any], expires_delta: timedelta | None = 
     return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
 
 
-def create_refresh_token(data: dict[str, Any]) -> str:
-    """Create long-lived refresh token (7 days)."""
-    payload = data.copy()
-    expire = datetime.now(timezone.utc) + timedelta(days=7)
-    payload.update(
-        {"exp": expire, "iat": datetime.now(timezone.utc).timestamp(), "type": "refresh"}
-    )
-    return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+def generate_opaque_refresh_token() -> tuple[str, str]:
+    """Generate a cryptographically random opaque refresh token.
+    Returns (raw_token, token_hash) — store only the hash, send raw in cookie.
+    """
+    raw = _secrets.token_urlsafe(48)
+    token_hash = sha256(raw.encode()).hexdigest()
+    return raw, token_hash
 
 
 def verify_access_token(token: str) -> dict[str, Any]:
-    """Verify and decode JWT token."""
+    """Verify and decode JWT access token."""
     try:
         payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
-        # Ensure it's not a refresh token being used as access token
+        # Ensure it's not an old-style JWT refresh token being used as access token
         if payload.get("type") == "refresh":
             raise ValueError("Refresh token cannot be used as access token")
         return payload
     except JWTError as exc:
         raise ValueError("Invalid token") from exc
-
-
-def verify_refresh_token(token: str) -> dict[str, Any]:
-    """Verify and decode refresh token."""
-    try:
-        payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
-        if payload.get("type") != "refresh":
-            raise ValueError("Invalid refresh token")
-        return payload
-    except JWTError as exc:
-        raise ValueError("Invalid refresh token") from exc

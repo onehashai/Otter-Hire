@@ -1,4 +1,4 @@
-# Test Dependencies for OneHash ATS Backend
+# Test Dependencies for Otter Backend
 
 # Core testing framework
 pytest==7.4.3

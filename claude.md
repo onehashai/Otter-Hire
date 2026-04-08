@@ -1,4 +1,4 @@
-# OneHash ATS - AI Context
+# Otter - AI Context
 
 ## Architecture Overview
 

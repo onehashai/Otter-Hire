@@ -42,7 +42,7 @@
 ### Services (`app/services`)
 
 - **Resume parsing** (`resume/`): Extract text (PDF/DOCX/OCR), LLM-based extraction, heuristics fallback
-- **Email** (`email.py`): Mailtrap (dev), ZeptoMail (prod), SES inbound + optional outbound path
+- **Email** (`email/`): Provider abstraction (`_factory.py`) selects ZeptoMail or SES based on credentials; handles transactional, conversation, and automation emails
 - **Storage** (`storage.py`): Config-driven local/S3 selection
 - **Automation** (`automation/`): Executor, action handlers, template rendering
 - **AI** (`job_description_ai.py`): OpenAI-based job description generation

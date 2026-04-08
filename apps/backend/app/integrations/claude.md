@@ -66,10 +66,10 @@ Email integration has two flows:
 4. `ses_bridge.py` validates signature and queues Temporal workflow
 5. Temporal workflow processes email and creates candidate/message
 
-**Outbound (FastAPI → SES)**:
+**Outbound (FastAPI → Temporal → platform provider)**:
 1. User sends message from UI
-2. API calls `outbound_service.py`
-3. SES sends email with reply-to tracking
+2. API enqueues `OutboundEmailWorkflow` via Temporal
+3. Platform provider (ZeptoMail or SES) sends email with reply-to tracking
 
 ### LinkedIn Integration Architecture
 

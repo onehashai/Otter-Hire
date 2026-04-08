@@ -44,6 +44,7 @@ export function useAuthSession(): AuthSessionContextValue {
 
 const AUTH_ROUTES = ["/login", "/signup"];
 const LIFECYCLE_ROUTES = ["/verify", "/onboarding"];
+const EXPLICIT_LOGOUT_KEY = "explicit_logout";
 
 function isInvitePath(pathname: string): boolean {
   return pathname.startsWith("/invite/");
@@ -128,9 +129,19 @@ export function Providers({ children }: { children: React.ReactNode }) {
     const onInvitePage = isInvitePath(pathname);
     const onInviteSignup = pathname === "/signup" && Boolean(searchParams.get("invite"));
     const isInviteLifecycleUser = user?.status === "pending" || user?.status === "declined";
+    const explicitLogout = sessionStorage.getItem(EXPLICIT_LOGOUT_KEY) === "true";
+
+    // Once user reaches an auth page, clear the explicit logout marker.
+    if (explicitLogout && isAuthRoute) {
+      sessionStorage.removeItem(EXPLICIT_LOGOUT_KEY);
+    }
 
     if (!user) {
       if (!isAuthRoute && !isLifecycleRoute && !onInvitePage) {
+        if (explicitLogout) {
+          router.replace("/login");
+          return;
+        }
         const currentSearch = searchParams.toString();
         const returnUrl = encodeURIComponent(
           `${pathname}${currentSearch ? `?${currentSearch}` : ""}`,

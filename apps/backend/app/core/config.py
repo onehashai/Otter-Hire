@@ -22,7 +22,7 @@ class Settings(BaseSettings):
 
     # Product branding (emails, UI copy, API metadata)
     platform_name: str = Field(default="Otter", validation_alias="PLATFORM_NAME")
-    support_email: str = Field(default="support@onehash.ai", validation_alias="SUPPORT_EMAIL")
+    support_email: str = Field(default="support@otter.bz", validation_alias="SUPPORT_EMAIL")
 
     # SQLAdmin (local development only — ignored in production)
     sqladmin_username: str = Field(default="admin", validation_alias="SQLADMIN_USERNAME")
@@ -93,23 +93,23 @@ class Settings(BaseSettings):
     # Cookie domain (empty for localhost, .domain.com for production)
     cookie_domain: str = Field(default="", validation_alias="COOKIE_DOMAIN")
 
-    # Mailtrap (dev)
-    mailtrap_host: str | None = Field(default=None, validation_alias="MAILTRAP_HOST")
-    mailtrap_port: int | None = Field(default=None, validation_alias="MAILTRAP_PORT")
-    mailtrap_username: str | None = Field(default=None, validation_alias="MAILTRAP_USERNAME")
-    mailtrap_password: str | None = Field(default=None, validation_alias="MAILTRAP_PASSWORD")
-    mailtrap_from_email: str | None = Field(default=None, validation_alias="MAILTRAP_FROM_EMAIL")
-
     # Token expiry (configurable)
     verification_token_expire_hours: int = Field(
         default=24, validation_alias="VERIFICATION_TOKEN_EXPIRE_HOURS"
     )
     invite_token_expire_days: int = Field(default=7, validation_alias="INVITE_TOKEN_EXPIRE_DAYS")
 
-    # ZeptoMail (prod)
+    # ZeptoMail — used when ZEPTOMAIL_API_KEY + ZEPTOMAIL_FROM_EMAIL are present
     zeptomail_api_key: str | None = Field(default=None, validation_alias="ZEPTOMAIL_API_KEY")
     zeptomail_from_email: str | None = Field(default=None, validation_alias="ZEPTOMAIL_FROM_EMAIL")
     zeptomail_from_name: str | None = Field(default=None, validation_alias="ZEPTOMAIL_FROM_NAME")
+
+    # SES platform sender — used when AWS credentials are present and ZEPTOMAIL_API_KEY is not set
+    # Default from-address uses the inbound domain so SES replies are routable.
+    ses_from_email: str = Field(
+        default="noreply@inbound.smartats.in", validation_alias="SES_FROM_EMAIL"
+    )
+    ses_from_name: str | None = Field(default=None, validation_alias="SES_FROM_NAME")
 
     # Storage
     local_storage_root: str = Field(default="storage/local", validation_alias="LOCAL_STORAGE_ROOT")

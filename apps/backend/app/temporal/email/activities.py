@@ -268,7 +268,7 @@ async def send_outbound_email_activity(input_data: OutboundWorkflowInput) -> dic
         get_verified_outbound_for_org,
     )
     from app.models.message import Message
-    from app.services.ses_outbound import send_email_via_ses
+    from app.services.email._factory import get_platform_provider
 
     logger.info(
         "Activity started: send_outbound_email message_id=%s to=%s",
@@ -324,22 +324,21 @@ async def send_outbound_email_activity(input_data: OutboundWorkflowInput) -> dic
             if previous_message_ids:
                 references_header = " ".join([f"<{mid}>" for mid in previous_message_ids])
 
-        ses_message_id = await asyncio.to_thread(
-            send_email_via_ses,
+        provider = get_platform_provider()
+        send_result = await provider.send_conversation(
             from_email=from_email_addr,
             from_name=display_name,
             to_email=input_data.to_email,
             subject=input_data.subject,
             text_body=input_data.body,
             html_body=html_body,
-            reply_to=None,
             in_reply_to=input_data.in_reply_to,
             references=references_header,
             message_id_tag=input_data.message_id,
             org_id_tag=input_data.org_id,
         )
 
-        provider_message_id = f"ses:{ses_message_id}"
+        provider_message_id = send_result.provider_message_id
 
         result = await db.execute(
             sa_update(Message)
@@ -347,7 +346,7 @@ async def send_outbound_email_activity(input_data: OutboundWorkflowInput) -> dic
             .values(
                 status="sent",
                 provider_message_id=provider_message_id,
-                email_message_id=ses_message_id,
+                email_message_id=send_result.email_message_id,
             )
         )
         await db.commit()

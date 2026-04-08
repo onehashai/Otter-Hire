@@ -26,10 +26,10 @@ def _email_header_inner_html(name_esc: str, name: str, logo_url: str | None) -> 
         # a broken-image icon when the URL is not fetchable (e.g. localhost from Mailtrap).
         # Sized for wordmarks: fixed height made small marks look tiny; width + height:auto scales naturally.
         return (
-            f'<img src="{html.escape(logo_url, quote=True)}" alt="" width="320" '
+            f'<img src="{html.escape(logo_url, quote=True)}" alt="" width="160" '
             'role="presentation" '
             'style="display:block;margin:0 auto;border:0;outline:none;text-decoration:none;'
-            'width:320px;max-width:100%;height:auto;line-height:0" />'
+            'width:160px;max-width:50%;height:auto;line-height:0" />'
         )
     logo_letter = name[0].upper() if name else "A"
     logo_letter_esc = html.escape(logo_letter, quote=False)

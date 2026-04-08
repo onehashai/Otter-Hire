@@ -21,8 +21,8 @@ jobs:
     if: startsWith(github.ref, 'refs/heads/')
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-      ANTHROPIC_MODEL: claude-sonnet-4-20250514
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_MODEL: gpt-4.1-mini
       # Strict validator compatibility: keep this aligned with your semantic PR rules.
       # Conventional Commits v1.0.0 header: <type>(<scope>)?!: <description>
       # Here we enforce an allowlist of types for deterministic passing:
@@ -49,8 +49,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
-            echo "Missing required secret ANTHROPIC_API_KEY."
+          if [ -z "${OPENAI_API_KEY:-}" ]; then
+            echo "Missing required secret OPENAI_API_KEY."
             exit 1
           fi
 
@@ -132,15 +132,15 @@ jobs:
             echo ""
           }
 
-          # Ask Claude for a title+body; then strictly validate/repair title before PR creation.
-          generate_with_claude() {
+          # Ask OpenAI for a title+body; then strictly validate/repair title before PR creation.
+          generate_with_openai() {
             local base="$1"
             local merge_base="$2"
             local log_text="$3"
             local diff_stat="$4"
             local file_list="$5"
 
-            call_anthropic() {
+            call_openai() {
               # Prints response body to stdout. On non-200, prints snippet to stderr and returns non-zero.
               local payload="$1"
               local tmp_body tmp_code http_code body
@@ -148,9 +148,8 @@ jobs:
               tmp_code="$(mktemp)"
 
               # Don't use -f: we want the error body for debugging.
-              curl -sS "https://api.anthropic.com/v1/messages" \
-                -H "x-api-key: ${ANTHROPIC_API_KEY}" \
-                -H "anthropic-version: 2023-06-01" \
+              curl -sS "https://api.openai.com/v1/responses" \
+                -H "Authorization: Bearer ${OPENAI_API_KEY}" \
                 -H "content-type: application/json" \
                 --data-binary "${payload}" \
                 -o "${tmp_body}" -w "%{http_code}" > "${tmp_code}" || true
@@ -160,7 +159,7 @@ jobs:
               rm -f "${tmp_body}" "${tmp_code}"
 
               if [ "${http_code}" != "200" ] && [ "${http_code}" != "201" ]; then
-                echo "Anthropic API request failed (http=${http_code})." >&2
+                echo "OpenAI API request failed (http=${http_code})." >&2
                 printf "%s" "${body}" | head -c 1200 >&2 || true
                 echo "" >&2
                 printf "%s" "${body}"
@@ -214,16 +213,24 @@ jobs:
               --arg diff "${diff_stat}" \
               --arg prompt "${prompt}" \
               '{
-                model: env.ANTHROPIC_MODEL,
-                max_tokens: 900,
+                model: env.OPENAI_MODEL,
+                max_output_tokens: 900,
                 temperature: 0.2,
-                system: $prompt,
-                messages: [
+                input: [
+                  {
+                    role: "system",
+                    content: [
+                      {
+                        type: "input_text",
+                        text: $prompt
+                      }
+                    ]
+                  },
                   {
                     role: "user",
                     content: [
                       {
-                        type: "text",
+                        type: "input_text",
                         text: ("Target base: " + $base + "\nHead branch: " + $head + "\nCommit: " + $sha + "\n\nRecent commits:\n" + $log + "\n\nChanged files (name-only):\n" + $files + "\n\nDiff stat:\n" + $diff + "\n")
                       }
                     ]
@@ -233,14 +240,14 @@ jobs:
             )"
 
             local resp
-            if ! resp="$(call_anthropic "${user_payload}")"; then
-              echo "Falling back: Anthropic API error." >&2
+            if ! resp="$(call_openai "${user_payload}")"; then
+              echo "Falling back: OpenAI API error." >&2
             fi
 
             # Extract the first text block.
             local text
-            # Join all text blocks (Claude may wrap JSON in ```json fences across lines).
-            text="$(printf "%s" "${resp}" | jq -r '[.content[]? | select(.type=="text") | .text] | join("\n")' 2>/dev/null || true)"
+            # Join all text blocks (model may wrap JSON in ```json fences across lines).
+            text="$(printf "%s" "${resp}" | jq -r '([.output[]?.content[]? | select(.type=="output_text") | .text] | join("\n")) // .output_text // ""' 2>/dev/null || true)"
 
             # The model must return JSON; tolerate extra wrapper text.
             local parsed
@@ -250,7 +257,7 @@ jobs:
               if [ -z "${fallback_title}" ]; then
                 fallback_title="chore(pr): sync branch $(sanitize_slug "${head_branch}")"
               fi
-              echo "Falling back: could not parse Claude JSON (text length: ${#text})." >&2
+              echo "Falling back: could not parse model JSON (text length: ${#text})." >&2
               jq -n --arg title "${fallback_title}" \
                     --arg body "$(printf "## Summary\nAuto-generated PR (Claude output could not be parsed).\n\n## Changes\n- Changed files:\n%s\n\n- Diff summary:\n%s\n\n## Testing Notes\n- Review and run CI.\n" "$(printf "%s" "${file_list}" | sed -E 's/^/- /')" "$(printf "%s" "${diff_stat}" | sed -E 's/^/- /')")" \
                     '{title:$title, body:$body}'
@@ -260,35 +267,50 @@ jobs:
             printf "%s" "${parsed}" | jq -c '{title, body}'
           }
 
-          repair_title_with_claude() {
+          repair_title_with_openai() {
             local bad_title="$1"
             local resp payload text
 
             payload="$(jq -n \
               --arg bad "${bad_title}" \
               '{
-                model: env.ANTHROPIC_MODEL,
-                max_tokens: 120,
+                model: env.OPENAI_MODEL,
+                max_output_tokens: 120,
                 temperature: 0.0,
-                system: "Return ONLY one line: a corrected Conventional Commits v1.0.0 header. Type must be one of feat, fix, chore, refactor, docs, test. Optional scope in parentheses. Optional ! before :. Description must be short and lowercase. No trailing period.",
-                messages: [
-                  { role: "user", content: [ { type: "text", text: ("Fix this title:\n" + $bad) } ] }
+                input: [
+                  {
+                    role: "system",
+                    content: [
+                      {
+                        type: "input_text",
+                        text: "Return ONLY one line: a corrected Conventional Commits v1.0.0 header. Type must be one of feat, fix, chore, refactor, docs, test. Optional scope in parentheses. Optional ! before :. Description must be short and lowercase. No trailing period."
+                      }
+                    ]
+                  },
+                  {
+                    role: "user",
+                    content: [
+                      {
+                        type: "input_text",
+                        text: ("Fix this title:\n" + $bad)
+                      }
+                    ]
+                  }
                 ]
               }'
             )"
 
-            resp="$(curl -fsS https://api.anthropic.com/v1/messages \
-              -H "x-api-key: ${ANTHROPIC_API_KEY}" \
-              -H "anthropic-version: 2023-06-01" \
+            resp="$(curl -fsS https://api.openai.com/v1/responses \
+              -H "Authorization: Bearer ${OPENAI_API_KEY}" \
               -H "content-type: application/json" \
               --data-binary "${payload}"
             )"
 
-            text="$(printf "%s" "${resp}" | jq -r '.content[] | select(.type=="text") | .text' | head -n 1)"
+            text="$(printf "%s" "${resp}" | jq -r '([.output[]?.content[]? | select(.type=="output_text") | .text] | join("\n")) // .output_text // ""' 2>/dev/null || true)"
             normalize_title "${text}"
           }
 
-          repair_body_with_claude() {
+          repair_body_with_openai() {
             local base="$1"
             local merge_base="$2"
             local log_text="$3"
@@ -308,29 +330,33 @@ jobs:
               --arg bad "${bad_body}" \
               --arg prompt "${prompt}" \
               '{
-                model: env.ANTHROPIC_MODEL,
-                max_tokens: 900,
+                model: env.OPENAI_MODEL,
+                max_output_tokens: 900,
                 temperature: 0.2,
-                system: $prompt,
-                messages: [
+                input: [
+                  {
+                    role: "system",
+                    content: [
+                      { type: "input_text", text: $prompt }
+                    ]
+                  },
                   {
                     role: "user",
                     content: [
-                      { type: "text", text: ("Target base: " + $base + "\nHead branch: " + $head + "\nCommit: " + $sha + "\n\nRecent commits:\n" + $log + "\n\nDiff stat:\n" + $diff + "\n\nCurrent body (fix this):\n" + $bad + "\n") }
+                      { type: "input_text", text: ("Target base: " + $base + "\nHead branch: " + $head + "\nCommit: " + $sha + "\n\nRecent commits:\n" + $log + "\n\nDiff stat:\n" + $diff + "\n\nCurrent body (fix this):\n" + $bad + "\n") }
                     ]
                   }
                 ]
               }'
             )"
 
-            resp="$(curl -fsS https://api.anthropic.com/v1/messages \
-              -H "x-api-key: ${ANTHROPIC_API_KEY}" \
-              -H "anthropic-version: 2023-06-01" \
+            resp="$(curl -fsS https://api.openai.com/v1/responses \
+              -H "Authorization: Bearer ${OPENAI_API_KEY}" \
               -H "content-type: application/json" \
               --data-binary "${payload}"
             )"
 
-            text="$(printf "%s" "${resp}" | jq -r '.content[] | select(.type=="text") | .text' | head -n 1)"
+            text="$(printf "%s" "${resp}" | jq -r '([.output[]?.content[]? | select(.type=="output_text") | .text] | join("\n")) // .output_text // ""' 2>/dev/null || true)"
             printf "%s" "${text}" | jq -r '.body'
           }
 
@@ -357,15 +383,15 @@ jobs:
             file_list="$(git diff --name-only "${merge_base}..HEAD" | head -n 200 || true)"
 
             local gen title body
-            gen="$(generate_with_claude "${base}" "${merge_base}" "${log_text}" "${diff_stat}" "${file_list}")"
+            gen="$(generate_with_openai "${base}" "${merge_base}" "${log_text}" "${diff_stat}" "${file_list}")"
             title="$(printf "%s" "${gen}" | jq -r '.title')"
             body="$(printf "%s" "${gen}" | jq -r '.body')"
 
             title="$(normalize_title "${title}")"
 
             if ! validate_title "${title}"; then
-              echo "Claude title invalid; attempting one repair." >&2
-              title="$(repair_title_with_claude "${title}")"
+              echo "Model title invalid; attempting one repair." >&2
+              title="$(repair_title_with_openai "${title}")"
             fi
 
             if ! validate_title "${title}"; then
@@ -379,8 +405,8 @@ jobs:
             fi
 
             if ! validate_body_shape "${body}"; then
-              echo "Claude body invalid; attempting one repair." >&2
-              body="$(repair_body_with_claude "${base}" "${merge_base}" "${log_text}" "${diff_stat}" "${body}")"
+              echo "Model body invalid; attempting one repair." >&2
+              body="$(repair_body_with_openai "${base}" "${merge_base}" "${log_text}" "${diff_stat}" "${body}")"
             fi
 
             # Ensure required body sections exist; if still invalid, use deterministic fallback.

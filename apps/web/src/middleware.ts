@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { isCareersUuidSegment, parseLegacyCareersOrgSlug } from "@/lib/public-careers-org";
 
 const AUTH_ROUTES = new Set(["/login", "/signup"]);
 const LIFECYCLE_ROUTES = new Set(["/verify", "/onboarding"]);
@@ -27,10 +28,30 @@ function isJobsHost(host: string): boolean {
 }
 
 function isPublicCareersRoute(pathname: string): boolean {
-  // Only allow /<orgSlug> and /<orgSlug>/<jobId>
-  // Pattern: /something or /something/something
+  // Only allow /<orgId> and /<orgId>/<jobId> (or legacy /<name-uuid>/… until redirect)
   const parts = pathname.split("/").filter(Boolean);
   return parts.length === 1 || parts.length === 2;
+}
+
+/** 301 from legacy `/{name}-{orgUuid}` to `/{orgUuid}` (and same for job detail). */
+function legacyCareersRedirect(request: NextRequest, pathname: string): NextResponse | null {
+  const parts = pathname.split("/").filter(Boolean);
+  if (parts.length !== 1 && parts.length !== 2) return null;
+
+  const first = parts[0];
+  if (isCareersUuidSegment(first)) return null;
+
+  const legacy = parseLegacyCareersOrgSlug(first);
+  if (!legacy) return null;
+
+  if (parts.length === 1) {
+    return NextResponse.redirect(new URL(`/${legacy.orgId}`, request.url), 301);
+  }
+
+  const jobSeg = parts[1];
+  if (!isCareersUuidSegment(jobSeg)) return null;
+
+  return NextResponse.redirect(new URL(`/${legacy.orgId}/${jobSeg}`, request.url), 301);
 }
 
 function getAppSubdomainUrl(pathname: string, rootHost: string): string {
@@ -53,6 +74,8 @@ export function middleware(request: NextRequest) {
     }
 
     if (isPublicCareersRoute(pathname)) {
+      const redirected = legacyCareersRedirect(request, pathname);
+      if (redirected) return redirected;
       return NextResponse.next();
     }
     // Block all other routes on jobs subdomain - return 404
@@ -72,6 +95,11 @@ export function middleware(request: NextRequest) {
 
   if (AUTH_ROUTES.has(pathname)) {
     if (hasAccessToken) {
+      const isExpiredSessionRecovery =
+        pathname === "/login" && request.nextUrl.searchParams.get("session_expired") === "true";
+      if (isExpiredSessionRecovery) {
+        return NextResponse.next();
+      }
       // Dashboard route is intentionally disabled for MVP; use root landing.
       return NextResponse.redirect(new URL("/", request.url));
     }

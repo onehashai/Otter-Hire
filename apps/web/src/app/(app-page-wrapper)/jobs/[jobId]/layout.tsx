@@ -44,7 +44,6 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
   const params = useParams();
   const { user } = useAuthSession();
   const id = params?.jobId as string;
-  const orgName = user?.org_name;
   const isMobile = useIsMobile();
   const { t } = useTranslation();
 
@@ -194,12 +193,11 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
         size="sm"
         className="w-full h-8 text-xs gap-1.5"
         onClick={() => {
-          if (!orgName || !id) {
+          if (!user?.org_id || !id) {
             toast.error(t("preview_org_missing", "Organization not found. Cannot open preview."));
             return;
           }
-          const orgSlug = `${orgName.toLowerCase().replace(/\s+/g, "-")}-${user?.org_id}`;
-          const previewUrl = `${window.location.protocol}//${process.env.NEXT_PUBLIC_JOBS_SUBDOMAIN || "jobs"}.${process.env.NEXT_PUBLIC_APP_ROOT_HOST || "localhost:3000"}/${orgSlug}/${id}`;
+          const previewUrl = `${window.location.protocol}//${process.env.NEXT_PUBLIC_JOBS_SUBDOMAIN || "jobs"}.${process.env.NEXT_PUBLIC_APP_ROOT_HOST || "localhost:3000"}/${user.org_id}/${id}`;
           window.open(previewUrl, "_blank", "noopener,noreferrer");
         }}
       >

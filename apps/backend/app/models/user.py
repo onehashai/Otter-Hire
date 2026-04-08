@@ -33,6 +33,8 @@ class User(Base):
     verification_token_expires_at = Column(DateTime(timezone=True), nullable=True)
     invite_token_hash = Column(String, nullable=True)
     invite_token_expires_at = Column(DateTime(timezone=True), nullable=True)
+    refresh_token_hash = Column(String, nullable=True)
+    refresh_token_expires_at = Column(DateTime(timezone=True), nullable=True)
     is_onboarded = Column(Boolean, nullable=False, default=False)
     avatar_url = Column(String, nullable=True)
     role = Column(String, nullable=False, server_default="user")

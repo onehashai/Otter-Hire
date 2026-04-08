@@ -65,36 +65,19 @@ export type PublicApplyFileUploadResponse = {
   url: string;
 };
 
-function publicCareersQuery(orgSlugPrefix: string): string {
-  const q = new URLSearchParams({ org_slug: orgSlugPrefix });
-  return `?${q.toString()}`;
-}
-
-export async function getPublicJobs(
-  orgSlugPrefix: string,
-  orgId: string,
-): Promise<PublicJobsListResponse> {
-  const data = await apiGet<PublicJobsListResponse>(
-    `/orgs/${orgId}/jobs${publicCareersQuery(orgSlugPrefix)}`,
-  );
+export async function getPublicJobs(orgId: string): Promise<PublicJobsListResponse> {
+  const data = await apiGet<PublicJobsListResponse>(`/orgs/${orgId}/jobs`);
   return { ...data, org_avatar_url: normalizeApiUrl(data.org_avatar_url) };
 }
 
-export async function getPublicJobDetail(
-  orgId: string,
-  jobId: string,
-  orgSlugPrefix: string,
-): Promise<PublicJobDetail> {
-  const data = await apiGet<PublicJobDetail>(
-    `/orgs/${orgId}/jobs/${jobId}${publicCareersQuery(orgSlugPrefix)}`,
-  );
+export async function getPublicJobDetail(orgId: string, jobId: string): Promise<PublicJobDetail> {
+  const data = await apiGet<PublicJobDetail>(`/orgs/${orgId}/jobs/${jobId}`);
   return { ...data, org_avatar_url: normalizeApiUrl(data.org_avatar_url) };
 }
 
 export async function applyToPublicJob(
   orgId: string,
   jobId: string,
-  orgSlugPrefix: string,
   payload: PublicApplyPayload,
   options?: { idempotencyKey?: string },
 ): Promise<PublicApplyResponse> {
@@ -102,20 +85,16 @@ export async function applyToPublicJob(
   if (options?.idempotencyKey) {
     extra["Idempotency-Key"] = options.idempotencyKey;
   }
-  return apiFetch<PublicApplyResponse>(
-    `/orgs/${orgId}/jobs/${jobId}/apply${publicCareersQuery(orgSlugPrefix)}`,
-    {
-      method: "POST",
-      body: payload,
-      headers: Object.keys(extra).length ? extra : undefined,
-    },
-  );
+  return apiFetch<PublicApplyResponse>(`/orgs/${orgId}/jobs/${jobId}/apply`, {
+    method: "POST",
+    body: payload,
+    headers: Object.keys(extra).length ? extra : undefined,
+  });
 }
 
 export async function uploadPublicApplicationFile(
   orgId: string,
   jobId: string,
-  orgSlugPrefix: string,
   fieldKey: string,
   file: File,
 ): Promise<PublicApplyFileUploadResponse> {
@@ -123,14 +102,11 @@ export async function uploadPublicApplicationFile(
   form.append("field_key", fieldKey);
   form.append("file", file);
 
-  const res = await fetch(
-    `${API_BASE_URL}/orgs/${orgId}/jobs/${jobId}/apply/upload${publicCareersQuery(orgSlugPrefix)}`,
-    {
-      method: "POST",
-      credentials: "include",
-      body: form,
-    },
-  );
+  const res = await fetch(`${API_BASE_URL}/orgs/${orgId}/jobs/${jobId}/apply/upload`, {
+    method: "POST",
+    credentials: "include",
+    body: form,
+  });
   if (!res.ok) {
     let message = `Upload failed: ${res.status} ${res.statusText}`;
     try {

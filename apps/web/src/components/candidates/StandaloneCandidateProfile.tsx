@@ -139,7 +139,7 @@ export function StandaloneCandidateProfile({
       role,
       email: candidate.email,
       phone: candidate.phone ?? "—",
-      location: candidate.address ?? "—",
+      address: candidate.address ?? "—",
       stage,
       source: candidate.source ?? "job_portal",
       appliedDate: candidate.created_at,
@@ -259,7 +259,7 @@ export function StandaloneCandidateProfile({
     name: string;
     email: string;
     phone: string | null;
-    location: string | null;
+    address: string | null;
   }) => {
     if (!id) return;
     try {

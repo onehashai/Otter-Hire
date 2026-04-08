@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     is_production: bool = Field(default=False, validation_alias="IS_PRODUCTION")
 
     # Product branding (emails, UI copy, API metadata)
-    platform_name: str = Field(default="OneHash ATS", validation_alias="PLATFORM_NAME")
+    platform_name: str = Field(default="Otter", validation_alias="PLATFORM_NAME")
     support_email: str = Field(default="support@onehash.ai", validation_alias="SUPPORT_EMAIL")
 
     # SQLAdmin (local development only — ignored in production)
@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     jwt_secret_key: str = Field(validation_alias="JWT_SECRET_KEY")
     jwt_algorithm: str = Field(default="HS256", validation_alias="JWT_ALGORITHM")
     access_token_expire_minutes: int = Field(
-        default=60 * 24 * 7, validation_alias="ACCESS_TOKEN_EXPIRE_MINUTES"
+        default=15, validation_alias="ACCESS_TOKEN_EXPIRE_MINUTES"
     )
     refresh_token_expire_days: int = Field(default=30, validation_alias="REFRESH_TOKEN_EXPIRE_DAYS")
     log_level: str = "INFO"

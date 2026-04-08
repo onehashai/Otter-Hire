@@ -24,7 +24,7 @@ export function EmailIntegrationAppIcon() {
         width={32}
         height={32}
         unoptimized
-        className="h-full w-full object-contain"
+        className="h-full w-full object-contain dark:invert"
         onError={() => setSrc("/favicon.ico")}
       />
     </div>

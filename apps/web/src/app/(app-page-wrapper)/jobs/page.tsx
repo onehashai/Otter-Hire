@@ -62,21 +62,14 @@ export default function JobsPage() {
   const [dateRange, setDateRange] = useState<{ from?: Date; to?: Date }>({});
   const [createOpen, setCreateOpen] = useState(false);
 
-  const generateOrgSlug = () => {
-    if (!user?.org_id || !user?.org_name) return null;
-    const slug = user.org_name.toLowerCase().replace(/\s+/g, "-");
-    return `${slug}-${user.org_id}`;
-  };
-
   const openJobPortal = (e?: React.MouseEvent) => {
     e?.preventDefault();
     e?.stopPropagation();
-    const orgSlug = generateOrgSlug();
-    if (!orgSlug) {
+    if (!user?.org_id) {
       toast.error("Unable to open job portal");
       return;
     }
-    const url = `${getJobsBaseUrl()}/${orgSlug}`;
+    const url = `${getJobsBaseUrl()}/${user.org_id}`;
     window.open(url, "_blank", "noopener,noreferrer");
   };
 

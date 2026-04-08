@@ -89,7 +89,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
           if (!AUTH_ROUTES.includes(pathname) && !LIFECYCLE_ROUTES.includes(pathname)) {
             const isInvite = isInvitePath(pathname);
             if (!isInvite) {
-              router.replace("/login?session_expired=true");
+              const returnUrl = encodeURIComponent(`${pathname}${window.location.search}`);
+              router.replace(`/login?redirect=${returnUrl}&session_expired=true`);
             }
           }
 
@@ -130,7 +131,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
     if (!user) {
       if (!isAuthRoute && !isLifecycleRoute && !onInvitePage) {
-        router.replace("/login");
+        const currentSearch = searchParams.toString();
+        const returnUrl = encodeURIComponent(
+          `${pathname}${currentSearch ? `?${currentSearch}` : ""}`,
+        );
+        router.replace(`/login?redirect=${returnUrl}&session_expired=true`);
       }
       return;
     }

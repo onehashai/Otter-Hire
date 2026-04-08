@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
@@ -1187,17 +1188,31 @@ async def update_candidate(
 
     # Track if job was assigned (from None to a job_id)
     old_job_id = candidate.job_id
+    changed_fields: list[str] = []
+    job_changed = False
     job_was_assigned = False
     assigned_job_assignment: CandidateJobs | None = None
 
     if body.name is not None:
-        candidate.name = body.name.strip()
+        next_name = body.name.strip()
+        if candidate.name != next_name:
+            candidate.name = next_name
+            changed_fields.append("name")
     if body.email is not None:
-        candidate.email = body.email.strip().lower()
+        next_email = body.email.strip().lower()
+        if candidate.email != next_email:
+            candidate.email = next_email
+            changed_fields.append("email")
     if body.phone is not None:
-        candidate.phone = body.phone.strip() or None
+        next_phone = body.phone.strip() or None
+        if candidate.phone != next_phone:
+            candidate.phone = next_phone
+            changed_fields.append("phone")
     if body.address is not None:
-        candidate.address = body.address.strip() or None
+        next_address = body.address.strip() or None
+        if candidate.address != next_address:
+            candidate.address = next_address
+            changed_fields.append("address")
     if body.profile_links is not None:
         normalized_links: dict[str, str] = {}
         for k, v in (body.profile_links or {}).items():
@@ -1205,12 +1220,17 @@ async def update_candidate(
             value = (v or "").strip()
             if key and value:
                 normalized_links[key] = value
-        candidate.profile_links = normalized_links
+        if (candidate.profile_links or {}) != normalized_links:
+            candidate.profile_links = normalized_links
+            changed_fields.append("profile_links")
 
     if body.clear_job:
         cleared_job_id = candidate.job_id
         candidate.job_id = None
         candidate.stage_id = None
+        if cleared_job_id is not None:
+            changed_fields.extend(["job_id", "stage_id"])
+            job_changed = True
         if cleared_job_id is not None:
             existing_assignment_result = await db.execute(
                 select(CandidateJobs).where(
@@ -1236,6 +1256,8 @@ async def update_candidate(
                 job_was_assigned = True  # Talent pool candidate assigned to job
 
             candidate.job_id = body.job_id
+            changed_fields.append("job_id")
+            job_changed = True
             first_stage_result = await db.execute(
                 select(Stage)
                 .where(Stage.org_id == current_user.org_id, Stage.job_id == body.job_id)
@@ -1244,6 +1266,7 @@ async def update_candidate(
             )
             first_stage = first_stage_result.scalar_one_or_none()
             candidate.stage_id = first_stage.id if first_stage else None
+            changed_fields.append("stage_id")
             assigned_job_assignment = await _upsert_candidate_job_assignment(
                 db,
                 org_id=current_user.org_id,
@@ -1257,28 +1280,24 @@ async def update_candidate(
                 assigned_at=datetime.now(timezone.utc),
             )
 
-    if candidate.job_id is not None and assigned_job_assignment is None:
-        assigned_job_assignment = await _upsert_candidate_job_assignment(
+    if changed_fields:
+        metadata: dict[str, Any] = {"changed_fields": changed_fields}
+        if job_changed:
+            metadata.update(
+                {
+                    "job_changed": True,
+                    "old_job_id": str(old_job_id) if old_job_id else None,
+                    "new_job_id": str(candidate.job_id) if candidate.job_id else None,
+                }
+            )
+        await _log_activity(
             db,
             org_id=current_user.org_id,
             candidate_id=candidate.id,
-            job_id=candidate.job_id,
-            stage_id=candidate.stage_id,
-            assignment_status=candidate.status
-            if candidate.status in {"active", "rejected", "hired"}
-            else "active",
-            source=candidate.source,
-            assigned_at=datetime.now(timezone.utc),
+            created_by_user_id=current_user.id,
+            activity_type="candidate_updated",
+            metadata=metadata,
         )
-
-    await _log_activity(
-        db,
-        org_id=current_user.org_id,
-        candidate_id=candidate.id,
-        created_by_user_id=current_user.id,
-        activity_type="candidate_updated",
-        metadata={"job_id": str(candidate.job_id) if candidate.job_id else None},
-    )
     await db.commit()
 
     # Trigger candidate_job_assigned automation when talent pool candidate gets a job

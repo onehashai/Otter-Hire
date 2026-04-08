@@ -35,15 +35,49 @@ export function getApiBase(): string {
    Global 401 Handler
 ========================= */
 
+// Shared in-flight refresh promise — prevents concurrent 401s from triggering
+// multiple simultaneous refresh calls.
+let _refreshPromise: Promise<boolean> | null = null;
+
+async function _attemptSilentRefresh(): Promise<boolean> {
+  if (_refreshPromise) return _refreshPromise;
+  _refreshPromise = (async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
+        method: "POST",
+        headers: { Accept: "application/json" },
+        credentials: "include",
+        cache: "no-store",
+      });
+      return res.ok;
+    } catch {
+      return false;
+    } finally {
+      _refreshPromise = null;
+    }
+  })();
+  return _refreshPromise;
+}
+
 let isHandling401 = false;
 
 async function handle401Response(): Promise<void> {
   if (isHandling401) return;
   isHandling401 = true;
 
-  // Clear cookies
-  document.cookie = "access_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
-  document.cookie = "refresh_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+  // Ask backend to clear httpOnly auth cookies and revoke refresh token.
+  try {
+    await fetch(`${API_BASE_URL}/auth/logout`, {
+      method: "POST",
+      headers: { Accept: "application/json" },
+      credentials: "include",
+      cache: "no-store",
+    });
+  } catch {
+    // Ignore logout failures; continue redirect flow.
+  }
+
+  // Clear client-managed session markers
   localStorage.removeItem("session_updated");
 
   // Redirect to login with return URL
@@ -168,12 +202,22 @@ export type ApiGetOptions = {
 export async function apiGet<T>(path: string, options: ApiGetOptions = {}): Promise<T> {
   const { credentials = "include", cache = "no-store" } = options;
 
-  const res = await fetch(`${API_BASE_URL}${path}`, {
-    method: "GET",
-    headers: { Accept: "application/json" },
-    cache,
-    credentials,
-  });
+  const fetchOnce = () =>
+    fetch(`${API_BASE_URL}${path}`, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      cache,
+      credentials,
+    });
+
+  let res = await fetchOnce();
+
+  if (res.status === 401) {
+    const refreshed = await _attemptSilentRefresh();
+    if (refreshed) {
+      res = await fetchOnce();
+    }
+  }
 
   if (res.status === 401) {
     await handle401Response();
@@ -199,12 +243,22 @@ export async function apiPost<T>(
 ): Promise<T> {
   const { credentials = "include" } = options;
 
-  const res = await fetch(`${API_BASE_URL}${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json" },
-    credentials,
-    body: JSON.stringify(body),
-  });
+  const fetchOnce = () =>
+    fetch(`${API_BASE_URL}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      credentials,
+      body: JSON.stringify(body),
+    });
+
+  let res = await fetchOnce();
+
+  if (res.status === 401) {
+    const refreshed = await _attemptSilentRefresh();
+    if (refreshed) {
+      res = await fetchOnce();
+    }
+  }
 
   if (res.status === 401) {
     await handle401Response();
@@ -228,18 +282,27 @@ export async function apiFetch<T>(
   if (options.headers) {
     Object.assign(headers, options.headers);
   }
-
   if (options.body !== undefined) {
     headers["Content-Type"] = "application/json";
   }
 
-  const res = await fetch(`${API_BASE_URL}${path}`, {
-    method: options.method,
-    headers,
-    credentials: "include",
-    body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
-    cache: "no-store",
-  });
+  const fetchOnce = () =>
+    fetch(`${API_BASE_URL}${path}`, {
+      method: options.method,
+      headers,
+      credentials: "include",
+      body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+      cache: "no-store",
+    });
+
+  let res = await fetchOnce();
+
+  if (res.status === 401) {
+    const refreshed = await _attemptSilentRefresh();
+    if (refreshed) {
+      res = await fetchOnce();
+    }
+  }
 
   if (res.status === 401) {
     await handle401Response();
@@ -256,11 +319,21 @@ export async function apiFetch<T>(
 }
 
 export async function apiDelete(path: string): Promise<void> {
-  const res = await fetch(`${API_BASE_URL}${path}`, {
-    method: "DELETE",
-    headers: { Accept: "application/json" },
-    credentials: "include",
-  });
+  const fetchOnce = () =>
+    fetch(`${API_BASE_URL}${path}`, {
+      method: "DELETE",
+      headers: { Accept: "application/json" },
+      credentials: "include",
+    });
+
+  let res = await fetchOnce();
+
+  if (res.status === 401) {
+    const refreshed = await _attemptSilentRefresh();
+    if (refreshed) {
+      res = await fetchOnce();
+    }
+  }
 
   if (res.status === 401) {
     await handle401Response();

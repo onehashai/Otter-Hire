@@ -23,6 +23,7 @@ import { OverviewTab } from "@/components/automations/tabs/OverviewTab";
 import { ExecutionLog, type ExecutionLogEntry } from "@/components/automations/tabs/ExecutionLog";
 import { ExecutionDetailsDialog } from "@/components/automations/tabs/ExecutionDetailsDialog";
 import { getAutomationById, getAutomationExecutions } from "@/api/automations";
+import { formatTimestamp } from "@/lib/format-date";
 
 export default function AutomationDetailPage() {
   const params = useParams();
@@ -72,8 +73,14 @@ export default function AutomationDetailPage() {
             detail: a.config.template ? `Template: ${a.config.template}` : undefined,
           })),
           createdBy: detail.created_by_name ?? "",
-          createdAt: new Date(detail.created_at).toLocaleDateString(),
-          lastModified: new Date(detail.updated_at).toLocaleDateString(),
+          createdAt: formatTimestamp(detail.created_at, "en-GB", {
+            showRelative: true,
+            showTime: false,
+          }),
+          lastModified: formatTimestamp(detail.updated_at, "en-GB", {
+            showRelative: true,
+            showTime: false,
+          }),
           executionCount: detail.execution_count,
         };
 
@@ -83,7 +90,7 @@ export default function AutomationDetailPage() {
           candidateEmail: e.candidate_email || "N/A",
           event: e.trigger_event,
           action: "",
-          timestamp: new Date(e.created_at).toLocaleString(),
+          timestamp: formatTimestamp(e.created_at, "en-GB", { showRelative: true }),
           status: e.status as "success" | "failed",
           detail: e.message ?? undefined,
         }));

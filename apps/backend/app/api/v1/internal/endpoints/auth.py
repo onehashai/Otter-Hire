@@ -2,7 +2,6 @@ import secrets
 import urllib.parse
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
-from uuid import UUID
 
 import httpx
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response, status
@@ -15,10 +14,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.security import (
     create_access_token,
-    create_refresh_token,
+    generate_opaque_refresh_token,
     hash_password,
     verify_password,
-    verify_refresh_token,
 )
 from app.db.session import get_db
 from app.deps.auth import get_current_user
@@ -89,7 +87,7 @@ def _set_access_cookie(response: Response, token: str) -> None:
 
 
 def _set_refresh_cookie(response: Response, token: str) -> None:
-    """Set refresh token as httpOnly cookie (7 days)."""
+    """Set refresh token as httpOnly cookie."""
     cookie_params = {
         "key": "refresh_token",
         "value": token,
@@ -97,10 +95,22 @@ def _set_refresh_cookie(response: Response, token: str) -> None:
         "samesite": "lax",
         "secure": settings.is_production,
         "max_age": settings.refresh_token_expire_days * 24 * 60 * 60,
+        "path": "/v1/internal/auth/refresh",
     }
     if settings.cookie_domain:
         cookie_params["domain"] = settings.cookie_domain
     response.set_cookie(**cookie_params)
+
+
+async def _issue_refresh_token(db: AsyncSession, user: User) -> str:
+    """Generate opaque refresh token, store hash on user row, commit, return raw token."""
+    raw, token_hash = generate_opaque_refresh_token()
+    user.refresh_token_hash = token_hash
+    user.refresh_token_expires_at = datetime.now(timezone.utc) + timedelta(
+        days=settings.refresh_token_expire_days
+    )
+    await db.flush()
+    return raw
 
 
 @router.post("/signup", response_model=AuthUserResponse, status_code=status.HTTP_201_CREATED)
@@ -150,16 +160,14 @@ async def signup(
         user.verified_at = None
         user.is_onboarded = False
 
+        raw_refresh = await _issue_refresh_token(db, user)
         await db.commit()
         await db.refresh(user)
         await db.refresh(membership)
 
         token = _create_session_token(user, membership)
-        refresh_token = create_refresh_token(
-            {"user_id": str(user.id), "org_id": str(membership.org_id)}
-        )
         _set_access_cookie(response, token)
-        _set_refresh_cookie(response, refresh_token)
+        _set_refresh_cookie(response, raw_refresh)
         return _to_user_response(user, membership)
 
     existing_user = await db.execute(select(User).where(User.email == normalized_email))
@@ -202,6 +210,7 @@ async def signup(
         status="active",
     )
     db.add(membership)
+    raw_refresh = await _issue_refresh_token(db, user)
     await db.commit()
     await db.refresh(user)
     await db.refresh(membership)
@@ -210,11 +219,8 @@ async def signup(
     await send_verification_email(user.email, verify_url)
 
     token = _create_session_token(user, membership)
-    refresh_token = create_refresh_token(
-        {"user_id": str(user.id), "org_id": str(membership.org_id)}
-    )
     _set_access_cookie(response, token)
-    _set_refresh_cookie(response, refresh_token)
+    _set_refresh_cookie(response, raw_refresh)
     return _to_user_response(user, membership)
 
 
@@ -273,11 +279,10 @@ async def login(
         )
 
     token = _create_session_token(user, membership)
-    refresh_token = create_refresh_token(
-        {"user_id": str(user.id), "org_id": str(membership.org_id)}
-    )
+    raw_refresh = await _issue_refresh_token(db, user)
+    await db.commit()
     _set_access_cookie(response, token)
-    _set_refresh_cookie(response, refresh_token)
+    _set_refresh_cookie(response, raw_refresh)
     return _to_user_response(user, membership)
 
 
@@ -306,7 +311,21 @@ async def me(
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
-async def logout(response: Response) -> Response:
+async def logout(
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    refresh_token: str | None = Cookie(default=None),
+) -> Response:
+    # Revoke the refresh token in DB so it cannot be reused after logout
+    if refresh_token:
+        token_hash = sha256(refresh_token.encode()).hexdigest()
+        result = await db.execute(select(User).where(User.refresh_token_hash == token_hash))
+        user = result.scalar_one_or_none()
+        if user is not None:
+            user.refresh_token_hash = None
+            user.refresh_token_expires_at = None
+            await db.commit()
+
     response.delete_cookie(
         key="access_token",
         path="/",
@@ -316,7 +335,7 @@ async def logout(response: Response) -> Response:
     )
     response.delete_cookie(
         key="refresh_token",
-        path="/",
+        path="/v1/internal/auth/refresh",
         domain=settings.cookie_domain or None,
         secure=settings.is_production,
         samesite="lax",
@@ -334,43 +353,53 @@ async def validate_session(
 
 
 @router.post("/refresh", response_model=AuthUserResponse)
+@limiter.limit("10/minute")
 async def refresh_token(
+    request: Request,
     response: Response,
     db: AsyncSession = Depends(get_db),
     refresh_token: str | None = Cookie(default=None),
 ) -> AuthUserResponse:
-    """Refresh access token using refresh token."""
+    """Refresh access token using opaque refresh token with rotation and reuse detection."""
     if not refresh_token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={"code": "AUTH_NO_REFRESH_TOKEN", "message": "Refresh token required."},
         )
 
-    try:
-        payload = verify_refresh_token(refresh_token)
-        user_id = UUID(str(payload.get("user_id")))
-        org_id = UUID(str(payload.get("org_id")))
-    except Exception as exc:
+    token_hash = sha256(refresh_token.encode()).hexdigest()
+    now = datetime.now(timezone.utc)
+
+    result = await db.execute(select(User).where(User.refresh_token_hash == token_hash))
+    user = result.scalar_one_or_none()
+
+    if user is None:
+        # Token not found — could be reuse of a rotated token; force re-login
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={
                 "code": "AUTH_INVALID_REFRESH_TOKEN",
                 "message": "Invalid or expired refresh token.",
             },
-        ) from exc
+        )
 
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
-    if user is None:
+    if user.refresh_token_expires_at is None or user.refresh_token_expires_at < now:
+        # Expired — clear it and force re-login
+        user.refresh_token_hash = None
+        user.refresh_token_expires_at = None
+        await db.commit()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"code": "AUTH_USER_NOT_FOUND", "message": "User account not found."},
+            detail={
+                "code": "AUTH_REFRESH_TOKEN_EXPIRED",
+                "message": "Refresh token has expired. Please sign in again.",
+            },
         )
 
     membership_result = await db.execute(
         select(OrgMembership).where(
-            OrgMembership.user_id == user_id,
-            OrgMembership.org_id == org_id,
+            OrgMembership.user_id == user.id,
+            OrgMembership.org_id == user.org_id,
         )
     )
     membership = membership_result.scalar_one_or_none()
@@ -383,6 +412,11 @@ async def refresh_token(
     user.org_id = membership.org_id
     user.membership_role = membership.role
     user.status = membership.status
+
+    # Rotate: issue new refresh token (overwrites hash on user row) and commit atomically
+    new_raw_refresh = await _issue_refresh_token(db, user)
+    await db.commit()
+    _set_refresh_cookie(response, new_raw_refresh)
 
     new_access_token = _create_session_token(user, membership)
     _set_access_cookie(response, new_access_token)
@@ -514,16 +548,14 @@ async def onboarding(
         if membership.role == "owner":
             organization.name = payload.organization_name
 
+    raw_refresh = await _issue_refresh_token(db, current_user)
     await db.commit()
     await db.refresh(current_user)
     await db.refresh(membership)
 
     token = _create_session_token(current_user, membership)
-    refresh_token_value = create_refresh_token(
-        {"user_id": str(current_user.id), "org_id": str(membership.org_id)}
-    )
     _set_access_cookie(response, token)
-    _set_refresh_cookie(response, refresh_token_value)
+    _set_refresh_cookie(response, raw_refresh)
     return _to_user_response(current_user, membership)
 
 
@@ -568,16 +600,14 @@ async def accept_invite(
     user.verification_token_hash = None
     user.verification_token_expires_at = None
 
+    raw_refresh = await _issue_refresh_token(db, user)
     await db.commit()
     await db.refresh(user)
     await db.refresh(membership)
 
     token = _create_session_token(user, membership)
-    refresh_token_value = create_refresh_token(
-        {"user_id": str(user.id), "org_id": str(membership.org_id)}
-    )
     _set_access_cookie(response, token)
-    _set_refresh_cookie(response, refresh_token_value)
+    _set_refresh_cookie(response, raw_refresh)
     return _to_user_response(user, membership)
 
 
@@ -626,16 +656,14 @@ async def accept_existing_invite(
     invited_user.verification_token_hash = None
     invited_user.verification_token_expires_at = None
 
+    raw_refresh = await _issue_refresh_token(db, invited_user)
     await db.commit()
     await db.refresh(invited_user)
     await db.refresh(membership)
 
     token_value = _create_session_token(invited_user, membership)
-    refresh_token_value = create_refresh_token(
-        {"user_id": str(invited_user.id), "org_id": str(membership.org_id)}
-    )
     _set_access_cookie(response, token_value)
-    _set_refresh_cookie(response, refresh_token_value)
+    _set_refresh_cookie(response, raw_refresh)
     return _to_user_response(invited_user, membership)
 
 
@@ -891,20 +919,18 @@ async def google_oauth_callback(
                 status="active",
             )
             db.add(membership)
+            raw_refresh = await _issue_refresh_token(db, user)
             await db.commit()
             await db.refresh(user)
             await db.refresh(membership)
 
             session_token = _create_session_token(user, membership)
-            refresh_token_value = create_refresh_token(
-                {"user_id": str(user.id), "org_id": str(membership.org_id)}
-            )
             redir = RedirectResponse(
                 url=f"{settings.frontend_base_url}/onboarding",
                 status_code=status.HTTP_302_FOUND,
             )
             _set_access_cookie(redir, session_token)
-            _set_refresh_cookie(redir, refresh_token_value)
+            _set_refresh_cookie(redir, raw_refresh)
             redir.delete_cookie(
                 key=_OAUTH_STATE_COOKIE,
                 path="/",
@@ -928,12 +954,11 @@ async def google_oauth_callback(
         else settings.frontend_base_url
     )
     session_token = _create_session_token(user, membership)
-    refresh_token_value = create_refresh_token(
-        {"user_id": str(user.id), "org_id": str(membership.org_id)}
-    )
+    raw_refresh = await _issue_refresh_token(db, user)
+    await db.commit()
     redir = RedirectResponse(url=dest, status_code=status.HTTP_302_FOUND)
     _set_access_cookie(redir, session_token)
-    _set_refresh_cookie(redir, refresh_token_value)
+    _set_refresh_cookie(redir, raw_refresh)
     redir.delete_cookie(
         key=_OAUTH_STATE_COOKIE,
         path="/",

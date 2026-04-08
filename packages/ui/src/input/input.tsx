@@ -3,6 +3,7 @@
 import * as React from "react";
 import type { Country } from "react-phone-number-input";
 import PhoneInput from "react-phone-number-input";
+import flags from "react-phone-number-input/flags";
 import "react-phone-number-input/style.css";
 
 import { cn } from "../lib/utils";
@@ -128,6 +129,7 @@ function PhoneNumberField({
         <PhoneInput
           id={id}
           international
+          flags={flags}
           countryCallingCodeEditable={false}
           defaultCountry={defaultCountry}
           value={value}

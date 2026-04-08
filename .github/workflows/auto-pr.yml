@@ -57,6 +57,14 @@ jobs:
           head_branch="${GITHUB_REF#refs/heads/}"
           short_sha="${GITHUB_SHA:0:7}"
 
+          # Do not open PRs from protected base branches.
+          # This prevents develop->main PRs from being opened/updated on merges into develop,
+          # and prevents any PR churn from pushes on develop/main.
+          if [ "${head_branch}" = "develop" ] || [ "${head_branch}" = "main" ]; then
+            echo "Skip: head branch '${head_branch}' is a base branch."
+            exit 0
+          fi
+
           sanitize_slug() {
             echo "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9._-]+/-/g; s/^-+|-+$//g' | cut -c1-48
           }

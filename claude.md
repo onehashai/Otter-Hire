@@ -12,7 +12,7 @@
 - **Async Workflows**: Temporal (resume parsing, email processing)
 - **Cache/Queue**: Redis
 - **Storage**: Config-driven (local filesystem default, AWS S3 when enabled)
-- **Email**: Mailtrap (dev), ZeptoMail (prod), AWS SES (inbound + optional outbound)
+- **Email**: ZeptoMail or AWS SES for all outbound (credential-based selection); AWS SES for inbound
 
 ### Core Modules
 

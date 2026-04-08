@@ -39,6 +39,8 @@ import { InputField } from "@onehash/ui/input";
 import { getPersonNameInitials } from "@/lib/name-initials";
 import { LOGO_SVG_PATH, PLATFORM_NAME } from "@/lib/constants";
 
+const EXPLICIT_LOGOUT_KEY = "explicit_logout";
+
 export function TopBar() {
   const router = useRouter();
   const { user, clearSession, refreshSession } = useAuthSession();
@@ -125,6 +127,7 @@ export function TopBar() {
     try {
       await logout();
     } finally {
+      sessionStorage.setItem(EXPLICIT_LOGOUT_KEY, "true");
       clearSession();
       router.replace("/login");
     }

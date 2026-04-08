@@ -165,7 +165,7 @@ Worker registers workflows and activities, then polls Temporal server for tasks.
 2. **API creates message**: Status = `pending`
 3. **API enqueues workflow**: `OutboundEmailWorkflow`
 4. **Workflow starts**: Loads message from DB
-5. **Activity**: Sends email via SES
+5. **Activity**: Sends email via platform provider (ZeptoMail or SES)
 6. **Success**: Message status → `sent`
 7. **Failure**: Retries 3x, then status → `failed`
 

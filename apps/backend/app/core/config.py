@@ -104,18 +104,29 @@ class Settings(BaseSettings):
     zeptomail_from_email: str | None = Field(default=None, validation_alias="ZEPTOMAIL_FROM_EMAIL")
     zeptomail_from_name: str | None = Field(default=None, validation_alias="ZEPTOMAIL_FROM_NAME")
 
-    # SES platform sender — used when AWS credentials are present and ZEPTOMAIL_API_KEY is not set
-    # Default from-address uses the inbound domain so SES replies are routable.
-    ses_from_email: str = Field(
-        default="noreply@inbound.smartats.in", validation_alias="SES_FROM_EMAIL"
+    # SES — transactional From (verification, invites, platform email). ZeptoMail path is unchanged.
+    # Conversational SES mail uses From = reply+...@<SES_MAIL_DOMAIN> (not these vars).
+    ses_transactional_from_email: str = Field(
+        default="",
+        validation_alias="SES_TRANSACTIONAL_FROM_EMAIL",
     )
+    ses_transactional_from_name: str | None = Field(
+        default=None,
+        validation_alias="SES_TRANSACTIONAL_FROM_NAME",
+    )
+    # Legacy single sender before SES_TRANSACTIONAL_* — used if transactional email is empty.
+    ses_from_email: str | None = Field(default=None, validation_alias="SES_FROM_EMAIL")
     ses_from_name: str | None = Field(default=None, validation_alias="SES_FROM_NAME")
 
     # Storage
     local_storage_root: str = Field(default="storage/local", validation_alias="LOCAL_STORAGE_ROOT")
     max_upload_bytes: int = Field(default=1024 * 1024, validation_alias="MAX_UPLOAD_BYTES")
+    avatar_max_upload_bytes: int = Field(
+        default=1024 * 1024,
+        validation_alias="AVATAR_MAX_UPLOAD_BYTES",
+    )
     public_job_apply_max_upload_bytes: int = Field(
-        default=10 * 1024 * 1024,
+        default=1024 * 1024,
         validation_alias="PUBLIC_JOB_APPLY_MAX_UPLOAD_BYTES",
     )
     aws_s3_bucket: str | None = Field(default=None, validation_alias="AWS_S3_BUCKET")
@@ -132,9 +143,13 @@ class Settings(BaseSettings):
     inbound_webhook_secret: str | None = Field(
         default=None, validation_alias="INBOUND_WEBHOOK_SECRET"
     )
-    inbound_email_domain: str | None = Field(default=None, validation_alias="INBOUND_EMAIL_DOMAIN")
+    # Hostname for inbound delivery and conversational outbound reply+ addresses.
+    SES_MAIL_DOMAIN: str | None = Field(
+        default=None,
+        validation_alias="SES_MAIL_DOMAIN",
+    )
     inbound_max_attachment_bytes: int = Field(
-        default=10 * 1024 * 1024, validation_alias="INBOUND_MAX_ATTACHMENT_BYTES"
+        default=5 * 1024 * 1024, validation_alias="INBOUND_MAX_ATTACHMENT_BYTES"
     )
     inbound_resume_min_confidence: int = Field(
         default=6, validation_alias="INBOUND_RESUME_MIN_CONFIDENCE"
@@ -201,6 +216,17 @@ class Settings(BaseSettings):
     # OpenAI key
     openai_api_key: str | None = Field(default=None, validation_alias="OPENAI_API_KEY")
 
+    # Sentry observability
+    sentry_dsn: str = Field(default="", validation_alias="SENTRY_DSN")
+    sentry_environment: str = Field(default="development", validation_alias="SENTRY_ENVIRONMENT")
+    sentry_release: str | None = Field(default=None, validation_alias="SENTRY_RELEASE")
+    sentry_traces_sample_rate: float = Field(
+        default=0.0, validation_alias="SENTRY_TRACES_SAMPLE_RATE"
+    )
+    sentry_profiles_sample_rate: float = Field(
+        default=0.0, validation_alias="SENTRY_PROFILES_SAMPLE_RATE"
+    )
+
     @property
     def _scheme(self) -> str:
         return "https" if self.is_production else "http"
@@ -244,6 +270,21 @@ class Settings(BaseSettings):
         if value:
             return value
         return "ats-production" if self.is_production else "ats-staging"
+
+    @property
+    def ses_effective_transactional_from_email(self) -> str:
+        """SES platform transactional From (not used for ZeptoMail or reply+ conversation mail)."""
+        t = (self.ses_transactional_from_email or "").strip()
+        if t:
+            return t
+        leg = (self.ses_from_email or "").strip()
+        if leg:
+            return leg
+        return "noreply@smartats.in"
+
+    @property
+    def ses_effective_transactional_from_name(self) -> str | None:
+        return self.ses_transactional_from_name or self.ses_from_name
 
 
 settings = Settings()

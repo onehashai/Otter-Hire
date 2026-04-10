@@ -26,7 +26,7 @@ from app.schemas.users import (
     UserResponse,
 )
 from app.services.email import send_invite_email
-from app.services.media import ensure_avatar_type, read_upload_with_size_check
+from app.services.media import ensure_avatar_type, read_avatar_upload_with_size_check
 from app.services.storage import storage_service
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -127,7 +127,7 @@ async def upload_my_avatar(
     db: AsyncSession = Depends(get_db),
 ):
     ensure_avatar_type(file.content_type)
-    raw = await read_upload_with_size_check(file)
+    raw = await read_avatar_upload_with_size_check(file)
     ext = os.path.splitext(file.filename or "")[1].lower()
     if not ext:
         content_type = (file.content_type or "").lower()

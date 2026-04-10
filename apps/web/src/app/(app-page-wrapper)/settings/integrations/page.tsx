@@ -25,6 +25,7 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@onehash/ui/tooltip";
 import { CheckCircle2, Clock3, Settings, Trash2 } from "lucide-react";
 import { toast } from "@onehash/ui/sonner";
+import { useAuthSession } from "@/app/providers";
 
 function IntegrationAppIcon({ slug, name }: { slug: string; name: string }) {
   const [src, setSrc] = useState("/favicon.ico");
@@ -56,12 +57,15 @@ function IntegrationAppIcon({ slug, name }: { slug: string; name: string }) {
 
 export default function IntegrationsSettingsPage() {
   const searchParams = useSearchParams();
+  const { user } = useAuthSession();
 
   const [apps, setApps] = useState<IntegrationAppDescriptor[]>([]);
   const [loading, setLoading] = useState(true);
   const [manageDialogOpen, setManageDialogOpen] = useState(false);
   const [disconnectDialogOpen, setDisconnectDialogOpen] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
+  const canConfigureIntegrations =
+    user?.membership_role === "owner" || user?.membership_role === "admin";
 
   const loadCatalog = async () => {
     setLoading(true);
@@ -97,12 +101,14 @@ export default function IntegrationsSettingsPage() {
 
   useEffect(() => {
     if (searchParams.get("app") === "email-integration") {
-      setManageDialogOpen(true);
+      if (canConfigureIntegrations) {
+        setManageDialogOpen(true);
+      }
     }
     if (searchParams.get("linkedin") === "success") {
       toast.success("LinkedIn connected successfully!");
     }
-  }, [searchParams]);
+  }, [searchParams, canConfigureIntegrations]);
 
   return (
     <TooltipProvider>
@@ -146,41 +152,112 @@ export default function IntegrationsSettingsPage() {
                     {app.installed ? (
                       <>
                         <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-8 w-8 p-0"
-                              onClick={() => setManageDialogOpen(true)}
-                            >
-                              <Settings className="h-4 w-4" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>Manage</TooltipContent>
+                          {canConfigureIntegrations ? (
+                            <>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-8 w-8 p-0"
+                                  onClick={() => setManageDialogOpen(true)}
+                                >
+                                  <Settings className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Manage</TooltipContent>
+                            </>
+                          ) : (
+                            <>
+                              <TooltipTrigger asChild>
+                                <span className="inline-flex">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-8 w-8 p-0"
+                                    disabled
+                                  >
+                                    <Settings className="h-4 w-4" />
+                                  </Button>
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                Permission denied! Please contact admin.
+                              </TooltipContent>
+                            </>
+                          )}
                         </Tooltip>
                         <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
-                              onClick={() => setDisconnectDialogOpen(true)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>Disconnect</TooltipContent>
+                          {canConfigureIntegrations ? (
+                            <>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                  onClick={() => setDisconnectDialogOpen(true)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Disconnect</TooltipContent>
+                            </>
+                          ) : (
+                            <>
+                              <TooltipTrigger asChild>
+                                <span className="inline-flex">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                    disabled
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                Permission denied! Please contact admin.
+                              </TooltipContent>
+                            </>
+                          )}
                         </Tooltip>
                       </>
                     ) : (
-                      <Button
-                        size="sm"
-                        variant="default"
-                        className="text-xs h-8 w-full"
-                        onClick={() => setManageDialogOpen(true)}
-                      >
-                        Connect
-                      </Button>
+                      <Tooltip>
+                        {canConfigureIntegrations ? (
+                          <>
+                            <TooltipTrigger asChild>
+                              <Button
+                                size="sm"
+                                variant="default"
+                                className="text-xs h-8 w-full"
+                                onClick={() => setManageDialogOpen(true)}
+                              >
+                                Connect
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Connect</TooltipContent>
+                          </>
+                        ) : (
+                          <>
+                            <TooltipTrigger asChild>
+                              <span className="inline-flex w-full">
+                                <Button
+                                  size="sm"
+                                  variant="default"
+                                  className="text-xs h-8 w-full"
+                                  disabled
+                                >
+                                  Connect
+                                </Button>
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              Permission denied! Please contact admin.
+                            </TooltipContent>
+                          </>
+                        )}
+                      </Tooltip>
                     )}
                   </div>
                 ) : app.slug === "linkedin" ? (

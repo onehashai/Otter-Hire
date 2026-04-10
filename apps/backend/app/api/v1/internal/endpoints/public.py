@@ -1097,8 +1097,13 @@ async def upload_public_job_application_file(
 
     safe_name = (file.filename or "attachment.bin").strip() or "attachment.bin"
     content = await file.read()
-    if len(content) > 10 * 1024 * 1024:
-        raise HTTPException(status_code=422, detail="File size must be <= 10MB")
+    max_bytes = settings.public_job_apply_max_upload_bytes
+    if len(content) > max_bytes:
+        mb = max_bytes / (1024 * 1024)
+        raise HTTPException(
+            status_code=422,
+            detail=f"File size must be <= {mb:g} MB",
+        )
 
     object_key = (
         f"orgs/{org_uuid}/job_applications/{job_uuid}/uploads/"

@@ -1,3 +1,4 @@
+import sentry_sdk
 from fastapi import HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -17,6 +18,15 @@ async def http_exception_handler(request: Request, exc: HTTPException):
         code = "HTTP_ERROR"
         message = str(detail) if detail else "Request failed"
         details = None
+
+    # Capture server-side HTTP errors (5xx) to Sentry.
+    # 4xx errors are expected application behavior and are not captured.
+    if exc.status_code >= 500:
+        with sentry_sdk.new_scope() as scope:
+            scope.set_tag("error_code", code)
+            scope.set_tag("http_status", exc.status_code)
+            sentry_sdk.capture_exception(exc)
+
     payload = make_error_payload(
         status_code=exc.status_code,
         code=code,
@@ -48,6 +58,11 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 async def generic_exception_handler(request: Request, exc: Exception):
     request_id = str(getattr(request.state, "request_id", "") or "")
     logger.error(f"Unhandled exception request_id={request_id}: {exc}", exc_info=True)
+
+    # FastAPI's custom exception handlers intercept exceptions before the
+    # Sentry ASGI middleware sees them, so we must capture manually here.
+    sentry_sdk.capture_exception(exc)
+
     payload = make_error_payload(
         status_code=500,
         code="INTERNAL_SERVER_ERROR",

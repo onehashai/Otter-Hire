@@ -16,6 +16,8 @@ import { MultiSelect } from "@onehash/ui/select";
 import { useSetPageMetadata } from "@/hooks/useSetPageMetadata";
 import { useTranslation } from "react-i18next";
 import { getAutomations } from "@/api/automations";
+import { ErrorCard } from "@onehash/ui/card";
+import { classifyError } from "@/api/client/client";
 
 const statusOptions = allStatuses.map((s) => ({
   value: s,
@@ -36,7 +38,7 @@ export default function AutomationsPage() {
   const [triggerFilter, setTriggerFilter] = useState<TriggerType[]>([]);
   const [automations, setAutomations] = useState<Automation[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ message: string; forbidden: boolean } | null>(null);
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [createInitialTemplate, setCreateInitialTemplate] = useState<
@@ -94,8 +96,8 @@ export default function AutomationsPage() {
         setError(null);
       } catch (err) {
         if (!cancelled) {
-          console.error(err);
-          setError("Failed to load automations.");
+          const classified = classifyError(err);
+          setError({ message: classified.message, forbidden: classified.forbidden });
         }
       } finally {
         if (!cancelled) {
@@ -188,7 +190,18 @@ export default function AutomationsPage() {
       }}
     >
       {error ? (
-        <p className="text-sm text-destructive">{error}</p>
+        error.forbidden ? (
+          <ErrorCard
+            icon="ShieldOff"
+            title={t("access_denied", "Access Denied")}
+            description={t(
+              "no_permission",
+              "You don't have permission to view this page. Contact your administrator if you think this is a mistake.",
+            )}
+          />
+        ) : (
+          <p className="text-sm text-destructive">{error.message}</p>
+        )
       ) : (
         <AutomationsList
           filtered={filtered}

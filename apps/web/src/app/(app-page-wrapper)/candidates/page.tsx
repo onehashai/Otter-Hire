@@ -63,6 +63,7 @@ import { Icon } from "@onehash/ui/icon";
 import { toast } from "@onehash/ui/sonner";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { getMyPreferences, updateMyPreferences } from "@/api/users";
+import { classifyError } from "@/api/client/client";
 
 const PAGE_SIZE = 25;
 const ASSIGNMENT_ALL = "all";
@@ -103,7 +104,7 @@ export default function CandidatesPage() {
   const [preferencesLoaded, setPreferencesLoaded] = useState(false);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ message: string; forbidden: boolean } | null>(null);
   const lastSavedColumnsRef = useRef<string>(
     JSON.stringify(normalizeVisibleCandidateColumns(DEFAULT_VISIBLE_CANDIDATE_COLUMNS)),
   );
@@ -384,9 +385,9 @@ export default function CandidatesPage() {
       setItems(res.items);
       setTotal(res.total);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to load candidates";
-      setError(message);
-      toast.error(message);
+      const classified = classifyError(err);
+      setError({ message: classified.message, forbidden: classified.forbidden });
+      if (!classified.forbidden) toast.error(classified.message);
     } finally {
       setLoading(false);
     }
@@ -590,8 +591,21 @@ export default function CandidatesPage() {
     });
   };
 
+  const openJobs = jobs.filter((j) => j.status === "open");
+  const allAssigned =
+    openJobs.length === 0 ||
+    selectedIds.size === 0 ||
+    (() => {
+      const openJobIds = new Set(openJobs.map((j) => j.id));
+      const selectedCandidates = items.filter((c) => selectedIds.has(c.id));
+      return selectedCandidates.every((c) =>
+        [...openJobIds].every((jid) =>
+          c.assignments.some((a) => a.job_id === jid && a.assignment_status === "active"),
+        ),
+      );
+    })();
   const openAssignDialog = () => {
-    setAssignJobId(jobs[0]?.id ?? "");
+    setAssignJobId(openJobs[0]?.id ?? "");
     setAssignOpen(true);
   };
 
@@ -654,11 +668,20 @@ export default function CandidatesPage() {
   if (error && items.length === 0 && !loading) {
     return (
       <ErrorCard
-        icon="CircleAlert"
-        title={t("error")}
-        description={error}
-        actionLabel={t("retry")}
-        onAction={() => void refresh()}
+        icon={error.forbidden ? "ShieldOff" : "CircleAlert"}
+        title={error.forbidden ? t("access_denied", "Access Denied") : t("error")}
+        description={
+          error.forbidden
+            ? t(
+                "no_permission",
+                "You don't have permission to view this page. Contact your administrator if you think this is a mistake.",
+              )
+            : error.message
+        }
+        {...(!error.forbidden && {
+          actionLabel: t("retry"),
+          onAction: () => void refresh(),
+        })}
       />
     );
   }
@@ -792,7 +815,12 @@ export default function CandidatesPage() {
                 >
                   Delete Candidates
                 </Button>
-                <Button size="sm" className="h-8 text-xs" onClick={openAssignDialog}>
+                <Button
+                  size="sm"
+                  className="h-8 text-xs"
+                  onClick={openAssignDialog}
+                  disabled={allAssigned}
+                >
                   Assign Job
                 </Button>
               </div>
@@ -809,7 +837,7 @@ export default function CandidatesPage() {
                 label={t("jobs_title")}
                 value={assignJobId}
                 onValueChange={setAssignJobId}
-                options={jobs.map((j) => ({ value: j.id, label: j.title }))}
+                options={openJobs.map((j) => ({ value: j.id, label: j.title }))}
               />
               <DialogFooter>
                 <Button
@@ -865,7 +893,23 @@ export default function CandidatesPage() {
             <DialogDescription>Upload CSV with required columns: name,email</DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
-            <p className="text-xs text-muted-foreground">Optional columns: phone,source</p>
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-muted-foreground">Optional columns: phone</p>
+              <button
+                type="button"
+                className="text-xs text-primary underline underline-offset-2 hover:opacity-80"
+                onClick={() => {
+                  const csv =
+                    "name,email,phone\nJohn Doe,john@example.com,+1234567890\nJane Smith,jane@example.com,";
+                  const a = document.createElement("a");
+                  a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+                  a.download = "candidates_sample.csv";
+                  a.click();
+                }}
+              >
+                Download Sample CSV
+              </button>
+            </div>
             <input
               type="file"
               accept=".csv,text/csv"

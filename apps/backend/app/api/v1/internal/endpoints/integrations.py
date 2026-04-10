@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.permissions import require_permission
 from app.db.session import get_db
+from app.deps.auth import require_active_user
 from app.integrations.app_store.email_integration import outbound_service
 from app.integrations.app_store.registry import all_integrations, get_integration_by_slug
 from app.models.user import User
@@ -26,7 +27,7 @@ def _owner_ctx(current_user: User) -> IntegrationOwnerContext:
 
 @router.get("/apps", response_model=IntegrationAppsResponse)
 async def list_integration_apps(
-    current_user: User = Depends(require_permission("org:inbox:manage")),
+    current_user: User = Depends(require_active_user),
     db: AsyncSession = Depends(get_db),
 ):
     items = []
@@ -37,7 +38,7 @@ async def list_integration_apps(
 
 @router.get("/installed", response_model=IntegrationInstalledAppsResponse)
 async def list_installed_integration_apps(
-    current_user: User = Depends(require_permission("org:inbox:manage")),
+    current_user: User = Depends(require_active_user),
     db: AsyncSession = Depends(get_db),
 ):
     items = []

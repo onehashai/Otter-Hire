@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
+import * as Sentry from "@sentry/nextjs";
 import { PLATFORM_NAME } from "@/lib/constants";
 import { Providers } from "./providers";
 import { SonnerToaster } from "@onehash/ui/sonner";
 import { headers } from "next/headers";
 import "../styles/globals.css";
 
-export const metadata: Metadata = {
+const baseMetadata: Metadata = {
   title: PLATFORM_NAME,
   description: "AI-powered, open source modern ATS to recruit top talent faster and smarter.",
   icons: {
@@ -40,6 +41,16 @@ export const metadata: Metadata = {
     images: ["/social_media/og-image.png"],
   },
 };
+
+export function generateMetadata(): Metadata {
+  return {
+    ...baseMetadata,
+    other: {
+      ...(baseMetadata.other ?? {}),
+      ...Sentry.getTraceData(),
+    },
+  };
+}
 
 function isJobsSubdomain(host: string): boolean {
   const jobsSubdomain = process.env.NEXT_PUBLIC_JOBS_SUBDOMAIN || "jobs";

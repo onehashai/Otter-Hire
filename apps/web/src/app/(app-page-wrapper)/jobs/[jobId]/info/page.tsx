@@ -188,6 +188,44 @@ export default function JobInfoPage() {
           ))}
         </div>
       </SelectField>
+      {needsLocation ? (
+        <div className="space-y-1.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <SearchableSelectField
+              label={t("country")}
+              value={country}
+              onValueChange={handleCountryChange}
+              placeholder={t("select")}
+              options={filteredCountries.map((c) => ({ value: c.isoCode, label: c.name }))}
+              searchPlaceholder={t("search_country")}
+              searchValue={countrySearch}
+              onSearchChange={setCountrySearch}
+              noResultsText={t("no_results")}
+              showAsterisk
+            />
+            <SearchableSelectField
+              label={t("city")}
+              value={city}
+              onValueChange={setCity}
+              placeholder={country ? t("select") : t("select_country_first")}
+              disabled={!country}
+              options={filteredCities.map((c) => ({
+                value: `${c.name}${CITY_VALUE_SEP}${c.stateCode}`,
+                label: c.stateCode ? `${c.name} (${c.stateCode})` : c.name,
+              }))}
+              getDisplayValue={getCityDisplayName}
+              searchPlaceholder={t("search_city")}
+              searchValue={citySearch}
+              onSearchChange={setCitySearch}
+              noResultsText={t("no_results")}
+              typeToNarrowText={t("type_to_narrow")}
+              maxOptions={200}
+              showAsterisk
+            />
+          </div>
+          {locationHint ? <p className="text-xs text-destructive">{locationHint}</p> : null}
+        </div>
+      ) : null}
       <Separator />
       <SelectField label={t("salary")}>
         <div className="flex gap-1.5">
@@ -283,44 +321,6 @@ export default function JobInfoPage() {
           )}
         </>
       )}
-      {needsLocation ? (
-        <div className="space-y-1.5">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <SearchableSelectField
-              label={t("country")}
-              value={country}
-              onValueChange={handleCountryChange}
-              placeholder={t("select")}
-              options={filteredCountries.map((c) => ({ value: c.isoCode, label: c.name }))}
-              searchPlaceholder={t("search_country")}
-              searchValue={countrySearch}
-              onSearchChange={setCountrySearch}
-              noResultsText={t("no_results")}
-              showAsterisk
-            />
-            <SearchableSelectField
-              label={t("city")}
-              value={city}
-              onValueChange={setCity}
-              placeholder={country ? t("select") : t("select_country_first")}
-              disabled={!country}
-              options={filteredCities.map((c) => ({
-                value: `${c.name}${CITY_VALUE_SEP}${c.stateCode}`,
-                label: c.stateCode ? `${c.name} (${c.stateCode})` : c.name,
-              }))}
-              getDisplayValue={getCityDisplayName}
-              searchPlaceholder={t("search_city")}
-              searchValue={citySearch}
-              onSearchChange={setCitySearch}
-              noResultsText={t("no_results")}
-              typeToNarrowText={t("type_to_narrow")}
-              maxOptions={200}
-              showAsterisk
-            />
-          </div>
-          {locationHint ? <p className="text-xs text-destructive">{locationHint}</p> : null}
-        </div>
-      ) : null}
     </div>
   );
 }

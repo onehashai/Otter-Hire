@@ -14,4 +14,6 @@ WORKDIR /app/apps/web
 
 EXPOSE 3000
 
+RUN npm i -D @rollup/rollup-linux-arm64-musl
+
 CMD ["npm", "run", "dev", "--", "--hostname", "0.0.0.0", "--port", "3000"]

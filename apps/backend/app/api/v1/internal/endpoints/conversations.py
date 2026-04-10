@@ -133,7 +133,7 @@ async def _append_outbound_message(
     inbox = inbox_result.scalar_one_or_none()
     reply_to = _reply_address_for_conversation(
         conv.id,
-        fixed_domain=settings.inbound_email_domain,
+        fixed_domain=settings.SES_MAIL_DOMAIN,
         inbox_address=(inbox.config or {}).get("inbound_address") if inbox else None,
     )
     org_result = await db.execute(
@@ -352,7 +352,7 @@ async def create_conversation(
     inbox = inbox_result.scalar_one_or_none()
     reply_to = _reply_address_for_conversation(
         conv.id,
-        fixed_domain=settings.inbound_email_domain,
+        fixed_domain=settings.SES_MAIL_DOMAIN,
         inbox_address=(inbox.config or {}).get("inbound_address") if inbox else None,
     )
     org_result = await db.execute(

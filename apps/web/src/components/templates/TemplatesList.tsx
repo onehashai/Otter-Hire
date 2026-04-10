@@ -24,6 +24,7 @@ import {
 } from "@onehash/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { getTemplates, createTemplate, deleteTemplate as deleteTemplateApi } from "@/api/templates";
+import { classifyError } from "@/api/client/client";
 import { TemplatePreviewModal } from "./components/TemplatePreviewModal";
 
 export interface Template {
@@ -60,6 +61,7 @@ export default function TemplatesList({ searchValue, onSearchChange }: Templates
   const { toast } = useToast();
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<{ message: string; forbidden: boolean } | null>(null);
   const [internalSearch, setInternalSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [previewTemplate, setPreviewTemplate] = useState<Template | null>(null);
@@ -70,18 +72,20 @@ export default function TemplatesList({ searchValue, onSearchChange }: Templates
 
   useEffect(() => {
     let cancelled = false;
-    getTemplates()
-      .then((list) => {
+    (async () => {
+      try {
+        const list = await getTemplates();
+        if (!cancelled) setTemplates(list.map(mapApiToTemplate));
+      } catch (err) {
         if (!cancelled) {
-          setTemplates(list.map(mapApiToTemplate));
+          const classified = classifyError(err);
+          setError({ message: classified.message, forbidden: classified.forbidden });
+          if (!classified.forbidden) toast({ title: classified.message, variant: "destructive" });
         }
-      })
-      .catch(() => {
-        if (!cancelled) toast({ title: "Failed to load templates", variant: "destructive" });
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setLoading(false);
-      });
+      }
+    })();
     return () => {
       cancelled = true;
     };
@@ -157,6 +161,24 @@ export default function TemplatesList({ searchValue, onSearchChange }: Templates
     return (
       <div className="flex items-center justify-center py-20 text-muted-foreground text-sm">
         Loading templates…
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-center">
+        <div className="mb-4 rounded-full bg-destructive/10 p-3">
+          <FileText className="h-6 w-6 text-destructive" />
+        </div>
+        <h3 className="mb-1 text-lg font-semibold">
+          {error.forbidden ? "Access Denied" : "Something went wrong"}
+        </h3>
+        <p className="max-w-md text-sm text-muted-foreground">
+          {error.forbidden
+            ? "You don't have permission to view templates. Contact your administrator if you think this is a mistake."
+            : error.message}
+        </p>
       </div>
     );
   }

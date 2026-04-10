@@ -1,10 +1,16 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { refresh401MeansSessionExpired } from "@/lib/auth-refresh-codes";
+import { shouldOmitLoginRedirect } from "@/lib/login-redirect";
 import { isCareersUuidSegment, parseLegacyCareersOrgSlug } from "@/lib/public-careers-org";
 
 const AUTH_ROUTES = new Set(["/login", "/signup"]);
 const LIFECYCLE_ROUTES = new Set(["/verify", "/onboarding"]);
 const PUBLIC_ROUTES = new Set(["/health", "/favicon.ico"]);
+
+function getApiBaseUrl(): string {
+  return (process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000").replace(/\/$/, "");
+}
 
 function getExpectedAppHost(): string | null {
   const subdomain = process.env.NEXT_PUBLIC_APP_SUBDOMAIN;
@@ -61,7 +67,52 @@ function getAppSubdomainUrl(pathname: string, rootHost: string): string {
   return `${protocol}://${appSubdomain}.${rootHost}${pathname}`;
 }
 
-export function middleware(request: NextRequest) {
+function appendSetCookieHeaders(target: NextResponse, sourceHeaders: Headers): void {
+  const maybeHeaders = sourceHeaders as Headers & {
+    getSetCookie?: () => string[];
+  };
+
+  if (typeof maybeHeaders.getSetCookie === "function") {
+    const cookies = maybeHeaders.getSetCookie();
+    for (const cookie of cookies) {
+      if (cookie) {
+        target.headers.append("set-cookie", cookie);
+      }
+    }
+    return;
+  }
+
+  const raw = sourceHeaders.get("set-cookie");
+  if (raw) {
+    target.headers.append("set-cookie", raw);
+  }
+}
+
+function buildLoginRedirect(request: NextRequest, sessionExpired: boolean): NextResponse {
+  const loginUrl = new URL("/login", request.url);
+  const pathname = request.nextUrl.pathname;
+  const search = request.nextUrl.search;
+  if (!shouldOmitLoginRedirect(pathname, search)) {
+    loginUrl.searchParams.set("redirect", `${pathname}${search}`);
+  }
+  if (sessionExpired) {
+    loginUrl.searchParams.set("session_expired", "true");
+  }
+  return NextResponse.redirect(loginUrl);
+}
+
+async function refreshUnauthorizedMeansSessionExpired(res: Response): Promise<boolean> {
+  if (res.status !== 401) return false;
+  try {
+    const data = (await res.json()) as { code?: string };
+    const code = typeof data.code === "string" ? data.code : undefined;
+    return refresh401MeansSessionExpired(code);
+  } catch {
+    return false;
+  }
+}
+
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const currentHost = request.headers.get("host") || "";
 
@@ -119,7 +170,31 @@ export function middleware(request: NextRequest) {
   }
 
   if (!hasAccessToken) {
-    return NextResponse.redirect(new URL("/login", request.url));
+    try {
+      const refreshRes = await fetch(`${getApiBaseUrl()}/v1/internal/auth/refresh`, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          cookie: request.headers.get("cookie") || "",
+        },
+        cache: "no-store",
+      });
+
+      if (refreshRes.ok) {
+        const response = NextResponse.next();
+        appendSetCookieHeaders(response, refreshRes.headers);
+        return response;
+      }
+
+      if (refreshRes.status === 401) {
+        const showExpired = await refreshUnauthorizedMeansSessionExpired(refreshRes);
+        return buildLoginRedirect(request, showExpired);
+      }
+    } catch {
+      // Network failure: plain login (not "session expired").
+    }
+
+    return buildLoginRedirect(request, false);
   }
 
   return NextResponse.next();

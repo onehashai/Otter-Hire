@@ -29,7 +29,7 @@ class ListLatestRawKeysTests(unittest.TestCase):
 
         latest, pages_scanned, objects_seen, newest_seen = _list_latest_raw_keys(
             s3_client=s3_client,
-            bucket="onehash-ats-test",
+            bucket="otter-hire",
             prefix="ats-staging/ses-inbound/raw/",
             limit=2,
         )

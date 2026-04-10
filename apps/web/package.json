@@ -75,7 +75,6 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@rollup/rollup-linux-arm64-musl": "^4.60.1",
     "@tailwindcss/typography": "^0.5.16",
     "@types/node": "^22.16.5",
     "@types/react": "^19.0.0",

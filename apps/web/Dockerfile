@@ -8,12 +8,15 @@ COPY packages/ui/package.json packages/ui/package-lock.json* ./packages/ui/
 RUN cd packages/ui && npm install
 
 COPY apps/web/package.json apps/web/package-lock.json* ./apps/web/
-RUN cd apps/web && npm install
+RUN cd apps/web && npm install && \
+    ARCH=$(uname -m) && \
+    if [ "$ARCH" = "aarch64" ]; then npm i -D @rollup/rollup-linux-arm64-musl; \
+    elif [ "$ARCH" = "x86_64" ]; then npm i -D @rollup/rollup-linux-x64-musl; \
+    else echo "Unsupported arch: $ARCH"; exit 1; \
+    fi
 
 WORKDIR /app/apps/web
 
 EXPOSE 3000
-
-RUN npm i -D @rollup/rollup-linux-arm64-musl
 
 CMD ["npm", "run", "dev", "--", "--hostname", "0.0.0.0", "--port", "3000"]

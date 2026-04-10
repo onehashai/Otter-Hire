@@ -11,6 +11,15 @@ RUN cd packages/ui && npm ci
 COPY apps/web/package.json apps/web/package-lock.json* ./apps/web/
 RUN cd apps/web && npm ci
 
+# Alpine (musl): Rollup optional deps don’t always resolve; install the native binary for
+# this image’s CPU (arm64 vs amd64). Keeps package.json lockfile CI-friendly (no pinned @rollup/*).
+RUN cd apps/web && \
+    ARCH=$(uname -m) && \
+    if [ "$ARCH" = "aarch64" ]; then npm i -D @rollup/rollup-linux-arm64-musl; \
+    elif [ "$ARCH" = "x86_64" ]; then npm i -D @rollup/rollup-linux-x64-musl; \
+    else echo "Unsupported arch: $ARCH"; exit 1; \
+    fi
+
 # ── Stage 2: build ─────────────────────────────────────────────────────────────
 FROM node:20-alpine AS builder
 

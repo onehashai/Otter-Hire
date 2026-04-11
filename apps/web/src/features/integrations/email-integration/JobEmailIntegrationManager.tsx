@@ -102,7 +102,7 @@ export function JobEmailIntegrationManager({ jobId, onChanged }: JobEmailIntegra
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [verifyDialogOpen, verificationStatus, inboxStatus]);
 
-  const forwardingDomain = process.env.NEXT_PUBLIC_INBOUND_EMAIL_DOMAIN || "inbound.smartats.in";
+  const forwardingDomain = process.env.NEXT_PUBLIC_SES_MAIL_DOMAIN || "applications.smartats.in";
   const forwardingAddress = `job-${jobId.replace(/-/g, "")}@${forwardingDomain}`;
   const canSaveInbox = !inboxSaving && !inboxLoading && isValidEmail(inboxAddress);
   const isVerificationReady = verificationStatus === "action_required";

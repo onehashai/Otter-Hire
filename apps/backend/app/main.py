@@ -1,5 +1,10 @@
 import asyncio
 
+from app.core.logging import logger
+
+import sentry  # noqa: F401
+
+import sentry_sdk
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,7 +17,6 @@ from app.admin import setup_admin
 from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.errors import make_error_payload
-from app.core.logging import logger, setup_logging
 from app.integrations.app_store.email_integration.ses_bridge import run_ses_raw_bridge_loop
 from app.middleware.errors import (
     generic_exception_handler,
@@ -21,8 +25,6 @@ from app.middleware.errors import (
 )
 from app.schemas.common import HealthResponse
 from app.utils.uuid import uuid7
-
-setup_logging()
 
 limiter = Limiter(key_func=get_remote_address)
 
@@ -50,6 +52,9 @@ app.include_router(api_router)
 @app.middleware("http")
 async def attach_request_id(request: Request, call_next):
     request.state.request_id = str(uuid7())
+    # Attach request_id to the current Sentry scope so every event/span on
+    # this request carries it — enables correlation with application logs.
+    sentry_sdk.set_tag("request_id", request.state.request_id)
     response = await call_next(request)
     response.headers["X-Request-ID"] = request.state.request_id
     return response

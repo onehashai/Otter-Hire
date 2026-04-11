@@ -20,7 +20,7 @@ from app.schemas.organization import (
 )
 from app.services.default_categories import create_default_job_categories_for_org
 from app.services.default_email_templates import create_default_templates_for_org
-from app.services.media import ensure_avatar_type, read_upload_with_size_check
+from app.services.media import ensure_avatar_type, read_avatar_upload_with_size_check
 from app.services.storage import storage_service
 from app.utils.uuid import uuid7
 
@@ -85,7 +85,7 @@ async def upload_my_organization_avatar(
     db: AsyncSession = Depends(get_db),
 ):
     ensure_avatar_type(file.content_type)
-    raw = await read_upload_with_size_check(file)
+    raw = await read_avatar_upload_with_size_check(file)
     ext = os.path.splitext(file.filename or "")[1].lower()
     if not ext:
         content_type = (file.content_type or "").lower()

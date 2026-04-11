@@ -16,10 +16,26 @@ ALLOWED_AVATAR_TYPES = {
 ALLOWED_PDF_TYPES = {"application/pdf"}
 
 
-async def read_upload_with_size_check(file: UploadFile) -> bytes:
+def _size_exceeded_detail(max_bytes: int) -> str:
+    mb = max_bytes / (1024 * 1024)
+    return f"File size must be <= {mb:g} MB"
+
+
+async def read_avatar_upload_with_size_check(file: UploadFile) -> bytes:
+    """User profile and organization logo uploads (`/me/avatar`)."""
     content = await file.read()
-    if len(content) > settings.max_upload_bytes:
-        raise HTTPException(status_code=422, detail="File size must be <= 1MB")
+    max_b = settings.avatar_max_upload_bytes
+    if len(content) > max_b:
+        raise HTTPException(status_code=422, detail=_size_exceeded_detail(max_b))
+    return content
+
+
+async def read_upload_with_size_check(file: UploadFile) -> bytes:
+    """Candidate document PDF upload (`/candidates/{id}/documents/upload`) — uses MAX_UPLOAD_BYTES."""
+    content = await file.read()
+    max_b = settings.max_upload_bytes
+    if len(content) > max_b:
+        raise HTTPException(status_code=422, detail=_size_exceeded_detail(max_b))
     return content
 
 

@@ -11,6 +11,15 @@ RUN cd packages/ui && npm ci
 COPY apps/web/package.json apps/web/package-lock.json* ./apps/web/
 RUN cd apps/web && npm ci
 
+# Alpine (musl): Rollup optional deps don’t always resolve; install the native binary for
+# this image’s CPU (arm64 vs amd64). Keeps package.json lockfile CI-friendly (no pinned @rollup/*).
+RUN cd apps/web && \
+    ARCH=$(uname -m) && \
+    if [ "$ARCH" = "aarch64" ]; then npm i -D @rollup/rollup-linux-arm64-musl; \
+    elif [ "$ARCH" = "x86_64" ]; then npm i -D @rollup/rollup-linux-x64-musl; \
+    else echo "Unsupported arch: $ARCH"; exit 1; \
+    fi
+
 # ── Stage 2: build ─────────────────────────────────────────────────────────────
 FROM node:20-alpine AS builder
 
@@ -32,8 +41,9 @@ ARG NEXT_PUBLIC_APP_SUBDOMAIN=app
 ARG NEXT_PUBLIC_JOBS_SUBDOMAIN=jobs
 ARG NEXT_PUBLIC_APP_ROOT_HOST
 ARG NEXT_PUBLIC_API_BASE_URL
-ARG NEXT_PUBLIC_INBOUND_EMAIL_DOMAIN
+ARG NEXT_PUBLIC_SES_MAIL_DOMAIN
 ARG NEXT_PUBLIC_TEMPORAL_UI_URL
+ARG NEXT_PUBLIC_SENTRY_DSN
 
 # Environment variables baked into frontend + rewrites
 ENV NEXT_PUBLIC_PLATFORM_NAME=$NEXT_PUBLIC_PLATFORM_NAME
@@ -41,8 +51,9 @@ ENV NEXT_PUBLIC_APP_SUBDOMAIN=$NEXT_PUBLIC_APP_SUBDOMAIN
 ENV NEXT_PUBLIC_JOBS_SUBDOMAIN=$NEXT_PUBLIC_JOBS_SUBDOMAIN
 ENV NEXT_PUBLIC_APP_ROOT_HOST=$NEXT_PUBLIC_APP_ROOT_HOST
 ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
-ENV NEXT_PUBLIC_INBOUND_EMAIL_DOMAIN=$NEXT_PUBLIC_INBOUND_EMAIL_DOMAIN
+ENV NEXT_PUBLIC_SES_MAIL_DOMAIN=$NEXT_PUBLIC_SES_MAIL_DOMAIN
 ENV NEXT_PUBLIC_TEMPORAL_UI_URL=$NEXT_PUBLIC_TEMPORAL_UI_URL
+ENV NEXT_PUBLIC_SENTRY_DSN=$NEXT_PUBLIC_SENTRY_DSN
 
 # Standalone build
 ENV NEXT_BUILD_STANDALONE=true

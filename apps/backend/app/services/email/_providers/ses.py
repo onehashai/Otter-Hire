@@ -9,10 +9,8 @@ from app.services.email._base import ConversationSendResult, EmailProvider
 
 class SesProvider(EmailProvider):
     """
-    Platform-level SES sender for transactional email (verification, invites, mentions).
-
-    Sends from SES_FROM_EMAIL (default: noreply@inbound.smartats.in).
-    Delegates to ses_outbound.send_email_via_ses — that module is not modified.
+    Platform-level SES: transactional mail uses SES_TRANSACTIONAL_FROM_* (default noreply@smartats.in).
+    Conversation mail uses send_conversation(from_email=...) — typically reply+...@SES_MAIL_DOMAIN.
     """
 
     @property
@@ -24,7 +22,7 @@ class SesProvider(EmailProvider):
             (settings.aws_access_key_id or "").strip()
             and (settings.aws_secret_access_key or "").strip()
             and (settings.aws_s3_region or "").strip()
-            and (settings.ses_from_email or "").strip()
+            and (settings.ses_effective_transactional_from_email or "").strip()
         )
 
     async def send(
@@ -39,8 +37,8 @@ class SesProvider(EmailProvider):
 
         await asyncio.to_thread(
             send_email_via_ses,
-            from_email=settings.ses_from_email,
-            from_name=settings.ses_from_name or settings.platform_name,
+            from_email=settings.ses_effective_transactional_from_email,
+            from_name=settings.ses_effective_transactional_from_name or settings.platform_name,
             to_email=to_email,
             subject=subject,
             text_body=text_body,

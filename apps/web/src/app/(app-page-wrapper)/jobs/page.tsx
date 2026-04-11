@@ -16,6 +16,7 @@ import {
   jobStatuses,
 } from "./[jobId]/constants";
 import { getJobs, createJob, type JobListItemResponse } from "@/api";
+import { classifyError } from "@/api/client/client";
 import { toast } from "@onehash/ui/sonner";
 import { useAuthSession } from "@/app/providers";
 import { getJobsBaseUrl } from "@/lib/host";
@@ -53,7 +54,7 @@ export default function JobsPage() {
 
   const [jobs, setJobs] = useState<JobListItemResponse[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ message: string; forbidden: boolean } | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [categoryFilter, setCategoryFilter] = useState<string[]>([]);
@@ -79,7 +80,10 @@ export default function JobsPage() {
       const data = await getJobs();
       if (!signal?.aborted) setJobs(data);
     } catch (err) {
-      if (!signal?.aborted) setError(err instanceof Error ? err.message : "Failed to load jobs");
+      if (!signal?.aborted) {
+        const classified = classifyError(err);
+        setError({ message: classified.message, forbidden: classified.forbidden });
+      }
     } finally {
       if (!signal?.aborted) setLoading(false);
     }
@@ -260,14 +264,23 @@ export default function JobsPage() {
   if (error) {
     return (
       <ErrorCard
-        icon="CircleAlert"
-        title={t("error")}
-        description={error}
-        actionLabel={t("retry")}
-        onAction={() => {
-          setLoading(true);
-          fetchJobs();
-        }}
+        icon={error.forbidden ? "ShieldOff" : "CircleAlert"}
+        title={error.forbidden ? t("access_denied", "Access Denied") : t("error")}
+        description={
+          error.forbidden
+            ? t(
+                "no_permission",
+                "You don't have permission to view this page. Contact your administrator if you think this is a mistake.",
+              )
+            : error.message
+        }
+        {...(!error.forbidden && {
+          actionLabel: t("retry"),
+          onAction: () => {
+            setLoading(true);
+            fetchJobs();
+          },
+        })}
       />
     );
   }
@@ -276,17 +289,25 @@ export default function JobsPage() {
     return <JobsListSkeleton count={6} />;
   }
 
+  const canCreateJob = user?.membership_role
+    ? !["hiring_manager", "interviewer", "employee"].includes(user.membership_role)
+    : false;
+
   if (jobs.length === 0) {
     return (
       <>
         <EmptyCard
           icon="Briefcase"
           title={t("jobs_title")}
-          description={t("jobs_subtitle")}
-          actionLabel={t("create")}
-          onAction={() => setCreateOpen(true)}
+          description={
+            canCreateJob ? t("jobs_subtitle") : t("no_jobs_assigned", "No jobs assigned to you yet")
+          }
+          {...(canCreateJob && {
+            actionLabel: t("create"),
+            onAction: () => setCreateOpen(true),
+          })}
         />
-        <CreateJobModal open={createOpen} onOpenChange={setCreateOpen} />
+        {canCreateJob && <CreateJobModal open={createOpen} onOpenChange={setCreateOpen} />}
       </>
     );
   }
@@ -295,9 +316,11 @@ export default function JobsPage() {
     <MainPagesLayout
       searchValue={search}
       onSearchChange={setSearch}
-      actionLabel={t("create")}
-      actionIcon="Plus"
-      onAction={() => setCreateOpen(true)}
+      {...(canCreateJob && {
+        actionLabel: t("create"),
+        actionIcon: "Plus",
+        onAction: () => setCreateOpen(true),
+      })}
       secondaryActionLabel="Job Portal"
       secondaryActionIcon="Link"
       onSecondaryAction={openJobPortal}

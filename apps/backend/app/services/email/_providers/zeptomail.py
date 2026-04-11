@@ -69,7 +69,7 @@ class ZeptoMailProvider(EmailProvider):
     ) -> ConversationSendResult:
         # Generate an RFC 5322 Message-ID using the reply+ routing pattern so
         # inbound replies land back in the correct conversation.
-        domain = (settings.inbound_email_domain or "inbound.smartats.in").strip()
+        domain = (settings.SES_MAIL_DOMAIN or "applications.smartats.in").strip()
         if message_id_tag:
             generated_mid = f"reply+{message_id_tag}@{domain}"
         else:

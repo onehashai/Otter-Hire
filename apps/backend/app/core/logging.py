@@ -14,3 +14,7 @@ def setup_logging():
 
 
 logger = logging.getLogger("ats_backend")
+
+# Run once on first import so stdlib logging is configured before `import sentry`
+# runs Sentry SDK init (visible init logs use this format).
+setup_logging()

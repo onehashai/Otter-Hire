@@ -1,3 +1,6 @@
+import { refresh401MeansSessionExpired } from "@/lib/auth-refresh-codes";
+import { buildLoginHref } from "@/lib/login-redirect";
+
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
 
 /** Full internal API base — all frontend calls use /v1/internal/* (JWT/session auth) */
@@ -35,11 +38,13 @@ export function getApiBase(): string {
    Global 401 Handler
 ========================= */
 
+type SilentRefreshOutcome = "ok" | "anonymous" | "session_dead";
+
 // Shared in-flight refresh promise — prevents concurrent 401s from triggering
 // multiple simultaneous refresh calls.
-let _refreshPromise: Promise<boolean> | null = null;
+let _refreshPromise: Promise<SilentRefreshOutcome> | null = null;
 
-async function _attemptSilentRefresh(): Promise<boolean> {
+async function _silentRefreshOutcome(): Promise<SilentRefreshOutcome> {
   if (_refreshPromise) return _refreshPromise;
   _refreshPromise = (async () => {
     try {
@@ -49,9 +54,15 @@ async function _attemptSilentRefresh(): Promise<boolean> {
         credentials: "include",
         cache: "no-store",
       });
-      return res.ok;
+      if (res.ok) return "ok";
+      if (res.status === 401) {
+        const body = await readApiErrorBody(res);
+        const code = typeof body?.code === "string" ? body.code : undefined;
+        return refresh401MeansSessionExpired(code) ? "session_dead" : "anonymous";
+      }
+      return "anonymous";
     } catch {
-      return false;
+      return "anonymous";
     } finally {
       _refreshPromise = null;
     }
@@ -61,7 +72,18 @@ async function _attemptSilentRefresh(): Promise<boolean> {
 
 let isHandling401 = false;
 
-async function handle401Response(): Promise<void> {
+function shouldBypassSessionRecovery(path: string): boolean {
+  return (
+    path.startsWith("/auth/login") ||
+    path.startsWith("/auth/signup") ||
+    path.startsWith("/auth/refresh") ||
+    path.startsWith("/auth/logout") ||
+    path.startsWith("/auth/verify") ||
+    path.startsWith("/auth/resend-verification")
+  );
+}
+
+async function handle401Response(sessionExpired: boolean): Promise<void> {
   if (isHandling401) return;
   isHandling401 = true;
 
@@ -80,9 +102,11 @@ async function handle401Response(): Promise<void> {
   // Clear client-managed session markers
   localStorage.removeItem("session_updated");
 
-  // Redirect to login with return URL
-  const returnUrl = encodeURIComponent(window.location.pathname + window.location.search);
-  window.location.href = `/login?redirect=${returnUrl}&session_expired=true`;
+  window.location.href = buildLoginHref(
+    window.location.pathname,
+    window.location.search,
+    sessionExpired,
+  );
 }
 
 /* =========================
@@ -181,13 +205,44 @@ async function toApiError(res: Response, fallback: string): Promise<ApiError> {
     fallback;
 
   const message = mapErrorCodeToMessage(res.status, body?.code, rawMessage);
-
   return new ApiError(message, res.status, body?.code, body?.request_id, body?.details);
 }
 
 export async function parseErrorResponse(res: Response, defaultMessage: string): Promise<string> {
   const err = await toApiError(res, defaultMessage);
   return err.message;
+}
+
+/**
+ * Classifies an error for UI display.
+ * Returns { forbidden: true } for 403 permission errors.
+ * Returns { networkError: true } for fetch/network failures.
+ * Otherwise returns the error message string.
+ */
+export function classifyError(err: unknown): {
+  message: string;
+  forbidden: boolean;
+  networkError: boolean;
+} {
+  if (err instanceof ApiError) {
+    return {
+      message: err.message,
+      forbidden: err.status === 403,
+      networkError: false,
+    };
+  }
+  if (err instanceof TypeError && err.message === "Failed to fetch") {
+    return {
+      message: "Unable to connect to the server. Please check your connection and try again.",
+      forbidden: false,
+      networkError: true,
+    };
+  }
+  return {
+    message: err instanceof Error ? err.message : "Something went wrong.",
+    forbidden: false,
+    networkError: false,
+  };
 }
 
 /* =========================
@@ -201,6 +256,7 @@ export type ApiGetOptions = {
 
 export async function apiGet<T>(path: string, options: ApiGetOptions = {}): Promise<T> {
   const { credentials = "include", cache = "no-store" } = options;
+  const shouldRecoverSession = !shouldBypassSessionRecovery(path);
 
   const fetchOnce = () =>
     fetch(`${API_BASE_URL}${path}`, {
@@ -211,16 +267,19 @@ export async function apiGet<T>(path: string, options: ApiGetOptions = {}): Prom
     });
 
   let res = await fetchOnce();
+  let sessionExpiredForLogin = false;
 
-  if (res.status === 401) {
-    const refreshed = await _attemptSilentRefresh();
-    if (refreshed) {
+  if (shouldRecoverSession && res.status === 401) {
+    const outcome = await _silentRefreshOutcome();
+    if (outcome === "ok") {
       res = await fetchOnce();
+    } else if (outcome === "session_dead") {
+      sessionExpiredForLogin = true;
     }
   }
 
-  if (res.status === 401) {
-    await handle401Response();
+  if (shouldRecoverSession && res.status === 401) {
+    await handle401Response(sessionExpiredForLogin);
     throw new ApiError("Session expired", 401, "AUTH_SESSION_EXPIRED");
   }
 
@@ -242,6 +301,7 @@ export async function apiPost<T>(
   options: ApiPostOptions = {},
 ): Promise<T> {
   const { credentials = "include" } = options;
+  const shouldRecoverSession = !shouldBypassSessionRecovery(path);
 
   const fetchOnce = () =>
     fetch(`${API_BASE_URL}${path}`, {
@@ -252,16 +312,19 @@ export async function apiPost<T>(
     });
 
   let res = await fetchOnce();
+  let sessionExpiredForLogin = false;
 
-  if (res.status === 401) {
-    const refreshed = await _attemptSilentRefresh();
-    if (refreshed) {
+  if (shouldRecoverSession && res.status === 401) {
+    const outcome = await _silentRefreshOutcome();
+    if (outcome === "ok") {
       res = await fetchOnce();
+    } else if (outcome === "session_dead") {
+      sessionExpiredForLogin = true;
     }
   }
 
-  if (res.status === 401) {
-    await handle401Response();
+  if (shouldRecoverSession && res.status === 401) {
+    await handle401Response(sessionExpiredForLogin);
     throw new ApiError("Session expired", 401, "AUTH_SESSION_EXPIRED");
   }
 
@@ -278,6 +341,7 @@ export async function apiFetch<T>(
   path: string,
   options: { method: string; body?: unknown; headers?: Record<string, string> },
 ): Promise<T> {
+  const shouldRecoverSession = !shouldBypassSessionRecovery(path);
   const headers: Record<string, string> = { Accept: "application/json" };
   if (options.headers) {
     Object.assign(headers, options.headers);
@@ -296,16 +360,19 @@ export async function apiFetch<T>(
     });
 
   let res = await fetchOnce();
+  let sessionExpiredForLogin = false;
 
-  if (res.status === 401) {
-    const refreshed = await _attemptSilentRefresh();
-    if (refreshed) {
+  if (shouldRecoverSession && res.status === 401) {
+    const outcome = await _silentRefreshOutcome();
+    if (outcome === "ok") {
       res = await fetchOnce();
+    } else if (outcome === "session_dead") {
+      sessionExpiredForLogin = true;
     }
   }
 
-  if (res.status === 401) {
-    await handle401Response();
+  if (shouldRecoverSession && res.status === 401) {
+    await handle401Response(sessionExpiredForLogin);
     throw new ApiError("Session expired", 401, "AUTH_SESSION_EXPIRED");
   }
 
@@ -319,6 +386,7 @@ export async function apiFetch<T>(
 }
 
 export async function apiDelete(path: string): Promise<void> {
+  const shouldRecoverSession = !shouldBypassSessionRecovery(path);
   const fetchOnce = () =>
     fetch(`${API_BASE_URL}${path}`, {
       method: "DELETE",
@@ -327,16 +395,19 @@ export async function apiDelete(path: string): Promise<void> {
     });
 
   let res = await fetchOnce();
+  let sessionExpiredForLogin = false;
 
-  if (res.status === 401) {
-    const refreshed = await _attemptSilentRefresh();
-    if (refreshed) {
+  if (shouldRecoverSession && res.status === 401) {
+    const outcome = await _silentRefreshOutcome();
+    if (outcome === "ok") {
       res = await fetchOnce();
+    } else if (outcome === "session_dead") {
+      sessionExpiredForLogin = true;
     }
   }
 
-  if (res.status === 401) {
-    await handle401Response();
+  if (shouldRecoverSession && res.status === 401) {
+    await handle401Response(sessionExpiredForLogin);
     throw new ApiError("Session expired", 401, "AUTH_SESSION_EXPIRED");
   }
 

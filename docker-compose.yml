@@ -139,7 +139,7 @@ services:
       NEXT_PUBLIC_APP_SUBDOMAIN: app
       NEXT_PUBLIC_JOBS_SUBDOMAIN: jobs
       NEXT_PUBLIC_APP_ROOT_HOST: localhost.com:3000
-      NEXT_PUBLIC_INBOUND_EMAIL_DOMAIN: inbound.smartats.in
+      NEXT_PUBLIC_SES_MAIL_DOMAIN: applications.smartats.in
       NEXT_PUBLIC_API_BASE_URL: http://api.localhost.com:8000
       NEXT_PUBLIC_TEMPORAL_UI_URL: http://temporal.localhost.com:8081
     extra_hosts:

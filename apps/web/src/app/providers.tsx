@@ -15,11 +15,8 @@ import { ThemeProvider } from "@/components/common/ThemeProvider";
 import { Toaster } from "@onehash/ui/toaster";
 import { SonnerToaster } from "@onehash/ui/sonner";
 import { TooltipProvider } from "@onehash/ui/tooltip";
-import {
-  getAuthSession,
-  refreshSession as refreshAuthSession,
-  type AuthSessionResponse,
-} from "@/api/index";
+import { getAuthSession, refreshSessionDetailed, type AuthSessionResponse } from "@/api/index";
+import { buildLoginHref } from "@/lib/login-redirect";
 
 import "@/i18n";
 
@@ -58,6 +55,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const inflightRef = useRef<Promise<AuthSessionResponse | null> | null>(null);
+  const authFailureRef = useRef<"none" | "anonymous" | "invalidated">("none");
 
   const clearSession = useCallback(() => {
     inflightRef.current = null;
@@ -71,30 +69,46 @@ export function Providers({ children }: { children: React.ReactNode }) {
       if (force) inflightRef.current = null;
       const promise = (async () => {
         try {
-          // Try to refresh token first if session seems expired
           let me = await getAuthSession();
+          let sessionInvalidated = false;
 
-          // If 401, try refresh token
           if (!me) {
-            me = await refreshAuthSession();
-          }
-
-          setUser(me);
-          return me;
-        } catch (error) {
-          // Clear session on any auth error
-          setUser(null);
-          clearSession();
-
-          // If on protected route, redirect to login
-          if (!AUTH_ROUTES.includes(pathname) && !LIFECYCLE_ROUTES.includes(pathname)) {
-            const isInvite = isInvitePath(pathname);
-            if (!isInvite) {
-              const returnUrl = encodeURIComponent(`${pathname}${window.location.search}`);
-              router.replace(`/login?redirect=${returnUrl}&session_expired=true`);
+            const refreshResult = await refreshSessionDetailed();
+            if (refreshResult.ok === true) {
+              me = refreshResult.user;
+            } else {
+              sessionInvalidated = refreshResult.sessionInvalidated;
             }
           }
 
+          if (!me) {
+            setUser(null);
+            clearSession();
+            authFailureRef.current = sessionInvalidated ? "invalidated" : "anonymous";
+            if (
+              !AUTH_ROUTES.includes(pathname) &&
+              !LIFECYCLE_ROUTES.includes(pathname) &&
+              !isInvitePath(pathname)
+            ) {
+              router.replace(buildLoginHref(pathname, window.location.search, sessionInvalidated));
+            }
+            return null;
+          }
+
+          authFailureRef.current = "none";
+          setUser(me);
+          return me;
+        } catch (error) {
+          setUser(null);
+          clearSession();
+          authFailureRef.current = "anonymous";
+          if (
+            !AUTH_ROUTES.includes(pathname) &&
+            !LIFECYCLE_ROUTES.includes(pathname) &&
+            !isInvitePath(pathname)
+          ) {
+            router.replace(buildLoginHref(pathname, window.location.search, false));
+          }
           return null;
         } finally {
           setLoading(false);
@@ -137,16 +151,20 @@ export function Providers({ children }: { children: React.ReactNode }) {
     }
 
     if (!user) {
+      // Only redirect if loading is complete — refreshSession already attempted
+      // getAuthSession + refreshSessionDetailed before setting user=null.
       if (!isAuthRoute && !isLifecycleRoute && !onInvitePage) {
         if (explicitLogout) {
           router.replace("/login");
           return;
         }
         const currentSearch = searchParams.toString();
-        const returnUrl = encodeURIComponent(
-          `${pathname}${currentSearch ? `?${currentSearch}` : ""}`,
-        );
-        router.replace(`/login?redirect=${returnUrl}&session_expired=true`);
+        const pathSearch = currentSearch ? `?${currentSearch}` : "";
+        const sessionExpired = authFailureRef.current === "invalidated";
+        authFailureRef.current = "none";
+        router.replace(buildLoginHref(pathname, pathSearch, sessionExpired));
+      } else {
+        authFailureRef.current = "none";
       }
       return;
     }

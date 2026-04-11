@@ -175,7 +175,7 @@ export function StandaloneCandidateProfile({
   }, [uiCandidate]);
 
   const assignableJobs = useMemo(
-    () => jobs.filter((j) => j.id !== candidate?.job_id),
+    () => jobs.filter((j) => j.id !== candidate?.job_id && j.status === "open"),
     [jobs, candidate?.job_id],
   );
 

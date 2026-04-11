@@ -25,6 +25,7 @@ from app.temporal.email.workflow import (
 )
 from app.temporal.resume_parsing.activities import parse_job_apply_resume_activity
 from app.temporal.resume_parsing.workflow import JobApplyResumeParseWorkflow
+from app.temporal.sentry_interceptor import SentryInterceptor
 
 logger = logging.getLogger("ats_worker")
 
@@ -39,6 +40,8 @@ async def run_temporal_worker() -> None:
         client = await get_temporal_client()
         logger.info("[WORKER] Connected to Temporal successfully")
 
+        _sentry_interceptors = [SentryInterceptor()]
+
         worker_inbound = Worker(
             client,
             task_queue="email-inbound",
@@ -51,6 +54,7 @@ async def run_temporal_worker() -> None:
                 process_s3_inbound_email_activity,
                 publish_update_activity,
             ],
+            interceptors=_sentry_interceptors,
             max_concurrent_activities=20,
             max_concurrent_workflow_tasks=5,
         )
@@ -62,6 +66,7 @@ async def run_temporal_worker() -> None:
                 send_outbound_email_activity,
                 mark_message_failed_activity,
             ],
+            interceptors=_sentry_interceptors,
             max_concurrent_activities=20,
             max_concurrent_workflow_tasks=5,
         )
@@ -70,6 +75,7 @@ async def run_temporal_worker() -> None:
             task_queue="careers-resume-parse",
             workflows=[JobApplyResumeParseWorkflow],
             activities=[parse_job_apply_resume_activity],
+            interceptors=_sentry_interceptors,
             max_concurrent_activities=10,
             max_concurrent_workflow_tasks=10,
         )

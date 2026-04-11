@@ -160,8 +160,8 @@ async def handle_send_email_action(
 
         # Build reply-to address: reply+{conversation_id}@domain
         reply_to_address = None
-        if settings.inbound_email_domain:
-            reply_to_address = f"reply+{conversation.id}@{settings.inbound_email_domain}"
+        if settings.SES_MAIL_DOMAIN:
+            reply_to_address = f"reply+{conversation.id}@{settings.SES_MAIL_DOMAIN}"
         elif org_inbox and (org_inbox.config or {}).get("inbound_address"):
             domain = str((org_inbox.config or {}).get("inbound_address")).split("@")[1]
             reply_to_address = f"reply+{conversation.id}@{domain}"

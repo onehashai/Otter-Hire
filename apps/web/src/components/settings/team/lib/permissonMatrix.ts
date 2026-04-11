@@ -38,10 +38,10 @@ export const permissionMatrix: {
   permissions: { label: string; roles: Record<DisplayRole, boolean> }[];
 }[] = [
   {
-    category: "User Management",
+    category: "Team Management",
     permissions: [
       {
-        label: "Add / remove users",
+        label: "Invite & remove members",
         roles: {
           Admin: true,
           Recruiter: false,
@@ -51,7 +51,7 @@ export const permissionMatrix: {
         },
       },
       {
-        label: "Assign roles",
+        label: "Assign & change roles",
         roles: {
           Admin: true,
           Recruiter: false,
@@ -63,10 +63,20 @@ export const permissionMatrix: {
     ],
   },
   {
-    category: "Jobs & Pipeline",
+    category: "Jobs",
     permissions: [
       {
-        label: "Post and edit jobs",
+        label: "View jobs",
+        roles: {
+          Admin: true,
+          Recruiter: true,
+          "Hiring Manager": true,
+          Interviewer: false,
+          Employee: false,
+        },
+      },
+      {
+        label: "Create & edit jobs",
         roles: {
           Admin: true,
           Recruiter: true,
@@ -76,7 +86,7 @@ export const permissionMatrix: {
         },
       },
       {
-        label: "Configure workflows",
+        label: "Publish / unpublish jobs",
         roles: {
           Admin: true,
           Recruiter: false,
@@ -86,11 +96,11 @@ export const permissionMatrix: {
         },
       },
       {
-        label: "View assigned jobs",
+        label: "Archive / unarchive jobs",
         roles: {
           Admin: true,
-          Recruiter: true,
-          "Hiring Manager": true,
+          Recruiter: false,
+          "Hiring Manager": false,
           Interviewer: false,
           Employee: false,
         },
@@ -101,7 +111,17 @@ export const permissionMatrix: {
     category: "Candidates",
     permissions: [
       {
-        label: "Source & screen candidates",
+        label: "View candidates",
+        roles: {
+          Admin: true,
+          Recruiter: true,
+          "Hiring Manager": true,
+          Interviewer: true,
+          Employee: true,
+        },
+      },
+      {
+        label: "Source candidates",
         roles: {
           Admin: true,
           Recruiter: true,
@@ -111,13 +131,13 @@ export const permissionMatrix: {
         },
       },
       {
-        label: "View candidate profiles",
+        label: "Move hiring stages",
         roles: {
           Admin: true,
           Recruiter: true,
           "Hiring Manager": true,
-          Interviewer: true,
-          Employee: true,
+          Interviewer: false,
+          Employee: false,
         },
       },
       {
@@ -130,12 +150,27 @@ export const permissionMatrix: {
           Employee: false,
         },
       },
+    ],
+  },
+  {
+    category: "Templates",
+    permissions: [
       {
-        label: "Update hiring stages",
+        label: "View templates",
         roles: {
           Admin: true,
           Recruiter: true,
-          "Hiring Manager": true,
+          "Hiring Manager": false,
+          Interviewer: false,
+          Employee: false,
+        },
+      },
+      {
+        label: "Create / Edit / Delete templates",
+        roles: {
+          Admin: true,
+          Recruiter: true,
+          "Hiring Manager": false,
           Interviewer: false,
           Employee: false,
         },
@@ -143,10 +178,10 @@ export const permissionMatrix: {
     ],
   },
   {
-    category: "Interviews",
+    category: "Automations",
     permissions: [
       {
-        label: "Schedule interviews",
+        label: "View automations",
         roles: {
           Admin: true,
           Recruiter: true,
@@ -156,40 +191,20 @@ export const permissionMatrix: {
         },
       },
       {
-        label: "Submit interview feedback",
+        label: "Create / Edit / Delete automations",
         roles: {
           Admin: true,
           Recruiter: true,
-          "Hiring Manager": true,
-          Interviewer: true,
+          "Hiring Manager": false,
+          Interviewer: false,
           Employee: false,
         },
       },
     ],
   },
   {
-    category: "Reports & Settings",
+    category: "Settings",
     permissions: [
-      {
-        label: "Access reports",
-        roles: {
-          Admin: true,
-          Recruiter: false,
-          "Hiring Manager": false,
-          Interviewer: false,
-          Employee: true,
-        },
-      },
-      {
-        label: "View salary data",
-        roles: {
-          Admin: true,
-          Recruiter: false,
-          "Hiring Manager": false,
-          Interviewer: false,
-          Employee: false,
-        },
-      },
       {
         label: "System settings",
         roles: {
@@ -200,21 +215,16 @@ export const permissionMatrix: {
           Employee: false,
         },
       },
+      {
+        label: "Manage inbox",
+        roles: {
+          Admin: true,
+          Recruiter: false,
+          "Hiring Manager": false,
+          Interviewer: false,
+          Employee: false,
+        },
+      },
     ],
   },
-  // {
-  //   category: "Account & Billing",
-  //   permissions: [
-  //     {
-  //       label: "Manage billing",
-  //       roles: {
-  //         Admin: false,
-  //         Recruiter: false,
-  //         "Hiring Manager": false,
-  //         Interviewer: false,
-  //         Employee: false,
-  //       },
-  //     },
-  //   ],
-  // },
 ];

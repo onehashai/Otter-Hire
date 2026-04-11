@@ -95,7 +95,8 @@ def _set_refresh_cookie(response: Response, token: str) -> None:
         "samesite": "lax",
         "secure": settings.is_production,
         "max_age": settings.refresh_token_expire_days * 24 * 60 * 60,
-        "path": "/v1/internal/auth/refresh",
+        # Keep refresh token available to middleware route guards as well.
+        "path": "/",
     }
     if settings.cookie_domain:
         cookie_params["domain"] = settings.cookie_domain
@@ -335,7 +336,7 @@ async def logout(
     )
     response.delete_cookie(
         key="refresh_token",
-        path="/v1/internal/auth/refresh",
+        path="/",
         domain=settings.cookie_domain or None,
         secure=settings.is_production,
         samesite="lax",
@@ -409,9 +410,11 @@ async def refresh_token(
             detail={"code": "AUTH_MEMBERSHIP_NOT_FOUND", "message": "Membership not found."},
         )
 
-    user.org_id = membership.org_id
-    user.membership_role = membership.role
-    user.status = membership.status
+    # Use object.__setattr__ to bypass SQLAlchemy instrumentation — these are
+    # in-memory shims only and must never be flushed as dirty column changes.
+    object.__setattr__(user, "org_id", membership.org_id)
+    object.__setattr__(user, "membership_role", membership.role)
+    object.__setattr__(user, "status", membership.status)
 
     # Rotate: issue new refresh token (overwrites hash on user row) and commit atomically
     new_raw_refresh = await _issue_refresh_token(db, user)

@@ -471,10 +471,12 @@ async def list_jobs(
     )
 
     if current_user.membership_role in ASSIGNED_ONLY_ROLES:
-        stmt = stmt.join(
-            JobTeamMember,
-            (JobTeamMember.job_id == Job.id) & (JobTeamMember.user_id == current_user.id),
-        ).distinct(Job.id)
+        assigned_job_ids_sub = (
+            select(JobTeamMember.job_id)
+            .where(JobTeamMember.user_id == current_user.id)
+            .scalar_subquery()
+        )
+        stmt = stmt.where(Job.id.in_(assigned_job_ids_sub))
 
     result = await db.execute(stmt)
     items = []

@@ -56,6 +56,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
   const searchParams = useSearchParams();
   const inflightRef = useRef<Promise<AuthSessionResponse | null> | null>(null);
   const authFailureRef = useRef<"none" | "anonymous" | "invalidated">("none");
+  const isAuthRoute = AUTH_ROUTES.includes(pathname);
+  const isLifecycleRoute = LIFECYCLE_ROUTES.includes(pathname);
+  const onInvitePage = isInvitePath(pathname);
 
   const clearSession = useCallback(() => {
     inflightRef.current = null;
@@ -138,9 +141,6 @@ export function Providers({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (loading) return;
 
-    const isAuthRoute = AUTH_ROUTES.includes(pathname);
-    const isLifecycleRoute = LIFECYCLE_ROUTES.includes(pathname);
-    const onInvitePage = isInvitePath(pathname);
     const onInviteSignup = pathname === "/signup" && Boolean(searchParams.get("invite"));
     const isInviteLifecycleUser = user?.status === "pending" || user?.status === "declined";
     const explicitLogout = sessionStorage.getItem(EXPLICIT_LOGOUT_KEY) === "true";
@@ -189,20 +189,22 @@ export function Providers({ children }: { children: React.ReactNode }) {
       // router.replace("/dashboard");
       router.replace("/");
     }
-  }, [user, loading, pathname, router, searchParams, sessionVersion]);
+  }, [
+    user,
+    loading,
+    pathname,
+    router,
+    searchParams,
+    sessionVersion,
+    isAuthRoute,
+    isLifecycleRoute,
+    onInvitePage,
+  ]);
 
   const authValue = useMemo(
     () => ({ user, loading, refreshSession, clearSession }),
     [user, loading, refreshSession, clearSession],
   );
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-foreground" />
-      </div>
-    );
-  }
 
   return (
     <QueryClientProvider client={queryClient}>

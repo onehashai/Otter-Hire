@@ -15,6 +15,9 @@ RUN cd apps/web && npm install && \
     else echo "Unsupported arch: $ARCH"; exit 1; \
     fi
 
+COPY packages/ui ./packages/ui
+COPY apps/web ./apps/web
+
 WORKDIR /app/apps/web
 
 EXPOSE 3000

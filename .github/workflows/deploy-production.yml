@@ -1,6 +1,9 @@
 name: Deploy Production
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -15,6 +18,11 @@ jobs:
     name: Deploy Production
     runs-on: ubuntu-latest
     environment: production
+    env:
+      CODEDEPLOY_APP_NAME: ${{ vars.CODEDEPLOY_APP_NAME }}
+      CODEDEPLOY_WEB_DG: ${{ vars.CODEDEPLOY_WEB_DG }}
+      CODEDEPLOY_BACKEND_DG: ${{ vars.CODEDEPLOY_BACKEND_DG }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -68,8 +76,25 @@ jobs:
             "${{ vars.ECS_BACKEND_TASKDEF }}" \
             "${{ vars.ECS_CLUSTER }}" \
             "${{ vars.ECS_BACKEND_SERVICE }}" \
-            "$BACKEND_IMAGE")"
+            "$BACKEND_IMAGE" \
+            register_only)"
           echo "arn=$arn" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy backend via CodeDeploy
+        if: steps.changes.outputs.backend == 'true'
+        id: codedeploy_backend
+        run: |
+          app_name="${CODEDEPLOY_APP_NAME:-otter-hire-prod-ecs}"
+          dg_name="${CODEDEPLOY_BACKEND_DG:-otter-hire-prod-backend-dg}"
+          deployment_id="$(
+            aws deploy create-deployment \
+              --application-name "$app_name" \
+              --deployment-group-name "$dg_name" \
+              --revision "{\"revisionType\":\"AppSpecContent\",\"appSpecContent\":{\"content\":\"{\\\"version\\\":1,\\\"Resources\\\":[{\\\"TargetService\\\":{\\\"Type\\\":\\\"AWS::ECS::Service\\\",\\\"Properties\\\":{\\\"TaskDefinition\\\":\\\"${{ steps.deploy_backend.outputs.arn }}\\\",\\\"LoadBalancerInfo\\\":{\\\"ContainerName\\\":\\\"backend\\\",\\\"ContainerPort\\\":8000}}}}]}\"}}" \
+              --query 'deploymentId' \
+              --output text
+          )"
+          echo "deployment_id=$deployment_id" >> "$GITHUB_OUTPUT"
 
       - name: Deploy worker service
         if: steps.changes.outputs.backend == 'true'
@@ -82,12 +107,29 @@ jobs:
             "$BACKEND_IMAGE")"
           echo "arn=$arn" >> "$GITHUB_OUTPUT"
 
-      - name: Wait for backend services
+      - name: Wait for worker service
         if: steps.changes.outputs.backend == 'true'
         run: |
           aws ecs wait services-stable \
             --cluster "${{ vars.ECS_CLUSTER }}" \
-            --services "${{ vars.ECS_BACKEND_SERVICE }}" "${{ vars.ECS_WORKER_SERVICE }}"
+            --services "${{ vars.ECS_WORKER_SERVICE }}"
+
+      - name: Wait for backend deployment
+        if: steps.changes.outputs.backend == 'true'
+        run: |
+          deployment_id="${{ steps.codedeploy_backend.outputs.deployment_id }}"
+          while true; do
+            status="$(aws deploy get-deployment --deployment-id "$deployment_id" --query 'deploymentInfo.status' --output text)"
+            echo "Backend CodeDeploy status: $status"
+            if [ "$status" = "Succeeded" ]; then
+              break
+            fi
+            if [ "$status" = "Failed" ] || [ "$status" = "Stopped" ]; then
+              aws deploy get-deployment --deployment-id "$deployment_id" --output json
+              exit 1
+            fi
+            sleep 10
+          done
 
       - name: Check backend health
         if: steps.changes.outputs.backend == 'true'
@@ -111,6 +153,7 @@ jobs:
             NEXT_PUBLIC_SES_MAIL_DOMAIN=${{ vars.NEXT_PUBLIC_SES_MAIL_DOMAIN }}
             NEXT_PUBLIC_TEMPORAL_UI_URL=${{ vars.NEXT_PUBLIC_TEMPORAL_UI_URL }}
             NEXT_PUBLIC_SENTRY_DSN=${{ vars.NEXT_PUBLIC_SENTRY_DSN }}
+            SENTRY_PROJECT=${{ vars.SENTRY_PROJECT }}
       - name: Deploy web service
         if: steps.changes.outputs.web == 'true'
         id: deploy_web
@@ -119,15 +162,42 @@ jobs:
             "${{ vars.ECS_WEB_TASKDEF }}" \
             "${{ vars.ECS_CLUSTER }}" \
             "${{ vars.ECS_WEB_SERVICE }}" \
-            "$WEB_IMAGE")"
+            "$WEB_IMAGE" \
+            register_only)"
           echo "arn=$arn" >> "$GITHUB_OUTPUT"
 
-      - name: Wait for web service
+      - name: Deploy web via CodeDeploy
+        if: steps.changes.outputs.web == 'true'
+        id: codedeploy_web
+        run: |
+          app_name="${CODEDEPLOY_APP_NAME:-otter-hire-prod-ecs}"
+          dg_name="${CODEDEPLOY_WEB_DG:-otter-hire-prod-web-dg}"
+          deployment_id="$(
+            aws deploy create-deployment \
+              --application-name "$app_name" \
+              --deployment-group-name "$dg_name" \
+              --revision "{\"revisionType\":\"AppSpecContent\",\"appSpecContent\":{\"content\":\"{\\\"version\\\":1,\\\"Resources\\\":[{\\\"TargetService\\\":{\\\"Type\\\":\\\"AWS::ECS::Service\\\",\\\"Properties\\\":{\\\"TaskDefinition\\\":\\\"${{ steps.deploy_web.outputs.arn }}\\\",\\\"LoadBalancerInfo\\\":{\\\"ContainerName\\\":\\\"web\\\",\\\"ContainerPort\\\":3000}}}}]}\"}}" \
+              --query 'deploymentId' \
+              --output text
+          )"
+          echo "deployment_id=$deployment_id" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for web deployment
         if: steps.changes.outputs.web == 'true'
         run: |
-          aws ecs wait services-stable \
-            --cluster "${{ vars.ECS_CLUSTER }}" \
-            --services "${{ vars.ECS_WEB_SERVICE }}"
+          deployment_id="${{ steps.codedeploy_web.outputs.deployment_id }}"
+          while true; do
+            status="$(aws deploy get-deployment --deployment-id "$deployment_id" --query 'deploymentInfo.status' --output text)"
+            echo "Web CodeDeploy status: $status"
+            if [ "$status" = "Succeeded" ]; then
+              break
+            fi
+            if [ "$status" = "Failed" ] || [ "$status" = "Stopped" ]; then
+              aws deploy get-deployment --deployment-id "$deployment_id" --output json
+              exit 1
+            fi
+            sleep 10
+          done
 
       - name: Check web route
         if: steps.changes.outputs.web == 'true'
@@ -159,10 +229,12 @@ jobs:
             if [ "${{ steps.changes.outputs.backend }}" = "true" ]; then
               echo "- Backend image: \`${BACKEND_IMAGE}\`"
               echo "- Backend task def: \`${{ steps.deploy_backend.outputs.arn }}\`"
+              echo "- Backend deployment: \`${{ steps.codedeploy_backend.outputs.deployment_id }}\`"
               echo "- Worker task def: \`${{ steps.deploy_worker.outputs.arn }}\`"
             fi
             if [ "${{ steps.changes.outputs.web }}" = "true" ]; then
               echo "- Web image: \`${WEB_IMAGE}\`"
               echo "- Web task def: \`${{ steps.deploy_web.outputs.arn }}\`"
+              echo "- Web deployment: \`${{ steps.codedeploy_web.outputs.deployment_id }}\`"
             fi
           } >> "$GITHUB_STEP_SUMMARY"

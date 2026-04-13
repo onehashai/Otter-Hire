@@ -42,3 +42,6 @@ __pycache__/
 *.pyc
 apps/backend/storage/local/*
 !apps/backend/storage/local/.gitkeep
+
+prod.md
+blue-green.md

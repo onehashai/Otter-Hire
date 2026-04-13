@@ -189,7 +189,17 @@ export function Providers({ children }: { children: React.ReactNode }) {
       // router.replace("/dashboard");
       router.replace("/");
     }
-  }, [user, loading, pathname, router, searchParams, sessionVersion]);
+  }, [
+    user,
+    loading,
+    pathname,
+    router,
+    searchParams,
+    sessionVersion,
+    isAuthRoute,
+    isLifecycleRoute,
+    onInvitePage,
+  ]);
 
   const authValue = useMemo(
     () => ({ user, loading, refreshSession, clearSession }),

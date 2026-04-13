@@ -148,12 +148,6 @@ services:
       - "3000:3000"
     depends_on:
       - backend
-    volumes:
-      - ./apps/web:/app/apps/web
-      - ./packages/ui:/app/packages/ui
-      - /app/apps/web/node_modules
-      - /app/packages/ui/node_modules
-      - /app/apps/web/.next
 
 
 volumes:

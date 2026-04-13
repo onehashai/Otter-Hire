@@ -1,6 +1,7 @@
 // Client
 export {
   API_BASE_URL,
+  getApiBase,
   handle429Error,
   parseErrorResponse,
   type ApiGetOptions,
@@ -13,11 +14,15 @@ export {
   signup,
   logout,
   getAuthSession,
+  refreshSession,
+  refreshSessionDetailed,
+  getGoogleAuthEnabled,
   getMe,
   verifyEmail,
   resendVerification,
   completeOnboarding,
   type AuthSessionResponse,
+  type RefreshSessionResult,
   type MeResponse,
   type AuthPayload,
   type OrgUserResponse,
@@ -54,5 +59,14 @@ export * from "./candidates/index";
 // Users
 export * from "./users/index";
 
+// Platform admin
+export * from "./admin/index";
+
 // Integrations
 export * from "./integrations/index";
+
+// Conversations
+export * from "./conversations/index";
+
+// Templates
+export * from "./templates/index";

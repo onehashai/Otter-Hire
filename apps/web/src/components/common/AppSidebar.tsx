@@ -5,11 +5,10 @@ import {
   // LayoutDashboard,
   Briefcase,
   Users,
-  Calendar,
-  // TODO(mvp-nav): Re-enable Reports/Automations/AI Assistant icons after MVP launch.
-  // BarChart3,
-  // Zap,
-  // Bot,
+  FileText,
+  BarChart3,
+  Zap,
+  Bot,
   Settings,
   Sun,
   Moon,
@@ -18,26 +17,28 @@ import {
 } from "lucide-react";
 import { NavLink } from "@/components/common/NavLink";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useTheme } from "@/components/common/ThemeProvider";
 import { Button } from "@onehash/ui/button";
 import { Separator } from "@onehash/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@onehash/ui/tooltip";
+import { LOGO_SVG_PATH, PLATFORM_NAME } from "@/lib/constants";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
 
 const navItems = [
   // TODO(mvp-nav): Re-enable Dashboard in sidebar after MVP launch.
-  // { title: "Dashboard", url: "/", icon: LayoutDashboard },
-  { title: "Jobs", url: "/jobs", icon: Briefcase },
-  { title: "Candidates", url: "/candidates", icon: Users },
-  { title: "Interviews", url: "/interviews", icon: Calendar },
-  // TODO(mvp-nav): Re-enable Reports in sidebar after MVP launch.
-  // { title: "Reports", url: "/reports", icon: BarChart3 },
-  // TODO(mvp-nav): Re-enable Automations in sidebar after MVP launch.
-  // { title: "Automations", url: "/automations", icon: Zap },
-  // TODO(mvp-nav): Re-enable AI Assistant in sidebar after MVP launch.
-  // { title: "AI Assistant", url: "/ai-assistant", icon: Bot },
-  { title: "Settings", url: "/settings/profile", icon: Settings },
+  // { titleKey: "nav_dashboard", url: "/", icon: LayoutDashboard },
+  { titleKey: "jobs_title", url: "/jobs", icon: Briefcase },
+  { titleKey: "candidates_title", url: "/candidates", icon: Users },
+  { titleKey: "templates_title", url: "/templates", icon: FileText },
+  // TODO(mvp-nav): Re-enable Interviews in sidebar post-messaging launch.
+  // { titleKey: "nav_interviews", url: "/interviews", icon: Calendar },
+  { titleKey: "reports_title", url: "/reports", icon: BarChart3 },
+  { titleKey: "automations_title", url: "/automations", icon: Zap },
+  { titleKey: "ai_assistant_title", url: "/ai-assistant", icon: Bot },
+  { titleKey: "settings_title", url: "/settings/profile", icon: Settings },
 ];
 
 interface AppSidebarProps {
@@ -49,6 +50,7 @@ interface AppSidebarProps {
 export function AppSidebar({ collapsed, onToggle, onOpenCommandPalette }: AppSidebarProps) {
   const pathname = usePathname();
   const { theme, setTheme } = useTheme();
+  const { t } = useTranslation();
 
   return (
     <aside
@@ -60,16 +62,19 @@ export function AppSidebar({ collapsed, onToggle, onOpenCommandPalette }: AppSid
       {/* Header */}
       <div
         className={cn(
-          "flex items-center h-12 px-3",
+          "flex items-center h-12 pl-1",
           collapsed ? "justify-center" : "justify-between",
         )}
       >
         {!collapsed && (
-          <Link href="/" className="flex items-center gap-2">
-            <div className="h-6 w-6 rounded-md bg-foreground flex items-center justify-center">
-              <span className="text-background text-xs font-bold">A</span>
-            </div>
-            <span className="text-sm font-semibold text-foreground">ATS</span>
+          <Link href="/" className="flex items-center">
+            <Image
+              src={LOGO_SVG_PATH}
+              alt="Otter"
+              width={90}
+              height={20}
+              className="object-contain dark:invert dark:contrast-200"
+            />
           </Link>
         )}
         <Button
@@ -88,10 +93,11 @@ export function AppSidebar({ collapsed, onToggle, onOpenCommandPalette }: AppSid
       <nav className="flex-1 overflow-y-auto py-2 px-2 space-y-0.5">
         {navItems.map((item) => {
           const isActive = item.url === "/" ? pathname === "/" : pathname.startsWith(item.url);
+          const label = t(item.titleKey);
 
           const link = (
             <NavLink
-              key={item.title}
+              key={item.url}
               href={item.url}
               end={item.url === "/"}
               className={cn(
@@ -102,16 +108,16 @@ export function AppSidebar({ collapsed, onToggle, onOpenCommandPalette }: AppSid
               activeClassName=""
             >
               <item.icon className="h-4 w-4 shrink-0" />
-              {!collapsed && <span>{item.title}</span>}
+              {!collapsed && <span>{label}</span>}
             </NavLink>
           );
 
           if (collapsed) {
             return (
-              <Tooltip key={item.title}>
+              <Tooltip key={item.url}>
                 <TooltipTrigger asChild>{link}</TooltipTrigger>
                 <TooltipContent side="right" className="text-xs">
-                  {item.title}
+                  {label}
                 </TooltipContent>
               </Tooltip>
             );
@@ -157,7 +163,7 @@ export function AppSidebar({ collapsed, onToggle, onOpenCommandPalette }: AppSid
             <Search className="h-3.5 w-3.5 shrink-0" />
             {!collapsed && (
               <>
-                <span>Search...</span>
+                <span>{t("search")}</span>
                 <kbd className="pointer-events-none inline-flex h-5 select-none items-center rounded border border-border bg-muted px-1.5 text-[10px] font-medium text-muted-foreground ml-auto">
                   ⌘K
                 </kbd>

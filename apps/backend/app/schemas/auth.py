@@ -7,6 +7,7 @@ class SignupRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8)
     name: str | None = None
+    invite_token: str | None = None
 
 
 class LoginRequest(BaseModel):
@@ -18,7 +19,9 @@ class AuthUserResponse(BaseModel):
     id: UUID
     email: EmailStr
     name: str
-    role: str
+    avatar_url: str | None = None
+    role: str  # account: "user" | "admin"
+    membership_role: str
     status: str
     org_id: UUID
     org_name: str
@@ -47,8 +50,7 @@ class OnboardingRequest(BaseModel):
 
 class AcceptInviteRequest(BaseModel):
     token: str
-    password: str = Field(min_length=8)
-    name: str | None = None
+    name: str = Field(min_length=1)
 
 
 class InviteDetailsResponse(BaseModel):
@@ -56,3 +58,5 @@ class InviteDetailsResponse(BaseModel):
     role: str
     email: EmailStr
     account_exists: bool
+    status: str
+    suggested_name: str | None = None

@@ -1,3 +1,4 @@
+import { refresh401MeansSessionExpired } from "@/lib/auth-refresh-codes";
 import {
   API_BASE_URL,
   apiGet,
@@ -11,7 +12,9 @@ export type AuthSessionResponse = {
   id: string;
   email: string;
   name: string;
+  avatar_url?: string | null;
   role: string;
+  membership_role: string;
   status: string;
   org_id: string;
   org_name: string;
@@ -36,6 +39,7 @@ export type AuthPayload = {
   email: string;
   password: string;
   name?: string;
+  invite_token?: string;
 };
 
 export function login(payload: AuthPayload): Promise<unknown> {
@@ -44,6 +48,24 @@ export function login(payload: AuthPayload): Promise<unknown> {
 
 export function signup(payload: AuthPayload): Promise<unknown> {
   return apiPost<unknown>("/auth/signup", payload);
+}
+
+/** Normalize `/auth/me` payload: older APIs used `role` for org membership only. */
+function normalizeAuthSessionPayload(raw: Record<string, unknown>): AuthSessionResponse {
+  const base = raw as unknown as AuthSessionResponse;
+  const withRoles =
+    typeof raw.membership_role === "string"
+      ? base
+      : {
+          ...base,
+          role: "user",
+          membership_role: String(raw.role ?? ""),
+        };
+  return {
+    ...withRoles,
+    org_avatar_url: normalizeApiUrl(withRoles.org_avatar_url),
+    avatar_url: normalizeApiUrl(withRoles.avatar_url),
+  };
 }
 
 export async function logout(): Promise<void> {
@@ -56,6 +78,46 @@ export async function logout(): Promise<void> {
   if (!res.ok && res.status !== 204) {
     throw new Error(`API request failed: ${res.status} ${res.statusText}`);
   }
+}
+
+export type RefreshSessionResult =
+  | { ok: true; user: AuthSessionResponse }
+  | { ok: false; sessionInvalidated: boolean };
+
+export async function refreshSessionDetailed(): Promise<RefreshSessionResult> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
+      method: "POST",
+      headers: { Accept: "application/json" },
+      credentials: "include",
+      cache: "no-store",
+    });
+
+    if (res.ok) {
+      const raw = (await res.json()) as Record<string, unknown>;
+      return { ok: true, user: normalizeAuthSessionPayload(raw) };
+    }
+
+    if (res.status === 401) {
+      let code: string | undefined;
+      try {
+        const body = (await res.json()) as { code?: string };
+        code = typeof body.code === "string" ? body.code : undefined;
+      } catch {
+        code = undefined;
+      }
+      return { ok: false, sessionInvalidated: refresh401MeansSessionExpired(code) };
+    }
+
+    return { ok: false, sessionInvalidated: false };
+  } catch {
+    return { ok: false, sessionInvalidated: false };
+  }
+}
+
+export async function refreshSession(): Promise<AuthSessionResponse | null> {
+  const r = await refreshSessionDetailed();
+  return r.ok ? r.user : null;
 }
 
 export async function getAuthSession(): Promise<AuthSessionResponse | null> {
@@ -74,8 +136,8 @@ export async function getAuthSession(): Promise<AuthSessionResponse | null> {
     throw new Error(`API request failed: ${res.status} ${res.statusText}`);
   }
 
-  const session = (await res.json()) as AuthSessionResponse;
-  return { ...session, org_avatar_url: normalizeApiUrl(session.org_avatar_url) };
+  const raw = (await res.json()) as Record<string, unknown>;
+  return normalizeAuthSessionPayload(raw);
 }
 
 export function getMe(): Promise<MeResponse> {
@@ -122,6 +184,17 @@ export async function resendVerification(email: string): Promise<{ ok: boolean }
   return (await res.json()) as { ok: boolean };
 }
 
+export async function getGoogleAuthEnabled(): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/auth/google/enabled`, { cache: "no-store" });
+    if (!res.ok) return false;
+    const data = (await res.json()) as { enabled: boolean };
+    return data.enabled;
+  } catch {
+    return false;
+  }
+}
+
 export async function completeOnboarding(data: {
   full_name: string;
   organization_name: string;
@@ -141,7 +214,8 @@ export async function completeOnboarding(data: {
     throw new Error(message);
   }
 
-  return (await res.json()) as AuthSessionResponse;
+  const raw = (await res.json()) as Record<string, unknown>;
+  return normalizeAuthSessionPayload(raw);
 }
 
 export type OrgUserResponse = {
@@ -158,4 +232,6 @@ export type InviteDetailsResponse = {
   role: string;
   email: string;
   account_exists: boolean;
+  status: string;
+  suggested_name?: string | null;
 };

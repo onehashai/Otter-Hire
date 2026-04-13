@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import hashlib
+import heapq
 import hmac
 import json
 import logging
@@ -14,6 +15,7 @@ from datetime import datetime, timedelta, timezone
 from email import policy
 from email.parser import BytesParser
 from email.utils import parseaddr
+from uuid import UUID
 
 import boto3
 import redis
@@ -21,13 +23,30 @@ from sqlalchemy import delete, select
 
 from app.core.config import settings
 from app.db.session import AsyncSessionLocal
+from app.integrations.app_store.email_integration import credential_store
+from app.models.conversation import Conversation
 from app.models.email import InboundEmail
-from app.models.organization import OrgInbox
+from app.models.integration_credential import IntegrationCredential
 
 logger = logging.getLogger(__name__)
 
 _PROCESS_KEY_TIMEOUT_SECONDS = 30
 _REDIS_SOCKET_TIMEOUT_SECONDS = 2
+
+
+def _parse_references(references_raw: str) -> list[str]:
+    """Parse an email References header into a list of bare message-IDs.
+
+    The header is a whitespace-separated list of angle-bracketed IDs, e.g.
+    ``<abc@host> <def@host>``.  Returns them without the angle brackets,
+    oldest-first (left-to-right as they appear in the header).
+    """
+    ids: list[str] = []
+    for token in re.split(r"\s+", (references_raw or "").strip()):
+        clean = token.strip().strip("<>")
+        if clean:
+            ids.append(clean)
+    return ids
 
 
 def _extract_recipient(to_values: list[str]) -> str | None:
@@ -73,30 +92,56 @@ def _extract_text_and_attachments(raw_email: bytes) -> dict:
     if not message_id:
         message_id = hashlib.sha256(raw_email).hexdigest()[:32]
 
+    # Threading headers — used to match inbound replies to existing conversations
+    in_reply_to = (msg.get("In-Reply-To") or "").strip().strip("<>") or None
+    references_raw = (msg.get("References") or "").strip()
+    # References is a space-separated list of message-ids; keep the raw string
+    references = references_raw or None
+
+    # Noise-filter headers — passed through so the API can reject automated mail
+    auto_submitted = (msg.get("Auto-Submitted") or "").strip().lower() or None
+    list_unsubscribe = bool(msg.get("List-Unsubscribe"))
+    precedence = (msg.get("Precedence") or "").strip().lower() or None
+    # Outlook / Exchange header that suppresses auto-replies
+    x_auto_response_suppress = (msg.get("X-Auto-Response-Suppress") or "").strip() or None
+
     return {
         "inbox_address": _extract_recipient(to_values),
         "from_email": (from_email or "").strip().lower() or None,
         "subject": (msg.get("Subject") or "").strip() or None,
         "message_id": message_id,
+        "in_reply_to": in_reply_to,
+        "references": references,
+        "auto_submitted": auto_submitted,
+        "list_unsubscribe": list_unsubscribe,
+        "precedence": precedence,
+        "x_auto_response_suppress": x_auto_response_suppress,
         "text_body": text_body,
         "html_body": html_body,
         "attachments": attachments,
     }
 
 
-_ENQUEUED_TTL_SECONDS = 86400  # 24h - avoid re-enqueuing same key while workflow runs
+_ENQUEUED_TTL_SECONDS = 86400  # 24h  – covers workflow execution time
+_IGNORED_TTL_SECONDS = 2592000  # 30d  – covers ignored emails until S3 lifecycle removes them
+
+
+def _redis_client() -> redis.Redis:
+    return redis.Redis.from_url(
+        settings.redis_url,
+        decode_responses=True,
+        socket_connect_timeout=_REDIS_SOCKET_TIMEOUT_SECONDS,
+        socket_timeout=_REDIS_SOCKET_TIMEOUT_SECONDS,
+    )
 
 
 def _is_key_enqueued_in_redis(raw_key: str) -> bool:
-    """Check if key was recently enqueued (workflow may still be running)."""
+    """Return True if the key was recently enqueued OR permanently marked as ignored."""
     try:
-        r = redis.Redis.from_url(
-            settings.redis_url,
-            decode_responses=True,
-            socket_connect_timeout=_REDIS_SOCKET_TIMEOUT_SECONDS,
-            socket_timeout=_REDIS_SOCKET_TIMEOUT_SECONDS,
+        r = _redis_client()
+        return bool(
+            r.exists(f"inbound:enqueued:{raw_key}") or r.exists(f"inbound:ignored:{raw_key}")
         )
-        return bool(r.exists(f"inbound:enqueued:{raw_key}"))
     except Exception:
         logger.exception("SES bridge redis exists failed key=%s", raw_key)
         return False
@@ -105,15 +150,87 @@ def _is_key_enqueued_in_redis(raw_key: str) -> bool:
 def _mark_key_enqueued_in_redis(raw_key: str) -> None:
     """Mark key as enqueued to avoid SES bridge re-enqueuing every poll cycle."""
     try:
-        r = redis.Redis.from_url(
-            settings.redis_url,
-            decode_responses=True,
-            socket_connect_timeout=_REDIS_SOCKET_TIMEOUT_SECONDS,
-            socket_timeout=_REDIS_SOCKET_TIMEOUT_SECONDS,
-        )
+        r = _redis_client()
         r.setex(f"inbound:enqueued:{raw_key}", _ENQUEUED_TTL_SECONDS, "1")
     except Exception:
         logger.exception("SES bridge redis setex failed key=%s", raw_key)
+
+
+def _clear_key_enqueued_in_redis(raw_key: str) -> None:
+    """Clear the temporary enqueue marker so fallback polling can retry the key."""
+    try:
+        r = _redis_client()
+        r.delete(f"inbound:enqueued:{raw_key}")
+    except Exception:
+        logger.exception("SES bridge redis delete failed key=%s", raw_key)
+
+
+def _mark_key_ignored_in_redis(raw_key: str) -> None:
+    """Permanently mark a key as ignored so the polling loop never re-enqueues it.
+
+    Used when a Temporal workflow completes as 'ignored' (unknown inbox, etc.) without
+    creating an InboundEmail DB record.  Without this, every poll cycle after the
+    short-lived 'enqueued' TTL expires would spin up a new workflow indefinitely.
+    """
+    try:
+        r = _redis_client()
+        r.setex(f"inbound:ignored:{raw_key}", _IGNORED_TTL_SECONDS, "1")
+    except Exception:
+        logger.exception("SES bridge redis setex ignored failed key=%s", raw_key)
+
+
+def _select_latest_keys_from_s3_objects(
+    objects: list[tuple[str, datetime | None]],
+    limit: int,
+) -> list[tuple[str, datetime | None]]:
+    bounded_limit = max(1, limit)
+    return heapq.nlargest(
+        bounded_limit,
+        objects,
+        key=lambda item: item[1] or datetime.fromtimestamp(0, tz=timezone.utc),
+    )
+
+
+def _list_latest_raw_keys(
+    s3_client,
+    bucket: str,
+    prefix: str,
+    limit: int,
+) -> tuple[list[tuple[str, datetime | None]], int, int, datetime | None]:
+    paginator = s3_client.get_paginator("list_objects_v2")
+    page_iterator = paginator.paginate(
+        Bucket=bucket,
+        Prefix=prefix,
+        PaginationConfig={"PageSize": 1000},
+    )
+
+    pages_scanned = 0
+    objects_seen = 0
+    newest_seen: datetime | None = None
+    latest_objects: list[tuple[str, datetime | None]] = []
+
+    for page in page_iterator:
+        pages_scanned += 1
+        page_objects = [(obj["Key"], obj.get("LastModified")) for obj in page.get("Contents", [])]
+        if not page_objects:
+            continue
+
+        objects_seen += len(page_objects)
+        page_newest = max(
+            (mtime for _, mtime in page_objects if mtime is not None),
+            default=None,
+        )
+        if page_newest and (newest_seen is None or page_newest > newest_seen):
+            newest_seen = page_newest
+
+        latest_objects.extend(page_objects)
+        latest_objects = _select_latest_keys_from_s3_objects(latest_objects, limit)
+
+    latest_objects.sort(
+        key=lambda item: item[1] or datetime.fromtimestamp(0, tz=timezone.utc),
+        reverse=True,
+    )
+    return latest_objects, pages_scanned, objects_seen, newest_seen
 
 
 async def _is_key_already_processed(raw_key: str) -> bool:
@@ -129,11 +246,16 @@ async def _is_key_already_processed(raw_key: str) -> bool:
 
 async def _find_inbox_secret(inbox_address: str) -> str | None:
     async with AsyncSessionLocal() as db:
-        result = await db.execute(select(OrgInbox).where(OrgInbox.inbox_address == inbox_address))
-        inbox = result.scalar_one_or_none()
-        if inbox is None:
+        job_cred = await credential_store.get_job_credential_by_address(db, inbox_address)
+        if job_cred is not None and (job_cred.status or "") in {"pending", "active"}:
+            return str(
+                (job_cred.config or {}).get("secret_hash") or settings.inbound_webhook_secret
+            )
+
+        org_cred = await credential_store.get_org_credential_by_address(db, inbox_address)
+        if org_cred is None:
             return None
-        return inbox.secret_hash or settings.inbound_webhook_secret
+        return str((org_cred.config or {}).get("secret_hash") or settings.inbound_webhook_secret)
 
 
 def _extract_org_id_from_forwarding_address(inbox_address: str) -> str | None:
@@ -149,34 +271,114 @@ def _extract_org_id_from_forwarding_address(inbox_address: str) -> str | None:
     return f"{hex_id[0:8]}-{hex_id[8:12]}-{hex_id[12:16]}-{hex_id[16:20]}-{hex_id[20:32]}"
 
 
-async def _resolve_inbox_context(inbox_address: str) -> tuple[str, str] | None:
+def _extract_job_id_from_forwarding_address(inbox_address: str) -> str | None:
     """
-    Resolve secret + canonical inbox address.
-    1) Direct match on org_inboxes.inbox_address
-    2) Fallback for forwarding alias org-<orgid>@inbound.domain -> lookup by org_id
+    Parse forwarding alias format:
+    job-<32hex>@inbound.domain -> UUID string with dashes
+    """
+    value = (inbox_address or "").strip().lower()
+    match = re.match(r"^job-([0-9a-f]{32})@", value)
+    if not match:
+        return None
+    hex_id = match.group(1)
+    return f"{hex_id[0:8]}-{hex_id[8:12]}-{hex_id[12:16]}-{hex_id[16:20]}-{hex_id[20:32]}"
+
+
+# Matches To address like reply+<conversation_id>@inbound.domain
+_REPLY_CONVERSATION_PATTERN = re.compile(
+    r"^reply\+([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})@",
+    re.IGNORECASE,
+)
+
+
+async def _resolve_inbox_context(
+    inbox_address: str,
+) -> tuple[str, str, str | None] | None:
+    """
+    Resolve secret + canonical inbox address + optional reply_to_conversation_id.
+    1) Direct match on jobs.email_inbound_address
+    2) Fallback for forwarding alias job-<jobid>@inbound.domain -> lookup by job_id
+    3) Direct match on organizations.inbox_address
+    4) Fallback for forwarding alias org-<orgid>@inbound.domain -> lookup by org_id
+    5) Fallback for reply+<conversation_id>@... -> lookup conversation, then org_inbox by org_id
+    Returns (secret, canonical_inbox_address, reply_to_conversation_id_str or None).
     """
     async with AsyncSessionLocal() as db:
-        direct_result = await db.execute(
-            select(OrgInbox).where(OrgInbox.inbox_address == inbox_address)
-        )
-        direct_inbox = direct_result.scalar_one_or_none()
+        # Job-level inbox direct match
+        job_cred = await credential_store.get_job_credential_by_address(db, inbox_address)
+        if job_cred is not None:
+            cfg = job_cred.config or {}
+            secret = cfg.get("secret_hash") or settings.inbound_webhook_secret
+            canonical = cfg.get("inbound_address") or inbox_address
+            if secret and (job_cred.status or "") in {"pending", "active"}:
+                return str(secret), str(canonical), None
+
+        job_id = _extract_job_id_from_forwarding_address(inbox_address)
+        if job_id:
+            cred_by_job_result = await db.execute(
+                select(IntegrationCredential).where(IntegrationCredential.job_id == job_id)
+            )
+            by_id = cred_by_job_result.scalar_one_or_none()
+            if by_id is not None:
+                cfg = by_id.config or {}
+                secret = cfg.get("secret_hash") or settings.inbound_webhook_secret
+                canonical = cfg.get("inbound_address") or inbox_address
+                if secret and (by_id.status or "") in {"pending", "active"}:
+                    return str(secret), str(canonical), None
+
+        direct_inbox = await credential_store.get_org_credential_by_address(db, inbox_address)
         if direct_inbox is not None:
-            secret = direct_inbox.secret_hash or settings.inbound_webhook_secret
+            cfg = direct_inbox.config or {}
+            secret = cfg.get("secret_hash") or settings.inbound_webhook_secret
             if secret:
-                return secret, direct_inbox.inbox_address
+                reply_conv_id = None
+                m = _REPLY_CONVERSATION_PATTERN.match((inbox_address or "").strip().lower())
+                if m:
+                    reply_conv_id = m.group(1)
+                return str(secret), str(cfg.get("inbound_address") or inbox_address), reply_conv_id
 
         org_id = _extract_org_id_from_forwarding_address(inbox_address)
-        if not org_id:
-            return None
+        if org_id:
+            cred_result = await db.execute(
+                select(IntegrationCredential).where(
+                    IntegrationCredential.org_id == org_id,
+                    IntegrationCredential.job_id.is_(None),
+                )
+            )
+            org_inbox = cred_result.scalar_one_or_none()
+            if org_inbox is not None:
+                cfg = org_inbox.config or {}
+                secret = cfg.get("secret_hash") or settings.inbound_webhook_secret
+                if secret:
+                    return str(secret), str(cfg.get("inbound_address") or inbox_address), None
 
-        org_result = await db.execute(select(OrgInbox).where(OrgInbox.org_id == org_id))
+        # reply+<conversation_id>@... -> resolve via conversation
+        m = _REPLY_CONVERSATION_PATTERN.match((inbox_address or "").strip().lower())
+        if not m:
+            return None
+        conv_id_str = m.group(1)
+        try:
+            conv_uuid = UUID(conv_id_str)
+        except (ValueError, TypeError):
+            return None
+        conv_result = await db.execute(select(Conversation).where(Conversation.id == conv_uuid))
+        conv = conv_result.scalar_one_or_none()
+        if conv is None:
+            return None
+        org_result = await db.execute(
+            select(IntegrationCredential).where(
+                IntegrationCredential.org_id == conv.org_id,
+                IntegrationCredential.job_id.is_(None),
+            )
+        )
         org_inbox = org_result.scalar_one_or_none()
         if org_inbox is None:
             return None
-        secret = org_inbox.secret_hash or settings.inbound_webhook_secret
+        cfg = org_inbox.config or {}
+        secret = cfg.get("secret_hash") or settings.inbound_webhook_secret
         if not secret:
             return None
-        return secret, org_inbox.inbox_address
+        return str(secret), str(cfg.get("inbound_address") or inbox_address), conv_id_str
 
 
 async def _cleanup_ignored_inbound_records(s3_client, bucket: str) -> None:
@@ -220,7 +422,7 @@ def _post_to_inbound_api(payload: dict, secret: str) -> tuple[int, str]:
     signature = "sha256=" + hmac.new(secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
 
     req = urllib.request.Request(
-        f"{settings.inbound_internal_api_base_url.rstrip('/')}/public/inbound/email",
+        f"{settings.backend_url.rstrip('/')}/v1/internal/inbound/email",
         data=body,
         headers={"Content-Type": "application/json", "X-OneHash-Signature": signature},
         method="POST",
@@ -232,105 +434,98 @@ def _post_to_inbound_api(payload: dict, secret: str) -> tuple[int, str]:
         return exc.code, exc.read().decode("utf-8", errors="ignore")
 
 
-def _enqueue_raw_key_via_http(bucket: str, key: str) -> tuple[int, str]:
-    body = json.dumps({"bucket": bucket, "key": key}, separators=(",", ":")).encode("utf-8")
-    req = urllib.request.Request(
-        f"{settings.inbound_internal_api_base_url.rstrip('/')}/public/inbound/s3-event",
-        data=body,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=20) as resp:
-            return resp.status, resp.read().decode("utf-8", errors="ignore")
-    except urllib.error.HTTPError as exc:
-        return exc.code, exc.read().decode("utf-8", errors="ignore")
-
-
 async def _process_raw_key(s3_client, bucket: str, key: str) -> None:
     logger.info("SES bridge process start key=%s", key)
     if "AMAZON_SES_SETUP_NOTIFICATION" in key:
         logger.info("SES bridge skipped key=%s reason=ses_setup_notification", key)
         return
+    # Fast Redis guard: skip keys that are already enqueued (workflow running) or
+    # permanently ignored (workflow completed without a DB record being created).
+    # This check must come before the DB query to avoid hammering the DB every poll.
+    if _is_key_enqueued_in_redis(key):
+        logger.debug("SES bridge skipped key=%s reason=redis_dedup", key)
+        return
     if await _is_key_already_processed(key):
         logger.info("SES bridge skipped key=%s reason=already_processed", key)
         return
-    if settings.inbound_async_pipeline_enabled and settings.inbound_async_enqueue_via_http:
-        status, response_text = await asyncio.to_thread(_enqueue_raw_key_via_http, bucket, key)
-        if status >= 400:
-            logger.error(
-                "SES bridge enqueue failed key=%s status=%s body=%s",
+    _mark_key_enqueued_in_redis(key)
+
+    try:
+        logger.info("SES bridge processing key=%s bucket=%s", key, bucket)
+        logger.info("SES bridge s3 fetch start key=%s", key)
+        raw_email = await asyncio.to_thread(
+            lambda: s3_client.get_object(Bucket=bucket, Key=key)["Body"].read()
+        )
+        logger.info("SES bridge s3 fetch done key=%s bytes=%s", key, len(raw_email))
+        logger.info("SES bridge parse start key=%s", key)
+        normalized = _extract_text_and_attachments(raw_email)
+        logger.info("SES bridge parse done key=%s inbox=%s", key, normalized.get("inbox_address"))
+        inbox_address = normalized.get("inbox_address")
+        if not inbox_address:
+            logger.warning("SES bridge skipped key=%s reason=missing_recipient", key)
+            return
+
+        inbox_context = await _resolve_inbox_context(inbox_address)
+        if not inbox_context:
+            logger.warning(
+                "SES bridge skipped key=%s inbox=%s reason=inbox_or_secret_not_found",
                 key,
+                inbox_address,
+            )
+            return
+        secret, canonical_inbox_address, reply_to_conv_id = inbox_context
+
+        payload = {
+            "inbox_address": canonical_inbox_address,
+            "reply_to_conversation_id": reply_to_conv_id,
+            "from_email": normalized.get("from_email"),
+            "subject": normalized.get("subject"),
+            "message_id": normalized.get("message_id"),
+            "in_reply_to": normalized.get("in_reply_to"),
+            "references": normalized.get("references"),
+            "auto_submitted": normalized.get("auto_submitted"),
+            "list_unsubscribe": normalized.get("list_unsubscribe") or False,
+            "precedence": normalized.get("precedence"),
+            "x_auto_response_suppress": normalized.get("x_auto_response_suppress"),
+            "received_at": datetime.now(timezone.utc).isoformat(),
+            "raw_storage_key": key,
+            "text_body": normalized.get("text_body") or None,
+            "html_body": normalized.get("html_body") or None,
+            "attachments": normalized.get("attachments") or [],
+        }
+
+        status, response_text = await asyncio.to_thread(_post_to_inbound_api, payload, secret)
+        if status >= 400:
+            _clear_key_enqueued_in_redis(key)
+            logger.error(
+                "SES bridge post failed key=%s inbox=%s status=%s body=%s",
+                key,
+                inbox_address,
                 status,
                 response_text,
             )
             return
-        _mark_key_enqueued_in_redis(key)
-        logger.info("SES bridge enqueued key=%s status=%s", key, status)
-        return
 
-    logger.info("SES bridge processing key=%s bucket=%s", key, bucket)
-    logger.info("SES bridge s3 fetch start key=%s", key)
-    raw_email = await asyncio.to_thread(
-        lambda: s3_client.get_object(Bucket=bucket, Key=key)["Body"].read()
-    )
-    logger.info("SES bridge s3 fetch done key=%s bytes=%s", key, len(raw_email))
-    logger.info("SES bridge parse start key=%s", key)
-    normalized = _extract_text_and_attachments(raw_email)
-    logger.info("SES bridge parse done key=%s inbox=%s", key, normalized.get("inbox_address"))
-    inbox_address = normalized.get("inbox_address")
-    if not inbox_address:
-        logger.warning("SES bridge skipped key=%s reason=missing_recipient", key)
-        return
-
-    inbox_context = await _resolve_inbox_context(inbox_address)
-    if not inbox_context:
-        logger.warning(
-            "SES bridge skipped key=%s inbox=%s reason=inbox_or_secret_not_found",
+        logger.info(
+            "SES bridge processed key=%s inbox=%s canonical_inbox=%s status=%s",
             key,
             inbox_address,
-        )
-        return
-    secret, canonical_inbox_address = inbox_context
-
-    payload = {
-        "inbox_address": canonical_inbox_address,
-        "from_email": normalized.get("from_email"),
-        "subject": normalized.get("subject"),
-        "message_id": normalized.get("message_id"),
-        "received_at": datetime.now(timezone.utc).isoformat(),
-        "raw_storage_key": key,
-        "text_body": normalized.get("text_body") or None,
-        "html_body": normalized.get("html_body") or None,
-        "attachments": normalized.get("attachments") or [],
-    }
-
-    status, response_text = await asyncio.to_thread(_post_to_inbound_api, payload, secret)
-    if status >= 400:
-        logger.error(
-            "SES bridge post failed key=%s inbox=%s status=%s body=%s",
-            key,
-            inbox_address,
+            canonical_inbox_address,
             status,
-            response_text,
         )
-        return
-
-    logger.info(
-        "SES bridge processed key=%s inbox=%s canonical_inbox=%s status=%s",
-        key,
-        inbox_address,
-        canonical_inbox_address,
-        status,
-    )
+    except Exception:
+        _clear_key_enqueued_in_redis(key)
+        raise
 
 
 async def run_ses_raw_bridge_loop(stop_event: asyncio.Event) -> None:
     if not settings.s3_enabled:
         logger.info("SES bridge disabled because S3 is not enabled")
         return
-    bucket = settings.effective_ses_raw_bridge_bucket
-    prefix = settings.effective_ses_raw_bridge_prefix
+    raw_bucket = (settings.ses_raw_bridge_bucket or "").strip()
+    bucket = raw_bucket or (settings.aws_s3_bucket or "").strip()
+    raw_prefix = (settings.ses_raw_bridge_prefix or "").strip().lstrip("/")
+    prefix = raw_prefix or f"{settings.s3_root_prefix}/ses-inbound/raw/"
     if not bucket:
         logger.warning("SES bridge disabled because bucket is missing")
         return
@@ -346,42 +541,21 @@ async def run_ses_raw_bridge_loop(stop_event: asyncio.Event) -> None:
     max_parallel = 10
     while not stop_event.is_set():
         try:
-            # Paginate across all available objects so new keys are not skipped when
-            # the prefix grows beyond a single list_objects_v2 page.
-            keys_with_mtime: list[tuple[str, datetime | None]] = []
-            continuation_token: str | None = None
-            while True:
-                request = {
-                    "Bucket": bucket,
-                    "Prefix": prefix,
-                    "MaxKeys": max(1, settings.ses_raw_bridge_max_keys),
-                }
-                if continuation_token:
-                    request["ContinuationToken"] = continuation_token
-                response = s3_client.list_objects_v2(**request)
-                keys_with_mtime.extend(
-                    (obj["Key"], obj.get("LastModified")) for obj in response.get("Contents", [])
-                )
-                if not response.get("IsTruncated"):
-                    break
-                continuation_token = response.get("NextContinuationToken")
-                if not continuation_token:
-                    break
-
-            # Prioritize latest raw emails first for lower end-to-end latency.
-            keys_with_mtime.sort(
-                key=lambda item: item[1] or datetime.fromtimestamp(0, tz=timezone.utc),
-                reverse=True,
+            keys_with_mtime, pages_scanned, objects_seen, newest_seen = await asyncio.to_thread(
+                _list_latest_raw_keys,
+                s3_client,
+                bucket,
+                prefix,
+                settings.ses_raw_bridge_max_keys,
             )
 
             if keys_with_mtime:
-                newest_seen = keys_with_mtime[0][1]
-                keys_with_mtime = keys_with_mtime[: max(1, settings.ses_raw_bridge_max_keys)]
                 logger.info(
-                    "SES bridge scan bucket=%s prefix=%s keys=%s newest=%s processing=%s",
+                    "SES bridge scan bucket=%s prefix=%s pages=%s seen=%s newest=%s processing=%s",
                     bucket,
                     prefix,
-                    len(keys_with_mtime),
+                    pages_scanned,
+                    objects_seen,
                     newest_seen.isoformat() if newest_seen else None,
                     len(keys_with_mtime),
                 )
@@ -411,9 +585,23 @@ async def run_ses_raw_bridge_loop(stop_event: asyncio.Event) -> None:
                         logger.exception("SES bridge failed key=%s", raw_key)
 
             tasks: list[asyncio.Task[None]] = []
-            for key, _ in keys_with_mtime:
+            fallback_grace_seconds = max(0, int(settings.inbound_sns_fallback_grace_seconds))
+            now_utc = datetime.now(timezone.utc)
+            for key, modified_at in keys_with_mtime:
                 if stop_event.is_set():
                     break
+                if (
+                    fallback_grace_seconds > 0
+                    and modified_at is not None
+                    and (now_utc - modified_at).total_seconds() < fallback_grace_seconds
+                ):
+                    logger.debug(
+                        "SES bridge deferred key=%s age_seconds=%s grace_seconds=%s",
+                        key,
+                        int((now_utc - modified_at).total_seconds()),
+                        fallback_grace_seconds,
+                    )
+                    continue
                 tasks.append(asyncio.create_task(_process_with_limit(key)))
 
             if tasks:

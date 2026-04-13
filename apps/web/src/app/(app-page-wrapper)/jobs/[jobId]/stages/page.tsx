@@ -5,7 +5,7 @@ import { Button } from "@onehash/ui/button";
 import { InputField } from "@onehash/ui/input";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@onehash/ui/dialog";
 import { GripVertical, Plus, Trash2, Settings } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@onehash/ui/sonner";
 import { cn } from "@/lib/utils";
 import { useJobSetup } from "../context";
 
@@ -33,7 +33,7 @@ export default function HiringStagesPage() {
 
   const handleRemoveStage = async (id: string, isRequired?: boolean) => {
     if (isRequired) {
-      toast.error("Applied and Hired stages cannot be deleted");
+      toast.error("Required stages cannot be deleted");
       return;
     }
     if (hiringStages.length <= 2) {
@@ -73,7 +73,7 @@ export default function HiringStagesPage() {
     <div className="space-y-5">
       <div>
         <p className="text-xs text-muted-foreground mb-1">
-          Define the interview pipeline for this job. Stages can be reordered by dragging.
+          Define hiring stages for this job. Stages can be reordered by dragging.
         </p>
       </div>
 
@@ -103,17 +103,13 @@ export default function HiringStagesPage() {
             <Button
               variant="ghost"
               size="icon"
-              className={cn(
-                "h-7 w-7 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground",
-                stage.isRequired && "opacity-40 group-hover:opacity-40 cursor-not-allowed",
-              )}
+              className="h-7 w-7 shrink-0 transition-opacity text-muted-foreground"
               onClick={() => handleRemoveStage(stage.id, stage.isRequired)}
-              title={stage.isRequired ? "Required stage cannot be deleted" : "Delete stage"}
-              disabled={isSubmitting}
+              tooltip={stage.isRequired ? "Required stage cannot be deleted" : "Delete"}
+              disabled={isSubmitting || stage.isRequired}
             >
               <Trash2 className="h-3.5 w-3.5" />
             </Button>
-            <Settings className="h-3.5 w-3.5 text-muted-foreground/30 shrink-0" />
           </div>
         ))}
       </div>

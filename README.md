@@ -21,9 +21,14 @@ docker compose up --build
 ```
 
 Open:
-- `http://localhost:3000`
-- `http://localhost:8000/openapi.json`
-- `http://localhost:3000/debug-api`
+- `http://localhost:3000` or `http://app.localhost.com:3000`
+- `http://localhost:8000/openapi.json` or `http://api.localhost.com:8000`
+- `http://temporal.localhost.com:8081` — Temporal UI
+
+Add to `/etc/hosts` for subdomains:
+```
+127.0.0.1 app.localhost.com api.localhost.com jobs.localhost.com temporal.localhost.com
+```
 
 Stop:
 
@@ -229,7 +234,6 @@ CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 ### Frontend (`apps/web/.env.local` local only)
 
 ```env
-NEXT_PUBLIC_API_URL=http://localhost:8000
 ```
 
 Notes:
@@ -299,6 +303,7 @@ Required `staging` variables:
 - `ECS_WEB_TASKDEF`
 - `API_HEALTHCHECK_URL`
 - `WEB_HEALTHCHECK_URL`
+- `NEXT_PUBLIC_APP_SUBDOMAIN`, `NEXT_PUBLIC_JOBS_SUBDOMAIN`, `NEXT_PUBLIC_APP_ROOT_HOST`, `NEXT_PUBLIC_API_BASE_URL`, `NEXT_PUBLIC_SES_MAIL_DOMAIN`, `NEXT_PUBLIC_TEMPORAL_UI_URL` (e.g. `https://temporal.smartats.in` for prod, `https://temporal.staging.smartats.in` for staging)
 
 Required `staging` secrets:
 - `AWS_ACCESS_KEY_ID`
@@ -345,6 +350,7 @@ python3 -m pip install -r apps/backend/requirements.txt
 - Ensure `CORS_ORIGINS` includes frontend origin.
 - Local defaults: `http://localhost:3000,http://127.0.0.1:3000`
 
-### `NEXT_PUBLIC_API_URL` issues
+### API path issues
 - For host dev: set in `apps/web/.env.local`.
 - For Docker: verify env in `docker-compose.yml`.
+

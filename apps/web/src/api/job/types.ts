@@ -14,7 +14,7 @@ export type JobTeamMemberResponse = {
   user_role: string | null;
 };
 
-export type JobPipelineCandidateResponse = {
+export type JobWorkspaceCandidateResponse = {
   id: string;
   name: string;
   email: string | null;
@@ -23,12 +23,12 @@ export type JobPipelineCandidateResponse = {
   updated_at: string;
 };
 
-export type JobPipelineResponse = {
+export type JobWorkspaceResponse = {
   id: string;
   title: string;
   status: string;
   stages: JobHiringStageResponse[];
-  candidates: JobPipelineCandidateResponse[];
+  candidates: JobWorkspaceCandidateResponse[];
 };
 
 export type JobListItemResponse = {
@@ -57,6 +57,11 @@ export type JobDetailResponse = {
   salary_fixed: number | null;
   currency: string | null;
   salary_timeframe: string | null;
+  post_to_linkedin: boolean;
+  linkedin_sync_status: string | null;
+  linkedin_external_job_id: string | null;
+  linkedin_last_synced_at: string | null;
+  linkedin_last_error: string | null;
   description: string | null;
   status: string;
   visibility: string;
@@ -64,7 +69,6 @@ export type JobDetailResponse = {
   collect_cover: boolean;
   screening_questions: string[];
   application_form_schema: Record<string, unknown>;
-  pipeline_template: string | null;
   hiring_stages: JobHiringStageResponse[];
   team_members: JobTeamMemberResponse[];
   created_by_user_id: string;
@@ -88,12 +92,12 @@ export type JobUpdatePayload = {
   salary_fixed?: number | null;
   currency?: string;
   salary_timeframe?: string;
+  post_to_linkedin?: boolean;
   description?: string | null;
   collect_resume?: boolean;
   collect_cover?: boolean;
   screening_questions?: string[];
   application_form_schema?: Record<string, unknown>;
-  pipeline_template?: string;
   hiring_stages?: { id?: string; name: string; position: number }[];
   team_members?: { user_id: string; role: string }[];
 };

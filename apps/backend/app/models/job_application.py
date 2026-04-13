@@ -14,6 +14,9 @@ class JobApplication(Base):
         UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False
     )
     job_id = Column(UUID(as_uuid=True), ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False)
+    candidate_id = Column(
+        UUID(as_uuid=True), ForeignKey("candidates.id", ondelete="SET NULL"), nullable=True
+    )
     full_name = Column(String, nullable=False)
     email = Column(String, nullable=False)
     phone = Column(String, nullable=True)
@@ -33,4 +36,5 @@ class JobApplication(Base):
         Index("ix_job_applications_org_job_created", "org_id", "job_id", "created_at"),
         Index("ix_job_applications_job_created", "job_id", "created_at"),
         Index("ix_job_applications_org_email", "org_id", "email"),
+        Index("ix_job_applications_candidate_created", "candidate_id", "created_at"),
     )

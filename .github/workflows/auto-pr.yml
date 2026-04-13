@@ -1,0 +1,437 @@
+name: Auto PR (develop + main)
+
+on:
+  push:
+    branches:
+      - "**"
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: auto-pr-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  auto-pr:
+    name: Create/Update PRs to develop and main
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/heads/')
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_MODEL: gpt-4.1-mini
+      # Strict validator compatibility: keep this aligned with your semantic PR rules.
+      # Conventional Commits v1.0.0 header: <type>(<scope>)?!: <description>
+      # Here we enforce an allowlist of types for deterministic passing:
+      TITLE_REGEX: '^(feat|fix|chore|refactor|docs|test)(\([a-z0-9._/-]+\))?(!)?: [a-z0-9][a-z0-9 ._,/+-]*$'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Ensure tools
+        run: |
+          set -euo pipefail
+          command -v gh >/dev/null
+          command -v jq >/dev/null || (sudo apt-get update && sudo apt-get install -y jq)
+          command -v curl >/dev/null
+
+      - name: Fetch base branches
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --prune origin develop main
+
+      - name: Create or update PRs
+        run: |
+          set -euo pipefail
+
+          if [ -z "${OPENAI_API_KEY:-}" ]; then
+            echo "Missing required secret OPENAI_API_KEY."
+            exit 1
+          fi
+
+          head_branch="${GITHUB_REF#refs/heads/}"
+          short_sha="${GITHUB_SHA:0:7}"
+
+          # Do not open PRs from protected base branches.
+          # This prevents develop->main PRs from being opened/updated on merges into develop,
+          # and prevents any PR churn from pushes on develop/main.
+          if [ "${head_branch}" = "develop" ] || [ "${head_branch}" = "main" ]; then
+            echo "Skip: head branch '${head_branch}' is a base branch."
+            exit 0
+          fi
+
+          sanitize_slug() {
+            echo "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9._-]+/-/g; s/^-+|-+$//g' | cut -c1-48
+          }
+
+          ensure_label() {
+            local label="$1"
+            # Create label if missing; tolerate races.
+            if ! gh label list --limit 200 --json name --jq ".[] | select(.name==\"${label}\") | .name" | grep -qx "${label}"; then
+              gh label create "${label}" --description "Auto PR target: ${label}" --color "0E8A16" || true
+            fi
+          }
+
+          validate_title() {
+            local t="$1"
+            echo "$t" | grep -Eq "${TITLE_REGEX}"
+          }
+
+          validate_body_shape() {
+            local b="$1"
+            printf "%s\n" "${b}" | grep -q '^## Summary' \
+              && printf "%s\n" "${b}" | grep -q '^## Changes' \
+              && printf "%s\n" "${b}" | grep -q '^## Testing Notes'
+          }
+
+          normalize_title() {
+            local t="$1"
+            t="$(printf "%s" "$t" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
+            t="$(printf "%s" "$t" | sed -E 's/^["“”]+//; s/["“”]+$//')"
+            t="$(printf "%s" "$t" | tr '\r' '\n' | head -n 1)"
+            # normalize spaces around colon
+            t="$(printf "%s" "$t" | sed -E 's/[[:space:]]*:[[:space:]]*/: /')"
+            echo "$t"
+          }
+
+          # Try to derive a compliant title from commit subjects in the range.
+          # Returns a title string (may be empty if none suitable).
+          title_from_commits() {
+            local from_ref="$1"
+            local subjects
+            subjects="$(git log --pretty=%s "${from_ref}..HEAD" 2>/dev/null | head -n 50 || true)"
+
+            # 1) Prefer any already-valid subject.
+            while IFS= read -r s; do
+              s="$(normalize_title "${s}")"
+              if [ -n "${s}" ] && validate_title "${s}"; then
+                echo "${s}"
+                return 0
+              fi
+            done <<< "${subjects}"
+
+            # 2) Try to normalize casing in a CC-ish subject (lowercase description) and re-validate.
+            while IFS= read -r s; do
+              s="$(normalize_title "${s}")"
+              if [ -z "${s}" ]; then
+                continue
+              fi
+              # Lowercase only the description (after ": ").
+              s="$(printf "%s" "${s}" | sed -E 's/^((feat|fix|chore|refactor|docs|test)(\\([^)]+\\))?(!)?: )[[:space:]]*(.*)$/\\1\\L\\5/')"
+              if validate_title "${s}"; then
+                echo "${s}"
+                return 0
+              fi
+            done <<< "${subjects}"
+
+            echo ""
+          }
+
+          # Ask OpenAI for a title+body; then strictly validate/repair title before PR creation.
+          generate_with_openai() {
+            local base="$1"
+            local merge_base="$2"
+            local log_text="$3"
+            local diff_stat="$4"
+            local file_list="$5"
+
+            call_openai() {
+              # Prints response body to stdout. On non-200, prints snippet to stderr and returns non-zero.
+              local payload="$1"
+              local tmp_body tmp_code http_code body
+              tmp_body="$(mktemp)"
+              tmp_code="$(mktemp)"
+
+              # Don't use -f: we want the error body for debugging.
+              curl -sS "https://api.openai.com/v1/responses" \
+                -H "Authorization: Bearer ${OPENAI_API_KEY}" \
+                -H "content-type: application/json" \
+                --data-binary "${payload}" \
+                -o "${tmp_body}" -w "%{http_code}" > "${tmp_code}" || true
+
+              http_code="$(cat "${tmp_code}" 2>/dev/null || echo "")"
+              body="$(cat "${tmp_body}" 2>/dev/null || echo "")"
+              rm -f "${tmp_body}" "${tmp_code}"
+
+              if [ "${http_code}" != "200" ] && [ "${http_code}" != "201" ]; then
+                echo "OpenAI API request failed (http=${http_code})." >&2
+                printf "%s" "${body}" | head -c 1200 >&2 || true
+                echo "" >&2
+                printf "%s" "${body}"
+                return 1
+              fi
+
+              printf "%s" "${body}"
+              return 0
+            }
+
+            local prompt
+            prompt=$'You are generating a GitHub Pull Request title and description.\n\nOUTPUT FORMAT (STRICT):\nReturn ONLY a JSON object with exactly these keys:\n  - title: string\n  - body: string\n\nTITLE RULES (STRICT):\n- Must be a Conventional Commits v1.0.0 header: <type>(<scope>)?!: <description>\n- type MUST be one of: feat, fix, chore, refactor, docs, test\n- scope is optional, lowercase, short (e.g. api, ui, auth)\n- optional ! only if breaking\n- description must be short and lowercase\n- no trailing period\n\nBODY RULES (STRICT):\nMust be exactly this structure (use markdown headings):\n\n## Summary\n<short explanation>\n\n## Changes\n- <bullet points>\n\n## Testing Notes\n- <how to test>\n\nIf breaking, append after a blank line:\nBREAKING CHANGE: <what breaks and what to do>\n'
+
+            extract_json_object() {
+              # Best-effort: accept pure JSON or JSON embedded in other text.
+              # Writes compact JSON to stdout; returns non-zero on failure.
+              local raw="$1"
+              local candidate=""
+              local cleaned=""
+
+              # 1) Already valid JSON?
+              if candidate="$(printf "%s" "${raw}" | jq -e -c . 2>/dev/null)"; then
+                printf "%s" "${candidate}"
+                return 0
+              fi
+
+              # 1b) Strip common ```json fences and retry.
+              cleaned="$(printf "%s" "${raw}" | tr -d '\r' | sed -E 's/^```[a-zA-Z0-9_-]*[[:space:]]*//; s/[[:space:]]*```$//')"
+              if candidate="$(printf "%s" "${cleaned}" | jq -e -c . 2>/dev/null)"; then
+                printf "%s" "${candidate}"
+                return 0
+              fi
+
+              # 2) Try to slice from first '{' to last '}'.
+              candidate="$(printf "%s" "${cleaned:-$raw}" | tr -d '\r' | sed -n 's/^[^{]*\\({.*\\}\\)[^}]*$/\\1/p' | head -n 1)"
+              if [ -n "${candidate}" ] && candidate="$(printf "%s" "${candidate}" | jq -e -c . 2>/dev/null)"; then
+                printf "%s" "${candidate}"
+                return 0
+              fi
+
+              return 1
+            }
+
+            local user_payload
+            user_payload="$(jq -n \
+              --arg base "${base}" \
+              --arg head "${head_branch}" \
+              --arg sha "${short_sha}" \
+              --arg log "${log_text}" \
+              --arg files "${file_list}" \
+              --arg diff "${diff_stat}" \
+              --arg prompt "${prompt}" \
+              '{
+                model: env.OPENAI_MODEL,
+                max_output_tokens: 900,
+                temperature: 0.2,
+                input: [
+                  {
+                    role: "system",
+                    content: [
+                      {
+                        type: "input_text",
+                        text: $prompt
+                      }
+                    ]
+                  },
+                  {
+                    role: "user",
+                    content: [
+                      {
+                        type: "input_text",
+                        text: ("Target base: " + $base + "\nHead branch: " + $head + "\nCommit: " + $sha + "\n\nRecent commits:\n" + $log + "\n\nChanged files (name-only):\n" + $files + "\n\nDiff stat:\n" + $diff + "\n")
+                      }
+                    ]
+                  }
+                ]
+              }'
+            )"
+
+            local resp
+            if ! resp="$(call_openai "${user_payload}")"; then
+              echo "Falling back: OpenAI API error." >&2
+            fi
+
+            # Extract the first text block.
+            local text
+            # Join all text blocks (model may wrap JSON in ```json fences across lines).
+            text="$(printf "%s" "${resp}" | jq -r '([.output[]?.content[]? | select(.type=="output_text") | .text] | join("\n")) // .output_text // ""' 2>/dev/null || true)"
+
+            # The model must return JSON; tolerate extra wrapper text.
+            local parsed
+            if ! parsed="$(extract_json_object "${text}")"; then
+              # Deterministic fallback object; caller still validates title/body.
+              fallback_title="$(title_from_commits "${merge_base}")"
+              if [ -z "${fallback_title}" ]; then
+                fallback_title="chore(pr): sync branch $(sanitize_slug "${head_branch}")"
+              fi
+              echo "Falling back: could not parse model JSON (text length: ${#text})." >&2
+              jq -n --arg title "${fallback_title}" \
+                    --arg body "$(printf "## Summary\nAuto-generated PR (Claude output could not be parsed).\n\n## Changes\n- Changed files:\n%s\n\n- Diff summary:\n%s\n\n## Testing Notes\n- Review and run CI.\n" "$(printf "%s" "${file_list}" | sed -E 's/^/- /')" "$(printf "%s" "${diff_stat}" | sed -E 's/^/- /')")" \
+                    '{title:$title, body:$body}'
+              return 0
+            fi
+
+            printf "%s" "${parsed}" | jq -c '{title, body}'
+          }
+
+          repair_title_with_openai() {
+            local bad_title="$1"
+            local resp payload text
+
+            payload="$(jq -n \
+              --arg bad "${bad_title}" \
+              '{
+                model: env.OPENAI_MODEL,
+                max_output_tokens: 120,
+                temperature: 0.0,
+                input: [
+                  {
+                    role: "system",
+                    content: [
+                      {
+                        type: "input_text",
+                        text: "Return ONLY one line: a corrected Conventional Commits v1.0.0 header. Type must be one of feat, fix, chore, refactor, docs, test. Optional scope in parentheses. Optional ! before :. Description must be short and lowercase. No trailing period."
+                      }
+                    ]
+                  },
+                  {
+                    role: "user",
+                    content: [
+                      {
+                        type: "input_text",
+                        text: ("Fix this title:\n" + $bad)
+                      }
+                    ]
+                  }
+                ]
+              }'
+            )"
+
+            resp="$(curl -fsS https://api.openai.com/v1/responses \
+              -H "Authorization: Bearer ${OPENAI_API_KEY}" \
+              -H "content-type: application/json" \
+              --data-binary "${payload}"
+            )"
+
+            text="$(printf "%s" "${resp}" | jq -r '([.output[]?.content[]? | select(.type=="output_text") | .text] | join("\n")) // .output_text // ""' 2>/dev/null || true)"
+            normalize_title "${text}"
+          }
+
+          repair_body_with_openai() {
+            local base="$1"
+            local merge_base="$2"
+            local log_text="$3"
+            local diff_stat="$4"
+            local bad_body="$5"
+
+            local prompt
+            prompt=$'Fix this GitHub Pull Request body to match the required format exactly.\n\nOUTPUT FORMAT (STRICT):\nReturn ONLY a JSON object with exactly this key:\n  - body: string\n\nBODY RULES (STRICT):\nMust be exactly this structure (use markdown headings):\n\n## Summary\n<short explanation>\n\n## Changes\n- <bullet points>\n\n## Testing Notes\n- <how to test>\n\nIf breaking, append after a blank line:\nBREAKING CHANGE: <what breaks and what to do>\n'
+
+            local payload resp text
+            payload="$(jq -n \
+              --arg base "${base}" \
+              --arg head "${head_branch}" \
+              --arg sha "${short_sha}" \
+              --arg log "${log_text}" \
+              --arg diff "${diff_stat}" \
+              --arg bad "${bad_body}" \
+              --arg prompt "${prompt}" \
+              '{
+                model: env.OPENAI_MODEL,
+                max_output_tokens: 900,
+                temperature: 0.2,
+                input: [
+                  {
+                    role: "system",
+                    content: [
+                      { type: "input_text", text: $prompt }
+                    ]
+                  },
+                  {
+                    role: "user",
+                    content: [
+                      { type: "input_text", text: ("Target base: " + $base + "\nHead branch: " + $head + "\nCommit: " + $sha + "\n\nRecent commits:\n" + $log + "\n\nDiff stat:\n" + $diff + "\n\nCurrent body (fix this):\n" + $bad + "\n") }
+                    ]
+                  }
+                ]
+              }'
+            )"
+
+            resp="$(curl -fsS https://api.openai.com/v1/responses \
+              -H "Authorization: Bearer ${OPENAI_API_KEY}" \
+              -H "content-type: application/json" \
+              --data-binary "${payload}"
+            )"
+
+            text="$(printf "%s" "${resp}" | jq -r '([.output[]?.content[]? | select(.type=="output_text") | .text] | join("\n")) // .output_text // ""' 2>/dev/null || true)"
+            printf "%s" "${text}" | jq -r '.body'
+          }
+
+          upsert_pr() {
+            local base="$1"
+            local label="$2"
+
+            if [ "${head_branch}" = "${base}" ]; then
+              echo "Skip PR to ${base}: head == base (${head_branch})."
+              return 0
+            fi
+
+            ensure_label "${label}"
+
+            local merge_base
+            merge_base="$(git merge-base "origin/${base}" HEAD 2>/dev/null || true)"
+            if [ -z "${merge_base}" ]; then
+              merge_base="$(git rev-list --max-parents=0 HEAD | tail -n 1)"
+            fi
+
+            local log_text diff_stat
+            log_text="$(git log --oneline -n 20 "${merge_base}..HEAD" || true)"
+            diff_stat="$(git diff --stat "${merge_base}..HEAD" | head -n 200 || true)"
+            file_list="$(git diff --name-only "${merge_base}..HEAD" | head -n 200 || true)"
+
+            local gen title body
+            gen="$(generate_with_openai "${base}" "${merge_base}" "${log_text}" "${diff_stat}" "${file_list}")"
+            title="$(printf "%s" "${gen}" | jq -r '.title')"
+            body="$(printf "%s" "${gen}" | jq -r '.body')"
+
+            title="$(normalize_title "${title}")"
+
+            if ! validate_title "${title}"; then
+              echo "Model title invalid; attempting one repair." >&2
+              title="$(repair_title_with_openai "${title}")"
+            fi
+
+            if ! validate_title "${title}"; then
+              echo "Title still invalid after repair; using deterministic fallback." >&2
+              fallback_title="$(title_from_commits "${merge_base}")"
+              if [ -n "${fallback_title}" ]; then
+                title="${fallback_title}"
+              else
+                title="chore(pr): sync branch $(sanitize_slug "${head_branch}")"
+              fi
+            fi
+
+            if ! validate_body_shape "${body}"; then
+              echo "Model body invalid; attempting one repair." >&2
+              body="$(repair_body_with_openai "${base}" "${merge_base}" "${log_text}" "${diff_stat}" "${body}")"
+            fi
+
+            # Ensure required body sections exist; if still invalid, use deterministic fallback.
+            if ! validate_body_shape "${body}"; then
+              echo "Body still invalid after repair; using deterministic fallback body." >&2
+              body="$(printf "## Summary\nAuto-generated PR.\n\n## Changes\n- Changed files:\n%s\n\n- Diff summary:\n%s\n\n## Testing Notes\n- Review and run CI.\n" "$(printf "%s" "${file_list}" | sed -E 's/^/- /')" "$(printf "%s" "${diff_stat}" | sed -E 's/^/- /')")"
+            fi
+
+            local existing
+            existing="$(gh pr list --head "${head_branch}" --base "${base}" --state open --json number --jq '.[0].number' || true)"
+
+            if [ -n "${existing}" ] && [ "${existing}" != "null" ]; then
+              echo "Updating existing PR #${existing} (${head_branch} -> ${base})."
+              gh pr edit "${existing}" --title "${title}" --body "${body}"
+              gh pr edit "${existing}" --add-label "${label}" || true
+              echo "PR updated: #${existing}"
+            else
+              echo "Creating PR (${head_branch} -> ${base})."
+              # gh pr create prints URL on success; capture for summary.
+              pr_url="$(gh pr create --base "${base}" --head "${head_branch}" --title "${title}" --body "${body}")"
+              # Label after creation to keep create minimal.
+              gh pr edit "${pr_url}" --add-label "${label}" || true
+              echo "PR created: ${pr_url}"
+            fi
+          }
+
+          upsert_pr develop develop
+          upsert_pr main main

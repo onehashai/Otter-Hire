@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@onehash/ui/button";
 import { Badge } from "@onehash/ui/badge";
@@ -16,114 +16,14 @@ import {
 } from "@onehash/ui/dialog";
 import { ArrowLeft, Pencil, Trash2, Mail, Tag } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { toast } from "sonner";
+import { toast } from "@onehash/ui/sonner";
 import { useSetPageMetadata } from "@/hooks/useSetPageMetadata";
 import { useTranslation } from "react-i18next";
 import { OverviewTab } from "@/components/automations/tabs/OverviewTab";
 import { ExecutionLog, type ExecutionLogEntry } from "@/components/automations/tabs/ExecutionLog";
 import { ExecutionDetailsDialog } from "@/components/automations/tabs/ExecutionDetailsDialog";
-
-const mockAutomation = {
-  id: "1",
-  name: "Auto-reject unqualified",
-  status: "active" as "active" | "paused" | "draft",
-  scope: "All jobs",
-  trigger: {
-    type: "Candidate applied",
-    config: null,
-  },
-  conditions: [
-    { field: "Candidate rating", operator: "is less than", value: "3" },
-    { field: "Source", operator: "equals", value: "Job board" },
-  ],
-  conditionLogic: "AND",
-  actions: [
-    {
-      type: "send_email",
-      label: "Send rejection email",
-      icon: Mail,
-      detail: "Template: Rejection Email",
-    },
-    {
-      type: "add_tag",
-      label: "Add tag",
-      icon: Tag,
-      detail: "Tag: Auto-rejected",
-    },
-  ],
-  createdBy: "Jane Doe",
-  createdAt: "Jan 15, 2026",
-  lastModified: "Feb 18, 2026",
-  executionCount: 142,
-};
-
-const mockLogs: ExecutionLogEntry[] = [
-  {
-    id: "1",
-    candidateName: "Alex Johnson",
-    event: "Candidate applied",
-    action: "Sent rejection email",
-    timestamp: "2h ago",
-    status: "success",
-  },
-  {
-    id: "2",
-    candidateName: "Maria Garcia",
-    event: "Candidate applied",
-    action: "Sent rejection email",
-    timestamp: "5h ago",
-    status: "success",
-  },
-  {
-    id: "3",
-    candidateName: "James Liu",
-    event: "Candidate applied",
-    action: "Sent rejection email",
-    timestamp: "1d ago",
-    status: "failed",
-    detail: "Email delivery failed",
-  },
-  {
-    id: "4",
-    candidateName: "Priya Sharma",
-    event: "Candidate applied",
-    action: "Added tag: Auto-rejected",
-    timestamp: "1d ago",
-    status: "success",
-  },
-  {
-    id: "5",
-    candidateName: "Tom Wilson",
-    event: "Candidate applied",
-    action: "Sent rejection email",
-    timestamp: "2d ago",
-    status: "success",
-  },
-  {
-    id: "6",
-    candidateName: "Sara Kim",
-    event: "Candidate applied",
-    action: "Sent rejection email",
-    timestamp: "3d ago",
-    status: "success",
-  },
-  {
-    id: "7",
-    candidateName: "David Chen",
-    event: "Candidate applied",
-    action: "Added tag: Auto-rejected",
-    timestamp: "3d ago",
-    status: "success",
-  },
-  {
-    id: "8",
-    candidateName: "Emma Brown",
-    event: "Candidate applied",
-    action: "Sent rejection email",
-    timestamp: "4d ago",
-    status: "success",
-  },
-];
+import { getAutomationById, getAutomationExecutions } from "@/api/automations";
+import { formatTimestamp } from "@/lib/format-date";
 
 export default function AutomationDetailPage() {
   const params = useParams();
@@ -137,10 +37,84 @@ export default function AutomationDetailPage() {
     subtitle: t("automation_overview_subtitle"),
   });
 
-  const [isActive, setIsActive] = useState(mockAutomation.status === "active");
+  const [isActive, setIsActive] = useState(false);
+  const [automation, setAutomation] = useState<any | null>(null);
+  const [logs, setLogs] = useState<ExecutionLogEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("overview");
   const [selectedLog, setSelectedLog] = useState<ExecutionLogEntry | null>(null);
+
+  useEffect(() => {
+    if (!automationId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const [detail, executions] = await Promise.all([
+          getAutomationById(automationId),
+          getAutomationExecutions(automationId),
+        ]);
+        if (cancelled) return;
+
+        const overviewAutomation = {
+          id: detail.id,
+          name: detail.name,
+          status: detail.status as "active" | "paused" | "draft",
+          scope: detail.scope,
+          trigger: {
+            type: detail.trigger_config?.label ?? detail.trigger_key,
+            config: detail.trigger_config,
+          },
+          actions: detail.actions.map((a) => ({
+            type: a.type,
+            label: a.config.label ?? a.type,
+            icon: Mail,
+            detail: a.config.template ? `Template: ${a.config.template}` : undefined,
+          })),
+          createdBy: detail.created_by_name ?? "",
+          createdAt: formatTimestamp(detail.created_at, "en-GB", {
+            showRelative: true,
+            showTime: false,
+          }),
+          lastModified: formatTimestamp(detail.updated_at, "en-GB", {
+            showRelative: true,
+            showTime: false,
+          }),
+          executionCount: detail.execution_count,
+        };
+
+        const mappedLogs: ExecutionLogEntry[] = executions.map((e) => ({
+          id: e.id,
+          candidateName: e.candidate_name || "N/A",
+          candidateEmail: e.candidate_email || "N/A",
+          event: e.trigger_event,
+          action: "",
+          timestamp: formatTimestamp(e.created_at, "en-GB", { showRelative: true }),
+          status: e.status as "success" | "failed",
+          detail: e.message ?? undefined,
+        }));
+
+        setAutomation(overviewAutomation);
+        setIsActive(detail.status === "active");
+        setLogs(mappedLogs);
+        setError(null);
+      } catch (err) {
+        console.error(err);
+        if (!cancelled) {
+          setError("Failed to load automation.");
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [automationId]);
 
   const handleToggle = () => {
     setIsActive(!isActive);
@@ -167,7 +141,9 @@ export default function AutomationDetailPage() {
           </Button>
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h1 className="text-base font-semibold truncate">{mockAutomation.name}</h1>
+              <h1 className="text-base font-semibold truncate">
+                {automation?.name ?? t("automation_overview_title")}
+              </h1>
               <Badge
                 variant={isActive ? "default" : "secondary"}
                 className="text-[10px] capitalize shrink-0"
@@ -216,17 +192,29 @@ export default function AutomationDetailPage() {
         </TabsList>
 
         <TabsContent value="overview" className="mt-4 space-y-4">
-          <OverviewTab
-            automation={mockAutomation}
-            isActive={isActive}
-            isMobile={isMobile}
-            onEdit={() => router.push(`/automations/${automationId}/edit`)}
-            onDelete={() => setDeleteOpen(true)}
-          />
+          {error ? (
+            <p className="text-sm text-destructive">{error}</p>
+          ) : automation ? (
+            <OverviewTab
+              automation={automation}
+              isActive={isActive}
+              isMobile={isMobile}
+              onEdit={() => router.push(`/automations/${automationId}/edit`)}
+              onDelete={() => setDeleteOpen(true)}
+            />
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              {loading ? "Loading automation..." : "Automation not found."}
+            </p>
+          )}
         </TabsContent>
 
         <TabsContent value="executions" className="mt-4">
-          <ExecutionLog logs={mockLogs} onLogSelect={setSelectedLog} isMobile={isMobile} />
+          {error ? (
+            <p className="text-sm text-destructive">{error}</p>
+          ) : (
+            <ExecutionLog logs={logs} onLogSelect={setSelectedLog} isMobile={isMobile} />
+          )}
         </TabsContent>
       </Tabs>
 

@@ -1,139 +1,86 @@
 import { TFunction } from "i18next";
 import { Country } from "country-state-city";
 
-export type EmploymentType = "full_time" | "part_time" | "contract" | "internship";
-export type CategoryType =
-  | "engineering"
-  | "design"
-  | "marketing"
-  | "sales"
-  | "data"
-  | "operations"
-  | "hr";
-export type WorkplaceType = "remote" | "hybrid" | "onsite";
-export type VisibilityType = "internal" | "public";
-export type SalaryType = "hidden" | "fixed" | "range";
-export type TimeframeType = "per_year" | "per_month" | "per_week" | "per_day" | "per_hour";
-export type TeamRole = "hiring_manager" | "recruiter" | "interviewer" | "coordinator";
+export const JobCategories = [
+  "Software Development",
+  "Product Management",
+  "Design",
+  "Data Analytics",
+  "Marketing",
+  "Sales",
+  "Customer Support",
+  "Human Resources",
+  "Finance",
+  "Operations",
+] as const;
+export type JobCategory = (typeof JobCategories)[number];
+
+export const employmentTypes = ["full_time", "part_time", "contract", "internship"] as const;
+export type EmploymentType = (typeof employmentTypes)[number];
+
+export const workplaceTypes = ["remote", "hybrid", "onsite"] as const;
+export type WorkplaceType = (typeof workplaceTypes)[number];
+
+export const visibilityTypes = ["internal", "public"] as const;
+export type VisibilityType = (typeof visibilityTypes)[number];
+
+export const salaryTypes = ["hidden", "fixed", "range"] as const;
+export type SalaryType = (typeof salaryTypes)[number];
+
+export const timeframes = ["per_year", "per_month", "per_week", "per_day", "per_hour"] as const;
+export type TimeframeType = (typeof timeframes)[number];
+
+export const teamRoles = ["hiring_manager", "recruiter", "interviewer", "coordinator"] as const;
+export type TeamRoleType = (typeof teamRoles)[number];
+
+export const jobStatuses = ["draft", "open", "archived"] as const;
+export type JobStatusType = (typeof jobStatuses)[number];
 
 export function getCountryName(isoCode: string): string {
-  const c = Country.getCountryByCode(isoCode);
-  return c?.name ?? isoCode;
+  return Country.getCountryByCode(isoCode)?.name ?? isoCode;
 }
 
 export const CITY_VALUE_SEP = "|";
+
 export function getCityDisplayName(city: string): string {
-  return city.includes(CITY_VALUE_SEP) ? (city.split(CITY_VALUE_SEP)[0] ?? city) : city;
+  return city.split(CITY_VALUE_SEP)[0] || city;
 }
 
+const setupSectionDefs = [
+  { slug: "info", key: "job_info" },
+  { slug: "description", key: "job_description" },
+  { slug: "application", key: "application_form" },
+  { slug: "stages", key: "hiring_stages" },
+  { slug: "team", key: "hiring_team" },
+  { slug: "integration", key: "integration" },
+] as const;
+
+export type SetupStepSlug = (typeof setupSectionDefs)[number]["slug"];
+
 export const SETUP_SECTIONS = (t: TFunction<"translation", undefined>) =>
-  [
-    { slug: "info", label: t("job_info") },
-    { slug: "description", label: t("job_description") },
-    { slug: "details", label: t("hiring_details") },
-    { slug: "application", label: t("application_form") },
-    { slug: "stages", label: t("hiring_stages") },
-    { slug: "team", label: t("hiring_team") },
-  ] as const;
+  setupSectionDefs.map(({ slug, key }) => ({
+    slug,
+    label: t(key),
+  }));
 
-export type SetupStepSlug = ReturnType<typeof SETUP_SECTIONS>[number]["slug"];
-
-export const employmentTypes: EmploymentType[] = [
-  "full_time",
-  "part_time",
-  "contract",
-  "internship",
-];
-
-export const categories: CategoryType[] = [
-  "engineering",
-  "design",
-  "marketing",
-  "sales",
-  "data",
-  "operations",
-  "hr",
-];
-
-export const workplaceTypes: WorkplaceType[] = ["remote", "hybrid", "onsite"];
-
-export type JobStatusType = "draft" | "open" | "archived";
-
-export const jobStatuses: JobStatusType[] = ["draft", "open", "archived"];
-
-export const salaryTypes: SalaryType[] = ["hidden", "fixed", "range"];
-
-export const timeframes: TimeframeType[] = [
-  "per_year",
-  "per_month",
-  "per_week",
-  "per_day",
-  "per_hour",
-];
-
-export interface HiringStage {
+export type HiringStage = {
   id: string;
   name: string;
   isRequired?: boolean;
-}
+};
 
-export interface TeamMember {
+export type TeamMember = {
   id: string;
   user_id?: string;
   name: string;
   email: string;
-  role: TeamRole;
+  role: TeamRoleType;
   userRole?: string | null;
-}
+};
 
-export const mockOrganizationUsers: { id: string; name: string; email: string }[] = [
-  { id: "u1", name: "Jane Doe", email: "jane@acme.com" },
-  { id: "u2", name: "John Smith", email: "john@acme.com" },
-  { id: "u3", name: "Sarah Lee", email: "sarah@acme.com" },
-  { id: "u4", name: "Mike Chen", email: "mike@acme.com" },
-  { id: "u5", name: "Emma Wilson", email: "emma@acme.com" },
-  { id: "u6", name: "David Kim", email: "david@acme.com" },
-];
-
-export const teamRoleLabels: Record<TeamRole, string> = {
+export const teamRoleLabels: Record<TeamRoleType, string> = {
   hiring_manager: "Hiring Manager",
   recruiter: "Recruiter",
   interviewer: "Interviewer",
   coordinator: "Coordinator",
-};
-
-/** Mock data for edit mode */
-export const mockJob = {
-  title: "Senior Frontend Engineer",
-  category: "Engineering",
-  employmentType: "full_time",
-  workplaceType: "onsite",
-  country: "US",
-  city: "San Francisco",
-  hiringManager: "Jane Doe",
-  status: "draft" as JobStatusType,
-  description:
-    "<p>We're looking for a Senior Frontend Engineer to lead our design system efforts and build delightful user experiences.</p><h2>Responsibilities</h2><ul><li>Architect and maintain our React component library</li><li>Collaborate with design on new features</li><li>Mentor junior engineers</li></ul><h2>Requirements</h2><ul><li>5+ years of frontend experience</li><li>Strong TypeScript and React skills</li><li>Experience with design systems</li></ul>",
-  openings: 2,
-  salaryType: "range" as SalaryType,
-  salaryFixed: "",
-  salaryMin: "140000",
-  salaryMax: "180000",
-  currency: "USD",
-  timeframe: "per_year" as TimeframeType,
-  pipeline: "standard",
-  collectResume: true,
-  collectCover: false,
-  screeningQuestions: ["Why are you interested in this role?"],
-  stages: [
-    { name: "Phone Screen", interviewer: "Jane Doe" },
-    { name: "Technical", interviewer: "John Smith" },
-    { name: "Culture Fit", interviewer: "Sarah Lee" },
-    { name: "Final", interviewer: "Jane Doe" },
-  ],
-  hiringStages: [],
-  teamMembers: [
-    { id: "u1", name: "Jane Doe", email: "jane@acme.com", role: "hiring_manager" as TeamRole },
-    { id: "u2", name: "John Smith", email: "john@acme.com", role: "interviewer" as TeamRole },
-  ],
 };

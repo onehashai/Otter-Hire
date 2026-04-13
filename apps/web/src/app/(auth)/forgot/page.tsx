@@ -2,11 +2,14 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { Button } from "@onehash/ui/button";
 import { InputField } from "@onehash/ui/input";
 import { Label } from "@onehash/ui/label";
 import { Icon } from "@onehash/ui/icon";
+import { LOGO_SVG_PATH, PLATFORM_NAME } from "@/lib/constants";
 import { useTranslation } from "react-i18next";
+import { isValidEmail, normalizeEmail } from "@/lib/validation/contact";
 
 export default function ForgotPassword() {
   const { t } = useTranslation();
@@ -24,10 +27,12 @@ export default function ForgotPassword() {
       setError("Please enter your email address.");
       return;
     }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    if (!isValidEmail(email)) {
       setError("Please enter a valid email address.");
       return;
     }
+    const normalizedEmail = normalizeEmail(email);
+    setEmail(normalizedEmail);
     setLoading(true);
     await new Promise((r) => setTimeout(r, 1500));
     setLoading(false);
@@ -67,21 +72,25 @@ export default function ForgotPassword() {
             backgroundSize: "24px 24px",
           }}
         />
-        <div className="relative z-10 max-w-md px-12">
-          <div className="flex items-center gap-2.5 mb-8">
-            <div className="h-9 w-9 rounded-lg bg-foreground flex items-center justify-center">
-              <span className="text-background text-sm font-bold">A</span>
-            </div>
-            <span className="text-lg font-semibold tracking-tight">ATS</span>
+        <div className="relative z-10 w-full max-w-md px-12 text-left">
+          <div className="flex flex-col items-start gap-3">
+            <Image
+              src={LOGO_SVG_PATH}
+              alt={PLATFORM_NAME}
+              width={480}
+              height={262}
+              className="-ml-2 h-24 w-auto max-w-[min(100%,400px)] object-contain object-left self-start"
+              priority
+            />
+            <h1 className="text-3xl lg:text-4xl font-bold tracking-tight leading-tight">
+              Reset your
+              <br />
+              password.
+            </h1>
+            <p className="text-muted-foreground text-sm leading-relaxed">
+              Get back to recruiting top talent. We'll help you regain access to your account.
+            </p>
           </div>
-          <h1 className="text-3xl font-semibold tracking-tight leading-tight mb-3">
-            We've got
-            <br />
-            your back.
-          </h1>
-          <p className="text-muted-foreground text-sm leading-relaxed">
-            Happens to the best of us. Reset your password and get back to building your dream team.
-          </p>
         </div>
       </div>
 
@@ -89,11 +98,15 @@ export default function ForgotPassword() {
       <div className="flex-1 flex items-center justify-center px-4 py-12 sm:px-8">
         <div className="w-full max-w-[420px]">
           {/* Mobile logo */}
-          <div className="lg:hidden flex items-center gap-2.5 mb-10 justify-center">
-            <div className="h-9 w-9 rounded-lg bg-foreground flex items-center justify-center">
-              <span className="text-background text-sm font-bold">A</span>
-            </div>
-            <span className="text-lg font-semibold tracking-tight">ATS</span>
+          <div className="lg:hidden flex items-center mb-10 justify-center">
+            <Image
+              src={LOGO_SVG_PATH}
+              alt={PLATFORM_NAME}
+              width={140}
+              height={42}
+              className="object-contain"
+              priority
+            />
           </div>
 
           <div className="lg:rounded-xl lg:border lg:border-border lg:bg-card lg:p-8 lg:shadow-sm">

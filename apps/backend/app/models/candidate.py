@@ -18,8 +18,9 @@ class Candidate(Base):
     name = Column(String, nullable=False)
     email = Column(String, nullable=False)
     phone = Column(String)
-    location = Column(String)
+    address = Column(String)
     profile_links = Column(JSONB)
+    parsed_resume = Column(JSONB)
     source = Column(String)
     tags = Column(JSONB)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -35,3 +36,9 @@ class Candidate(Base):
     organization = relationship("Organization")
     job = relationship("Job")
     stage = relationship("Stage")
+    job_assignments = relationship(
+        "CandidateJobs",
+        back_populates="candidate",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )

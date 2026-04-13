@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Optional
+from typing import Any, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, field_validator
@@ -33,6 +33,14 @@ class ProfileResponse(BaseModel):
 
 class UpdateProfileRequest(BaseModel):
     name: str
+
+
+class UserPreferencesResponse(BaseModel):
+    preferences: dict[str, Any] = {}
+
+
+class UserPreferencesPatchRequest(BaseModel):
+    preferences: dict[str, Any]
 
 
 class InviteUserRequest(BaseModel):

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ $# -ne 4 ]]; then
-  echo "usage: $0 <taskdef-family-or-arn> <cluster> <service> <image>" >&2
+if [[ $# -lt 4 || $# -gt 5 ]]; then
+  echo "usage: $0 <taskdef-family-or-arn> <cluster> <service> <image> [register_only|register_and_update]" >&2
   exit 1
 fi
 
@@ -20,6 +20,7 @@ taskdef="$1"
 cluster="$2"
 service="$3"
 image="$4"
+mode="${5:-register_and_update}"
 
 tmpdir="$(mktemp -d)"
 trap 'rm -rf "$tmpdir"' EXIT
@@ -29,7 +30,7 @@ aws ecs describe-task-definition \
   --query 'taskDefinition' \
   --output json > "$tmpdir/current.json"
 
-jq --arg image "$image" '
+jq --arg image "$image" --arg openai "${OPENAI_API_KEY:-}" '
   del(
     .taskDefinitionArn,
     .revision,
@@ -40,6 +41,16 @@ jq --arg image "$image" '
     .registeredBy
   )
   | .containerDefinitions[0].image = $image
+  | if ($openai | length) > 0 then
+      .containerDefinitions[0].environment =
+        (
+          ((.containerDefinitions[0].environment // [])
+            | map(select(.name != "OPENAI_API_KEY")))
+          + [{"name":"OPENAI_API_KEY","value":$openai}]
+        )
+    else
+      .
+    end
 ' "$tmpdir/current.json" > "$tmpdir/register.json"
 
 new_arn="$(
@@ -49,12 +60,17 @@ new_arn="$(
     --output text
 )"
 
-aws ecs update-service \
-  --cluster "$cluster" \
-  --service "$service" \
-  --task-definition "$new_arn" \
-  --force-new-deployment \
-  --query 'service.taskDefinition' \
-  --output text >/dev/null
+if [[ "$mode" == "register_and_update" ]]; then
+  aws ecs update-service \
+    --cluster "$cluster" \
+    --service "$service" \
+    --task-definition "$new_arn" \
+    --force-new-deployment \
+    --query 'service.taskDefinition' \
+    --output text >/dev/null
+elif [[ "$mode" != "register_only" ]]; then
+  echo "invalid mode: $mode (expected register_only or register_and_update)" >&2
+  exit 1
+fi
 
 printf '%s\n' "$new_arn"

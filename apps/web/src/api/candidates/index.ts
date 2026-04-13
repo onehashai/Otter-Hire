@@ -5,8 +5,9 @@ export type CandidateListItemResponse = {
   name: string;
   email: string;
   phone: string | null;
-  location: string | null;
+  address: string | null;
   profile_links: Record<string, string>;
+  parsed_resume?: Record<string, unknown> | null;
   source: string | null;
   tags: string[];
   status: "active" | "rejected" | "hired";
@@ -14,11 +15,26 @@ export type CandidateListItemResponse = {
   job_title: string | null;
   stage_id: string | null;
   stage_name: string | null;
+  assignments: CandidateAssignmentItemResponse[];
   created_at: string;
   updated_at: string;
 };
 
 export type CandidateDetailResponse = CandidateListItemResponse & {};
+
+export type CandidateAssignmentItemResponse = {
+  assigned_id: string;
+  job_id: string;
+  job_title: string | null;
+  stage_id: string | null;
+  stage_name: string | null;
+  assignment_status: "active" | "rejected" | "hired" | "withdrawn";
+  source: string | null;
+  applied_at: string | null;
+  assigned_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
 
 export type CandidatesPaginatedResponse = {
   items: CandidateListItemResponse[];
@@ -27,16 +43,22 @@ export type CandidatesPaginatedResponse = {
   offset: number;
 };
 
+export type CandidateStageFilterOptionsResponse = {
+  names: string[];
+};
+
 export type CandidateBulkUpdateResponse = {
   updated_count: number;
 };
+
+export type CandidateBulkAssignJobResponse = CandidateBulkUpdateResponse;
 
 export type CreateCandidatePayload = {
   job_id?: string | null;
   name: string;
   email: string;
   phone?: string | null;
-  location?: string | null;
+  address?: string | null;
   profile_links?: Record<string, string>;
   stage_id?: string | null;
   source?: string | null;
@@ -50,6 +72,11 @@ export type CandidateOverviewResponse = {
     author_user_id: string;
     author_name: string | null;
     content: string;
+    mentions: Array<{
+      user_id: string;
+      name: string | null;
+      email: string;
+    }>;
     created_at: string;
   }>;
   activities: Array<{
@@ -105,11 +132,44 @@ export type CandidateDocumentResponse = {
   created_at: string;
 };
 
+export type CandidateCsvImportError = {
+  row: number;
+  reason: string;
+};
+
+export type CandidateCsvImportResponse = {
+  total_rows: number;
+  created_count: number;
+  failed_count: number;
+  errors: CandidateCsvImportError[];
+};
+
+export type CandidateApplicationResponseFile = {
+  name: string;
+  url: string;
+};
+
+export type CandidateApplicationResponseItem = {
+  key: string;
+  label: string;
+  type: string;
+  required: boolean;
+  response: string | number | boolean | string[] | null;
+  files: CandidateApplicationResponseFile[];
+};
+
+export type CandidateApplicationResponsesResponse = {
+  submitted_at: string | null;
+  has_additional_questions: boolean;
+  items: CandidateApplicationResponseItem[];
+};
+
 export async function getCandidates(params?: {
   search?: string;
   job_id?: string;
   stage_id?: string;
   status?: string;
+  source?: string;
   limit?: number;
   offset?: number;
 }): Promise<CandidateListItemResponse[]> {
@@ -118,6 +178,7 @@ export async function getCandidates(params?: {
   if (params?.job_id) searchParams.set("job_id", params.job_id);
   if (params?.stage_id) searchParams.set("stage_id", params.stage_id);
   if (params?.status) searchParams.set("status", params.status);
+  if (params?.source) searchParams.set("source", params.source);
   if (params?.limit !== undefined) searchParams.set("limit", String(params.limit));
   if (params?.offset !== undefined) searchParams.set("offset", String(params.offset));
   const query = searchParams.toString();
@@ -136,7 +197,7 @@ export async function updateCandidate(
     name?: string;
     email?: string;
     phone?: string | null;
-    location?: string | null;
+    address?: string | null;
     profile_links?: Record<string, string>;
     job_id?: string | null;
     clear_job?: boolean;
@@ -148,11 +209,29 @@ export async function updateCandidate(
   });
 }
 
+export async function deleteCandidate(id: string): Promise<void> {
+  await apiFetch<void>(`/candidates/${id}`, { method: "DELETE" });
+}
+
+export async function getCandidateStageFilterOptions(): Promise<CandidateStageFilterOptionsResponse> {
+  return apiFetch<CandidateStageFilterOptionsResponse>("/candidates/stage-filter-options", {
+    method: "GET",
+  });
+}
+
 export async function getCandidatesPaginated(params?: {
   search?: string;
   job_id?: string;
   stage_id?: string;
   status?: string;
+  source?: string;
+  /** Unassigned only (maps to API `talent_pool_only`). */
+  unassignedOnly?: boolean;
+  assigned_only?: boolean;
+  /** ISO 8601: filter by candidate `updated_at` (last activity), inclusive lower bound. */
+  updated_from?: string;
+  /** ISO 8601: filter by candidate `updated_at` (last activity), inclusive upper bound. */
+  updated_to?: string;
   limit?: number;
   offset?: number;
 }): Promise<CandidatesPaginatedResponse> {
@@ -161,6 +240,11 @@ export async function getCandidatesPaginated(params?: {
   if (params?.job_id) searchParams.set("job_id", params.job_id);
   if (params?.stage_id) searchParams.set("stage_id", params.stage_id);
   if (params?.status) searchParams.set("status", params.status);
+  if (params?.source) searchParams.set("source", params.source);
+  if (params?.unassignedOnly) searchParams.set("talent_pool_only", "true");
+  if (params?.assigned_only) searchParams.set("assigned_only", "true");
+  if (params?.updated_from) searchParams.set("updated_from", params.updated_from);
+  if (params?.updated_to) searchParams.set("updated_to", params.updated_to);
   if (params?.limit !== undefined) searchParams.set("limit", String(params.limit));
   if (params?.offset !== undefined) searchParams.set("offset", String(params.offset));
   const query = searchParams.toString();
@@ -172,10 +256,22 @@ export async function getCandidatesPaginated(params?: {
 export async function updateCandidateStage(
   id: string,
   stageId: string,
+  jobId?: string,
 ): Promise<CandidateDetailResponse> {
   return apiFetch<CandidateDetailResponse>(`/candidates/${id}/stage`, {
     method: "PATCH",
-    body: { stage_id: stageId },
+    body: { stage_id: stageId, ...(jobId ? { job_id: jobId } : {}) },
+  });
+}
+
+export async function updateCandidateStatus(
+  id: string,
+  status: "active" | "rejected" | "hired",
+  jobId?: string,
+): Promise<CandidateDetailResponse> {
+  return apiFetch<CandidateDetailResponse>(`/candidates/${id}/status`, {
+    method: "PATCH",
+    body: { status, ...(jobId ? { job_id: jobId } : {}) },
   });
 }
 
@@ -199,6 +295,16 @@ export async function bulkUpdateCandidateStage(
   });
 }
 
+export async function bulkAssignCandidatesToJob(
+  candidateIds: string[],
+  jobId: string,
+): Promise<CandidateBulkAssignJobResponse> {
+  return apiFetch<CandidateBulkAssignJobResponse>("/candidates/actions/bulk/assign-job", {
+    method: "PATCH",
+    body: { candidate_ids: candidateIds, job_id: jobId },
+  });
+}
+
 export async function createCandidate(
   payload: CreateCandidatePayload,
 ): Promise<CandidateDetailResponse> {
@@ -212,10 +318,35 @@ export async function getCandidateOverview(id: string): Promise<CandidateOvervie
   return apiFetch<CandidateOverviewResponse>(`/candidates/${id}/overview`, { method: "GET" });
 }
 
-export async function addCandidateNote(id: string, content: string): Promise<void> {
+export async function getCandidateApplicationResponses(
+  id: string,
+): Promise<CandidateApplicationResponsesResponse> {
+  const data = await apiFetch<CandidateApplicationResponsesResponse>(
+    `/candidates/${id}/application-responses`,
+    { method: "GET" },
+  );
+  return {
+    ...data,
+    items: (data.items || []).map((item) => ({
+      ...item,
+      files: (item.files || []).map((file) => ({
+        ...file,
+        url: normalizeApiUrl(file.url) ?? file.url,
+      })),
+    })),
+  };
+}
+
+export async function addCandidateNote(
+  id: string,
+  payload: { content: string; mentions?: string[] },
+): Promise<void> {
   await apiFetch(`/candidates/${id}/notes`, {
     method: "POST",
-    body: { content },
+    body: {
+      content: payload.content,
+      mentions: payload.mentions ?? [],
+    },
   });
 }
 
@@ -313,4 +444,32 @@ export async function deleteCandidateDocument(
   await apiFetch<void>(`/candidates/${candidateId}/documents/${documentId}`, {
     method: "DELETE",
   });
+}
+
+export async function importCandidatesCsv(file: File): Promise<CandidateCsvImportResponse> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch(`${API_BASE_URL}/candidates/import-csv`, {
+    method: "POST",
+    credentials: "include",
+    body: formData,
+  });
+
+  if (!res.ok) {
+    let message = `Request failed: ${res.status} ${res.statusText}`;
+    try {
+      const data = (await res.json()) as { detail?: string; error?: string };
+      const msg =
+        typeof data.detail === "string"
+          ? data.detail
+          : typeof data.error === "string"
+            ? data.error
+            : "";
+      if (msg.trim()) message = msg;
+    } catch {}
+    throw new Error(message);
+  }
+
+  return (await res.json()) as CandidateCsvImportResponse;
 }

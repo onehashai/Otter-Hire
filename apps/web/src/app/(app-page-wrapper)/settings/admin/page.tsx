@@ -2,30 +2,24 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useSearchParams } from "next/navigation";
-import { useAuthSession } from "@/app/providers";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@onehash/ui/tabs";
-import { Activity } from "lucide-react";
-
-// Use same-origin proxy to avoid port conflicts and nginx default page on localhost:8080
-const TEMPORAL_UI_URL = "/temporal-dashboard";
+import { useAuthSession } from "@/app/providers";
+import { UsersAdminTab } from "@/components/settings/admin/tabs/UsersTab";
+import { OrganizationsAdminTab } from "@/components/settings/admin/tabs/OrganizationsTab";
 
 export default function AdminSettingsPage() {
   const { user, loading } = useAuthSession();
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const tabParam = searchParams.get("tab");
-  const activeTab = tabParam === "background-jobs" ? "background-jobs" : "background-jobs";
 
   useEffect(() => {
     if (loading) return;
-    if (!user || user.role !== "super_admin") {
+    if (!user || user.role !== "admin") {
       router.replace("/settings");
       return;
     }
   }, [user, loading, router]);
 
-  if (loading || !user || user.role !== "super_admin") {
+  if (loading || !user || user.role !== "admin") {
     return (
       <div className="flex min-h-[200px] items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-foreground" />
@@ -34,36 +28,36 @@ export default function AdminSettingsPage() {
   }
 
   return (
-    <>
-      <h2 className="text-base md:text-lg font-semibold mb-1">Admin</h2>
-      <p className="text-xs text-muted-foreground mb-4 md:mb-6">
-        System administration (Super Admin only)
-      </p>
+    <div className="space-y-6">
+      <div className="space-y-2">
+        <h1 className="text-base md:text-lg font-semibold text-foreground">Administration</h1>
+        <p className="text-xs text-muted-foreground">
+          Platform administration tools are available to accounts with the admin role.
+        </p>
+      </div>
 
-      <Tabs value={activeTab} className="w-full">
-        <TabsList className="h-9 w-full justify-start bg-transparent border-b rounded-none p-0 gap-0 overflow-x-auto no-scrollbar">
+      <Tabs defaultValue="users" className="w-full">
+        <TabsList className="h-9 bg-transparent p-0 gap-6 rounded-none border-b border-border w-full justify-start">
           <TabsTrigger
-            value="background-jobs"
-            className="rounded-none border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent px-4 text-sm"
+            value="users"
+            className="rounded-none border-0 border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none px-0 pb-2 text-sm font-medium"
           >
-            <Activity className="mr-2 h-4 w-4" />
-            Background Jobs
+            Users
+          </TabsTrigger>
+          <TabsTrigger
+            value="organizations"
+            className="rounded-none border-0 border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none px-0 pb-2 text-sm font-medium"
+          >
+            Organizations
           </TabsTrigger>
         </TabsList>
-
-        <TabsContent value="background-jobs" className="mt-6">
-          <div className="rounded-lg border bg-card overflow-hidden">
-            <div className="relative w-full min-h-[600px]">
-              <iframe
-                src={TEMPORAL_UI_URL}
-                title="Temporal Dashboard"
-                className="absolute inset-0 w-full h-full min-h-[600px] border-0"
-                sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
-              />
-            </div>
-          </div>
+        <TabsContent value="users" className="mt-6 focus-visible:outline-none">
+          <UsersAdminTab />
+        </TabsContent>
+        <TabsContent value="organizations" className="mt-6 focus-visible:outline-none">
+          <OrganizationsAdminTab />
         </TabsContent>
       </Tabs>
-    </>
+    </div>
   );
 }

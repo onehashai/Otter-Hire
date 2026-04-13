@@ -20,8 +20,9 @@ const SonnerToaster = ({ ...props }: ToasterProps) => {
         },
       }}
       {...props}
+      style={{ ...(props.style as React.CSSProperties), zIndex: 99999 }}
     />
   );
 };
 
-export { SonnerToaster, toast as sonnerToast };
+export { SonnerToaster, toast, toast as sonnerToast };

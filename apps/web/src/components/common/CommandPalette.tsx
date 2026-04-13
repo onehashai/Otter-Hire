@@ -17,29 +17,28 @@ import {
   Briefcase,
   Users,
   Calendar,
-  // TODO(mvp-nav): Re-enable Reports/Automations/AI Assistant icons after MVP launch.
-  // BarChart3,
+  BarChart3,
+  // TODO(mvp-nav): Re-enable Automations in command palette after MVP launch.
   // Zap,
-  // Bot,
+  Bot,
   Settings,
   Plus,
   UserPlus,
   CalendarPlus,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 const pages = [
   // TODO(mvp-nav): Re-enable Dashboard in command palette after MVP launch.
-  // { title: "Dashboard", url: "/", icon: LayoutDashboard },
-  { title: "Jobs", url: "/jobs", icon: Briefcase },
-  { title: "Candidates", url: "/candidates", icon: Users },
-  { title: "Interviews", url: "/interviews", icon: Calendar },
-  // TODO(mvp-nav): Re-enable Reports in command palette after MVP launch.
-  // { title: "Reports", url: "/reports", icon: BarChart3 },
+  // { titleKey: "nav_dashboard", url: "/", icon: LayoutDashboard },
+  { titleKey: "jobs_title", url: "/jobs", icon: Briefcase },
+  { titleKey: "candidates_title", url: "/candidates", icon: Users },
+  { titleKey: "nav_interviews", url: "/interviews", icon: Calendar },
+  { titleKey: "reports_title", url: "/reports", icon: BarChart3 },
   // TODO(mvp-nav): Re-enable Automations in command palette after MVP launch.
-  // { title: "Automations", url: "/automations", icon: Zap },
-  // TODO(mvp-nav): Re-enable AI Assistant in command palette after MVP launch.
-  // { title: "AI Assistant", url: "/ai-assistant", icon: Bot },
-  { title: "Settings", url: "/settings/profile", icon: Settings },
+  // { titleKey: "automations_title", url: "/automations", icon: Zap },
+  { titleKey: "ai_assistant_title", url: "/ai-assistant", icon: Bot },
+  { titleKey: "settings_title", url: "/settings/profile", icon: Settings },
 ];
 
 const quickActions = [
@@ -55,6 +54,7 @@ interface CommandPaletteProps {
 
 export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
   const router = useRouter();
+  const { t } = useTranslation();
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
@@ -81,7 +81,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
           {pages.map((page) => (
             <CommandItem key={page.url} onSelect={() => handleSelect(page.url)}>
               <page.icon className="mr-2 h-4 w-4 text-muted-foreground" />
-              <span>{page.title}</span>
+              <span>{t(page.titleKey)}</span>
             </CommandItem>
           ))}
         </CommandGroup>

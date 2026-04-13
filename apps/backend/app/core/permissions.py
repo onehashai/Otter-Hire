@@ -25,11 +25,18 @@ PERMISSIONS = {
     "settings:system",
     "billing:manage",
     "org:inbox:manage",
+    "templates:read",
+    "templates:create",
+    "templates:update",
+    "templates:delete",
+    "automations:read",
+    "automations:create",
+    "automations:update",
+    "automations:delete",
 }
 
 ROLE_PERMISSIONS: dict[str, set[str]] = {
     "owner": set(PERMISSIONS),
-    "super_admin": set(PERMISSIONS),
     "admin": {
         "users:read",
         "users:invite",
@@ -51,6 +58,14 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "reports:read",
         "settings:system",
         "org:inbox:manage",
+        "templates:read",
+        "templates:create",
+        "templates:update",
+        "templates:delete",
+        "automations:read",
+        "automations:create",
+        "automations:update",
+        "automations:delete",
     },
     "recruiter": {
         "jobs:read",
@@ -62,7 +77,14 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "candidates:feedback",
         "interviews:schedule",
         "interviews:feedback",
-        # Intentionally no destructive/publishing/system settings permissions for recruiter.
+        "templates:read",
+        "templates:create",
+        "templates:update",
+        "templates:delete",
+        "automations:read",
+        "automations:create",
+        "automations:update",
+        "automations:delete",
     },
     "hiring_manager": {
         "jobs:read",
@@ -84,7 +106,7 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
 
 
 def has_permission(user: User, perm: str) -> bool:
-    role_perms = ROLE_PERMISSIONS.get(user.role, set())
+    role_perms = ROLE_PERMISSIONS.get(user.membership_role, set())
     return perm in role_perms
 
 

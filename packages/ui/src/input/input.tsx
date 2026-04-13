@@ -1,10 +1,16 @@
 "use client";
 
 import * as React from "react";
+import type { Country } from "react-phone-number-input";
+import PhoneInput from "react-phone-number-input";
+import flags from "react-phone-number-input/flags";
+import "react-phone-number-input/style.css";
 
 import { cn } from "../lib/utils";
 import { Label } from "../label";
 import { Icon } from "../icon";
+
+import "./phone-number-field.css";
 
 interface InputFieldProps extends React.ComponentProps<"input"> {
   error?: string;
@@ -93,4 +99,68 @@ const PasswordField = React.forwardRef<HTMLInputElement, PasswordFieldProps>(
 );
 PasswordField.displayName = "PasswordField";
 
-export { InputField, PasswordField, type InputFieldProps, type PasswordFieldProps };
+interface PhoneNumberFieldProps {
+  label?: string;
+  value: string | undefined;
+  onChange: (value: string | undefined) => void;
+  error?: string;
+  disabled?: boolean;
+  defaultCountry?: Country;
+  id?: string;
+}
+
+function PhoneNumberField({
+  label = "Phone Number",
+  value,
+  onChange,
+  error,
+  disabled,
+  defaultCountry = "IN",
+  id = "phone-number",
+}: PhoneNumberFieldProps) {
+  return (
+    <div className="w-full">
+      {label ? (
+        <Label htmlFor={id} className="text-xs font-medium text-muted-foreground">
+          {label}
+        </Label>
+      ) : null}
+      <div className="phone-number-field mt-1.5">
+        <PhoneInput
+          id={id}
+          international
+          flags={flags}
+          countryCallingCodeEditable={false}
+          defaultCountry={defaultCountry}
+          value={value}
+          onChange={(v) => onChange(v ?? undefined)}
+          disabled={disabled}
+          numberInputProps={{
+            className:
+              "!border-0 !shadow-none !ring-0 h-10 min-w-0 flex-1 rounded-none bg-transparent px-3 py-2 text-base outline-none placeholder:text-muted-foreground focus:outline-none focus:ring-0 focus-visible:outline-none md:text-sm",
+            "aria-invalid": error ? true : undefined,
+          }}
+          className={cn(
+            "PhoneInput !gap-0",
+            "!rounded-md !border !border-input !bg-background",
+            "!px-0",
+            "focus-within:!border-muted-foreground",
+            error && "!border-destructive focus-within:!border-destructive",
+            disabled && "!cursor-not-allowed !opacity-50",
+          )}
+        />
+      </div>
+      {error ? <p className="mt-1.5 text-xs text-destructive">{error}</p> : null}
+    </div>
+  );
+}
+
+export {
+  InputField,
+  PasswordField,
+  PhoneNumberField,
+  type InputFieldProps,
+  type PasswordFieldProps,
+  type PhoneNumberFieldProps,
+};
+export { isValidPhoneNumber, parsePhoneNumber } from "react-phone-number-input";

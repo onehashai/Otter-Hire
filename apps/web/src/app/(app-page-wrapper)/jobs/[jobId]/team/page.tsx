@@ -9,10 +9,11 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@onehash/ui/dialog";
 import { Plus, X, Search, Users } from "lucide-react";
 import { useJobSetup } from "../context";
-import { type TeamRole } from "../constants";
+import { type TeamRoleType } from "../constants";
 import { getOrgUsers, type OrgUserResponse } from "@/api";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { toast } from "sonner";
+import { toast } from "@onehash/ui/sonner";
+import { getInitialsFromName } from "@/lib/name-initials";
 
 export default function HiringTeamPage() {
   const isMobile = useIsMobile();
@@ -32,8 +33,13 @@ export default function HiringTeamPage() {
   const formatRoleLabel = (role?: string | null) =>
     role ? role.replace(/_/g, " ").replace(/\b\w/g, (ch) => ch.toUpperCase()) : "Member";
 
-  const mapUserRoleToTeamRole = (role: string): TeamRole => {
-    if (role === "recruiter" || role === "hiring_manager" || role === "interviewer") {
+  const mapUserRoleToTeamRole = (role: string): TeamRoleType => {
+    if (
+      role === "recruiter" ||
+      role === "hiring_manager" ||
+      role === "interviewer" ||
+      role === "coordinator"
+    ) {
       return role;
     }
     return "recruiter";
@@ -87,12 +93,7 @@ export default function HiringTeamPage() {
               className="w-full flex items-center gap-3 rounded-lg p-2.5 text-left hover:bg-muted/50 transition-colors"
             >
               <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-xs font-medium text-muted-foreground shrink-0">
-                {user.name
-                  ? user.name
-                      .split(" ")
-                      .map((n) => n[0])
-                      .join("")
-                  : "U"}
+                {user.name ? getInitialsFromName(user.name, "U") : "U"}
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium truncate">{user.name ?? user.email}</p>
@@ -149,18 +150,9 @@ export default function HiringTeamPage() {
               {i > 0 && <Separator />}
               <div className="flex items-center gap-3 px-4 py-3 bg-card">
                 <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-xs font-medium text-muted-foreground shrink-0">
-                  {member.name
-                    .split(" ")
-                    .map((n) => n[0])
-                    .join("")}
+                  {getInitialsFromName(member.name)}
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{member.name}</p>
-                  <p className="text-xs text-muted-foreground truncate">{member.email}</p>
-                </div>
-                <Badge variant="secondary" className="capitalize text-xs">
-                  {formatRoleLabel(member.userRole)}
-                </Badge>
+                <p className="flex-1 min-w-0 text-sm font-medium truncate">{member.name}</p>
                 <Button
                   variant="ghost"
                   size="icon"

@@ -13,10 +13,11 @@ import { Card, CardContent } from "@onehash/ui/card";
 import { InputField } from "@onehash/ui/input";
 import { Separator } from "@onehash/ui/separator";
 import { Button } from "@onehash/ui/button";
-import { Avatar, AvatarFallback, AvatarImage } from "@onehash/ui/avatar";
-import { Building2, Trash2, Upload } from "lucide-react";
-import { toast } from "sonner";
+import { Avatar } from "@onehash/ui/avatar";
+import { Trash2, Upload } from "lucide-react";
+import { toast } from "@onehash/ui/sonner";
 import { useTranslation } from "react-i18next";
+import { ImageCropDialog } from "@/components/common/ImageCropDialog";
 
 export default function OrganizationSettings() {
   const { t } = useTranslation();
@@ -32,11 +33,11 @@ export default function OrganizationSettings() {
   const [originalAvatarUrl, setOriginalAvatarUrl] = useState<string | null>(null);
   const [pendingAvatarFile, setPendingAvatarFile] = useState<File | null>(null);
   const [pendingAvatarRemoved, setPendingAvatarRemoved] = useState(false);
-  const [avatarFallbackMode, setAvatarFallbackMode] = useState<"initial" | "dummy">("initial");
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
   const previewObjectUrlRef = useRef<string | null>(null);
-  const avatarModeStorageKey = user?.org_id ? `org_avatar_fallback_mode:${user.org_id}` : null;
   const [saving, setSaving] = useState(false);
+  const [cropDialogOpen, setCropDialogOpen] = useState(false);
+  const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
 
   useEffect(() => {
     if (searchParams.get("tab") === "careers") {
@@ -63,18 +64,6 @@ export default function OrganizationSettings() {
         if (!cancelled) {
           setAvatarUrl(resp.avatar_url ?? null);
           setOriginalAvatarUrl(resp.avatar_url ?? null);
-          const persistedMode =
-            typeof window !== "undefined" && avatarModeStorageKey
-              ? window.localStorage.getItem(avatarModeStorageKey)
-              : null;
-          if (resp.avatar_url) {
-            setAvatarFallbackMode("dummy");
-            if (avatarModeStorageKey) {
-              window.localStorage.setItem(avatarModeStorageKey, "dummy");
-            }
-          } else {
-            setAvatarFallbackMode(persistedMode === "dummy" ? "dummy" : "initial");
-          }
         }
       } catch {
         // keep page usable
@@ -83,7 +72,7 @@ export default function OrganizationSettings() {
     return () => {
       cancelled = true;
     };
-  }, [avatarModeStorageKey, user?.org_name, user?.org_website]);
+  }, [user?.org_id]);
 
   const avatarDirty =
     pendingAvatarRemoved || pendingAvatarFile !== null || avatarUrl !== originalAvatarUrl;
@@ -120,12 +109,6 @@ export default function OrganizationSettings() {
       setOriginalWebsite(website.trim());
       setAvatarUrl(nextAvatarUrl ?? null);
       setOriginalAvatarUrl(nextAvatarUrl ?? null);
-      if (pendingAvatarRemoved || pendingAvatarFile) {
-        setAvatarFallbackMode("dummy");
-        if (avatarModeStorageKey) {
-          window.localStorage.setItem(avatarModeStorageKey, "dummy");
-        }
-      }
       setPendingAvatarFile(null);
       setPendingAvatarRemoved(false);
       if (previewObjectUrlRef.current) {
@@ -143,8 +126,33 @@ export default function OrganizationSettings() {
     }
   };
 
-  const handleAvatarChange = (file: File | undefined) => {
+  const handleCropDialogOpenChange = (open: boolean) => {
+    if (!open) {
+      if (cropImageSrc) {
+        URL.revokeObjectURL(cropImageSrc);
+        setCropImageSrc(null);
+      }
+      if (avatarInputRef.current) avatarInputRef.current.value = "";
+    }
+    setCropDialogOpen(open);
+  };
+
+  const handleAvatarFileSelected = (file: File | undefined) => {
     if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please choose an image file");
+      return;
+    }
+    const src = URL.createObjectURL(file);
+    setCropImageSrc(src);
+    setCropDialogOpen(true);
+  };
+
+  const handleAvatarCropped = (file: File) => {
+    if (cropImageSrc) {
+      URL.revokeObjectURL(cropImageSrc);
+      setCropImageSrc(null);
+    }
     if (previewObjectUrlRef.current) {
       URL.revokeObjectURL(previewObjectUrlRef.current);
     }
@@ -153,7 +161,6 @@ export default function OrganizationSettings() {
     setAvatarUrl(objectUrl);
     setPendingAvatarFile(file);
     setPendingAvatarRemoved(false);
-    setAvatarFallbackMode("dummy");
     toast.success("Organization avatar selected. Click Save to apply.");
   };
 
@@ -163,7 +170,6 @@ export default function OrganizationSettings() {
       previewObjectUrlRef.current = null;
     }
     setAvatarUrl(null);
-    setAvatarFallbackMode("dummy");
     if (pendingAvatarFile) {
       setPendingAvatarFile(null);
       setPendingAvatarRemoved(false);
@@ -176,6 +182,14 @@ export default function OrganizationSettings() {
 
   return (
     <>
+      <ImageCropDialog
+        open={cropDialogOpen}
+        onOpenChange={handleCropDialogOpenChange}
+        imageSrc={cropImageSrc}
+        title="Adjust organization logo"
+        onCropComplete={handleAvatarCropped}
+      />
+
       <h2 className="text-base md:text-lg font-semibold mb-1">Organization</h2>
       <p className="text-xs text-muted-foreground mb-4 md:mb-6">
         Manage your organization profile settings
@@ -184,23 +198,20 @@ export default function OrganizationSettings() {
       <Card>
         <CardContent className="p-4 md:p-5 space-y-4">
           <div className="flex items-center gap-3">
-            <Avatar key={`${avatarUrl ?? "none"}-${avatarFallbackMode}`} className="h-16 w-16">
-              {avatarUrl ? <AvatarImage src={avatarUrl} alt={name || "Organization"} /> : null}
-              <AvatarFallback className="text-lg bg-gray-100 border border-gray-300 text-gray-700">
-                {avatarFallbackMode === "initial" ? (
-                  getInitial()
-                ) : (
-                  <Building2 className="h-7 w-7 text-muted-foreground" />
-                )}
-              </AvatarFallback>
-            </Avatar>
+            <Avatar
+              key={avatarUrl ?? "none"}
+              className="h-16 w-16"
+              src={avatarUrl}
+              alt={name || "Organization"}
+              fallbackClassName="text-lg bg-gray-100 border border-gray-300 text-gray-700"
+            />
             <div className="flex items-center gap-2">
               <input
                 ref={avatarInputRef}
                 type="file"
                 accept="image/*"
                 className="sr-only"
-                onChange={(e) => handleAvatarChange(e.target.files?.[0])}
+                onChange={(e) => handleAvatarFileSelected(e.target.files?.[0])}
               />
               <Button
                 size="sm"
@@ -242,7 +253,13 @@ export default function OrganizationSettings() {
             className="text-sm h-10 md:h-9"
           />
           <Separator />
-          <Button size="sm" className="text-xs h-9 md:h-8" onClick={handleSave} disabled={!canSave}>
+          <Button
+            size="sm"
+            className="text-xs h-9 md:h-8"
+            onClick={handleSave}
+            disabled={!canSave}
+            pending={saving}
+          >
             {t("save")}
           </Button>
         </CardContent>

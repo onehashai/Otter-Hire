@@ -1,7 +1,11 @@
 import asyncio
-from uuid import uuid4
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from app.core.logging import logger
+
+import sentry  # noqa: F401
+
+import sentry_sdk
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -9,25 +13,26 @@ from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded as SlowRateLimitExceeded
 from slowapi.util import get_remote_address
 
+from app.admin import setup_admin
 from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.errors import make_error_payload
-from app.core.logging import logger, setup_logging
 from app.integrations.app_store.email_integration.ses_bridge import run_ses_raw_bridge_loop
-from app.middleware.context import RequestContext, get_request_context
 from app.middleware.errors import (
     generic_exception_handler,
     http_exception_handler,
     validation_exception_handler,
 )
-from app.schemas.common import HealthResponse, RequestContextSchema
-
-setup_logging()
+from app.schemas.common import HealthResponse
+from app.utils.uuid import uuid7
 
 limiter = Limiter(key_func=get_remote_address)
 
-app = FastAPI(title="ATS Backend", version="1.0.0")
+app = FastAPI(title=f"{settings.platform_name} API", version="1.0.0")
 app.state.limiter = limiter
+
+if not settings.is_production:
+    setup_admin(app)
 
 app.add_exception_handler(HTTPException, http_exception_handler)
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
@@ -46,7 +51,10 @@ app.include_router(api_router)
 
 @app.middleware("http")
 async def attach_request_id(request: Request, call_next):
-    request.state.request_id = str(uuid4())
+    request.state.request_id = str(uuid7())
+    # Attach request_id to the current Sentry scope so every event/span on
+    # this request carries it — enables correlation with application logs.
+    sentry_sdk.set_tag("request_id", request.state.request_id)
     response = await call_next(request)
     response.headers["X-Request-ID"] = request.state.request_id
     return response
@@ -69,8 +77,6 @@ async def rate_limit_handler(request: Request, exc: SlowRateLimitExceeded):
 
 @app.on_event("startup")
 async def startup_event():
-    mode = "production" if settings.is_production else "development"
-    logger.info(f"Starting ATS Backend in {mode} mode")
     app.state.ses_bridge_stop_event = asyncio.Event()
     app.state.ses_bridge_task = None
     if settings.ses_raw_bridge_enabled:
@@ -93,8 +99,3 @@ async def shutdown_event():
 @app.get("/health", response_model=HealthResponse)
 async def health():
     return HealthResponse(status="ok")
-
-
-@app.get("/me", response_model=RequestContextSchema)
-async def get_me(ctx: RequestContext = Depends(get_request_context)):
-    return ctx.to_schema()

@@ -8,18 +8,10 @@ import type { Action } from "./types";
 export interface SummaryStripProps {
   currentTrigger: TriggerOption | undefined;
   triggerStage: string;
-  triggerDays: string;
-  conditionsCount: number;
   actions: Action[];
 }
 
-export function SummaryStrip({
-  currentTrigger,
-  triggerStage,
-  triggerDays,
-  conditionsCount,
-  actions,
-}: SummaryStripProps) {
+export function SummaryStrip({ currentTrigger, triggerStage, actions }: SummaryStripProps) {
   const hasContent = currentTrigger || actions.length > 0;
   if (!hasContent) return null;
 
@@ -32,13 +24,6 @@ export function SummaryStrip({
             <Badge variant="outline" className="text-[10px]">
               When: {currentTrigger.label}
               {currentTrigger.hasStageSelect && triggerStage && ` → ${triggerStage}`}
-              {currentTrigger.hasDaysInput && ` (${triggerDays} days)`}
-            </Badge>
-          )}
-          {conditionsCount > 0 && (
-            <Badge variant="outline" className="text-[10px]">
-              If: {conditionsCount} condition
-              {conditionsCount !== 1 && "s"}
             </Badge>
           )}
           {actions.map((a) => (

@@ -8,9 +8,16 @@ import { Calendar } from "@onehash/ui/calendar";
 import { MultiSelect } from "@onehash/ui/select";
 import { MainPagesLayout } from "@/components/common/MainPagesLayout";
 import { format, isAfter, isBefore, subDays, startOfDay } from "date-fns";
-import { CategoryType, EmploymentType, JobStatusType } from "./[jobId]/constants";
+import {
+  JobCategories,
+  EmploymentType,
+  JobStatusType,
+  employmentTypes,
+  jobStatuses,
+} from "./[jobId]/constants";
 import { getJobs, createJob, type JobListItemResponse } from "@/api";
-import { toast } from "sonner";
+import { classifyError } from "@/api/client/client";
+import { toast } from "@onehash/ui/sonner";
 import { useAuthSession } from "@/app/providers";
 import { getJobsBaseUrl } from "@/lib/host";
 import { JobsList } from "@/components/jobs/JobsList";
@@ -20,31 +27,10 @@ import { EmptyCard, ErrorCard } from "@onehash/ui/card";
 import { useSetPageMetadata } from "@/hooks/useSetPageMetadata";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useRouter } from "next/navigation";
-const allCategories: CategoryType[] = [
-  "engineering",
-  "design",
-  "data",
-  "marketing",
-  "sales",
-  "operations",
-  "hr",
-];
-const allTypes: EmploymentType[] = ["full_time", "part_time", "contract", "internship"];
-const allStatuses = ["open", "draft", "archived"] as const;
-
 const statusKey: Record<JobStatusType, string> = {
   open: "open",
   draft: "draft",
   archived: "archived",
-};
-const categoryKey: Record<CategoryType, string> = {
-  engineering: "engineering",
-  design: "design",
-  data: "data",
-  marketing: "marketing",
-  sales: "sales",
-  operations: "operations",
-  hr: "hr",
 };
 const typeKey: Record<EmploymentType, string> = {
   full_time: "full_time",
@@ -68,7 +54,7 @@ export default function JobsPage() {
 
   const [jobs, setJobs] = useState<JobListItemResponse[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ message: string; forbidden: boolean } | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [categoryFilter, setCategoryFilter] = useState<string[]>([]);
@@ -77,21 +63,14 @@ export default function JobsPage() {
   const [dateRange, setDateRange] = useState<{ from?: Date; to?: Date }>({});
   const [createOpen, setCreateOpen] = useState(false);
 
-  const generateOrgSlug = () => {
-    if (!user?.org_id || !user?.org_name) return null;
-    const slug = user.org_name.toLowerCase().replace(/\s+/g, "-");
-    return `${slug}-${user.org_id}`;
-  };
-
-  const openJobBoard = (e?: React.MouseEvent) => {
+  const openJobPortal = (e?: React.MouseEvent) => {
     e?.preventDefault();
     e?.stopPropagation();
-    const orgSlug = generateOrgSlug();
-    if (!orgSlug) {
-      toast.error("Unable to open job board");
+    if (!user?.org_id) {
+      toast.error("Unable to open job portal");
       return;
     }
-    const url = `${getJobsBaseUrl()}/${orgSlug}`;
+    const url = `${getJobsBaseUrl()}/${user.org_id}`;
     window.open(url, "_blank", "noopener,noreferrer");
   };
 
@@ -101,7 +80,10 @@ export default function JobsPage() {
       const data = await getJobs();
       if (!signal?.aborted) setJobs(data);
     } catch (err) {
-      if (!signal?.aborted) setError(err instanceof Error ? err.message : "Failed to load jobs");
+      if (!signal?.aborted) {
+        const classified = classifyError(err);
+        setError({ message: classified.message, forbidden: classified.forbidden });
+      }
     } finally {
       if (!signal?.aborted) setLoading(false);
     }
@@ -149,8 +131,7 @@ export default function JobsPage() {
       )
         return false;
       if (statusFilter.length && !statusFilter.includes(job.status as JobStatusType)) return false;
-      if (categoryFilter.length && !categoryFilter.includes((job.category ?? "") as CategoryType))
-        return false;
+      if (categoryFilter.length && !categoryFilter.includes(job.category ?? "")) return false;
       if (typeFilter.length && !typeFilter.includes((job.employment_type ?? "") as EmploymentType))
         return false;
       if (dateRange.from) {
@@ -165,9 +146,9 @@ export default function JobsPage() {
     });
   }, [jobs, search, statusFilter, categoryFilter, typeFilter, dateRange]);
 
-  const statusOptions = allStatuses.map((s) => ({ value: s, label: t(statusKey[s]) }));
-  const categoryOptions = allCategories.map((d) => ({ value: d, label: t(categoryKey[d]) }));
-  const typeOptions = allTypes.map((tp) => ({ value: tp, label: t(typeKey[tp]) }));
+  const statusOptions = jobStatuses.map((s) => ({ value: s, label: t(statusKey[s]) }));
+  const categoryOptions = JobCategories.map((d) => ({ value: d, label: t(d) }));
+  const typeOptions = employmentTypes.map((tp) => ({ value: tp, label: t(typeKey[tp]) }));
 
   const activeChips: { label: string; clear: () => void }[] = [];
   statusFilter.forEach((s) =>
@@ -178,7 +159,7 @@ export default function JobsPage() {
   );
   categoryFilter.forEach((d) =>
     activeChips.push({
-      label: t(categoryKey[d as CategoryType]),
+      label: t(d, { defaultValue: d }),
       clear: () => setCategoryFilter((p) => p.filter((v) => v !== d)),
     }),
   );
@@ -256,13 +237,13 @@ export default function JobsPage() {
           ))}
         </div>
         {datePreset === "custom" && (
-          <div className="mt-2">
+          <div className="mt-3 border-t border-border pt-3">
             <Calendar
               mode="range"
               selected={dateRange.from ? { from: dateRange.from, to: dateRange.to } : undefined}
               onSelect={(range) => setDateRange(range ? { from: range.from, to: range.to } : {})}
               numberOfMonths={1}
-              className="rounded-md border p-2 pointer-events-auto"
+              className="w-full max-w-full rounded-md border bg-card p-3 shadow-none pointer-events-auto"
             />
           </div>
         )}
@@ -283,30 +264,24 @@ export default function JobsPage() {
   if (error) {
     return (
       <ErrorCard
-        icon="CircleAlert"
-        title={t("error")}
-        description={error}
-        actionLabel={t("retry")}
-        onAction={() => {
-          setLoading(true);
-          fetchJobs();
-        }}
+        icon={error.forbidden ? "ShieldOff" : "CircleAlert"}
+        title={error.forbidden ? t("access_denied", "Access Denied") : t("error")}
+        description={
+          error.forbidden
+            ? t(
+                "no_permission",
+                "You don't have permission to view this page. Contact your administrator if you think this is a mistake.",
+              )
+            : error.message
+        }
+        {...(!error.forbidden && {
+          actionLabel: t("retry"),
+          onAction: () => {
+            setLoading(true);
+            fetchJobs();
+          },
+        })}
       />
-    );
-  }
-
-  if (jobs.length === 0) {
-    return (
-      <>
-        <EmptyCard
-          icon="Briefcase"
-          title={t("jobs_title")}
-          description={t("jobs_subtitle")}
-          actionLabel={t("create")}
-          onAction={() => setCreateOpen(true)}
-        />
-        <CreateJobModal open={createOpen} onOpenChange={setCreateOpen} />
-      </>
     );
   }
 
@@ -314,22 +289,47 @@ export default function JobsPage() {
     return <JobsListSkeleton count={6} />;
   }
 
+  const canCreateJob = user?.membership_role
+    ? !["hiring_manager", "interviewer", "employee"].includes(user.membership_role)
+    : false;
+
+  if (jobs.length === 0) {
+    return (
+      <>
+        <EmptyCard
+          icon="Briefcase"
+          title={t("jobs_title")}
+          description={
+            canCreateJob ? t("jobs_subtitle") : t("no_jobs_assigned", "No jobs assigned to you yet")
+          }
+          {...(canCreateJob && {
+            actionLabel: t("create"),
+            onAction: () => setCreateOpen(true),
+          })}
+        />
+        {canCreateJob && <CreateJobModal open={createOpen} onOpenChange={setCreateOpen} />}
+      </>
+    );
+  }
+
   return (
     <MainPagesLayout
       searchValue={search}
       onSearchChange={setSearch}
-      actionLabel={t("create")}
-      actionIcon="Plus"
-      onAction={() => setCreateOpen(true)}
-      secondaryActionLabel="Job Board"
+      {...(canCreateJob && {
+        actionLabel: t("create"),
+        actionIcon: "Plus",
+        onAction: () => setCreateOpen(true),
+      })}
+      secondaryActionLabel="Job Portal"
       secondaryActionIcon="Link"
-      onSecondaryAction={openJobBoard}
+      onSecondaryAction={openJobPortal}
       filterContent={filterContent}
       hasActiveFilters={hasFilters}
       activeChips={activeChips}
       onClearAllFilters={clearAll}
     >
-      <JobsList jobs={filtered} />
+      <JobsList jobs={filtered} onJobArchived={() => void fetchJobs()} />
       <CreateJobModal open={createOpen} onOpenChange={setCreateOpen} />
     </MainPagesLayout>
   );

@@ -5,6 +5,7 @@ import type { SetupStepSlug } from "../../app/(app-page-wrapper)/jobs/[jobId]/co
 export type BasicInfoValidation = {
   valid: boolean;
   titleError?: "min" | "max" | "invalid";
+  locationError?: boolean;
 };
 
 export type HiringDetailsValidation = {
@@ -20,11 +21,20 @@ export type FirstInvalidSection = {
   messageParams?: Record<string, number>;
 };
 
-export function getBasicInfoValidation(state: Pick<JobSetupState, "title">): BasicInfoValidation {
+export function getBasicInfoValidation(
+  state: Pick<JobSetupState, "title" | "workplaceType" | "country" | "city">,
+): BasicInfoValidation {
   const result = jobNameSchema.safeParse({ jobName: state.title });
-  if (result.success) return { valid: true };
-  const msg = result.error.errors[0]?.message as "min" | "max" | "invalid" | undefined;
-  return { valid: false, titleError: msg ?? undefined };
+  if (!result.success) {
+    const msg = result.error.errors[0]?.message as "min" | "max" | "invalid" | undefined;
+    return { valid: false, titleError: msg ?? undefined };
+  }
+  if (state.workplaceType === "hybrid" || state.workplaceType === "onsite") {
+    if (!state.country?.trim() || !state.city?.trim()) {
+      return { valid: false, locationError: true };
+    }
+  }
+  return { valid: true };
 }
 
 export function getHiringDetailsValidation(
@@ -51,7 +61,14 @@ export function getHiringDetailsValidation(
 
 type SetupValidationState = Pick<
   JobSetupState,
-  "title" | "salaryType" | "salaryFixed" | "salaryMin" | "salaryMax"
+  | "title"
+  | "workplaceType"
+  | "country"
+  | "city"
+  | "salaryType"
+  | "salaryFixed"
+  | "salaryMin"
+  | "salaryMax"
 >;
 
 export function isSetupValid(state: SetupValidationState): boolean {
@@ -70,18 +87,21 @@ export function getFirstInvalidSection(state: SetupValidationState): FirstInvali
     if (basic.titleError === "invalid") {
       return { slug: "info", messageKey: "job_name_invalid" };
     }
+    if (basic.locationError) {
+      return { slug: "info", messageKey: "location_required_hybrid_onsite" };
+    }
     return { slug: "info", messageKey: "job_title_required" };
   }
   const hiring = getHiringDetailsValidation(state);
   if (!hiring.valid) {
     if (hiring.amountError) {
-      return { slug: "details", messageKey: "required" };
+      return { slug: "info", messageKey: "required" };
     }
     if (hiring.minError) {
-      return { slug: "details", messageKey: "required" };
+      return { slug: "info", messageKey: "required" };
     }
     if (hiring.maxError) {
-      return { slug: "details", messageKey: "required" };
+      return { slug: "info", messageKey: "required" };
     }
   }
   return null;

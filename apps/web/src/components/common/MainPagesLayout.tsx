@@ -12,9 +12,9 @@ import { useIsMobile } from "@/hooks/use-mobile";
 interface MainPagesLayoutProps {
   searchValue: string;
   onSearchChange: (value: string) => void;
-  actionLabel: string;
-  actionIcon: IconName;
-  onAction: () => void;
+  actionLabel?: string;
+  actionIcon?: IconName;
+  onAction?: () => void;
   secondaryActionLabel?: string;
   secondaryActionIcon?: IconName;
   onSecondaryAction?: (e?: React.MouseEvent) => void;
@@ -23,6 +23,7 @@ interface MainPagesLayoutProps {
   hasActiveFilters?: boolean;
   activeChips?: { label: string; clear: () => void }[];
   onClearAllFilters?: () => void;
+  rightActions?: ReactNode;
 
   children: ReactNode;
 }
@@ -41,6 +42,7 @@ export const MainPagesLayout = ({
   hasActiveFilters = false,
   activeChips,
   onClearAllFilters,
+  rightActions,
   children,
 }: MainPagesLayoutProps) => {
   const { t } = useTranslation();
@@ -56,7 +58,7 @@ export const MainPagesLayout = ({
             className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground"
           />
           <InputField
-            placeholder={t("search") + "..."}
+            placeholder={t("search")}
             value={searchValue}
             onChange={(e) => onSearchChange(e.target.value)}
             className="h-9 md:h-8 pl-8 text-xs md:w-56"
@@ -93,7 +95,10 @@ export const MainPagesLayout = ({
                   {hasActiveFilters && <span className="h-1.5 w-1.5 rounded-full bg-foreground" />}
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-72 max-h-[70vh] overflow-y-auto" align="start">
+              <PopoverContent
+                className="w-80 max-h-[min(70vh,520px)] overflow-y-auto overflow-x-hidden p-3"
+                align="start"
+              >
                 {filterContent}
               </PopoverContent>
             </Popover>
@@ -110,9 +115,12 @@ export const MainPagesLayout = ({
             {!isMobile && secondaryActionLabel}
           </Button>
         )}
-        <Button size="sm" className="h-9 md:h-8 text-xs gap-1.5 shrink-0" onClick={onAction}>
-          <Icon name={actionIcon} className="h-3.5 w-3.5" /> {actionLabel}
-        </Button>
+        {actionLabel && actionIcon && onAction ? (
+          <Button size="sm" className="h-9 md:h-8 text-xs gap-1.5 shrink-0" onClick={onAction}>
+            <Icon name={actionIcon} className="h-3.5 w-3.5" /> {actionLabel}
+          </Button>
+        ) : null}
+        {rightActions}
       </div>
 
       {activeChips && activeChips.length > 0 && (

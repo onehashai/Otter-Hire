@@ -1,45 +1,117 @@
-const PUBLIC_API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-const INTERNAL_API_BASE_URL = process.env.API_INTERNAL_URL ?? PUBLIC_API_BASE_URL;
+import { refresh401MeansSessionExpired } from "@/lib/auth-refresh-codes";
+import { buildLoginHref } from "@/lib/login-redirect";
 
-export const API_BASE_URL =
-  typeof window === "undefined" ? INTERNAL_API_BASE_URL : PUBLIC_API_BASE_URL;
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
 
+/** Full internal API base — all frontend calls use /v1/internal/* (JWT/session auth) */
+export const API_BASE_URL = `${API_BASE.replace(/\/$/, "")}/v1/internal`;
+
+/** Full WebSocket base URL for client-side WebSocket connections. */
+export function getWebSocketBaseUrl(): string {
+  const base = API_BASE.replace(/^http/i, "ws");
+  return `${base}/v1/internal/inbound/events/ws`;
+}
+
+/** Normalize API or file URLs */
 export function normalizeApiUrl(url: string | null | undefined): string | null {
   if (!url) return null;
+
+  // Already absolute
   if (/^https?:\/\//i.test(url)) return url;
-  const normalizedPath = url.startsWith("/") ? url : `/${url}`;
 
-  // File URLs should remain same-origin so app host serves /api/files/* in all environments.
-  if (normalizedPath.startsWith("/api/files/")) {
-    return normalizedPath;
-  }
+  const path = url.startsWith("/") ? url : `/${url}`;
 
-  // Stored legacy URLs may still contain /api/files/local/...
-  // Keep /api prefix when frontend talks to a relative API base (e.g. NEXT_PUBLIC_API_URL=/api),
-  // but strip it when talking directly to an absolute backend URL.
-  let path = normalizedPath;
-  if (path.startsWith("/api/files/")) {
-    let shouldStripApiPrefix = false;
-    try {
-      const parsed = new URL(API_BASE_URL);
-      const basePath = parsed.pathname.replace(/\/+$/, "");
-      shouldStripApiPrefix = basePath !== "/api";
-    } catch {
-      shouldStripApiPrefix = false;
-    }
-    if (shouldStripApiPrefix) {
-      path = path.replace(/^\/api/, "");
-    }
-  }
-
-  // Avoid double-prefixing when API base is relative (e.g. "/api")
-  // and payload URL already starts with that same prefix.
-  if (API_BASE_URL.startsWith("/") && path.startsWith(`${API_BASE_URL}/`)) {
-    return path;
+  // File URLs (served from backend)
+  if (path.startsWith("/v1/internal/files/") || path.startsWith("/files/")) {
+    return `${API_BASE.replace(/\/$/, "")}${path}`;
   }
 
   return `${API_BASE_URL}${path}`;
 }
+
+/** Base API URL (without /v1/internal) */
+export function getApiBase(): string {
+  return API_BASE.replace(/\/$/, "");
+}
+
+/* =========================
+   Global 401 Handler
+========================= */
+
+type SilentRefreshOutcome = "ok" | "anonymous" | "session_dead";
+
+// Shared in-flight refresh promise — prevents concurrent 401s from triggering
+// multiple simultaneous refresh calls.
+let _refreshPromise: Promise<SilentRefreshOutcome> | null = null;
+
+async function _silentRefreshOutcome(): Promise<SilentRefreshOutcome> {
+  if (_refreshPromise) return _refreshPromise;
+  _refreshPromise = (async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
+        method: "POST",
+        headers: { Accept: "application/json" },
+        credentials: "include",
+        cache: "no-store",
+      });
+      if (res.ok) return "ok";
+      if (res.status === 401) {
+        const body = await readApiErrorBody(res);
+        const code = typeof body?.code === "string" ? body.code : undefined;
+        return refresh401MeansSessionExpired(code) ? "session_dead" : "anonymous";
+      }
+      return "anonymous";
+    } catch {
+      return "anonymous";
+    } finally {
+      _refreshPromise = null;
+    }
+  })();
+  return _refreshPromise;
+}
+
+let isHandling401 = false;
+
+function shouldBypassSessionRecovery(path: string): boolean {
+  return (
+    path.startsWith("/auth/login") ||
+    path.startsWith("/auth/signup") ||
+    path.startsWith("/auth/refresh") ||
+    path.startsWith("/auth/logout") ||
+    path.startsWith("/auth/verify") ||
+    path.startsWith("/auth/resend-verification")
+  );
+}
+
+async function handle401Response(sessionExpired: boolean): Promise<void> {
+  if (isHandling401) return;
+  isHandling401 = true;
+
+  // Ask backend to clear httpOnly auth cookies and revoke refresh token.
+  try {
+    await fetch(`${API_BASE_URL}/auth/logout`, {
+      method: "POST",
+      headers: { Accept: "application/json" },
+      credentials: "include",
+      cache: "no-store",
+    });
+  } catch {
+    // Ignore logout failures; continue redirect flow.
+  }
+
+  // Clear client-managed session markers
+  localStorage.removeItem("session_updated");
+
+  window.location.href = buildLoginHref(
+    window.location.pathname,
+    window.location.search,
+    sessionExpired,
+  );
+}
+
+/* =========================
+   Error Handling
+========================= */
 
 export type ApiErrorResponse = {
   code?: string;
@@ -99,10 +171,15 @@ function mapErrorCodeToMessage(status: number, code?: string, fallback?: string)
     return "Too many attempts. Please try again later.";
   }
   if (code === "VALIDATION_ERROR" || status === 422) {
-    return "Please check the form and try again.";
+    return fallback && fallback !== "Validation failed"
+      ? fallback
+      : "Please check the form and try again.";
   }
   if (status === 403) {
     return "You don't have permission to perform this action.";
+  }
+  if (status === 502 || status === 503) {
+    if (fallback && fallback.trim()) return fallback;
   }
   if (status >= 500) {
     return "Something went wrong. Please try again.";
@@ -120,11 +197,13 @@ async function readApiErrorBody(res: Response): Promise<ApiErrorResponse | null>
 
 async function toApiError(res: Response, fallback: string): Promise<ApiError> {
   const body = await readApiErrorBody(res);
+
   const rawMessage =
     (typeof body?.message === "string" && body.message.trim()) ||
     (typeof body?.detail === "string" && body.detail.trim()) ||
     (typeof body?.error === "string" && body.error.trim()) ||
     fallback;
+
   const message = mapErrorCodeToMessage(res.status, body?.code, rawMessage);
   return new ApiError(message, res.status, body?.code, body?.request_id, body?.details);
 }
@@ -134,6 +213,42 @@ export async function parseErrorResponse(res: Response, defaultMessage: string):
   return err.message;
 }
 
+/**
+ * Classifies an error for UI display.
+ * Returns { forbidden: true } for 403 permission errors.
+ * Returns { networkError: true } for fetch/network failures.
+ * Otherwise returns the error message string.
+ */
+export function classifyError(err: unknown): {
+  message: string;
+  forbidden: boolean;
+  networkError: boolean;
+} {
+  if (err instanceof ApiError) {
+    return {
+      message: err.message,
+      forbidden: err.status === 403,
+      networkError: false,
+    };
+  }
+  if (err instanceof TypeError && err.message === "Failed to fetch") {
+    return {
+      message: "Unable to connect to the server. Please check your connection and try again.",
+      forbidden: false,
+      networkError: true,
+    };
+  }
+  return {
+    message: err instanceof Error ? err.message : "Something went wrong.",
+    forbidden: false,
+    networkError: false,
+  };
+}
+
+/* =========================
+   API Helpers
+========================= */
+
 export type ApiGetOptions = {
   credentials?: RequestCredentials;
   cache?: RequestCache;
@@ -141,16 +256,36 @@ export type ApiGetOptions = {
 
 export async function apiGet<T>(path: string, options: ApiGetOptions = {}): Promise<T> {
   const { credentials = "include", cache = "no-store" } = options;
+  const shouldRecoverSession = !shouldBypassSessionRecovery(path);
 
-  const res = await fetch(`${API_BASE_URL}${path}`, {
-    method: "GET",
-    headers: { Accept: "application/json" },
-    cache,
-    credentials,
-  });
+  const fetchOnce = () =>
+    fetch(`${API_BASE_URL}${path}`, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      cache,
+      credentials,
+    });
+
+  let res = await fetchOnce();
+  let sessionExpiredForLogin = false;
+
+  if (shouldRecoverSession && res.status === 401) {
+    const outcome = await _silentRefreshOutcome();
+    if (outcome === "ok") {
+      res = await fetchOnce();
+    } else if (outcome === "session_dead") {
+      sessionExpiredForLogin = true;
+    }
+  }
+
+  if (shouldRecoverSession && res.status === 401) {
+    await handle401Response(sessionExpiredForLogin);
+    throw new ApiError("Session expired", 401, "AUTH_SESSION_EXPIRED");
+  }
 
   if (!res.ok) {
-    throw new Error(`API request failed: ${res.status} ${res.statusText}`);
+    const err = await toApiError(res, `GET failed: ${res.status}`);
+    throw err;
   }
 
   return (await res.json()) as T;
@@ -166,61 +301,117 @@ export async function apiPost<T>(
   options: ApiPostOptions = {},
 ): Promise<T> {
   const { credentials = "include" } = options;
+  const shouldRecoverSession = !shouldBypassSessionRecovery(path);
 
-  const res = await fetch(`${API_BASE_URL}${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json" },
-    credentials,
-    body: JSON.stringify(body),
-  });
+  const fetchOnce = () =>
+    fetch(`${API_BASE_URL}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      credentials,
+      body: JSON.stringify(body),
+    });
+
+  let res = await fetchOnce();
+  let sessionExpiredForLogin = false;
+
+  if (shouldRecoverSession && res.status === 401) {
+    const outcome = await _silentRefreshOutcome();
+    if (outcome === "ok") {
+      res = await fetchOnce();
+    } else if (outcome === "session_dead") {
+      sessionExpiredForLogin = true;
+    }
+  }
+
+  if (shouldRecoverSession && res.status === 401) {
+    await handle401Response(sessionExpiredForLogin);
+    throw new ApiError("Session expired", 401, "AUTH_SESSION_EXPIRED");
+  }
 
   if (!res.ok) {
-    const err = await toApiError(res, `API request failed: ${res.status} ${res.statusText}`);
-    throw err;
+    throw await toApiError(res, `POST failed: ${res.status}`);
   }
 
-  if (res.status === 204) {
-    return {} as T;
-  }
+  if (res.status === 204) return {} as T;
 
   return (await res.json()) as T;
 }
 
 export async function apiFetch<T>(
   path: string,
-  options: { method: string; body?: unknown },
+  options: { method: string; body?: unknown; headers?: Record<string, string> },
 ): Promise<T> {
+  const shouldRecoverSession = !shouldBypassSessionRecovery(path);
   const headers: Record<string, string> = { Accept: "application/json" };
+  if (options.headers) {
+    Object.assign(headers, options.headers);
+  }
   if (options.body !== undefined) {
     headers["Content-Type"] = "application/json";
   }
 
-  const res = await fetch(`${API_BASE_URL}${path}`, {
-    method: options.method,
-    headers,
-    credentials: "include",
-    body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
-    cache: "no-store",
-  });
+  const fetchOnce = () =>
+    fetch(`${API_BASE_URL}${path}`, {
+      method: options.method,
+      headers,
+      credentials: "include",
+      body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+      cache: "no-store",
+    });
+
+  let res = await fetchOnce();
+  let sessionExpiredForLogin = false;
+
+  if (shouldRecoverSession && res.status === 401) {
+    const outcome = await _silentRefreshOutcome();
+    if (outcome === "ok") {
+      res = await fetchOnce();
+    } else if (outcome === "session_dead") {
+      sessionExpiredForLogin = true;
+    }
+  }
+
+  if (shouldRecoverSession && res.status === 401) {
+    await handle401Response(sessionExpiredForLogin);
+    throw new ApiError("Session expired", 401, "AUTH_SESSION_EXPIRED");
+  }
 
   if (!res.ok) {
-    const err = await toApiError(res, `Request failed: ${res.status} ${res.statusText}`);
-    throw err;
+    throw await toApiError(res, `Request failed: ${res.status}`);
   }
 
   if (res.status === 204) return {} as T;
+
   return (await res.json()) as T;
 }
 
 export async function apiDelete(path: string): Promise<void> {
-  const res = await fetch(`${API_BASE_URL}${path}`, {
-    method: "DELETE",
-    headers: { Accept: "application/json" },
-    credentials: "include",
-  });
+  const shouldRecoverSession = !shouldBypassSessionRecovery(path);
+  const fetchOnce = () =>
+    fetch(`${API_BASE_URL}${path}`, {
+      method: "DELETE",
+      headers: { Accept: "application/json" },
+      credentials: "include",
+    });
+
+  let res = await fetchOnce();
+  let sessionExpiredForLogin = false;
+
+  if (shouldRecoverSession && res.status === 401) {
+    const outcome = await _silentRefreshOutcome();
+    if (outcome === "ok") {
+      res = await fetchOnce();
+    } else if (outcome === "session_dead") {
+      sessionExpiredForLogin = true;
+    }
+  }
+
+  if (shouldRecoverSession && res.status === 401) {
+    await handle401Response(sessionExpiredForLogin);
+    throw new ApiError("Session expired", 401, "AUTH_SESSION_EXPIRED");
+  }
 
   if (!res.ok) {
-    const err = await toApiError(res, `API request failed: ${res.status} ${res.statusText}`);
-    throw err;
+    throw await toApiError(res, `DELETE failed: ${res.status}`);
   }
 }

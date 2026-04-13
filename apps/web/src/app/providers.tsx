@@ -9,13 +9,14 @@ import {
   useRef,
   useState,
 } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "@/components/common/ThemeProvider";
 import { Toaster } from "@onehash/ui/toaster";
 import { SonnerToaster } from "@onehash/ui/sonner";
 import { TooltipProvider } from "@onehash/ui/tooltip";
-import { getAuthSession, type AuthSessionResponse } from "@/api/index";
+import { getAuthSession, refreshSessionDetailed, type AuthSessionResponse } from "@/api/index";
+import { buildLoginHref } from "@/lib/login-redirect";
 
 import "@/i18n";
 
@@ -40,6 +41,7 @@ export function useAuthSession(): AuthSessionContextValue {
 
 const AUTH_ROUTES = ["/login", "/signup"];
 const LIFECYCLE_ROUTES = ["/verify", "/onboarding"];
+const EXPLICIT_LOGOUT_KEY = "explicit_logout";
 
 function isInvitePath(pathname: string): boolean {
   return pathname.startsWith("/invite/");
@@ -51,7 +53,18 @@ export function Providers({ children }: { children: React.ReactNode }) {
   const [sessionVersion, setSessionVersion] = useState(0);
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const inflightRef = useRef<Promise<AuthSessionResponse | null> | null>(null);
+  const authFailureRef = useRef<"none" | "anonymous" | "invalidated">("none");
+  const isAuthRoute = AUTH_ROUTES.includes(pathname);
+  const isLifecycleRoute = LIFECYCLE_ROUTES.includes(pathname);
+  const onInvitePage = isInvitePath(pathname);
+
+  const clearSession = useCallback(() => {
+    inflightRef.current = null;
+    setUser(null);
+    localStorage.removeItem("session_updated");
+  }, []);
 
   const refreshSession = useCallback(
     async (force?: boolean): Promise<AuthSessionResponse | null> => {
@@ -59,11 +72,46 @@ export function Providers({ children }: { children: React.ReactNode }) {
       if (force) inflightRef.current = null;
       const promise = (async () => {
         try {
-          const me = await getAuthSession();
+          let me = await getAuthSession();
+          let sessionInvalidated = false;
+
+          if (!me) {
+            const refreshResult = await refreshSessionDetailed();
+            if (refreshResult.ok === true) {
+              me = refreshResult.user;
+            } else {
+              sessionInvalidated = refreshResult.sessionInvalidated;
+            }
+          }
+
+          if (!me) {
+            setUser(null);
+            clearSession();
+            authFailureRef.current = sessionInvalidated ? "invalidated" : "anonymous";
+            if (
+              !AUTH_ROUTES.includes(pathname) &&
+              !LIFECYCLE_ROUTES.includes(pathname) &&
+              !isInvitePath(pathname)
+            ) {
+              router.replace(buildLoginHref(pathname, window.location.search, sessionInvalidated));
+            }
+            return null;
+          }
+
+          authFailureRef.current = "none";
           setUser(me);
           return me;
-        } catch {
+        } catch (error) {
           setUser(null);
+          clearSession();
+          authFailureRef.current = "anonymous";
+          if (
+            !AUTH_ROUTES.includes(pathname) &&
+            !LIFECYCLE_ROUTES.includes(pathname) &&
+            !isInvitePath(pathname)
+          ) {
+            router.replace(buildLoginHref(pathname, window.location.search, false));
+          }
           return null;
         } finally {
           setLoading(false);
@@ -74,14 +122,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
       inflightRef.current = promise;
       return promise;
     },
-    [],
+    [pathname, router, clearSession],
   );
-
-  const clearSession = useCallback(() => {
-    inflightRef.current = null;
-    setUser(null);
-    localStorage.removeItem("session_updated");
-  }, []);
 
   useEffect(() => {
     void refreshSession();
@@ -99,19 +141,37 @@ export function Providers({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (loading) return;
 
-    const isAuthRoute = AUTH_ROUTES.includes(pathname);
-    const isLifecycleRoute = LIFECYCLE_ROUTES.includes(pathname);
-    const onInvitePage = isInvitePath(pathname);
+    const onInviteSignup = pathname === "/signup" && Boolean(searchParams.get("invite"));
+    const isInviteLifecycleUser = user?.status === "pending" || user?.status === "declined";
+    const explicitLogout = sessionStorage.getItem(EXPLICIT_LOGOUT_KEY) === "true";
+
+    // Once user reaches an auth page, clear the explicit logout marker.
+    if (explicitLogout && isAuthRoute) {
+      sessionStorage.removeItem(EXPLICIT_LOGOUT_KEY);
+    }
 
     if (!user) {
+      // Only redirect if loading is complete — refreshSession already attempted
+      // getAuthSession + refreshSessionDetailed before setting user=null.
       if (!isAuthRoute && !isLifecycleRoute && !onInvitePage) {
-        router.replace("/login");
+        if (explicitLogout) {
+          router.replace("/login");
+          return;
+        }
+        const currentSearch = searchParams.toString();
+        const pathSearch = currentSearch ? `?${currentSearch}` : "";
+        const sessionExpired = authFailureRef.current === "invalidated";
+        authFailureRef.current = "none";
+        router.replace(buildLoginHref(pathname, pathSearch, sessionExpired));
+      } else {
+        authFailureRef.current = "none";
       }
       return;
     }
 
     if (!user.is_verified) {
-      if (pathname !== "/verify" && !onInvitePage) {
+      // Invitation lifecycle users should never be forced through /verify.
+      if (!isInviteLifecycleUser && pathname !== "/verify" && !onInvitePage && !onInviteSignup) {
         router.replace("/verify");
       }
       return;
@@ -129,20 +189,22 @@ export function Providers({ children }: { children: React.ReactNode }) {
       // router.replace("/dashboard");
       router.replace("/");
     }
-  }, [user, loading, pathname, router, sessionVersion]);
+  }, [
+    user,
+    loading,
+    pathname,
+    router,
+    searchParams,
+    sessionVersion,
+    isAuthRoute,
+    isLifecycleRoute,
+    onInvitePage,
+  ]);
 
   const authValue = useMemo(
     () => ({ user, loading, refreshSession, clearSession }),
     [user, loading, refreshSession, clearSession],
   );
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-foreground" />
-      </div>
-    );
-  }
 
   return (
     <QueryClientProvider client={queryClient}>

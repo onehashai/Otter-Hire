@@ -12,7 +12,7 @@ import { Card, CardContent } from "@onehash/ui/card";
 import { InputField } from "@onehash/ui/input";
 import { Separator } from "@onehash/ui/separator";
 import { Button } from "@onehash/ui/button";
-import { Avatar, AvatarFallback, AvatarImage } from "@onehash/ui/avatar";
+import { Avatar } from "@onehash/ui/avatar";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,10 +23,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@onehash/ui/alert-dialog";
-import { Trash2, Upload, UserRound } from "lucide-react";
-import { toast } from "sonner";
+import { Trash2, Upload } from "lucide-react";
+import { toast } from "@onehash/ui/sonner";
 import { useTranslation } from "react-i18next";
 import { useRouter } from "next/navigation";
+import { useAuthSession } from "@/app/providers";
+import { getInitialsFromName } from "@/lib/name-initials";
+import { ImageCropDialog } from "@/components/common/ImageCropDialog";
 
 type ProfileSettingsProps = {
   user: AuthSessionResponse | null;
@@ -35,6 +38,7 @@ type ProfileSettingsProps = {
 export function ProfileSettings({ user }: ProfileSettingsProps) {
   const { t } = useTranslation();
   const router = useRouter();
+  const { refreshSession } = useAuthSession();
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -48,10 +52,10 @@ export function ProfileSettings({ user }: ProfileSettingsProps) {
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
   const [pendingNavigateTo, setPendingNavigateTo] = useState<string | null>(null);
   const [pendingBackNavigation, setPendingBackNavigation] = useState(false);
-  const [avatarFallbackMode, setAvatarFallbackMode] = useState<"initial" | "dummy">("initial");
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
   const previewObjectUrlRef = useRef<string | null>(null);
-  const avatarModeStorageKey = user?.id ? `profile_avatar_fallback_mode:${user.id}` : null;
+  const [cropDialogOpen, setCropDialogOpen] = useState(false);
+  const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -63,6 +67,12 @@ export function ProfileSettings({ user }: ProfileSettingsProps) {
     }
   }, [user]);
 
+  // Profile loads avatar from `/users/me/profile`; the header uses auth session (`/auth/me`).
+  // Refetch session when opening this page so `avatar_url` matches what Profile shows.
+  useEffect(() => {
+    void refreshSession(true);
+  }, [refreshSession]);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -71,18 +81,6 @@ export function ProfileSettings({ user }: ProfileSettingsProps) {
         if (!cancelled) {
           setAvatarUrl(profile.avatar_url ?? null);
           setOriginalAvatarUrl(profile.avatar_url ?? null);
-          const persistedMode =
-            typeof window !== "undefined" && avatarModeStorageKey
-              ? window.localStorage.getItem(avatarModeStorageKey)
-              : null;
-          if (profile.avatar_url) {
-            setAvatarFallbackMode("dummy");
-            if (avatarModeStorageKey) {
-              window.localStorage.setItem(avatarModeStorageKey, "dummy");
-            }
-          } else {
-            setAvatarFallbackMode(persistedMode === "dummy" ? "dummy" : "initial");
-          }
           setName(profile.name || "");
           setOriginalName(profile.name || "");
         }
@@ -93,20 +91,12 @@ export function ProfileSettings({ user }: ProfileSettingsProps) {
     return () => {
       cancelled = true;
     };
-  }, [avatarModeStorageKey]);
+  }, [user?.id, user?.org_id]);
 
   const avatarDirty =
     pendingAvatarRemoved || pendingAvatarFile !== null || avatarUrl !== originalAvatarUrl;
   const isDirty = name !== originalName || avatarDirty;
   const canSave = isDirty && name.trim().length > 0 && !saving;
-
-  const getInitials = () => {
-    const parts = name.trim().split(" ");
-    if (parts.length >= 2) {
-      return (parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase();
-    }
-    return name.charAt(0).toUpperCase() || "U";
-  };
 
   const handleSave = async () => {
     if (!canSave) return;
@@ -128,17 +118,6 @@ export function ProfileSettings({ user }: ProfileSettingsProps) {
       setOriginalName(profile.name);
       setAvatarUrl(nextAvatarUrl ?? null);
       setOriginalAvatarUrl(nextAvatarUrl ?? null);
-      if (pendingAvatarRemoved) {
-        setAvatarFallbackMode("dummy");
-        if (avatarModeStorageKey) {
-          window.localStorage.setItem(avatarModeStorageKey, "dummy");
-        }
-      } else if (pendingAvatarFile) {
-        setAvatarFallbackMode("dummy");
-        if (avatarModeStorageKey) {
-          window.localStorage.setItem(avatarModeStorageKey, "dummy");
-        }
-      }
       setPendingAvatarFile(null);
       setPendingAvatarRemoved(false);
 
@@ -147,6 +126,8 @@ export function ProfileSettings({ user }: ProfileSettingsProps) {
         previewObjectUrlRef.current = null;
       }
       if (avatarInputRef.current) avatarInputRef.current.value = "";
+
+      await refreshSession(true);
 
       toast.success("Profile updated successfully");
 
@@ -169,10 +150,35 @@ export function ProfileSettings({ user }: ProfileSettingsProps) {
     }
   };
 
-  const handleAvatarChange = async (file: File | undefined) => {
+  const handleCropDialogOpenChange = (open: boolean) => {
+    if (!open) {
+      if (cropImageSrc) {
+        URL.revokeObjectURL(cropImageSrc);
+        setCropImageSrc(null);
+      }
+      if (avatarInputRef.current) avatarInputRef.current.value = "";
+    }
+    setCropDialogOpen(open);
+  };
+
+  const handleAvatarFileSelected = (file: File | undefined) => {
     if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please choose an image file");
+      return;
+    }
+    const src = URL.createObjectURL(file);
+    setCropImageSrc(src);
+    setCropDialogOpen(true);
+  };
+
+  const handleAvatarCropped = (file: File) => {
     try {
       setAvatarUploading(true);
+      if (cropImageSrc) {
+        URL.revokeObjectURL(cropImageSrc);
+        setCropImageSrc(null);
+      }
       if (previewObjectUrlRef.current) {
         URL.revokeObjectURL(previewObjectUrlRef.current);
       }
@@ -181,10 +187,9 @@ export function ProfileSettings({ user }: ProfileSettingsProps) {
       setAvatarUrl(objectUrl);
       setPendingAvatarFile(file);
       setPendingAvatarRemoved(false);
-      setAvatarFallbackMode("dummy");
       toast.success("Avatar selected. Click Save to apply.");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to upload avatar");
+      toast.error(err instanceof Error ? err.message : "Failed to prepare avatar");
     } finally {
       setAvatarUploading(false);
     }
@@ -198,7 +203,6 @@ export function ProfileSettings({ user }: ProfileSettingsProps) {
         previewObjectUrlRef.current = null;
       }
       setAvatarUrl(null);
-      setAvatarFallbackMode("dummy");
       if (pendingAvatarFile) {
         // Removing a staged avatar selection should not hit delete API on save.
         setPendingAvatarFile(null);
@@ -259,7 +263,6 @@ export function ProfileSettings({ user }: ProfileSettingsProps) {
   const handleDiscardChanges = () => {
     setName(originalName);
     setAvatarUrl(originalAvatarUrl);
-    setAvatarFallbackMode(originalAvatarUrl ? "dummy" : "initial");
     setPendingAvatarFile(null);
     setPendingAvatarRemoved(false);
     if (previewObjectUrlRef.current) {
@@ -294,15 +297,14 @@ export function ProfileSettings({ user }: ProfileSettingsProps) {
         <Card>
           <CardContent className="p-4 md:p-5 space-y-4">
             <div className="flex items-center gap-3">
-              <Avatar key={`${avatarUrl ?? "none"}-${avatarFallbackMode}`} className="h-16 w-16">
-                {avatarUrl ? <AvatarImage src={avatarUrl} alt={name || "User"} /> : null}
-                <AvatarFallback className="text-lg bg-gray-100 border border-gray-300 text-gray-700">
-                  {avatarFallbackMode === "initial" ? (
-                    getInitials()
-                  ) : (
-                    <UserRound className="h-7 w-7 text-muted-foreground" />
-                  )}
-                </AvatarFallback>
+              <Avatar
+                key={avatarUrl ?? "none"}
+                className="h-16 w-16"
+                src={avatarUrl}
+                alt={name || "User"}
+                fallbackClassName="text-lg bg-gray-100 border border-gray-300 text-gray-700"
+              >
+                {getInitialsFromName(name.trim(), "U")}
               </Avatar>
               <div className="flex items-center gap-2">
                 <input
@@ -310,7 +312,7 @@ export function ProfileSettings({ user }: ProfileSettingsProps) {
                   type="file"
                   accept="image/*"
                   className="sr-only"
-                  onChange={(e) => handleAvatarChange(e.target.files?.[0])}
+                  onChange={(e) => handleAvatarFileSelected(e.target.files?.[0])}
                   disabled={avatarUploading}
                 />
                 <Button
@@ -365,12 +367,21 @@ export function ProfileSettings({ user }: ProfileSettingsProps) {
               className="text-xs h-9 md:h-8"
               onClick={handleSave}
               disabled={!canSave}
+              pending={saving}
             >
               {t("save")}
             </Button>
           </CardContent>
         </Card>
       </div>
+      <ImageCropDialog
+        open={cropDialogOpen}
+        onOpenChange={handleCropDialogOpenChange}
+        imageSrc={cropImageSrc}
+        title="Adjust profile photo"
+        onCropComplete={handleAvatarCropped}
+      />
+
       <AlertDialog open={showUnsavedDialog} onOpenChange={setShowUnsavedDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>

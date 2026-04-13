@@ -1,0 +1,81 @@
+# ── Stage 1: install dependencies ─────────────────────────────────────────────
+FROM node:20-alpine AS deps
+
+WORKDIR /app
+
+# Install UI dependencies
+COPY packages/ui/package.json packages/ui/package-lock.json* ./packages/ui/
+RUN cd packages/ui && npm ci
+
+# Install Web/App dependencies
+COPY apps/web/package.json apps/web/package-lock.json* ./apps/web/
+RUN cd apps/web && npm ci
+
+# Alpine (musl): Rollup optional deps don’t always resolve; install the native binary for
+# this image’s CPU (arm64 vs amd64). Keeps package.json lockfile CI-friendly (no pinned @rollup/*).
+RUN cd apps/web && \
+    ARCH=$(uname -m) && \
+    if [ "$ARCH" = "aarch64" ]; then npm i -D @rollup/rollup-linux-arm64-musl; \
+    elif [ "$ARCH" = "x86_64" ]; then npm i -D @rollup/rollup-linux-x64-musl; \
+    else echo "Unsupported arch: $ARCH"; exit 1; \
+    fi
+
+# ── Stage 2: build ─────────────────────────────────────────────────────────────
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Copy node_modules from deps stage
+COPY --from=deps /app/packages/ui/node_modules ./packages/ui/node_modules
+COPY --from=deps /app/apps/web/node_modules ./apps/web/node_modules
+
+# Copy source code
+COPY packages/ui ./packages/ui
+COPY apps/web ./apps/web
+
+WORKDIR /app/apps/web
+
+# Build-time arguments
+ARG NEXT_PUBLIC_PLATFORM_NAME="Otter"
+ARG NEXT_PUBLIC_APP_SUBDOMAIN=app
+ARG NEXT_PUBLIC_JOBS_SUBDOMAIN=jobs
+ARG NEXT_PUBLIC_APP_ROOT_HOST
+ARG NEXT_PUBLIC_API_BASE_URL
+ARG NEXT_PUBLIC_SES_MAIL_DOMAIN
+ARG NEXT_PUBLIC_TEMPORAL_UI_URL
+ARG NEXT_PUBLIC_SENTRY_DSN
+ARG SENTRY_PROJECT
+
+# Environment variables baked into frontend + rewrites
+ENV NEXT_PUBLIC_PLATFORM_NAME=$NEXT_PUBLIC_PLATFORM_NAME
+ENV NEXT_PUBLIC_APP_SUBDOMAIN=$NEXT_PUBLIC_APP_SUBDOMAIN
+ENV NEXT_PUBLIC_JOBS_SUBDOMAIN=$NEXT_PUBLIC_JOBS_SUBDOMAIN
+ENV NEXT_PUBLIC_APP_ROOT_HOST=$NEXT_PUBLIC_APP_ROOT_HOST
+ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
+ENV NEXT_PUBLIC_SES_MAIL_DOMAIN=$NEXT_PUBLIC_SES_MAIL_DOMAIN
+ENV NEXT_PUBLIC_TEMPORAL_UI_URL=$NEXT_PUBLIC_TEMPORAL_UI_URL
+ENV NEXT_PUBLIC_SENTRY_DSN=$NEXT_PUBLIC_SENTRY_DSN
+ENV SENTRY_PROJECT=$SENTRY_PROJECT
+
+# Standalone build
+ENV NEXT_BUILD_STANDALONE=true
+
+RUN npm run build
+
+# ── Stage 3: runtime (lean) ────────────────────────────────────────────────────
+FROM node:20-alpine AS runner
+
+WORKDIR /app/apps/web
+
+ENV NODE_ENV=production
+
+# Copy built standalone app
+COPY --from=builder /app/apps/web/.next/standalone ./
+
+# Copy static assets
+COPY --from=builder /app/apps/web/.next/static ./.next/static
+COPY --from=builder /app/apps/web/public ./public
+
+EXPOSE 3000
+
+CMD ["node", "server.js"]

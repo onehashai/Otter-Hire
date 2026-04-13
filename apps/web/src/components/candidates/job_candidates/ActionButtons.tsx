@@ -1,0 +1,375 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Button } from "@onehash/ui/button";
+import { Icon } from "@onehash/ui/icon";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@onehash/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@onehash/ui/alert-dialog";
+import { useToast } from "@/hooks/use-toast";
+import {
+  deleteCandidate,
+  updateCandidateStage,
+  updateCandidateStatus,
+  type JobHiringStageResponse,
+} from "@/api";
+
+export interface ActionButtonsProps {
+  candidateName: string;
+  jobId?: string;
+  candidateId?: string;
+  currentStageId?: string | null;
+  stages?: JobHiringStageResponse[];
+  onCandidateUpdated?: () => void | Promise<void>;
+  onStageMoved?: (stageId: string) => void | Promise<void>;
+  onSchedule?: () => void;
+}
+
+export function ActionButtons({
+  candidateName,
+  jobId,
+  candidateId,
+  currentStageId,
+  stages,
+  onCandidateUpdated,
+  onStageMoved,
+  onSchedule,
+}: ActionButtonsProps) {
+  const router = useRouter();
+  const { toast } = useToast();
+  const [movingToStageId, setMovingToStageId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [isMoveStageListOpen, setIsMoveStageListOpen] = useState(false);
+  const [isReconsiderListOpen, setIsReconsiderListOpen] = useState(false);
+
+  const sortedStages = useMemo(
+    () => [...(stages ?? [])].sort((a, b) => a.position - b.position),
+    [stages],
+  );
+  const rejectedStage = useMemo(
+    () => sortedStages.find((s) => s.name.trim().toLowerCase() === "rejected") ?? null,
+    [sortedStages],
+  );
+  const hiredStage = useMemo(
+    () => sortedStages.find((s) => s.name.trim().toLowerCase() === "hired") ?? null,
+    [sortedStages],
+  );
+  const appliedStage = useMemo(
+    () => sortedStages.find((s) => s.name.trim().toLowerCase() === "applied") ?? null,
+    [sortedStages],
+  );
+  const progressionStages = useMemo(
+    () => sortedStages.filter((s) => !rejectedStage || s.id !== rejectedStage.id),
+    [sortedStages, rejectedStage],
+  );
+  const currentStageIndex = useMemo(
+    () => progressionStages.findIndex((s) => s.id === currentStageId),
+    [progressionStages, currentStageId],
+  );
+  const nextStage =
+    currentStageIndex >= 0 && currentStageIndex < progressionStages.length - 1
+      ? progressionStages[currentStageIndex + 1]
+      : null;
+  const moveTargets = progressionStages.filter((s) => s.id !== currentStageId);
+  const isInRejectedStage = Boolean(rejectedStage && currentStageId === rejectedStage.id);
+  const isInHiredStage = Boolean(hiredStage && currentStageId === hiredStage.id);
+  const reconsiderTargets = progressionStages.filter((s) => s.id !== currentStageId);
+  const defaultReconsiderStage = appliedStage ?? reconsiderTargets[0] ?? null;
+
+  const handleMove = async (stageId: string, stageName: string) => {
+    if (!candidateId) {
+      toast({ title: "Candidate not found", variant: "destructive" });
+      return;
+    }
+    try {
+      setMovingToStageId(stageId);
+      await updateCandidateStage(candidateId, stageId, jobId);
+      toast({ title: `Moved to ${stageName}` });
+      if (onCandidateUpdated) {
+        await onCandidateUpdated();
+      }
+      if (onStageMoved) {
+        await onStageMoved(stageId);
+      }
+    } catch (err) {
+      toast({
+        title: err instanceof Error ? err.message : "Failed to move candidate",
+        variant: "destructive",
+      });
+    } finally {
+      setMovingToStageId(null);
+    }
+  };
+
+  const handleReject = async () => {
+    if (!candidateId) {
+      toast({ title: "Candidate not found", variant: "destructive" });
+      return;
+    }
+    if (!rejectedStage) {
+      toast({ title: "Rejected stage not found", variant: "destructive" });
+      return;
+    }
+    try {
+      setMovingToStageId(rejectedStage.id);
+      await updateCandidateStage(candidateId, rejectedStage.id, jobId);
+      await updateCandidateStatus(candidateId, "rejected", jobId);
+      toast({ title: "Moved to Rejected" });
+      if (onCandidateUpdated) {
+        await onCandidateUpdated();
+      }
+      if (onStageMoved) {
+        await onStageMoved(rejectedStage.id);
+      }
+    } catch (err) {
+      toast({
+        title: err instanceof Error ? err.message : "Failed to reject candidate",
+        variant: "destructive",
+      });
+    } finally {
+      setMovingToStageId(null);
+    }
+  };
+
+  const handleReconsider = async (stageId: string, stageName: string) => {
+    if (!candidateId) {
+      toast({ title: "Candidate not found", variant: "destructive" });
+      return;
+    }
+    try {
+      setMovingToStageId(stageId);
+      await updateCandidateStage(candidateId, stageId, jobId);
+      await updateCandidateStatus(candidateId, "active", jobId);
+      toast({ title: `Reconsidered to ${stageName}` });
+      if (onCandidateUpdated) {
+        await onCandidateUpdated();
+      }
+      if (onStageMoved) {
+        await onStageMoved(stageId);
+      }
+    } catch (err) {
+      toast({
+        title: err instanceof Error ? err.message : "Failed to reconsider candidate",
+        variant: "destructive",
+      });
+    } finally {
+      setMovingToStageId(null);
+    }
+  };
+
+  const toggleMoveStageList = () => {
+    setIsMoveStageListOpen((prev) => !prev);
+    setIsReconsiderListOpen(false);
+  };
+
+  const toggleReconsiderList = () => {
+    setIsReconsiderListOpen((prev) => !prev);
+    setIsMoveStageListOpen(false);
+  };
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <Button
+        size="sm"
+        className="h-8 text-xs gap-1.5"
+        onClick={() => {
+          if (isInRejectedStage) return;
+          if (nextStage) {
+            void handleMove(nextStage.id, nextStage.name);
+          }
+        }}
+        disabled={isInRejectedStage || !nextStage || !candidateId || Boolean(movingToStageId)}
+        pending={!isInRejectedStage && movingToStageId === nextStage?.id}
+      >
+        <Icon name="UserCheck" className="h-3.5 w-3.5" />{" "}
+        {isInRejectedStage
+          ? "Rejected"
+          : nextStage
+            ? `Move to ${nextStage.name}`
+            : "At final stage"}
+      </Button>
+      <DropdownMenu
+        onOpenChange={(open) => {
+          if (!open) {
+            setIsMoveStageListOpen(false);
+            setIsReconsiderListOpen(false);
+          }
+        }}
+      >
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline" size="sm" className="h-8 w-8 p-0">
+            <Icon name="MoreHorizontal" className="h-3.5 w-3.5" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-40">
+          {isInRejectedStage ? (
+            <div
+              onMouseEnter={() => setIsReconsiderListOpen(true)}
+              onMouseLeave={() => setIsReconsiderListOpen(false)}
+            >
+              <DropdownMenuItem
+                className="text-xs cursor-pointer flex w-full items-center"
+                onSelect={(e) => e.preventDefault()}
+                onClick={(e) => {
+                  e.preventDefault();
+                  toggleReconsiderList();
+                }}
+              >
+                <Icon name="ArrowLeftRight" className="h-3.5 w-3.5 mr-2" />
+                <span>Reconsider to stage</span>
+                <Icon name="ChevronLeft" className="h-3.5 w-3.5 ml-1 rotate-[-90deg]" />
+              </DropdownMenuItem>
+              {isReconsiderListOpen ? (
+                <div className="pb-1">
+                  {reconsiderTargets.length === 0 ? (
+                    <DropdownMenuItem disabled className="text-xs pl-8">
+                      No available stages
+                    </DropdownMenuItem>
+                  ) : (
+                    reconsiderTargets.map((stage) => (
+                      <DropdownMenuItem
+                        key={stage.id}
+                        className="text-xs pl-8"
+                        disabled={Boolean(movingToStageId)}
+                        onClick={() => void handleReconsider(stage.id, stage.name)}
+                      >
+                        {movingToStageId === stage.id ? (
+                          <Icon name="Loader" className="h-3.5 w-3.5 mr-2 animate-spin" />
+                        ) : null}
+                        {stage.name}
+                      </DropdownMenuItem>
+                    ))
+                  )}
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <div
+              onMouseEnter={() => setIsMoveStageListOpen(true)}
+              onMouseLeave={() => setIsMoveStageListOpen(false)}
+            >
+              <DropdownMenuItem
+                className="text-xs cursor-pointer flex w-full items-center"
+                onSelect={(e) => e.preventDefault()}
+                onClick={(e) => {
+                  e.preventDefault();
+                  toggleMoveStageList();
+                }}
+              >
+                <Icon name="ArrowLeftRight" className="h-3.5 w-3.5 mr-2" />
+                <span>Move to stage</span>
+                <Icon name="ChevronLeft" className="h-3.5 w-3.5 ml-1 rotate-[-90deg]" />
+              </DropdownMenuItem>
+              {isMoveStageListOpen ? (
+                <div className="pb-1">
+                  {moveTargets.length === 0 ? (
+                    <DropdownMenuItem disabled className="text-xs pl-8">
+                      No other stages
+                    </DropdownMenuItem>
+                  ) : (
+                    moveTargets.map((stage) => (
+                      <DropdownMenuItem
+                        key={stage.id}
+                        className="text-xs pl-8"
+                        disabled={Boolean(movingToStageId)}
+                        onClick={() => void handleMove(stage.id, stage.name)}
+                      >
+                        {movingToStageId === stage.id ? (
+                          <Icon name="Loader" className="h-3.5 w-3.5 mr-2 animate-spin" />
+                        ) : null}
+                        {stage.name}
+                      </DropdownMenuItem>
+                    ))
+                  )}
+                </div>
+              ) : null}
+            </div>
+          )}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            className="text-xs text-destructive focus:text-destructive"
+            disabled={
+              !rejectedStage ||
+              currentStageId === rejectedStage.id ||
+              isInHiredStage ||
+              Boolean(movingToStageId)
+            }
+            onClick={() => void handleReject()}
+          >
+            {movingToStageId === rejectedStage?.id ? (
+              <Icon name="Loader" className="h-3.5 w-3.5 mr-2 animate-spin" />
+            ) : (
+              <Icon name="X" className="h-3.5 w-3.5 mr-2" />
+            )}
+            Reject
+          </DropdownMenuItem>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <DropdownMenuItem
+                className="text-xs text-destructive focus:text-destructive"
+                disabled={isInHiredStage}
+                onSelect={(e) => e.preventDefault()}
+              >
+                <Icon name="Trash2" className="h-3.5 w-3.5 mr-2" /> Delete
+              </DropdownMenuItem>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete candidate?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will permanently remove {candidateName} and all associated data.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel className="text-xs">Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  className="text-xs bg-destructive text-destructive-foreground"
+                  disabled={deleting || !candidateId}
+                  onClick={() => {
+                    if (!candidateId) {
+                      toast({ title: "Candidate not found", variant: "destructive" });
+                      return;
+                    }
+                    void (async () => {
+                      try {
+                        setDeleting(true);
+                        await deleteCandidate(candidateId);
+                        toast({ title: "Candidate deleted" });
+                        router.push(jobId ? `/jobs/${encodeURIComponent(jobId)}` : "/candidates");
+                      } catch (err) {
+                        toast({
+                          title: err instanceof Error ? err.message : "Failed to delete candidate",
+                          variant: "destructive",
+                        });
+                      } finally {
+                        setDeleting(false);
+                      }
+                    })();
+                  }}
+                >
+                  {deleting ? "Deleting..." : "Delete"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
+}

@@ -3,6 +3,7 @@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useEffect } from "react";
 import { Button } from "@onehash/ui/button";
@@ -11,9 +12,11 @@ import { Checkbox } from "@onehash/ui/checkbox";
 import { Form, FormField, FormItem, FormControl } from "@onehash/ui/form";
 import { Icon } from "@onehash/ui/icon";
 import { useTranslation } from "react-i18next";
+import { LOGO_SVG_PATH, PLATFORM_NAME } from "@/lib/constants";
 import { loginSchema, type LoginFormValues } from "@/lib/schemas/zodResolver";
-import { acceptExistingInvite, login } from "@/api/index";
+import { getGoogleAuthEnabled, login, API_BASE_URL } from "@/api/index";
 import { useAuthSession } from "@/app/providers";
+import { normalizeEmail } from "@/lib/validation/contact";
 
 function isSafeRedirect(path: string): boolean {
   return path.startsWith("/invite/") && path.length > 8;
@@ -30,8 +33,11 @@ export default function Login() {
   const searchParams = useSearchParams();
   const { refreshSession } = useAuthSession();
   const [mounted, setMounted] = useState(false);
+  const [googleEnabled, setGoogleEnabled] = useState(false);
   const redirectTo = searchParams.get("redirect");
   const inviteEmail = searchParams.get("invite_email");
+  const oauthError = searchParams.get("oauth_error");
+  const sessionExpired = searchParams.get("session_expired");
   const inviteRedirect =
     typeof redirectTo === "string" && isSafeRedirect(redirectTo) ? redirectTo : null;
   const signupHref = inviteRedirect
@@ -40,6 +46,7 @@ export default function Login() {
 
   useEffect(() => {
     setMounted(true);
+    getGoogleAuthEnabled().then(setGoogleEnabled);
   }, []);
 
   const form = useForm<LoginFormValues>({
@@ -57,17 +64,14 @@ export default function Login() {
     form.clearErrors("root");
     try {
       await login({
-        email: data.email,
+        email: normalizeEmail(data.email),
         password: data.password,
       });
       const inviteToken = getInviteTokenFromRedirect(inviteRedirect);
-      if (inviteToken) {
-        await acceptExistingInvite(inviteToken);
-      }
       await refreshSession(true);
       // Avoid cross-subdomain cookie propagation race between api.* and app.*.
       await new Promise((resolve) => setTimeout(resolve, 200));
-      window.location.assign("/");
+      window.location.assign(inviteToken ? `/invite/${encodeURIComponent(inviteToken)}` : "/");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to sign in";
       form.setError("root", { message });
@@ -90,22 +94,25 @@ export default function Login() {
             backgroundSize: "24px 24px",
           }}
         />
-        <div className="relative z-10 max-w-md px-12">
-          <div className="flex items-center gap-2.5 mb-8">
-            <div className="h-9 w-9 rounded-lg bg-foreground flex items-center justify-center">
-              <span className="text-background text-sm font-bold">A</span>
-            </div>
-            <span className="text-lg font-semibold tracking-tight">ATS</span>
+        <div className="relative z-10 w-full max-w-md px-12 text-left">
+          <div className="flex flex-col items-start gap-3">
+            <Image
+              src={LOGO_SVG_PATH}
+              alt={PLATFORM_NAME}
+              width={480}
+              height={262}
+              className="-ml-2 h-24 w-auto max-w-[min(100%,400px)] object-contain object-left self-start dark:invert dark:contrast-200"
+              priority
+            />
+            <h1 className="text-3xl lg:text-4xl font-bold tracking-tight leading-tight">
+              Recruit top talent
+              <br />
+              faster and smarter.
+            </h1>
+            <p className="text-muted-foreground text-sm leading-relaxed">
+              AI-powered, open source modern ATS to recruit top talent faster and smarter.
+            </p>
           </div>
-          <h1 className="text-3xl font-semibold tracking-tight leading-tight mb-3">
-            Modern hiring,
-            <br />
-            simplified.
-          </h1>
-          <p className="text-muted-foreground text-sm leading-relaxed">
-            Streamline your recruitment pipeline with an intuitive, distraction-free experience
-            built for modern teams.
-          </p>
         </div>
       </div>
 
@@ -113,11 +120,15 @@ export default function Login() {
       <div className="flex-1 flex items-center justify-center px-4 py-12 sm:px-8">
         <div className="w-full max-w-[420px]">
           {/* Mobile logo */}
-          <div className="lg:hidden flex items-center gap-2.5 mb-10 justify-center">
-            <div className="h-9 w-9 rounded-lg bg-foreground flex items-center justify-center">
-              <span className="text-background text-sm font-bold">A</span>
-            </div>
-            <span className="text-lg font-semibold tracking-tight">ATS</span>
+          <div className="lg:hidden flex items-center mb-10 justify-center">
+            <Image
+              src={LOGO_SVG_PATH}
+              alt={PLATFORM_NAME}
+              width={140}
+              height={42}
+              className="object-contain dark:invert dark:contrast-200"
+              priority
+            />
           </div>
 
           <div className="lg:rounded-xl lg:border lg:border-border lg:bg-card lg:p-8 lg:shadow-sm">
@@ -128,41 +139,62 @@ export default function Login() {
               </p>
             </div>
 
-            {/* Social */}
-            <Button
-              variant="outline"
-              className="w-full h-10 text-sm font-medium gap-2.5 mb-4"
-              type="button"
-            >
-              <svg className="h-4 w-4" viewBox="0 0 24 24">
-                <path
-                  d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"
-                  fill="#4285F4"
-                />
-                <path
-                  d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                  fill="#34A853"
-                />
-                <path
-                  d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-                  fill="#FBBC05"
-                />
-                <path
-                  d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                  fill="#EA4335"
-                />
-              </svg>
-              Continue with Google
-            </Button>
+            {/* OAuth error from Google redirect */}
+            {oauthError && (
+              <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-sm text-destructive mb-4">
+                {oauthError}
+              </div>
+            )}
 
-            <div className="relative my-5">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-border" />
+            {/* Session expired message */}
+            {sessionExpired && (
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2.5 text-sm text-amber-700 dark:text-amber-400 mb-4">
+                Your session has expired. Please sign in again.
               </div>
-              <div className="relative flex justify-center">
-                <span className="bg-card px-3 text-xs text-muted-foreground lg:bg-card">or</span>
+            )}
+
+            {/* Social */}
+            {googleEnabled && (
+              <Button
+                variant="outline"
+                className="w-full h-10 text-sm font-medium gap-2.5 mb-4"
+                type="button"
+                onClick={() => {
+                  window.location.assign(`${API_BASE_URL}/auth/google`);
+                }}
+              >
+                <svg className="h-4 w-4" viewBox="0 0 24 24">
+                  <path
+                    d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"
+                    fill="#4285F4"
+                  />
+                  <path
+                    d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                    fill="#34A853"
+                  />
+                  <path
+                    d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                    fill="#FBBC05"
+                  />
+                  <path
+                    d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                    fill="#EA4335"
+                  />
+                </svg>
+                Continue with Google
+              </Button>
+            )}
+
+            {googleEnabled && (
+              <div className="relative my-5">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-border" />
+                </div>
+                <div className="relative flex justify-center">
+                  <span className="bg-card px-3 text-xs text-muted-foreground lg:bg-card">or</span>
+                </div>
               </div>
-            </div>
+            )}
 
             <Form form={form} onSubmit={onSubmit} className="space-y-4">
               {form.formState.errors.root?.message && (
@@ -182,6 +214,7 @@ export default function Login() {
                         type="email"
                         placeholder="acme@example.com"
                         autoComplete="email"
+                        disabled={Boolean(inviteEmail)}
                         error={fieldState.error?.message}
                       />
                     </FormControl>

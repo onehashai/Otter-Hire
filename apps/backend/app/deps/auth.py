@@ -1,5 +1,6 @@
 from uuid import UUID
 
+import sentry_sdk
 from fastapi import Cookie, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -42,7 +43,6 @@ async def get_current_user(
         select(OrgMembership).where(
             OrgMembership.user_id == user_id,
             OrgMembership.org_id == org_id,
-            OrgMembership.status != "disabled",
         )
     )
     membership = membership_result.scalar_one_or_none()
@@ -53,9 +53,17 @@ async def get_current_user(
         )
 
     # Compatibility shim: existing handlers expect org-scoped attrs on current_user.
-    user.org_id = membership.org_id
-    user.role = membership.role
-    user.status = membership.status
+    # Use object.__setattr__ to bypass SQLAlchemy's instrumentation so these
+    # in-memory overrides are never flushed to the DB as dirty column changes.
+    object.__setattr__(user, "org_id", membership.org_id)
+    object.__setattr__(user, "membership_role", membership.role)
+    object.__setattr__(user, "status", membership.status)
+
+    # Attach non-PII user context to Sentry so every event on this request
+    # carries the internal user ID, org, and role for triage.
+    # Deliberately omit email/name — only internal UUIDs and the role segment.
+    sentry_sdk.set_user({"id": str(user.id), "segment": membership.role})
+    sentry_sdk.set_tag("org_id", str(membership.org_id))
 
     return user
 

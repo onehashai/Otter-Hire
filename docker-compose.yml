@@ -34,9 +34,8 @@ services:
     environment:
       - TEMPORAL_ADDRESS=temporal:7233
       - TEMPORAL_UI_PORT=8080
-      - TEMPORAL_UI_PUBLIC_PATH=/temporal-dashboard
     ports:
-      - "8080:8080"
+      - "8081:8080"
     depends_on:
       - temporal
 
@@ -70,9 +69,12 @@ services:
       - ./apps/backend/.env
     environment:
       DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/ats_db
-      CORS_ORIGINS: http://app.localhost:3000,http://jobs.localhost:3000,http://api.localhost:8000
-      FRONTEND_BASE_URL: http://app.localhost:3000
-      COOKIE_DOMAIN: ""
+      PLATFORM_NAME: Otter
+      CORS_ORIGINS: http://app.localhost.com:3000,http://jobs.localhost.com:3000
+      APP_DOMAIN: localhost.com
+      APP_SUBDOMAIN: app
+      JOBS_SUBDOMAIN: jobs
+      COOKIE_DOMAIN: .localhost.com
       TEMPORAL_SERVER_URL: temporal:7233
     ports:
       - "8000:8000"
@@ -101,10 +103,13 @@ services:
       - ./apps/backend/.env
     environment:
       DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/ats_db
-      CORS_ORIGINS: http://app.localhost:3000,http://jobs.localhost:3000,http://api.localhost:8000
-      FRONTEND_BASE_URL: http://app.localhost:3000
+      PLATFORM_NAME: Otter
+      CORS_ORIGINS: http://app.localhost.com:3000,http://jobs.localhost.com:3000
+      APP_DOMAIN: localhost.com
+      APP_SUBDOMAIN: app
+      JOBS_SUBDOMAIN: jobs
       COOKIE_DOMAIN: ""
-      INBOUND_INTERNAL_API_BASE_URL: http://backend:8000
+      BACKEND_URL: http://backend:8000
       TEMPORAL_SERVER_URL: temporal:7233
     depends_on:
       postgres:
@@ -117,9 +122,9 @@ services:
         condition: service_healthy
     volumes:
       - ./apps/backend:/app
-    command: sh -lc "python -m app.workers.inbound_temporal_worker"
+    command: sh -lc "python -m app.temporal"
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -f inbound_temporal_worker || exit 1"]
+      test: ["CMD-SHELL", "pgrep -f worker || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -130,24 +135,19 @@ services:
       dockerfile: apps/web/Dockerfile
     container_name: ats-web
     environment:
-      NEXT_PUBLIC_API_URL: /api
+      NEXT_PUBLIC_PLATFORM_NAME: Otter
       NEXT_PUBLIC_APP_SUBDOMAIN: app
       NEXT_PUBLIC_JOBS_SUBDOMAIN: jobs
-      NEXT_PUBLIC_APP_ROOT_HOST: localhost:3000
-      NEXT_PUBLIC_INBOUND_EMAIL_DOMAIN: inbound.smartats.in
-      API_INTERNAL_URL: http://backend:8000
-      TEMPORAL_UI_INTERNAL_URL: http://temporal-ui:8080
+      NEXT_PUBLIC_APP_ROOT_HOST: localhost.com:3000
+      NEXT_PUBLIC_SES_MAIL_DOMAIN: applications.smartats.in
+      NEXT_PUBLIC_API_BASE_URL: http://api.localhost.com:8000
+      NEXT_PUBLIC_TEMPORAL_UI_URL: http://temporal.localhost.com:8081
+    extra_hosts:
+      - "api.localhost.com:host-gateway"
     ports:
       - "3000:3000"
     depends_on:
       - backend
-      - temporal-ui
-    volumes:
-      - ./apps/web:/app/apps/web
-      - ./packages/ui:/app/packages/ui
-      - /app/apps/web/node_modules
-      - /app/packages/ui/node_modules
-      - /app/apps/web/.next
 
 
 volumes:

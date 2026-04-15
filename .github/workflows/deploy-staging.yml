@@ -33,6 +33,8 @@ jobs:
         id: changes
         uses: dorny/paths-filter@v3
         with:
+          base: ${{ github.event.before }}
+          ref: ${{ github.sha }}
           filters: |
             backend:
               - 'apps/backend/**'
@@ -79,6 +81,39 @@ jobs:
             "$BACKEND_IMAGE" \
             register_only)"
           echo "arn=$arn" >> "$GITHUB_OUTPUT"
+
+      - name: Stop active backend CodeDeploy deployments
+        if: steps.changes.outputs.backend == 'true'
+        run: |
+          app_name="${CODEDEPLOY_APP_NAME:-otter-hire-stag-ecs}"
+          dg_name="${CODEDEPLOY_BACKEND_DG:-otter-hire-stag-backend-dg}"
+          active_ids="$(aws deploy list-deployments \
+            --application-name "$app_name" \
+            --deployment-group-name "$dg_name" \
+            --include-only-statuses Created Queued InProgress \
+            --query 'deployments' \
+            --output text)"
+
+          if [ -z "$active_ids" ] || [ "$active_ids" = "None" ]; then
+            echo "No active backend deployments found."
+            exit 0
+          fi
+
+          echo "Stopping active backend deployments: $active_ids"
+          for id in $active_ids; do
+            aws deploy stop-deployment --deployment-id "$id" --auto-rollback-enabled || true
+          done
+
+          for id in $active_ids; do
+            while true; do
+              status="$(aws deploy get-deployment --deployment-id "$id" --query 'deploymentInfo.status' --output text)"
+              echo "Deployment $id status: $status"
+              case "$status" in
+                Succeeded|Failed|Stopped) break ;;
+              esac
+              sleep 10
+            done
+          done
 
       - name: Deploy backend via CodeDeploy
         if: steps.changes.outputs.backend == 'true'
@@ -165,6 +200,39 @@ jobs:
             "$WEB_IMAGE" \
             register_only)"
           echo "arn=$arn" >> "$GITHUB_OUTPUT"
+
+      - name: Stop active web CodeDeploy deployments
+        if: steps.changes.outputs.web == 'true'
+        run: |
+          app_name="${CODEDEPLOY_APP_NAME:-otter-hire-stag-ecs}"
+          dg_name="${CODEDEPLOY_WEB_DG:-otter-hire-stag-web-dg}"
+          active_ids="$(aws deploy list-deployments \
+            --application-name "$app_name" \
+            --deployment-group-name "$dg_name" \
+            --include-only-statuses Created Queued InProgress \
+            --query 'deployments' \
+            --output text)"
+
+          if [ -z "$active_ids" ] || [ "$active_ids" = "None" ]; then
+            echo "No active web deployments found."
+            exit 0
+          fi
+
+          echo "Stopping active web deployments: $active_ids"
+          for id in $active_ids; do
+            aws deploy stop-deployment --deployment-id "$id" --auto-rollback-enabled || true
+          done
+
+          for id in $active_ids; do
+            while true; do
+              status="$(aws deploy get-deployment --deployment-id "$id" --query 'deploymentInfo.status' --output text)"
+              echo "Deployment $id status: $status"
+              case "$status" in
+                Succeeded|Failed|Stopped) break ;;
+              esac
+              sleep 10
+            done
+          done
 
       - name: Deploy web via CodeDeploy
         if: steps.changes.outputs.web == 'true'

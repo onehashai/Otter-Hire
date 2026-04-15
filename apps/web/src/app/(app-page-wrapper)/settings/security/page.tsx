@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
   createPassword,
@@ -257,7 +257,7 @@ export default function SecuritySettingsPage() {
   const [disconnecting, setDisconnecting] = useState(false);
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
 
-  const loadStatus = async () => {
+  const loadStatus = useCallback(async () => {
     setLoading(true);
     try {
       const data = await getSecurityStatus();
@@ -267,7 +267,7 @@ export default function SecuritySettingsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [t]);
 
   // Initial load + handle OAuth return params
   useEffect(() => {
@@ -283,7 +283,7 @@ export default function SecuritySettingsPage() {
       toast.error(decodeURIComponent(linkError));
       router.replace("/settings/security");
     }
-  }, []);
+  }, [loadStatus, router, searchParams, t]);
 
   // Reload when tab regains focus — handles the case where user returns from
   // Google OAuth redirect and the router cache serves the stale page.
@@ -295,7 +295,7 @@ export default function SecuritySettingsPage() {
     };
     document.addEventListener("visibilitychange", handleVisibility);
     return () => document.removeEventListener("visibilitychange", handleVisibility);
-  }, []);
+  }, [loadStatus]);
 
   const handleDisconnectGoogle = async () => {
     setDisconnecting(true);

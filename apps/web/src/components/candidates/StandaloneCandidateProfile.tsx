@@ -108,7 +108,7 @@ export function StandaloneCandidateProfile({
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, t]);
 
   useEffect(() => {
     let cancelled = false;

@@ -30,7 +30,7 @@ export default function HiringTeamPage() {
       .catch(() => {
         toast.error(t("load_org_users_failed"));
       });
-  }, []);
+  }, [t]);
 
   const formatRoleLabel = (role?: string | null) =>
     role ? role.replace(/_/g, " ").replace(/\b\w/g, (ch) => ch.toUpperCase()) : "Member";

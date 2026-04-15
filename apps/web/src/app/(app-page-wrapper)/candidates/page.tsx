@@ -524,7 +524,7 @@ export default function CandidatesPage() {
     if (columnKey === "updated_at") return t("col_updated");
     if (columnKey === "tags") return t("tags");
     if (columnKey === "stage_name") return t("stage");
-    return CANDIDATE_COLUMN_DEFS[columnKey].label;
+    return t("stage");
   };
   const columnPickerContent = (
     <div className="space-y-3">

@@ -16,6 +16,7 @@ from app.schemas.organization import (
     OrganizationMembershipResponse,
     OrganizationResponse,
     SwitchOrganizationRequest,
+    UpdateOrganizationLanguageRequest,
     UpdateOrganizationRequest,
 )
 from app.services.default_categories import create_default_job_categories_for_org
@@ -60,6 +61,27 @@ async def update_my_organization(
         name=organization.name,
         website=organization.website,
         avatar_url=organization.avatar_url,
+        jobs_page_language=organization.jobs_page_language or "en",
+    )
+
+
+@router.patch("/me/language", response_model=OrganizationResponse)
+async def update_my_organization_language(
+    body: UpdateOrganizationLanguageRequest,
+    current_user: User = Depends(require_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(Organization).where(Organization.id == current_user.org_id))
+    organization = result.scalar_one()
+    organization.jobs_page_language = body.jobs_page_language
+    await db.commit()
+    await db.refresh(organization)
+    return OrganizationResponse(
+        id=organization.id,
+        name=organization.name,
+        website=organization.website,
+        avatar_url=organization.avatar_url,
+        jobs_page_language=organization.jobs_page_language,
     )
 
 
@@ -75,6 +97,7 @@ async def get_my_organization(
         name=organization.name,
         website=organization.website,
         avatar_url=organization.avatar_url,
+        jobs_page_language=organization.jobs_page_language or "en",
     )
 
 
@@ -119,6 +142,7 @@ async def upload_my_organization_avatar(
         name=organization.name,
         website=organization.website,
         avatar_url=organization.avatar_url,
+        jobs_page_language=organization.jobs_page_language or "en",
     )
 
 
@@ -139,6 +163,7 @@ async def delete_my_organization_avatar(
         name=organization.name,
         website=organization.website,
         avatar_url=None,
+        jobs_page_language=organization.jobs_page_language or "en",
     )
 
 

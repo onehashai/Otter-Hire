@@ -1,4 +1,4 @@
-import { API_BASE_URL, apiFetch, normalizeApiUrl } from "../client/client";
+import { API_BASE_URL, apiFetch, normalizeApiUrl, parseErrorResponse } from "../client/client";
 
 export type ProfileResponse = {
   id: string;
@@ -66,4 +66,59 @@ export async function updateMyPreferences(
     method: "PATCH",
     body: { preferences },
   });
+}
+
+export type SecurityStatusResponse = {
+  auth_provider: string;
+  has_password: boolean;
+  google_connected: boolean;
+};
+
+export async function getSecurityStatus(): Promise<SecurityStatusResponse> {
+  return apiFetch<SecurityStatusResponse>("/users/me/security", { method: "GET" });
+}
+
+export async function createPassword(
+  new_password: string,
+  confirm_password: string,
+): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/users/me/password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ new_password, confirm_password }),
+  });
+  if (!res.ok) {
+    const message = await parseErrorResponse(res, `Failed to set password: ${res.status}`);
+    throw new Error(message);
+  }
+}
+
+export async function updatePassword(
+  current_password: string,
+  new_password: string,
+  confirm_password: string,
+): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/users/me/password`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ current_password, new_password, confirm_password }),
+  });
+  if (!res.ok) {
+    const message = await parseErrorResponse(res, `Failed to update password: ${res.status}`);
+    throw new Error(message);
+  }
+}
+
+export async function disconnectGoogle(): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/users/me/google`, {
+    method: "DELETE",
+    headers: { Accept: "application/json" },
+    credentials: "include",
+  });
+  if (!res.ok) {
+    const message = await parseErrorResponse(res, `Failed to disconnect Google: ${res.status}`);
+    throw new Error(message);
+  }
 }

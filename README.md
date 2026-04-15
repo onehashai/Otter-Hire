@@ -1,7 +1,7 @@
-# OneHash ATS Monorepo
+# Otter Monorepo
 
 ## About
-OneHash ATS is a monorepo-based Applicant Tracking System.
+Otter is a monorepo-based Applicant Tracking System.
 
 It contains:
 - `apps/web`: Next.js App Router frontend
@@ -303,7 +303,7 @@ Required `staging` variables:
 - `ECS_WEB_TASKDEF`
 - `API_HEALTHCHECK_URL`
 - `WEB_HEALTHCHECK_URL`
-- `NEXT_PUBLIC_APP_SUBDOMAIN`, `NEXT_PUBLIC_JOBS_SUBDOMAIN`, `NEXT_PUBLIC_APP_ROOT_HOST`, `NEXT_PUBLIC_API_BASE_URL`, `NEXT_PUBLIC_SES_MAIL_DOMAIN`, `NEXT_PUBLIC_TEMPORAL_UI_URL` (e.g. `https://temporal.smartats.in` for prod, `https://temporal.staging.smartats.in` for staging)
+- `NEXT_PUBLIC_APP_SUBDOMAIN`, `NEXT_PUBLIC_JOBS_SUBDOMAIN`, `NEXT_PUBLIC_APP_ROOT_HOST`, `NEXT_PUBLIC_API_BASE_URL`, `NEXT_PUBLIC_INBOUND_EMAIL_DOMAIN`, `NEXT_PUBLIC_TEMPORAL_UI_URL` (e.g. `https://temporal.smartats.in` for prod, `https://temporal.staging.smartats.in` for staging)
 
 Required `staging` secrets:
 - `AWS_ACCESS_KEY_ID`

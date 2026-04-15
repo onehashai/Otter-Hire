@@ -86,8 +86,8 @@ type Props = {
 function formatSourceLabel(source: string | null | undefined, t: (key: string) => string): string {
   if (!source) return "—";
   if (source === "job_portal") return t("candidates_source_job_portal");
-  if (source === "email_automation") return "Email";
-  if (source === "Manual" || source === "manual") return "Manual";
+  if (source === "email_automation") return t("source_email") ?? "Email";
+  if (source === "Manual" || source === "manual") return t("source_manual");
   return source
     .split("_")
     .map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1) : ""))
@@ -134,7 +134,7 @@ export function CandidatesTable({
           key={column}
           className="text-xs font-medium h-9 min-w-[140px] max-w-[220px] text-center"
         >
-          Candidate
+          {t("col_candidate")}
         </TableHead>
       );
     }
@@ -144,7 +144,7 @@ export function CandidatesTable({
           key={column}
           className="text-xs font-medium h-9 min-w-[160px] max-w-[240px] text-center"
         >
-          Email
+          {t("email")}
         </TableHead>
       );
     }
@@ -154,7 +154,7 @@ export function CandidatesTable({
           key={column}
           className="text-xs font-medium h-9 min-w-[120px] max-w-[160px] text-center"
         >
-          Phone
+          {t("col_phone")}
         </TableHead>
       );
     }
@@ -181,14 +181,14 @@ export function CandidatesTable({
     if (column === "source") {
       return (
         <TableHead key={column} className="text-xs font-medium h-9 min-w-[100px] text-center">
-          Source
+          {t("col_source")}
         </TableHead>
       );
     }
     if (column === "status") {
       return (
         <TableHead key={column} className="text-xs font-medium h-9 min-w-[100px] text-center">
-          Status
+          {t("status")}
         </TableHead>
       );
     }
@@ -198,7 +198,7 @@ export function CandidatesTable({
           key={column}
           className="text-xs font-medium h-9 min-w-[160px] max-w-[220px] text-center"
         >
-          Location
+          {t("col_location")}
         </TableHead>
       );
     }
@@ -208,7 +208,7 @@ export function CandidatesTable({
           key={column}
           className="text-xs font-medium h-9 min-w-[150px] whitespace-nowrap text-center"
         >
-          Updated
+          {t("col_updated")}
         </TableHead>
       );
     }
@@ -218,7 +218,7 @@ export function CandidatesTable({
           key={column}
           className="text-xs font-medium h-9 min-w-[180px] max-w-[260px] text-center"
         >
-          Tags
+          {t("tags")}
         </TableHead>
       );
     }
@@ -227,7 +227,7 @@ export function CandidatesTable({
         key={column}
         className="text-xs font-medium h-9 min-w-[140px] max-w-[200px] text-center"
       >
-        Stage
+        {t("stage")}
       </TableHead>
     );
   };

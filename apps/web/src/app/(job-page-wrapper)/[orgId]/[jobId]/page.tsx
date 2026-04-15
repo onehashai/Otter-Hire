@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
-import Link from "next/link";
+import { useTranslation } from "react-i18next";
 import { Button } from "@onehash/ui/button";
 import { Badge } from "@onehash/ui/badge";
 import { Separator } from "@onehash/ui/separator";
@@ -31,6 +31,7 @@ import {
 import { PLATFORM_NAME } from "@/lib/constants";
 import { parseCareersOrgId } from "@/lib/public-careers-org";
 import { isValidEmail, normalizeEmail } from "@/lib/validation/contact";
+import { JobsI18nProvider } from "@/components/public/JobsI18nProvider";
 
 type ApplyFile = {
   name: string;
@@ -71,16 +72,12 @@ function formatEmploymentType(type: string): string {
   return type.replace("_", "-").replace(/\b\w/g, (l) => l.toUpperCase());
 }
 
-export default function CareerJobDetailPage() {
-  const params = useParams();
+// Inner component — rendered only once job is loaded; has access to i18n via JobsI18nProvider
+function JobDetailContent({ job, orgIdParam }: { job: PublicJobDetail; orgIdParam: string }) {
   const router = useRouter();
   const isMobile = useIsMobile();
-  const orgIdParam = params?.orgId as string;
-  const jobId = params?.jobId as string;
-
-  const [job, setJob] = useState<PublicJobDetail | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const { t } = useTranslation();
+  const jobId = job.id;
 
   const [applyDialogOpen, setApplyDialogOpen] = useState(false);
   const [applyForm, setApplyForm] = useState({
@@ -92,25 +89,6 @@ export default function CareerJobDetailPage() {
   });
   const [applySubmitting, setApplySubmitting] = useState(false);
   const [applyErrors, setApplyErrors] = useState<Record<string, string>>({});
-
-  useEffect(() => {
-    const orgId = parseCareersOrgId(orgIdParam);
-    if (!orgId) {
-      setError("Invalid organization");
-      setLoading(false);
-      return;
-    }
-
-    getPublicJobDetail(orgId, jobId)
-      .then((data) => {
-        setJob(data);
-        setLoading(false);
-      })
-      .catch((err) => {
-        setError(err instanceof Error ? err.message : "Job not found");
-        setLoading(false);
-      });
-  }, [orgIdParam, jobId]);
 
   const openApplyDialog = () => setApplyDialogOpen(true);
   const closeApplyDialog = () => {
@@ -181,25 +159,25 @@ export default function CareerJobDetailPage() {
 
     const errors: Record<string, string> = {};
     if (isRequired(fullNameVisibility) && !applyForm.fullName.trim()) {
-      errors.fullName = "Full name is required.";
+      errors.fullName = t("full_name_required");
     }
     if (isRequired(emailVisibility) && !applyForm.email.trim()) {
-      errors.email = "Email is required.";
+      errors.email = t("email_required");
     }
     if (applyForm.email.trim() && !isValidEmail(applyForm.email)) {
-      errors.email = "Enter a valid email address.";
+      errors.email = t("email_invalid");
     }
     if (isRequired(phoneVisibility) && !applyForm.phone.trim()) {
-      errors.phone = "Phone is required.";
+      errors.phone = t("phone_required");
     }
     if (applyForm.phone.trim() && !isValidPhoneNumber(applyForm.phone)) {
-      errors.phone = "Enter a valid phone number.";
+      errors.phone = t("phone_invalid");
     }
     if (isRequired(resumeVisibility) && !applyForm.files.resume) {
-      errors.resume = "Resume is required.";
+      errors.resume = t("resume_required");
     }
     if (isRequired(coverVisibility) && !applyForm.files.cover_letter) {
-      errors.cover_letter = "Cover letter is required.";
+      errors.cover_letter = t("cover_letter_required");
     }
 
     for (const field of [...profileLinkFields, ...customFields]) {
@@ -212,12 +190,12 @@ export default function CareerJobDetailPage() {
         if (type === "file_upload") {
           const fileMeta = applyForm.files[key];
           if (!fileMeta || (!fileMeta.url && !fileMeta.name)) {
-            errors[`file:${key}`] = `${label} is required.`;
+            errors[`file:${key}`] = t("field_required", { label });
           }
         } else {
           const val = applyForm.answers[key];
           if (val == null || (typeof val === "string" && !val.trim())) {
-            errors[`answer:${key}`] = `${label} is required.`;
+            errors[`answer:${key}`] = t("field_required", { label });
           }
         }
       }
@@ -225,13 +203,13 @@ export default function CareerJobDetailPage() {
 
     const hasUploadingFiles = Object.values(applyForm.files).some((f) => f?.uploading);
     return { errors, hasUploadingFiles };
-  }, [applyForm, profileLinkFields, customFields, fieldVisibility]);
+  }, [applyForm, profileLinkFields, customFields, fieldVisibility, t]);
 
   const handleSelectAndUploadFile = async (key: string, file: File | null) => {
     if (!file) return;
     const orgId = parseCareersOrgId(orgIdParam);
     if (!orgId) {
-      toast.error("Invalid organization");
+      toast.error(t("invalid_organization"));
       return;
     }
     setApplyForm((s) => ({
@@ -258,14 +236,14 @@ export default function CareerJobDetailPage() {
       }));
     } catch (err) {
       setApplyForm((s) => ({ ...s, files: { ...s.files, [key]: undefined } }));
-      toast.error(err instanceof Error ? err.message : "Failed to upload file");
+      toast.error(err instanceof Error ? err.message : t("failed_to_upload_file"));
     }
   };
 
-  const handleApplySubmit = (e: React.FormEvent) => {
+  const handleApplySubmit = (e: React.BaseSyntheticEvent) => {
     e.preventDefault();
     if (applyValidation.hasUploadingFiles) {
-      return toast.error("Please wait for files to finish uploading.");
+      return toast.error(t("files_uploading"));
     }
     setApplyErrors(applyValidation.errors);
     if (Object.keys(applyValidation.errors).length > 0) return;
@@ -299,7 +277,7 @@ export default function CareerJobDetailPage() {
 
         const orgId = parseCareersOrgId(orgIdParam);
         if (!orgId) {
-          toast.error("Invalid organization");
+          toast.error(t("invalid_organization"));
           setApplySubmitting(false);
           return;
         }
@@ -312,42 +290,13 @@ export default function CareerJobDetailPage() {
         });
         setApplySubmitting(false);
         closeApplyDialog();
-        toast.success("Application submitted. We'll be in touch!");
+        toast.success(t("application_submitted"));
       } catch (err) {
         setApplySubmitting(false);
-        toast.error(err instanceof Error ? err.message : "Failed to submit application");
+        toast.error(err instanceof Error ? err.message : t("failed_to_submit_application"));
       }
     })();
   };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-sm text-muted-foreground">Loading...</div>
-      </div>
-    );
-  }
-
-  if (error || !job) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background px-4">
-        <div className="text-center space-y-3 max-w-sm">
-          <h1 className="text-xl font-semibold">Job not found</h1>
-          <p className="text-sm text-muted-foreground">
-            {error || "This job posting is no longer available."}
-          </p>
-          <Button
-            variant="outline"
-            size="sm"
-            className="text-xs mt-4"
-            onClick={() => router.push(`/${orgIdParam}`)}
-          >
-            <Icon name="ChevronLeft" className="h-3.5 w-3.5 mr-1.5" /> View all positions
-          </Button>
-        </div>
-      </div>
-    );
-  }
 
   const salary = formatSalary(job);
   const locationLabel = formatLocation(job);
@@ -372,12 +321,12 @@ export default function CareerJobDetailPage() {
       {/* Status Banner for Org Members */}
       {job.status === "draft" && (
         <div className="bg-black text-white text-center py-2.5 text-sm font-medium">
-          This job is saved as draft
+          {t("this_job_is_draft")}
         </div>
       )}
       {job.status === "archived" && (
         <div className="bg-black text-white text-center py-2.5 text-sm font-medium">
-          This job is archived
+          {t("this_job_is_archived")}
         </div>
       )}
 
@@ -411,7 +360,7 @@ export default function CareerJobDetailPage() {
               <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">{job.title}</h1>
               {job.status === "draft" && (
                 <Badge variant="secondary" className="text-[10px] h-5 px-2">
-                  Draft
+                  {t("draft")}
                 </Badge>
               )}
             </div>
@@ -435,7 +384,7 @@ export default function CareerJobDetailPage() {
               className={cn("text-sm", isMobile && "w-full h-12")}
               onClick={openApplyDialog}
             >
-              Apply for this position
+              {t("apply_for_this_position")}
             </Button>
           </div>
         </div>
@@ -446,7 +395,7 @@ export default function CareerJobDetailPage() {
       <div className="mx-auto max-w-3xl px-4 py-8 md:py-10 space-y-10">
         {job.description ? (
           <div
-            className="prose prose-sm max-w-none text-foreground 
+            className="prose prose-sm max-w-none text-foreground
               [&_h2]:text-base [&_h2]:font-semibold [&_h2]:mt-8 [&_h2]:mb-3
               [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:mt-6 [&_h3]:mb-2
               [&_p]:text-sm [&_p]:leading-relaxed [&_p]:text-muted-foreground [&_p]:mb-3
@@ -457,22 +406,22 @@ export default function CareerJobDetailPage() {
             dangerouslySetInnerHTML={{ __html: job.description }}
           />
         ) : (
-          <p className="text-sm text-muted-foreground">No description available.</p>
+          <p className="text-sm text-muted-foreground">{t("no_description_available")}</p>
         )}
 
         <Separator />
 
         <div className="text-center space-y-3 py-4">
-          <h2 className="text-lg font-semibold">Interested in this role?</h2>
+          <h2 className="text-lg font-semibold">{t("interested_in_this_role")}</h2>
           <p className="text-sm text-muted-foreground max-w-md mx-auto">
-            We&apos;d love to hear from you. Apply now and our team will review your application.
+            {t("interested_in_this_role_description")}
           </p>
           <Button
             size={isMobile ? "lg" : "default"}
             className={cn("text-sm mt-2", isMobile && "w-full h-12")}
             onClick={openApplyDialog}
           >
-            Apply for this position
+            {t("apply_for_this_position")}
           </Button>
         </div>
       </div>
@@ -489,9 +438,9 @@ export default function CareerJobDetailPage() {
       >
         <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Apply for {job.title}</DialogTitle>
+            <DialogTitle>{`${t("apply_for")} ${job.title}`}</DialogTitle>
             <DialogDescription>
-              Submit your application to {job.org_name}. We'll review it and get back to you.
+              {t("we_review_your_application", { orgName: job.org_name })}
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleApplySubmit} className="mt-2 space-y-4">
@@ -499,8 +448,8 @@ export default function CareerJobDetailPage() {
               {isVisible(fieldVisibility("full_name", "required")) && (
                 <div>
                   <Label className="text-xs">
-                    {defaultFields.full_name?.label ?? "Full name"}{" "}
-                    {isRequired(fieldVisibility("full_name", "required")) ? "*" : "(optional)"}
+                    {defaultFields.full_name?.label ?? t("full_name_label")}{" "}
+                    {isRequired(fieldVisibility("full_name", "required")) ? "*" : t("optional")}
                   </Label>
                   <InputField
                     value={applyForm.fullName}
@@ -511,7 +460,7 @@ export default function CareerJobDetailPage() {
                         ...prev,
                         fullName:
                           isRequired(fieldVisibility("full_name", "required")) && !value.trim()
-                            ? "Full name is required."
+                            ? t("full_name_required")
                             : "",
                       }));
                     }}
@@ -525,8 +474,8 @@ export default function CareerJobDetailPage() {
               {isVisible(fieldVisibility("email", "required")) && (
                 <div>
                   <Label className="text-xs">
-                    {defaultFields.email?.label ?? "Email"}{" "}
-                    {isRequired(fieldVisibility("email", "required")) ? "*" : "(optional)"}
+                    {defaultFields.email?.label ?? t("email")}{" "}
+                    {isRequired(fieldVisibility("email", "required")) ? "*" : t("optional")}
                   </Label>
                   <InputField
                     type="email"
@@ -536,9 +485,9 @@ export default function CareerJobDetailPage() {
                       setApplyForm((f) => ({ ...f, email: value }));
                       let emailError = "";
                       if (isRequired(fieldVisibility("email", "required")) && !value.trim()) {
-                        emailError = "Email is required.";
+                        emailError = t("email_required");
                       } else if (value.trim() && !isValidEmail(value)) {
-                        emailError = "Enter a valid email address.";
+                        emailError = t("email_invalid");
                       }
                       setApplyErrors((prev) => ({ ...prev, email: emailError }));
                     }}
@@ -552,8 +501,8 @@ export default function CareerJobDetailPage() {
               {isVisible(fieldVisibility("phone", "optional")) && (
                 <div>
                   <Label className="text-xs">
-                    {defaultFields.phone?.label ?? "Phone"}{" "}
-                    {isRequired(fieldVisibility("phone", "optional")) ? "*" : "(optional)"}
+                    {defaultFields.phone?.label ?? t("phone_label")}{" "}
+                    {isRequired(fieldVisibility("phone", "optional")) ? "*" : t("optional")}
                   </Label>
                   <PhoneNumberField
                     label=""
@@ -563,9 +512,9 @@ export default function CareerJobDetailPage() {
                       setApplyForm((f) => ({ ...f, phone: value }));
                       let phoneError = "";
                       if (isRequired(fieldVisibility("phone", "optional")) && !value.trim()) {
-                        phoneError = "Phone is required.";
+                        phoneError = t("phone_required");
                       } else if (value.trim() && !isValidPhoneNumber(value)) {
-                        phoneError = "Enter a valid phone number for the selected country.";
+                        phoneError = t("phone_invalid");
                       }
                       setApplyErrors((prev) => ({ ...prev, phone: phoneError }));
                     }}
@@ -576,13 +525,13 @@ export default function CareerJobDetailPage() {
               {isVisible(fieldVisibility("resume", "hidden")) && (
                 <div>
                   <Label className="text-xs">
-                    {defaultFields.resume?.label ?? "Resume"}{" "}
-                    {isRequired(fieldVisibility("resume", "hidden")) ? "*" : "(optional)"}
+                    {defaultFields.resume?.label ?? t("resume")}{" "}
+                    {isRequired(fieldVisibility("resume", "hidden")) ? "*" : t("optional")}
                   </Label>
                   <div className="mt-1.5 flex items-center gap-2">
                     <label className="flex-1 flex items-center justify-center gap-2 rounded-lg border border-border border-dashed px-4 py-3 text-xs text-muted-foreground hover:bg-muted/50 cursor-pointer transition-colors">
                       <Icon name="Upload" className="h-4 w-4 shrink-0" />
-                      <span>{applyForm.files.resume?.name ?? "Choose file or drag and drop"}</span>
+                      <span>{applyForm.files.resume?.name ?? t("choose_file_or_drag")}</span>
                       <input
                         type="file"
                         accept=".pdf,.doc,.docx"
@@ -602,15 +551,13 @@ export default function CareerJobDetailPage() {
               {isVisible(fieldVisibility("cover_letter", "hidden")) && (
                 <div>
                   <Label className="text-xs">
-                    {defaultFields.cover_letter?.label ?? "Cover letter"}{" "}
-                    {isRequired(fieldVisibility("cover_letter", "hidden")) ? "*" : "(optional)"}
+                    {defaultFields.cover_letter?.label ?? t("cover_letter_label")}{" "}
+                    {isRequired(fieldVisibility("cover_letter", "hidden")) ? "*" : t("optional")}
                   </Label>
                   <div className="mt-1.5 flex items-center gap-2">
                     <label className="flex-1 flex items-center justify-center gap-2 rounded-lg border border-border border-dashed px-4 py-3 text-xs text-muted-foreground hover:bg-muted/50 cursor-pointer transition-colors">
                       <Icon name="Upload" className="h-4 w-4 shrink-0" />
-                      <span>
-                        {applyForm.files.cover_letter?.name ?? "Choose file or drag and drop"}
-                      </span>
+                      <span>{applyForm.files.cover_letter?.name ?? t("choose_file_or_drag")}</span>
                       <input
                         type="file"
                         accept=".pdf,.doc,.docx,.txt"
@@ -633,7 +580,7 @@ export default function CareerJobDetailPage() {
               {profileLinkFields.some((f) => String(f.visibility ?? "hidden") !== "hidden") && (
                 <div className="pt-1">
                   <Label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                    Profile Links
+                    {t("profile_links")}
                   </Label>
                 </div>
               )}
@@ -648,7 +595,7 @@ export default function CareerJobDetailPage() {
                   return (
                     <div key={key}>
                       <Label className="text-xs">
-                        {label} {required ? "*" : "(optional)"}
+                        {label} {required ? "*" : t("optional")}
                       </Label>
                       <InputField
                         type="url"
@@ -674,7 +621,7 @@ export default function CareerJobDetailPage() {
               {customFields.some((f) => String(f.visibility ?? "hidden") !== "hidden") && (
                 <div className="pt-1">
                   <Label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                    Additional Questions
+                    {t("additional_questions")}
                   </Label>
                 </div>
               )}
@@ -691,7 +638,7 @@ export default function CareerJobDetailPage() {
                   return (
                     <div key={key}>
                       <Label className="text-xs">
-                        {label} {required ? "*" : "(optional)"}
+                        {label} {required ? "*" : t("optional")}
                       </Label>
                       {type === "long_text" ? (
                         <textarea
@@ -721,7 +668,7 @@ export default function CareerJobDetailPage() {
                           }}
                           className="mt-1.5 h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
                         >
-                          <option value="">Select</option>
+                          <option value="">{t("select_option")}</option>
                           {options.map((opt) => (
                             <option key={opt} value={opt}>
                               {opt}
@@ -765,17 +712,15 @@ export default function CareerJobDetailPage() {
                           }}
                           className="mt-1.5 h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
                         >
-                          <option value="">Select</option>
-                          <option value="yes">Yes</option>
-                          <option value="no">No</option>
+                          <option value="">{t("select_option")}</option>
+                          <option value="yes">{t("yes")}</option>
+                          <option value="no">{t("no")}</option>
                         </select>
                       ) : type === "file_upload" ? (
                         <div className="mt-1.5 flex items-center gap-2">
                           <label className="flex-1 flex items-center justify-center gap-2 rounded-lg border border-border border-dashed px-4 py-3 text-xs text-muted-foreground hover:bg-muted/50 cursor-pointer transition-colors">
                             <Icon name="Upload" className="h-4 w-4 shrink-0" />
-                            <span>
-                              {applyForm.files[key]?.name ?? "Choose file or drag and drop"}
-                            </span>
+                            <span>{applyForm.files[key]?.name ?? t("choose_file_or_drag")}</span>
                             <input
                               type="file"
                               className="sr-only"
@@ -824,7 +769,7 @@ export default function CareerJobDetailPage() {
             </div>
             <DialogFooter className="mt-4 gap-2 sm:gap-2">
               <Button type="button" variant="outline" size="sm" onClick={closeApplyDialog}>
-                Cancel
+                {t("cancel")}
               </Button>
               <Button
                 type="submit"
@@ -835,7 +780,7 @@ export default function CareerJobDetailPage() {
                   Object.keys(applyValidation.errors).length > 0
                 }
               >
-                {applySubmitting ? "Submitting…" : "Submit application"}
+                {applySubmitting ? t("submitting") : t("submit_application")}
               </Button>
             </DialogFooter>
           </form>
@@ -845,10 +790,76 @@ export default function CareerJobDetailPage() {
       <footer className="border-t border-border">
         <div className="mx-auto max-w-3xl px-4 py-6">
           <p className="text-xs text-muted-foreground capitalize text-center">
-            © {new Date().getFullYear()} {PLATFORM_NAME}.
+            {t("copyright", { year: new Date().getFullYear(), platformName: PLATFORM_NAME })}
           </p>
         </div>
       </footer>
     </div>
+  );
+}
+
+// Outer component — handles data fetching; wraps inner content with JobsI18nProvider once loaded
+export default function CareerJobDetailPage() {
+  const params = useParams();
+  const router = useRouter();
+  const orgIdParam = params?.orgId as string;
+  const jobId = params?.jobId as string;
+
+  const [job, setJob] = useState<PublicJobDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const orgId = parseCareersOrgId(orgIdParam);
+    if (!orgId) {
+      setError("Invalid organization");
+      setLoading(false);
+      return;
+    }
+
+    getPublicJobDetail(orgId, jobId)
+      .then((data) => {
+        setJob(data);
+        setLoading(false);
+      })
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : "Job not found");
+        setLoading(false);
+      });
+  }, [orgIdParam, jobId]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-sm text-muted-foreground">Loading...</div>
+      </div>
+    );
+  }
+
+  if (error || !job) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background px-4">
+        <div className="text-center space-y-3 max-w-sm">
+          <h1 className="text-xl font-semibold">Job not found</h1>
+          <p className="text-sm text-muted-foreground">
+            {error || "This job posting is no longer available."}
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-xs mt-4"
+            onClick={() => router.push(`/${orgIdParam}`)}
+          >
+            <Icon name="ChevronLeft" className="h-3.5 w-3.5 mr-1.5" /> View all positions
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <JobsI18nProvider jobsPageLanguage={job.jobs_page_language ?? "en"}>
+      <JobDetailContent job={job} orgIdParam={orgIdParam} />
+    </JobsI18nProvider>
   );
 }

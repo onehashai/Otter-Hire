@@ -1,6 +1,6 @@
 # Backend Test Suite
 
-Comprehensive test suite for OneHash ATS backend automation system.
+Comprehensive test suite for Otter backend automation system.
 
 ## Test Structure
 

@@ -81,14 +81,12 @@ export default function IntegrationPage() {
           <div className="flex items-start justify-between gap-3">
             <div className="space-y-1">
               <div className="flex items-center gap-2">
-                <p className="text-sm font-medium">Email Integration</p>
+                <p className="text-sm font-medium">{t("email_integration")}</p>
                 <Badge variant={emailStatus?.status === "active" ? "default" : "secondary"}>
                   {emailStatus?.status === "active" ? t("connected") : t("not_connected")}
                 </Badge>
               </div>
-              <p className="text-xs text-muted-foreground">
-                Connect a job-specific inbound mailbox to auto-create and assign candidates.
-              </p>
+              <p className="text-xs text-muted-foreground">{t("email_integration_description")}</p>
             </div>
             <div className="flex items-center gap-2">
               {emailStatus?.configured ? (
@@ -108,7 +106,7 @@ export default function IntegrationPage() {
                 onClick={() => setEmailDialogOpen(true)}
                 disabled={isLoading || !jobId}
               >
-                {emailStatus?.configured ? "Manage" : "Connect"}
+                {emailStatus?.configured ? t("manage") : t("connect")}
               </Button>
             </div>
           </div>
@@ -158,10 +156,8 @@ export default function IntegrationPage() {
       <Dialog open={emailDialogOpen} onOpenChange={setEmailDialogOpen}>
         <DialogContent className="sm:max-w-xl">
           <DialogHeader>
-            <DialogTitle>Job Email Integration</DialogTitle>
-            <DialogDescription>
-              Configure inbound email integration for this specific job.
-            </DialogDescription>
+            <DialogTitle>{t("job_email_integration")}</DialogTitle>
+            <DialogDescription>{t("job_email_integration_description")}</DialogDescription>
           </DialogHeader>
           {jobId ? (
             <JobEmailIntegrationManager
@@ -177,14 +173,12 @@ export default function IntegrationPage() {
       <Dialog open={disconnectConfirmOpen} onOpenChange={setDisconnectConfirmOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Disconnect Job Email Integration?</DialogTitle>
-            <DialogDescription>
-              This will disable email ingestion for this job-specific inbound address.
-            </DialogDescription>
+            <DialogTitle>{t("disconnect_job_email_title")}</DialogTitle>
+            <DialogDescription>{t("disconnect_email_integration_description")}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDisconnectConfirmOpen(false)}>
-              Cancel
+              {t("cancel")}
             </Button>
             <Button
               variant="destructive"
@@ -194,7 +188,7 @@ export default function IntegrationPage() {
                 try {
                   if (!jobId) throw new Error("Job is still loading");
                   await disconnectJobEmailIntegration(jobId);
-                  toast.success("Job email integration disconnected");
+                  toast.success(t("email_integration_disconnected"));
                   setDisconnectConfirmOpen(false);
                   await fetchEmailStatus();
                 } catch (error) {
@@ -206,7 +200,7 @@ export default function IntegrationPage() {
                 }
               }}
             >
-              Disconnect
+              {t("disconnect")}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -29,6 +29,8 @@ class AuthUserResponse(BaseModel):
     org_avatar_url: str | None = None
     is_verified: bool
     is_onboarded: bool
+    auth_provider: str = "email"  # email | google | email,google | google,email
+    preferences: dict = {}
 
 
 class VerifyEmailRequest(BaseModel):
@@ -60,3 +62,12 @@ class InviteDetailsResponse(BaseModel):
     account_exists: bool
     status: str
     suggested_name: str | None = None
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str = Field(min_length=8)

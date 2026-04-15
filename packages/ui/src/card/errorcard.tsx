@@ -11,15 +11,16 @@ export interface ErrorCardProps extends React.HTMLAttributes<HTMLDivElement> {
   description?: string;
   actionLabel?: string;
   onAction?: () => void;
+  ref?: React.Ref<HTMLDivElement>;
 }
 
-const ErrorCard = React.forwardRef<HTMLDivElement, ErrorCardProps>(
-  ({ className, icon = "CircleAlert", title, description, actionLabel, onAction, ...props }, ref) => (
+function ErrorCard({ ref, className, icon = "CircleAlert", title, description, actionLabel, onAction, ...props }: ErrorCardProps) {
+  return (
     <div
       ref={ref}
       className={cn(
         "flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-destructive/25 bg-destructive/5 p-12 text-center",
-        className
+        className,
       )}
       {...props}
     >
@@ -37,8 +38,8 @@ const ErrorCard = React.forwardRef<HTMLDivElement, ErrorCardProps>(
         </Button>
       )}
     </div>
-  )
-);
+  );
+}
 ErrorCard.displayName = "ErrorCard";
 
 export { ErrorCard };

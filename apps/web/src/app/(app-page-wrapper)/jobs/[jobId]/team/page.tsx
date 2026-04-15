@@ -14,10 +14,12 @@ import { getOrgUsers, type OrgUserResponse } from "@/api";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { toast } from "@onehash/ui/sonner";
 import { getInitialsFromName } from "@/lib/name-initials";
+import { useTranslation } from "react-i18next";
 
 export default function HiringTeamPage() {
   const isMobile = useIsMobile();
   const { teamMembers, addTeamMember, removeTeamMember } = useJobSetup();
+  const { t } = useTranslation();
   const [addMemberOpen, setAddMemberOpen] = useState(false);
   const [memberSearch, setMemberSearch] = useState("");
   const [orgUsers, setOrgUsers] = useState<OrgUserResponse[]>([]);
@@ -26,7 +28,7 @@ export default function HiringTeamPage() {
     getOrgUsers()
       .then(setOrgUsers)
       .catch(() => {
-        toast.error("Unable to load organization users");
+        toast.error(t("load_org_users_failed"));
       });
   }, []);
 
@@ -76,14 +78,14 @@ export default function HiringTeamPage() {
         <InputField
           value={memberSearch}
           onChange={(e) => setMemberSearch(e.target.value)}
-          placeholder="Search by name or email…"
+          placeholder={t("search_name_email")}
           className="h-9 text-sm pl-9"
         />
       </div>
       <Separator />
       <div className="space-y-1 max-h-[240px] overflow-y-auto">
         {filteredUsers.length === 0 ? (
-          <p className="text-xs text-muted-foreground text-center py-6">No matching users found.</p>
+          <p className="text-xs text-muted-foreground text-center py-6">{t("no_matching_users")}</p>
         ) : (
           filteredUsers.map((user) => (
             <button
@@ -110,9 +112,7 @@ export default function HiringTeamPage() {
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
-        <p className="text-xs text-muted-foreground">
-          Define who is responsible for this job&apos;s hiring process.
-        </p>
+        <p className="text-xs text-muted-foreground">{t("define_hiring_process")}</p>
         {teamMembers.length > 0 && (
           <Button
             variant="outline"
@@ -120,7 +120,7 @@ export default function HiringTeamPage() {
             className="h-7 text-xs gap-1"
             onClick={() => setAddMemberOpen(true)}
           >
-            <Plus className="h-3 w-3" /> Add Member
+            <Plus className="h-3 w-3" /> {t("add_member")}
           </Button>
         )}
       </div>
@@ -130,9 +130,9 @@ export default function HiringTeamPage() {
           <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-3">
             <Users className="h-5 w-5 text-muted-foreground" />
           </div>
-          <p className="text-sm text-muted-foreground mb-1">No team members added yet.</p>
+          <p className="text-sm text-muted-foreground mb-1">{t("no_team_members_added")}</p>
           <p className="text-xs text-muted-foreground/70 mb-4">
-            Add recruiters, interviewers, and coordinators.
+            {t("add_hiring_team_description")}
           </p>
           <Button
             variant="outline"
@@ -140,7 +140,7 @@ export default function HiringTeamPage() {
             className="text-xs gap-1.5"
             onClick={() => setAddMemberOpen(true)}
           >
-            <Plus className="h-3.5 w-3.5" /> Add Team Member
+            <Plus className="h-3.5 w-3.5" /> {t("add_team_member")}
           </Button>
         </div>
       ) : (
@@ -171,10 +171,8 @@ export default function HiringTeamPage() {
         <Sheet open={addMemberOpen} onOpenChange={setAddMemberOpen}>
           <SheetContent side="bottom" className="h-[85vh] rounded-t-2xl">
             <SheetHeader>
-              <SheetTitle className="text-base">Add Team Member</SheetTitle>
-              <SheetDescription className="text-xs">
-                Search and select a organization member.
-              </SheetDescription>
+              <SheetTitle className="text-base">{t("add_team_member")}</SheetTitle>
+              <SheetDescription className="text-xs">{t("search_org_member")}</SheetDescription>
             </SheetHeader>
             <div className="mt-4 pb-4">
               <AddMemberContent />
@@ -185,7 +183,7 @@ export default function HiringTeamPage() {
         <Dialog open={addMemberOpen} onOpenChange={setAddMemberOpen}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle>Add Team Member</DialogTitle>
+              <DialogTitle>{t("add_team_member")}</DialogTitle>
             </DialogHeader>
             <AddMemberContent />
           </DialogContent>

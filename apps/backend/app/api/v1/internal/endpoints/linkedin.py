@@ -4,6 +4,7 @@ from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Requ
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.crypto import decrypt_value
 from app.core.permissions import require_permission
 from app.db.session import get_db
 from app.integrations.linkedin import service as linkedin_service
@@ -32,9 +33,11 @@ async def get_linkedin_organizations(
     if not cred:
         raise HTTPException(status_code=404, detail="LinkedIn not connected")
 
-    access_token = cred.encrypted_credentials
-    if not access_token:
+    if not cred.encrypted_credentials:
         raise HTTPException(status_code=400, detail="No access token found")
+    if not settings.encryption_key:
+        raise RuntimeError("ENCRYPTION_KEY is not configured.")
+    access_token = decrypt_value(cred.encrypted_credentials, settings.encryption_key)
 
     organizations = await linkedin_service.get_linkedin_organizations(access_token)
 

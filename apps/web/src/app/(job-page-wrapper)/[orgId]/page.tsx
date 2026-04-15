@@ -6,11 +6,16 @@ import { useParams } from "next/navigation";
 import { InputField } from "@onehash/ui/input";
 import { Badge } from "@onehash/ui/badge";
 import { SelectField } from "@onehash/ui/select";
-import { Search, MapPin, Briefcase, Clock, DollarSign, ArrowRight } from "lucide-react";
-import { getPublicJobs, type PublicJobListItem } from "@/api";
+import { Search, MapPin, Briefcase, Clock, ArrowRight } from "lucide-react";
+import { getPublicJobs, type PublicJobsListResponse } from "@/api";
 import { parseCareersOrgId } from "@/lib/public-careers-org";
 import { Avatar } from "@onehash/ui/avatar";
 import { PLATFORM_NAME } from "@/lib/constants";
+import { JobsI18nProvider } from "@/components/public/JobsI18nProvider";
+import { useTranslation } from "react-i18next";
+import "@/i18n";
+
+type PublicJobListItem = PublicJobsListResponse["jobs"][number];
 
 function formatSalary(job: PublicJobListItem): string | null {
   const currencySymbol =
@@ -33,7 +38,6 @@ function formatSalary(job: PublicJobListItem): string | null {
 }
 
 function formatLocation(job: PublicJobListItem): string {
-  // Backend already formats as "City|State, Country" or fallback
   return job.location || job.workplace_type || "Remote";
 }
 
@@ -41,39 +45,16 @@ function formatEmploymentType(type: string): string {
   return type.replace("_", "-").replace(/\b\w/g, (l) => l.toUpperCase());
 }
 
-export default function CareersListPage() {
+function CareersListContent({ data }: { data: PublicJobsListResponse }) {
+  const { t } = useTranslation();
   const params = useParams();
   const orgIdParam = params?.orgId as string;
 
-  const [jobs, setJobs] = useState<PublicJobListItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [orgName, setOrgName] = useState("");
-  const [orgAvatarUrl, setOrgAvatarUrl] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [locationFilter, setLocationFilter] = useState("all");
 
-  useEffect(() => {
-    const orgId = parseCareersOrgId(orgIdParam);
-    if (!orgId) {
-      setError("Invalid organization");
-      setLoading(false);
-      return;
-    }
-
-    getPublicJobs(orgId)
-      .then((data) => {
-        setJobs(data.jobs);
-        setOrgName(data.org_name);
-        setOrgAvatarUrl(data.org_avatar_url);
-        setLoading(false);
-      })
-      .catch((err) => {
-        setError(err instanceof Error ? err.message : "Failed to load jobs");
-        setLoading(false);
-      });
-  }, [orgIdParam]);
+  const jobs = data.jobs;
 
   const allCategories = useMemo(() => {
     const depts = jobs.map((j) => j.category).filter((c): c is string => c != null && c !== "");
@@ -98,25 +79,6 @@ export default function CareersListPage() {
     });
   }, [jobs, search, categoryFilter, locationFilter]);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-sm text-muted-foreground">Loading...</div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center px-4">
-        <div className="text-center space-y-3 max-w-sm">
-          <h1 className="text-xl font-semibold">Not Found</h1>
-          <p className="text-sm text-muted-foreground">{error}</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <header className="border-b border-border">
@@ -124,12 +86,12 @@ export default function CareersListPage() {
           <div className="flex items-center gap-2.5">
             <Avatar
               className="h-8 w-8 shrink-0 rounded-lg"
-              src={orgAvatarUrl}
-              alt={orgName}
+              src={data.org_avatar_url}
+              alt={data.org_name}
               imageClassName="rounded-lg object-cover"
               fallbackClassName="rounded-lg bg-foreground text-background text-xs font-bold"
             />
-            <span className="text-sm font-semibold">{orgName}</span>
+            <span className="text-sm font-semibold">{data.org_name}</span>
           </div>
         </div>
       </header>
@@ -140,7 +102,7 @@ export default function CareersListPage() {
             <div className="relative w-full min-w-0 md:flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none z-10" />
               <InputField
-                placeholder="Search roles…"
+                placeholder={t("search_roles")}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="w-full pl-9 h-9 text-sm"
@@ -155,7 +117,7 @@ export default function CareersListPage() {
                     value={categoryFilter}
                     onValueChange={setCategoryFilter}
                     options={[
-                      { value: "all", label: "All categories" },
+                      { value: "all", label: t("all_categories") },
                       ...allCategories.map((d) => ({ value: d, label: d })),
                     ]}
                   />
@@ -167,7 +129,7 @@ export default function CareersListPage() {
                     value={locationFilter}
                     onValueChange={setLocationFilter}
                     options={[
-                      { value: "all", label: "All locations" },
+                      { value: "all", label: t("all_locations") },
                       ...allLocations.map((l) => ({ value: l, label: l })),
                     ]}
                   />
@@ -179,7 +141,9 @@ export default function CareersListPage() {
 
         <div className="mx-auto max-w-4xl px-4 pb-3">
           <p className="text-xs text-muted-foreground">
-            {filtered.length} {filtered.length === 1 ? "position" : "positions"} available
+            {filtered.length === 1
+              ? t("positions_available", { count: filtered.length })
+              : t("positions_available_plural", { count: filtered.length })}
           </p>
         </div>
 
@@ -189,10 +153,9 @@ export default function CareersListPage() {
               <div className="h-12 w-12 rounded-full bg-muted mx-auto flex items-center justify-center">
                 <Briefcase className="h-5 w-5 text-muted-foreground" />
               </div>
-              <h2 className="text-base font-medium">No open positions</h2>
+              <h2 className="text-base font-medium">{t("no_open_positions")}</h2>
               <p className="text-sm text-muted-foreground max-w-sm mx-auto">
-                We don&apos;t have any matching openings right now. Check back soon or adjust your
-                filters.
+                {t("no_open_positions_description")}
               </p>
             </div>
           ) : (
@@ -205,18 +168,18 @@ export default function CareersListPage() {
                 );
                 const timeAgo =
                   daysAgo === 0
-                    ? "Today"
+                    ? t("today")
                     : daysAgo === 1
-                      ? "1 day ago"
+                      ? t("one_day_ago")
                       : daysAgo < 7
-                        ? `${daysAgo} days ago`
+                        ? t("last_n_days", { count: daysAgo })
                         : daysAgo < 14
-                          ? "1 week ago"
+                          ? t("one_week_ago")
                           : daysAgo < 30
-                            ? `${Math.floor(daysAgo / 7)} weeks ago`
+                            ? t("n_weeks_ago", { count: Math.floor(daysAgo / 7) })
                             : daysAgo < 60
-                              ? "1 month ago"
-                              : `${Math.floor(daysAgo / 30)} months ago`;
+                              ? t("one_month_ago")
+                              : t("n_months_ago", { count: Math.floor(daysAgo / 30) });
 
                 return (
                   <Link
@@ -232,7 +195,7 @@ export default function CareersListPage() {
                           </h3>
                           {job.status === "draft" && (
                             <Badge variant="secondary" className="text-[10px] h-5 px-2">
-                              Draft
+                              {t("draft")}
                             </Badge>
                           )}
                           {job.category && (
@@ -280,5 +243,57 @@ export default function CareersListPage() {
         </div>
       </footer>
     </div>
+  );
+}
+
+export default function CareersListPage() {
+  const params = useParams();
+  const orgIdParam = params?.orgId as string;
+
+  const [data, setData] = useState<PublicJobsListResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const orgId = parseCareersOrgId(orgIdParam);
+    if (!orgId) {
+      setError("Invalid organization");
+      setLoading(false);
+      return;
+    }
+    getPublicJobs(orgId)
+      .then((res) => {
+        setData({ ...res, org_avatar_url: res.org_avatar_url });
+        setLoading(false);
+      })
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : "Failed to load jobs");
+        setLoading(false);
+      });
+  }, [orgIdParam]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-sm text-muted-foreground">Loading...</div>
+      </div>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center px-4">
+        <div className="text-center space-y-3 max-w-sm">
+          <h1 className="text-xl font-semibold">Not Found</h1>
+          <p className="text-sm text-muted-foreground">{error}</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <JobsI18nProvider jobsPageLanguage={data.jobs_page_language ?? "en"}>
+      <CareersListContent data={data} />
+    </JobsI18nProvider>
   );
 }

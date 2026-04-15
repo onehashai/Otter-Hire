@@ -16,6 +16,7 @@ import { useJobWorkspaceStage } from "../context";
 import { ChevronLeft } from "lucide-react";
 import { formatTimestamp } from "@/lib/format-date";
 import { JobCandidateProfile } from "@/components/candidates/job_candidates/JobCandidateProfile";
+import { useTranslation } from "react-i18next";
 
 const MOBILE_BREAKPOINT_PX = 768;
 
@@ -27,6 +28,7 @@ export default function StageWorkspaceContent() {
   const candidateIdParam = params?.candidateId as string | undefined;
   const isMobile = useIsMobile();
   const { workspace, loading, error, reload } = useJobWorkspaceStage();
+  const { t } = useTranslation();
 
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
@@ -138,19 +140,23 @@ export default function StageWorkspaceContent() {
   }, [isMobile, candidateIdParam, stageIdParam]);
 
   if (!jobId) {
-    return <p className="text-sm text-muted-foreground p-4">Invalid job.</p>;
+    return <p className="text-sm text-muted-foreground p-4">{t("invalid_job")}</p>;
   }
 
   if (loading) {
-    return <p className="text-sm text-muted-foreground p-4">Loading...</p>;
+    return (
+      <p className="text-sm text-muted-foreground p-4" suppressHydrationWarning>
+        {t("loading")}
+      </p>
+    );
   }
 
   if (error || !workspace) {
     return (
       <div className="space-y-4 p-4">
-        <p className="text-sm text-muted-foreground">{error ?? "Job not found."}</p>
+        <p className="text-sm text-muted-foreground">{error ?? t("job_not_found")}</p>
         <Button variant="outline" size="sm" asChild>
-          <Link href="/jobs">Back to Jobs</Link>
+          <Link href="/jobs">{t("back_to_jobs")}</Link>
         </Button>
       </div>
     );
@@ -160,18 +166,19 @@ export default function StageWorkspaceContent() {
     <>
       <div className="p-3 border-b border-border flex items-start justify-between gap-2 shrink-0">
         <div className="min-w-0">
-          <h2 className="text-sm font-semibold">{stageForList?.name ?? "Stage"}</h2>
+          <h2 className="text-sm font-semibold">{stageForList?.name ?? t("stage")}</h2>
           <p className="text-xs text-muted-foreground">
-            {candidatesInStage.length} {candidatesInStage.length === 1 ? "candidate" : "candidates"}
+            {candidatesInStage.length}{" "}
+            {candidatesInStage.length === 1 ? t("candidate") : t("candidates")}
           </p>
         </div>
         <Button size="sm" className="h-7 px-2.5 text-[11px]" onClick={() => setAddOpen(true)}>
-          + Candidate
+          + {t("candidate")}
         </Button>
       </div>
       <div className="p-3 border-b border-border shrink-0">
         <InputField
-          placeholder="Search candidates"
+          placeholder={t("search_candidates")}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="h-8 text-sm"
@@ -180,7 +187,7 @@ export default function StageWorkspaceContent() {
       <div className="flex-1 overflow-auto p-2 space-y-1.5 min-h-0">
         {filteredCandidates.length === 0 ? (
           <div className="h-full min-h-[120px] grid place-items-center text-xs text-muted-foreground px-4 text-center">
-            No candidates in this stage
+            {t("no_candidates_in_stage")}
           </div>
         ) : (
           filteredCandidates.map((c) => {
@@ -229,7 +236,7 @@ export default function StageWorkspaceContent() {
           <section
             ref={mobileStagesPanelRef}
             role="region"
-            aria-label="Hiring stages"
+            aria-label={t("hiring_stages")}
             className={cn(
               "w-[83.333dvw] shrink-0 snap-start snap-always h-full min-h-0",
               "border-r border-border bg-sidebar flex flex-col overflow-y-auto",
@@ -241,13 +248,13 @@ export default function StageWorkspaceContent() {
                 className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-sidebar-foreground hover:bg-sidebar-accent"
               >
                 <ChevronLeft className="h-4 w-4 shrink-0" />
-                Back to Jobs
+                {t("back_to_jobs")}
               </Link>
               <h2 className="text-sm font-semibold truncate px-0.5">{workspace.title}</h2>
             </div>
 
             <p className="text-[10px] font-semibold text-muted-foreground tracking-wide px-3 pt-3 pb-1">
-              Stages
+              {t("stages")}
             </p>
             <nav className="px-2 pb-2 space-y-0.5 min-h-0">
               {sortedStages.map((s, i) => {
@@ -280,7 +287,7 @@ export default function StageWorkspaceContent() {
                 )}
               >
                 <Icon name="PenLine" className="h-3.5 w-3.5 shrink-0" />
-                <span className="truncate">Edit job</span>
+                <span className="truncate">{t("edit_job")}</span>
               </Link>
             </nav>
           </section>
@@ -288,7 +295,7 @@ export default function StageWorkspaceContent() {
           <section
             ref={mobileListPanelRef}
             role="region"
-            aria-label="Candidates in stage"
+            aria-label={t("candidates_in_stage")}
             className={cn(
               "w-[83.333dvw] shrink-0 snap-start snap-always h-full min-h-0",
               "border-r border-border flex flex-col bg-background",
@@ -300,7 +307,7 @@ export default function StageWorkspaceContent() {
           <section
             ref={mobileDetailPanelRef}
             role="region"
-            aria-label="Candidate details"
+            aria-label={t("candidate_details")}
             tabIndex={-1}
             className={cn(
               "w-[100dvw] min-w-[100dvw] shrink-0 snap-start snap-always h-full min-h-0",
@@ -328,7 +335,7 @@ export default function StageWorkspaceContent() {
               </div>
             ) : (
               <div className="flex-1 grid place-items-center text-sm text-muted-foreground px-4 text-center">
-                Select a candidate from the list
+                {t("select_candidate_from_list")}
               </div>
             )}
           </section>
@@ -375,7 +382,7 @@ export default function StageWorkspaceContent() {
         </section>
       ) : (
         <section className="flex-1 grid place-items-center text-sm text-muted-foreground">
-          Select a candidate from the list
+          {t("select_candidate_from_list")}
         </section>
       )}
 

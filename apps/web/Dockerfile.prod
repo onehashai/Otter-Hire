@@ -9,7 +9,7 @@ RUN cd packages/ui && npm ci
 
 # Install Web/App dependencies
 COPY apps/web/package.json apps/web/package-lock.json* ./apps/web/
-RUN cd apps/web && npm ci
+RUN cd apps/web && npm ci --legacy-peer-deps
 
 # Alpine (musl): Rollup optional deps don’t always resolve; install the native binary for
 # this image’s CPU (arm64 vs amd64). Keeps package.json lockfile CI-friendly (no pinned @rollup/*).

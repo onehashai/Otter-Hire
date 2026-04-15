@@ -21,6 +21,7 @@ export type PublicJobsListResponse = {
   jobs: PublicJobListItem[];
   org_name: string;
   org_avatar_url: string | null;
+  jobs_page_language: string;
 };
 
 export type PublicJobDetail = {
@@ -42,6 +43,7 @@ export type PublicJobDetail = {
   org_avatar_url: string | null;
   status: string;
   application_form_schema: Record<string, unknown>;
+  jobs_page_language: string;
 };
 
 export type PublicApplyPayload = {

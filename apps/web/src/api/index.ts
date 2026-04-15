@@ -21,6 +21,8 @@ export {
   verifyEmail,
   resendVerification,
   completeOnboarding,
+  forgotPassword,
+  resetPassword,
   type AuthSessionResponse,
   type RefreshSessionResult,
   type MeResponse,

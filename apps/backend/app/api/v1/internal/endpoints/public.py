@@ -961,6 +961,7 @@ async def get_public_jobs(
         jobs=items,
         org_name=org.name,
         org_avatar_url=org.avatar_url,
+        jobs_page_language=org.jobs_page_language or "en",
     )
 
 
@@ -1051,6 +1052,7 @@ async def get_public_job_detail(
         org_avatar_url=org.avatar_url,
         status=job.status,
         application_form_schema=_normalized_application_form_schema(job),
+        jobs_page_language=org.jobs_page_language or "en",
     )
 
 

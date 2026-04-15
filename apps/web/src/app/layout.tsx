@@ -7,6 +7,7 @@ import { headers } from "next/headers";
 import "../styles/globals.css";
 
 const baseMetadata: Metadata = {
+  metadataBase: new URL("https://smartats.in"),
   title: PLATFORM_NAME,
   description: "AI-powered, open source modern ATS to recruit top talent faster and smarter.",
   icons: {
@@ -53,18 +54,24 @@ export function generateMetadata(): Metadata {
 }
 
 function isJobsSubdomain(host: string): boolean {
-  const jobsSubdomain = process.env.NEXT_PUBLIC_JOBS_SUBDOMAIN || "jobs";
-  return host.startsWith(`${jobsSubdomain}.`);
+  const jobsSubdomain = (process.env.NEXT_PUBLIC_JOBS_SUBDOMAIN || "jobs").toLowerCase();
+  const appSubdomain = (process.env.NEXT_PUBLIC_APP_SUBDOMAIN || "app").toLowerCase();
+  const hostname = host.split(":")[0]?.toLowerCase();
+  const hostSubdomain = hostname?.split(".")[0];
+  if (!hostSubdomain) return false;
+  // Keep app shell rendering on app subdomain even when env values drift.
+  if (hostSubdomain === appSubdomain) return false;
+  return hostSubdomain === jobsSubdomain;
 }
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
-  const headersList = headers();
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const headersList = await headers();
   const host = headersList.get("host") || "";
   const isPublicSite = isJobsSubdomain(host);
 
   return (
     <html lang="en" suppressHydrationWarning>
-      <body>
+      <body suppressHydrationWarning>
         {isPublicSite ? (
           <>
             <SonnerToaster />

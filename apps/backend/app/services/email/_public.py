@@ -8,6 +8,7 @@ from app.core.config import settings
 from app.services.email._dispatch import send_email
 from app.templates.email.candidate_note_mention import build_candidate_note_mention_email
 from app.templates.email.invite import build_invite_email
+from app.templates.email.password_reset import build_password_reset_email
 from app.templates.email.verification import build_verification_email
 
 
@@ -37,6 +38,18 @@ async def send_invite_email(
         expiry_days=settings.invite_token_expire_days,
     )
     await send_email(to_email, content, fallback_url=invite_url)
+
+
+async def send_password_reset_email(
+    to_email: str,
+    reset_url: str,
+) -> None:
+    content = build_password_reset_email(
+        platform_name=settings.platform_name,
+        expiry_hours=settings.password_reset_token_expire_hours,
+        reset_url=reset_url,
+    )
+    await send_email(to_email, content, fallback_url=reset_url)
 
 
 async def send_candidate_note_mention_email(

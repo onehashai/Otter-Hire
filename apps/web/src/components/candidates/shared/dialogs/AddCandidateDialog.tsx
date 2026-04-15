@@ -48,11 +48,11 @@ export function AddCandidateDialog({
   const submit = async () => {
     if (!name.trim() || !email.trim()) return;
     if (!isValidEmail(email)) {
-      toast.error("Enter a valid email address");
+      toast.error(t("enter_valid_email"));
       return;
     }
     if (phone.trim() && !isValidPhone(phone)) {
-      toast.error("Enter a valid phone number");
+      toast.error(t("enter_valid_phone"));
       return;
     }
     try {
@@ -66,7 +66,7 @@ export function AddCandidateDialog({
         status: "active",
         stage_id: jobId ? (stageId ?? undefined) : undefined,
       });
-      toast.success("Candidate added");
+      toast.success(t("candidate_added"));
       onOpenChange(false);
       setName("");
       setEmail("");
@@ -83,7 +83,7 @@ export function AddCandidateDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Add candidate</DialogTitle>
+          <DialogTitle>{t("add_candidate")}</DialogTitle>
           <DialogDescription>
             {jobId && jobTitle
               ? t("add_candidate_dialog_job_description", { jobTitle })
@@ -92,14 +92,14 @@ export function AddCandidateDialog({
         </DialogHeader>
         <div className="space-y-3">
           <InputField
-            label="Full name"
+            label={t("full_name")}
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Candidate name"
+            placeholder={t("candidate_name_placeholder")}
             showAsterisk
           />
           <InputField
-            label="Email"
+            label={t("email")}
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -107,7 +107,7 @@ export function AddCandidateDialog({
             showAsterisk
           />
           <InputField
-            label="Phone (optional)"
+            label={t("phone_optional_label")}
             value={phone}
             onChange={(e) => setPhone(sanitizePhoneInput(e.target.value))}
             placeholder="+1 …"
@@ -115,7 +115,7 @@ export function AddCandidateDialog({
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
-            Cancel
+            {t("cancel")}
           </Button>
           <Button
             onClick={() => void submit()}
@@ -127,7 +127,7 @@ export function AddCandidateDialog({
               Boolean(phone.trim() && !isValidPhone(phone))
             }
           >
-            {loading ? "Adding…" : "Add candidate"}
+            {loading ? t("adding") : t("add_candidate")}
           </Button>
         </DialogFooter>
       </DialogContent>

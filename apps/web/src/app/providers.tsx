@@ -19,6 +19,7 @@ import { getAuthSession, refreshSessionDetailed, type AuthSessionResponse } from
 import { buildLoginHref } from "@/lib/login-redirect";
 
 import "@/i18n";
+import { changeLanguage } from "@/i18n";
 
 const queryClient = new QueryClient();
 
@@ -40,7 +41,7 @@ export function useAuthSession(): AuthSessionContextValue {
 }
 
 const AUTH_ROUTES = ["/login", "/signup"];
-const LIFECYCLE_ROUTES = ["/verify", "/onboarding"];
+const LIFECYCLE_ROUTES = ["/verify", "/onboarding", "/forgot", "/reset"];
 const EXPLICIT_LOGOUT_KEY = "explicit_logout";
 
 function isInvitePath(pathname: string): boolean {
@@ -100,6 +101,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
           authFailureRef.current = "none";
           setUser(me);
+          // Sync app language from user preferences (DB is source of truth after login)
+          const prefLang = (me.preferences as Record<string, unknown>)?.app_language;
+          if (typeof prefLang === "string" && prefLang) {
+            void changeLanguage(prefLang);
+          }
           return me;
         } catch (error) {
           setUser(null);
@@ -124,6 +130,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
     },
     [pathname, router, clearSession],
   );
+
+  useEffect(() => {
+    const stored = localStorage.getItem("app_language");
+    if (stored) void changeLanguage(stored);
+  }, []);
 
   useEffect(() => {
     void refreshSession();

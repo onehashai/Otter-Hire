@@ -108,7 +108,7 @@ export function AppSidebar({ collapsed, onToggle, onOpenCommandPalette }: AppSid
               activeClassName=""
             >
               <item.icon className="h-4 w-4 shrink-0" />
-              {!collapsed && <span>{label}</span>}
+              {!collapsed && <span suppressHydrationWarning>{label}</span>}
             </NavLink>
           );
 
@@ -146,7 +146,9 @@ export function AppSidebar({ collapsed, onToggle, onOpenCommandPalette }: AppSid
             <Moon className="h-4 w-4 shrink-0" />
           )}
           {!collapsed && (
-            <span className="text-xs">{theme === "dark" ? "Light mode" : "Dark mode"}</span>
+            <span className="text-xs" suppressHydrationWarning>
+              {theme === "dark" ? t("light_mode") : t("dark_mode")}
+            </span>
           )}
         </Button>
 
@@ -163,7 +165,7 @@ export function AppSidebar({ collapsed, onToggle, onOpenCommandPalette }: AppSid
             <Search className="h-3.5 w-3.5 shrink-0" />
             {!collapsed && (
               <>
-                <span>{t("search")}</span>
+                <span suppressHydrationWarning>{t("search")}</span>
                 <kbd className="pointer-events-none inline-flex h-5 select-none items-center rounded border border-border bg-muted px-1.5 text-[10px] font-medium text-muted-foreground ml-auto">
                   ⌘K
                 </kbd>

@@ -12,10 +12,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.crypto import hmac_hash
 from app.core.security import (
     create_access_token,
     generate_opaque_refresh_token,
     hash_password,
+    verify_access_token,
     verify_password,
 )
 from app.db.session import get_db
@@ -26,17 +28,19 @@ from app.models.user import User
 from app.schemas.auth import (
     AcceptInviteRequest,
     AuthUserResponse,
+    ForgotPasswordRequest,
     InviteDetailsResponse,
     LoginRequest,
     OnboardingRequest,
     ResendVerificationRequest,
+    ResetPasswordRequest,
     SignupRequest,
     VerifyEmailRequest,
     VerifyEmailResponse,
 )
 from app.services.default_categories import create_default_job_categories_for_org
 from app.services.default_email_templates import create_default_templates_for_org
-from app.services.email import send_verification_email
+from app.services.email import send_password_reset_email, send_verification_email
 from app.utils.uuid import uuid7
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -58,6 +62,8 @@ def _to_user_response(user: User, membership: OrgMembership) -> AuthUserResponse
         org_avatar_url=None,
         is_verified=user.is_verified,
         is_onboarded=user.is_onboarded,
+        auth_provider=user.auth_provider,
+        preferences=dict(user.preferences or {}),
     )
 
 
@@ -490,6 +496,64 @@ async def resend_verification(
     return VerifyEmailResponse(ok=True)
 
 
+@router.post("/forgot-password", status_code=status.HTTP_200_OK)
+@limiter.limit("3/hour")
+async def forgot_password(
+    request: Request, payload: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)
+) -> dict:
+    normalized_email = payload.email.lower()
+    result = await db.execute(select(User).where(User.email == normalized_email))
+    user = result.scalar_one_or_none()
+
+    # Always return 200 — prevents user enumeration
+    if user is None:
+        return {"ok": True}
+
+    raw_token = secrets.token_urlsafe(48)
+    token_hash = sha256(raw_token.encode()).hexdigest()
+    user.password_reset_token_hash = token_hash
+    user.password_reset_token_expires_at = datetime.now(timezone.utc) + timedelta(
+        hours=settings.password_reset_token_expire_hours
+    )
+    await db.commit()
+
+    reset_url = f"{settings.frontend_base_url}/reset?token={raw_token}"
+    await send_password_reset_email(user.email, reset_url)
+    return {"ok": True}
+
+
+@router.post("/reset-password", status_code=status.HTTP_200_OK)
+@limiter.limit("10/hour")
+async def reset_password(
+    request: Request, payload: ResetPasswordRequest, db: AsyncSession = Depends(get_db)
+) -> dict:
+    token_hash = sha256(payload.token.encode()).hexdigest()
+    now = datetime.now(timezone.utc)
+
+    result = await db.execute(
+        select(User).where(
+            User.password_reset_token_hash == token_hash,
+            User.password_reset_token_expires_at > now,
+        )
+    )
+    user = result.scalar_one_or_none()
+
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": "RESET_TOKEN_INVALID", "message": "Invalid or expired reset link."},
+        )
+
+    user.hashed_password = hash_password(payload.new_password)
+    user.password_reset_token_hash = None
+    user.password_reset_token_expires_at = None
+    # Invalidate all existing sessions — force re-login everywhere
+    user.refresh_token_hash = None
+    user.refresh_token_expires_at = None
+    await db.commit()
+    return {"ok": True}
+
+
 @router.post("/onboarding", response_model=AuthUserResponse)
 async def onboarding(
     payload: OnboardingRequest,
@@ -695,7 +759,7 @@ async def get_invite_details(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invite not found")
 
     membership, user, org = row
-    account_exists = bool(user.hashed_password or user.google_id)
+    account_exists = bool(user.hashed_password or user.oauth_credentials)
     return InviteDetailsResponse(
         org_name=org.name,
         role=membership.role,
@@ -749,7 +813,18 @@ _GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 _GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 _GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v3/userinfo"
 _OAUTH_STATE_COOKIE = "oauth_state"
+_OAUTH_LINK_MODE_COOKIE = "oauth_link_mode"
 _OAUTH_STATE_TTL_SECONDS = 600  # 10 minutes
+
+
+def _enc_key() -> str:
+    """Return the configured encryption key, raising loudly if absent."""
+    if not settings.encryption_key:
+        raise RuntimeError(
+            "ENCRYPTION_KEY is not configured. "
+            "Set it in your environment before enabling Google OAuth."
+        )
+    return settings.encryption_key
 
 
 @router.get("/google/enabled")
@@ -799,16 +874,27 @@ async def google_oauth_callback(
     response: Response,
     db: AsyncSession = Depends(get_db),
 ) -> RedirectResponse:
+    # Detect whether this is an account-linking flow (initiated from Security settings)
+    # or a regular sign-in/sign-up flow.
+    is_link_mode = request.cookies.get(_OAUTH_LINK_MODE_COOKIE) == "1"
+    frontend_security_url = f"{settings.frontend_base_url}/settings/security"
     error_base = f"{settings.frontend_base_url}/login"
 
-    def _error_redirect(message: str) -> RedirectResponse:
-        params = urllib.parse.urlencode({"oauth_error": message})
-        redir = RedirectResponse(url=f"{error_base}?{params}", status_code=status.HTTP_302_FOUND)
+    def _clear_oauth_cookies(redir: RedirectResponse) -> None:
         redir.delete_cookie(
-            key=_OAUTH_STATE_COOKIE,
-            path="/",
-            domain=settings.cookie_domain or None,
+            key=_OAUTH_STATE_COOKIE, path="/", domain=settings.cookie_domain or None
         )
+        redir.delete_cookie(
+            key=_OAUTH_LINK_MODE_COOKIE, path="/", domain=settings.cookie_domain or None
+        )
+
+    def _error_redirect(message: str) -> RedirectResponse:
+        if is_link_mode:
+            url = f"{frontend_security_url}?link_error={urllib.parse.quote(message)}"
+        else:
+            url = f"{error_base}?{urllib.parse.urlencode({'oauth_error': message})}"
+        redir = RedirectResponse(url=url, status_code=status.HTTP_302_FOUND)
+        _clear_oauth_cookies(redir)
         return redir
 
     code = request.query_params.get("code")
@@ -868,11 +954,59 @@ async def google_oauth_callback(
     if not google_id or not email:
         return _error_redirect("Google did not return required account information.")
 
+    # ── Link mode: attach Google to the currently logged-in account ──────────
+    if is_link_mode:
+        jwt_token = request.cookies.get("access_token")
+        if not jwt_token:
+            return _error_redirect("Session expired. Please sign in and try again.")
+        try:
+            payload = verify_access_token(jwt_token)
+            user_id = payload.get("user_id")
+        except ValueError:
+            return _error_redirect("Session expired. Please sign in and try again.")
+
+        user_result = await db.execute(select(User).where(User.id == user_id))
+        current_user = user_result.scalar_one_or_none()
+        if not current_user:
+            return _error_redirect("User not found. Please sign in and try again.")
+
+        if email.lower() != current_user.email.lower():
+            return _error_redirect(
+                "The Google account email does not match your account email. "
+                "Please use the same email address."
+            )
+
+        gid_hash = hmac_hash(google_id, _enc_key())
+        conflict_result = await db.execute(
+            select(User).where(User.oauth_credentials["google_id_hash"].as_string() == gid_hash)
+        )
+        conflict = conflict_result.scalar_one_or_none()
+        if conflict is not None and conflict.id != current_user.id:
+            return _error_redirect("This Google account is already linked to another account.")
+
+        current_user.oauth_credentials = {"provider": "google", "google_id_hash": gid_hash}
+        if current_user.auth_provider == "email":
+            current_user.auth_provider = "email,google"
+        if not current_user.avatar_url and userinfo.get("picture"):
+            current_user.avatar_url = userinfo.get("picture")
+        await db.commit()
+
+        redir = RedirectResponse(
+            url=f"{frontend_security_url}?linked=true",
+            status_code=status.HTTP_302_FOUND,
+        )
+        _clear_oauth_cookies(redir)
+        return redir
+
+    # ── Regular sign-in / sign-up flow ───────────────────────────────────────
     normalized_email = email.lower()
     now = datetime.now(timezone.utc)
 
-    # Look up user by google_id first, then by email
-    result = await db.execute(select(User).where(User.google_id == google_id))
+    # Look up user by google_id_hash stored inside oauth_credentials JSONB
+    gid_hash = hmac_hash(google_id, _enc_key())
+    result = await db.execute(
+        select(User).where(User.oauth_credentials["google_id_hash"].as_string() == gid_hash)
+    )
     user = result.scalar_one_or_none()
 
     if user is None:
@@ -880,9 +1014,9 @@ async def google_oauth_callback(
         user = result.scalar_one_or_none()
 
         if user is not None:
-            # Auto-link: existing password account — attach google_id
-            user.google_id = google_id
-            user.auth_provider = "both" if user.hashed_password else "google"
+            # Auto-link: existing email account — attach Google identity
+            user.oauth_credentials = {"provider": "google", "google_id_hash": gid_hash}
+            user.auth_provider = "email,google" if user.hashed_password else "google"
             if not user.avatar_url and picture:
                 user.avatar_url = picture
             await db.commit()
@@ -902,7 +1036,7 @@ async def google_oauth_callback(
                 org_id=organization.id,
                 email=normalized_email,
                 hashed_password=None,
-                google_id=google_id,
+                oauth_credentials={"provider": "google", "google_id_hash": gid_hash},
                 auth_provider="google",
                 name=name,
                 status="active",
@@ -934,11 +1068,7 @@ async def google_oauth_callback(
             )
             _set_access_cookie(redir, session_token)
             _set_refresh_cookie(redir, raw_refresh)
-            redir.delete_cookie(
-                key=_OAUTH_STATE_COOKIE,
-                path="/",
-                domain=settings.cookie_domain or None,
-            )
+            _clear_oauth_cookies(redir)
             return redir
 
     # Fetch membership for existing/linked user
@@ -962,10 +1092,70 @@ async def google_oauth_callback(
     redir = RedirectResponse(url=dest, status_code=status.HTTP_302_FOUND)
     _set_access_cookie(redir, session_token)
     _set_refresh_cookie(redir, raw_refresh)
-    redir.delete_cookie(
+    _clear_oauth_cookies(redir)
+    return redir
+
+
+# ── Google Account Linking (for Security tab) ────────────────────────────────
+
+
+@router.get("/google/link")
+async def google_link_redirect(
+    request: Request,
+    response: Response,
+    current_user: User = Depends(get_current_user),
+) -> RedirectResponse:
+    """Initiate Google OAuth to link an existing account. Authenticated users only."""
+    if not settings.google_oauth_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Google OAuth is not configured",
+        )
+    if (
+        current_user.oauth_credentials
+        and current_user.oauth_credentials.get("provider") == "google"
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Google account is already linked.",
+        )
+
+    state_token = secrets.token_urlsafe(32)
+    state_hash = sha256(state_token.encode()).hexdigest()
+
+    # Reuse the same redirect URI as regular Google OAuth — only one URI needs to be
+    # registered in Google Cloud Console.
+    callback_uri = f"{settings.api_base_url}/v1/internal/auth/google/callback"
+    params = {
+        "client_id": settings.google_client_id,
+        "redirect_uri": callback_uri,
+        "response_type": "code",
+        "scope": "openid email profile",
+        "state": state_token,
+        "access_type": "offline",
+        "prompt": "select_account",
+    }
+    auth_url = _GOOGLE_AUTH_URL + "?" + urllib.parse.urlencode(params)
+
+    redir = RedirectResponse(url=auth_url, status_code=status.HTTP_302_FOUND)
+    redir.set_cookie(
         key=_OAUTH_STATE_COOKIE,
+        value=state_hash,
+        httponly=True,
+        samesite="lax",
+        secure=settings.is_production,
+        max_age=_OAUTH_STATE_TTL_SECONDS,
         path="/",
-        domain=settings.cookie_domain or None,
+    )
+    # Signal to the shared callback that this is an account-linking flow, not a login.
+    redir.set_cookie(
+        key=_OAUTH_LINK_MODE_COOKIE,
+        value="1",
+        httponly=True,
+        samesite="lax",
+        secure=settings.is_production,
+        max_age=_OAUTH_STATE_TTL_SECONDS,
+        path="/",
     )
     return redir
 

@@ -9,25 +9,26 @@ import { useSetPageMetadata } from "@/hooks/useSetPageMetadata";
 import { useAuthSession } from "@/app/providers";
 import { Icon, type IconName } from "@onehash/ui/icon";
 
-const baseTabRoutes: { label: string; path: string; icon: IconName }[] = [
-  { label: "Profile", path: "/settings/profile", icon: "User" },
-  { label: "Organization", path: "/settings/organization", icon: "Building2" },
-  { label: "Team", path: "/settings/team", icon: "Users" },
-  { label: "Job Categories", path: "/settings/categories", icon: "Briefcase" },
-  { label: "Integrations", path: "/settings/integrations", icon: "Sparkles" },
-];
-
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation();
   const pathname = usePathname();
   const isMobile = useIsMobile();
   const { user } = useAuthSession();
 
+  const baseTabRoutes: { label: string; path: string; icon: IconName }[] = [
+    { label: t("nav_profile"), path: "/settings/profile", icon: "User" },
+    { label: t("nav_organization"), path: "/settings/organization", icon: "Building2" },
+    { label: t("nav_team"), path: "/settings/team", icon: "Users" },
+    { label: t("nav_job_categories"), path: "/settings/categories", icon: "Briefcase" },
+    { label: t("nav_integrations"), path: "/settings/integrations", icon: "Sparkles" },
+    { label: t("nav_security"), path: "/settings/security", icon: "Shield" },
+  ];
+
   const tabRoutes =
     user?.role === "admin"
       ? [
           ...baseTabRoutes,
-          { label: "Admin", path: "/settings/admin", icon: "ShieldCheck" as const },
+          { label: t("nav_admin"), path: "/settings/admin", icon: "ShieldCheck" as const },
         ]
       : baseTabRoutes;
 
@@ -53,7 +54,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
                 )}
               >
                 <Icon name={icon} size={16} className="shrink-0 opacity-90" />
-                {label}
+                <span suppressHydrationWarning>{label}</span>
               </Link>
             );
           })}
@@ -78,7 +79,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
                   size={16}
                   className={cn("shrink-0", isActive ? "text-foreground" : "text-muted-foreground")}
                 />
-                {label}
+                <span suppressHydrationWarning>{label}</span>
               </Link>
             );
           })}

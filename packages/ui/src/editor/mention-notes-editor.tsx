@@ -9,7 +9,7 @@ import Text from "@tiptap/extension-text";
 import { ReactRenderer, EditorContent, useEditor } from "@tiptap/react";
 import type { Editor } from "@tiptap/core";
 import type { SuggestionKeyDownProps, SuggestionProps } from "@tiptap/suggestion";
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { Button } from "../button";
 import { cn } from "../lib/utils";
 import "./mention-notes-editor.css";
@@ -39,13 +39,15 @@ export type MentionListRef = {
   onKeyDown: (props: SuggestionKeyDownProps) => boolean;
 };
 
-const MentionList = forwardRef<
-  MentionListRef,
-  {
-    items: MentionItem[];
-    command: (item: MentionItem) => void;
-  }
->(function MentionList({ items, command }, ref) {
+function MentionList({
+  items,
+  command,
+  ref,
+}: {
+  items: MentionItem[];
+  command: (item: MentionItem) => void;
+  ref?: React.Ref<MentionListRef>;
+}) {
   const [selectedIndex, setSelectedIndex] = useState(0);
 
   useEffect(() => {
@@ -98,7 +100,7 @@ const MentionList = forwardRef<
       ))}
     </div>
   );
-});
+}
 
 function positionSuggestion(el: HTMLElement, props: SuggestionProps<MentionItem>) {
   const rect = props.clientRect?.();

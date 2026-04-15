@@ -5,10 +5,25 @@ from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from app.schemas.validators import normalize_email
 
+SUPPORTED_JOBS_PAGE_LANGUAGES = ("en", "es", "fr", "de", "pt", "browser")
+
 
 class UpdateOrganizationRequest(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     website: str | None = None
+
+
+class UpdateOrganizationLanguageRequest(BaseModel):
+    jobs_page_language: str
+
+    @field_validator("jobs_page_language")
+    @classmethod
+    def validate_language(cls, v: str) -> str:
+        if v not in SUPPORTED_JOBS_PAGE_LANGUAGES:
+            raise ValueError(
+                f"Unsupported language. Must be one of: {SUPPORTED_JOBS_PAGE_LANGUAGES}"
+            )
+        return v
 
 
 class OrganizationResponse(BaseModel):
@@ -16,6 +31,7 @@ class OrganizationResponse(BaseModel):
     name: str
     website: str | None
     avatar_url: str | None = None
+    jobs_page_language: str = "en"
 
 
 class OrganizationMembershipResponse(BaseModel):

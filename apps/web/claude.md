@@ -2,7 +2,7 @@
 
 ## Tech Stack
 
-- Next.js 14 (App Router), React 18, TypeScript
+- Next.js 16.2.3 (App Router), React 19, TypeScript
 - Tailwind CSS, shadcn/ui components
 - React Hook Form, Zod validation
 - Sonner (toasts), Lexical (rich text editor)
@@ -14,7 +14,7 @@
 
 - **App Router**: File-based routing in `src/app`
 - **Subdomain logic**: Middleware handles `app.domain.com` vs `jobs.domain.com`
-- **Auth guard**: Middleware redirects unauthenticated users to `/login`
+- **Auth guard**: Two-layer gate — server `middleware.ts` redirects unauthenticated requests; client `providers.tsx` re-checks on mount. Both must agree on which routes are public (`LIFECYCLE_ROUTES`: `/verify`, `/onboarding`, `/forgot`, `/reset`)
 
 ### Key Routes
 
@@ -77,6 +77,7 @@
 
 - Profile, organization, team management
 - Job categories
+- Security: Google account connect/disconnect, password set/change
 - Admin panel (platform-level, dev only)
 
 ## Components

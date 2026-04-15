@@ -78,9 +78,10 @@ class Settings(BaseSettings):
         default=False, validation_alias="FEATURE_LINKEDIN_APPLICANT_INGESTION"
     )
 
-    # SMTP credential encryption (Fernet key, base64-encoded 32 bytes)
+    # Unified encryption key (Fernet, base64-encoded 32 bytes).
+    # Used for: google_id (users table), encrypted_credentials (integration_credentials table).
     # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-    smtp_encryption_key: str | None = Field(default=None, validation_alias="SMTP_ENCRYPTION_KEY")
+    encryption_key: str | None = Field(default=None, validation_alias="ENCRYPTION_KEY")
 
     # SES outbound configuration set name — when set, X-SES-Configuration-Set is added to every
     # outbound email so SES publishes Delivery/Open/Bounce events to the SNS topic below.
@@ -98,6 +99,9 @@ class Settings(BaseSettings):
         default=24, validation_alias="VERIFICATION_TOKEN_EXPIRE_HOURS"
     )
     invite_token_expire_days: int = Field(default=7, validation_alias="INVITE_TOKEN_EXPIRE_DAYS")
+    password_reset_token_expire_hours: int = Field(
+        default=1, validation_alias="PASSWORD_RESET_TOKEN_EXPIRE_HOURS"
+    )
 
     # ZeptoMail — used when ZEPTOMAIL_API_KEY + ZEPTOMAIL_FROM_EMAIL are present
     zeptomail_api_key: str | None = Field(default=None, validation_alias="ZEPTOMAIL_API_KEY")

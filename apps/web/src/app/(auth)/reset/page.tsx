@@ -3,7 +3,8 @@
 import { useState, useMemo } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { resetPassword } from "@/api";
 import { Button } from "@onehash/ui/button";
 import { InputField } from "@onehash/ui/input";
 import { Label } from "@onehash/ui/label";
@@ -23,6 +24,8 @@ const passwordRules = [
 
 export default function ResetPassword() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const token = searchParams.get("token");
   const { t } = useTranslation();
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -31,9 +34,7 @@ export default function ResetPassword() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
-
-  // Simulate checking token validity
-  const [tokenValid] = useState(true);
+  const [tokenValid, setTokenValid] = useState(Boolean(token));
 
   const ruleResults = useMemo(() => passwordRules.map((r) => r.test(password)), [password]);
   const allRulesPassed = ruleResults.every(Boolean);
@@ -51,13 +52,22 @@ export default function ResetPassword() {
       return;
     }
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 1500));
-    setLoading(false);
-    setSuccess(true);
-    setTimeout(() => {
-      router.replace("/login");
-      router.refresh();
-    }, 3000);
+    try {
+      await resetPassword(token!, password);
+      setSuccess(true);
+      setTimeout(() => {
+        router.replace("/login");
+      }, 3000);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Something went wrong.";
+      if (msg.includes("RESET_TOKEN")) {
+        setTokenValid(false);
+      } else {
+        setError(msg);
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (!tokenValid) {
@@ -72,7 +82,7 @@ export default function ResetPassword() {
             This password reset link is no longer valid. Please request a new one.
           </p>
           <Button asChild className="h-10 text-sm font-medium">
-            <Link href="/forgot-password">Request new link</Link>
+            <Link href="/forgot">Request new link</Link>
           </Button>
         </div>
       </div>

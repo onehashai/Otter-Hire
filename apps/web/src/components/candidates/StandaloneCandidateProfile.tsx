@@ -89,7 +89,7 @@ export function StandaloneCandidateProfile({
 
   useEffect(() => {
     if (!id) {
-      setError("Candidate not found");
+      setError(t("candidate_not_found"));
       setLoading(false);
       return;
     }
@@ -100,7 +100,7 @@ export function StandaloneCandidateProfile({
         setError(null);
         await loadCore(id);
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load candidate");
+        if (!cancelled) setError(err instanceof Error ? err.message : t("error"));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -108,7 +108,7 @@ export function StandaloneCandidateProfile({
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -292,13 +292,13 @@ export function StandaloneCandidateProfile({
   };
 
   if (loading) {
-    return <p className="text-sm text-muted-foreground">Loading candidate...</p>;
+    return <p className="text-sm text-muted-foreground">{t("loading_candidate")}</p>;
   }
 
   if (error || !uiCandidate) {
     return (
       <div className="flex flex-col items-center justify-center py-20 gap-3">
-        <p className="text-sm text-muted-foreground">{error ?? "Candidate not found"}</p>
+        <p className="text-sm text-muted-foreground">{error ?? t("candidate_not_found")}</p>
         <Button variant="outline" size="sm" onClick={() => router.push("/candidates")}>
           <Icon name="ChevronLeft" className="h-3.5 w-3.5 mr-1.5" /> {t("candidates_title")}
         </Button>

@@ -2,7 +2,7 @@ from enum import Enum
 from typing import Any, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 class AssignableRole(str, Enum):
@@ -56,3 +56,24 @@ class InviteUserRequest(BaseModel):
 
 class UpdateUserRoleRequest(BaseModel):
     role: AssignableRole
+
+
+class SecurityStatusResponse(BaseModel):
+    auth_provider: str  # email | google | email,google | google,email
+    has_password: bool
+    google_connected: bool
+
+
+class CreatePasswordRequest(BaseModel):
+    """For Google-first users who have no password yet."""
+
+    new_password: str = Field(min_length=8)
+    confirm_password: str = Field(min_length=8)
+
+
+class UpdatePasswordRequest(BaseModel):
+    """For users who already have a password."""
+
+    current_password: str
+    new_password: str = Field(min_length=8)
+    confirm_password: str = Field(min_length=8)

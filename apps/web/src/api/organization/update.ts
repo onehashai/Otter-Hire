@@ -5,6 +5,7 @@ export type OrganizationResponse = {
   name: string;
   website: string | null;
   avatar_url?: string | null;
+  jobs_page_language: string;
 };
 
 export async function updateOrganization(data: {
@@ -14,6 +15,16 @@ export async function updateOrganization(data: {
   const org = await apiFetch<OrganizationResponse>("/organizations/me", {
     method: "PATCH",
     body: data,
+  });
+  return { ...org, avatar_url: normalizeApiUrl(org.avatar_url) };
+}
+
+export async function updateOrganizationLanguage(
+  jobs_page_language: string,
+): Promise<OrganizationResponse> {
+  const org = await apiFetch<OrganizationResponse>("/organizations/me/language", {
+    method: "PATCH",
+    body: { jobs_page_language },
   });
   return { ...org, avatar_url: normalizeApiUrl(org.avatar_url) };
 }

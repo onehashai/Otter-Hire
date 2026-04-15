@@ -3,8 +3,10 @@
 import { useState, useEffect, useRef } from "react";
 import {
   deleteMyAvatar,
+  getMyPreferences,
   getMyProfile,
   type AuthSessionResponse,
+  updateMyPreferences,
   updateMyProfile,
   uploadMyAvatar,
 } from "@/api";
@@ -30,6 +32,9 @@ import { useRouter } from "next/navigation";
 import { useAuthSession } from "@/app/providers";
 import { getInitialsFromName } from "@/lib/name-initials";
 import { ImageCropDialog } from "@/components/common/ImageCropDialog";
+import { APP_LANGUAGES, changeLanguage } from "@/i18n";
+import i18n from "@/i18n";
+import { SelectField } from "@onehash/ui/select";
 
 type ProfileSettingsProps = {
   user: AuthSessionResponse | null;
@@ -56,6 +61,8 @@ export function ProfileSettings({ user }: ProfileSettingsProps) {
   const previewObjectUrlRef = useRef<string | null>(null);
   const [cropDialogOpen, setCropDialogOpen] = useState(false);
   const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
+  const [appLanguage, setAppLanguage] = useState("en");
+  const [savingLanguage, setSavingLanguage] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -93,6 +100,38 @@ export function ProfileSettings({ user }: ProfileSettingsProps) {
     };
   }, [user?.id, user?.org_id]);
 
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { preferences } = await getMyPreferences();
+        if (!cancelled && typeof preferences.app_language === "string") {
+          setAppLanguage(preferences.app_language);
+        }
+      } catch {
+        // keep page usable
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
+
+  const handleLanguageSave = async (lng: string) => {
+    setSavingLanguage(true);
+    try {
+      const { preferences } = await getMyPreferences();
+      await updateMyPreferences({ ...preferences, app_language: lng });
+      await changeLanguage(lng);
+      setAppLanguage(lng);
+      toast.success(i18n.getFixedT(lng, "common")("language_saved"));
+    } catch {
+      toast.error(t("error"));
+    } finally {
+      setSavingLanguage(false);
+    }
+  };
+
   const avatarDirty =
     pendingAvatarRemoved || pendingAvatarFile !== null || avatarUrl !== originalAvatarUrl;
   const isDirty = name !== originalName || avatarDirty;
@@ -129,7 +168,7 @@ export function ProfileSettings({ user }: ProfileSettingsProps) {
 
       await refreshSession(true);
 
-      toast.success("Profile updated successfully");
+      toast.success(t("profile_updated"));
 
       if (pendingBackNavigation) {
         setPendingBackNavigation(false);
@@ -143,7 +182,7 @@ export function ProfileSettings({ user }: ProfileSettingsProps) {
         router.push(target);
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to update profile";
+      const message = err instanceof Error ? err.message : t("profile_update_failed");
       toast.error(message);
     } finally {
       setSaving(false);
@@ -290,8 +329,8 @@ export function ProfileSettings({ user }: ProfileSettingsProps) {
 
   return (
     <>
-      <h2 className="text-base md:text-lg font-semibold mb-1">Profile</h2>
-      <p className="text-xs text-muted-foreground mb-4 md:mb-6">Manage your personal information</p>
+      <h2 className="text-base md:text-lg font-semibold mb-1">{t("nav_profile")}</h2>
+      <p className="text-xs text-muted-foreground mb-4 md:mb-6">{t("manage_personal_info")}</p>
 
       <div className="space-y-6">
         <Card>
@@ -324,7 +363,7 @@ export function ProfileSettings({ user }: ProfileSettingsProps) {
                   onClick={() => avatarInputRef.current?.click()}
                 >
                   <Upload className="h-4 w-4 mr-1.5" />
-                  Upload
+                  {t("upload_photo")}
                 </Button>
                 {avatarUrl ? (
                   <Button
@@ -336,7 +375,7 @@ export function ProfileSettings({ user }: ProfileSettingsProps) {
                     disabled={avatarUploading}
                   >
                     <Trash2 className="h-4 w-4 mr-1.5" />
-                    Remove
+                    {t("remove_photo")}
                   </Button>
                 ) : null}
               </div>
@@ -345,7 +384,7 @@ export function ProfileSettings({ user }: ProfileSettingsProps) {
             <Separator />
 
             <InputField
-              label="Full Name"
+              label={t("full_name")}
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Enter your full name"
@@ -353,7 +392,7 @@ export function ProfileSettings({ user }: ProfileSettingsProps) {
             />
 
             <InputField
-              label="Email"
+              label={t("email")}
               value={email}
               disabled
               placeholder="Email address"
@@ -374,6 +413,21 @@ export function ProfileSettings({ user }: ProfileSettingsProps) {
           </CardContent>
         </Card>
       </div>
+
+      <h2 className="text-base md:text-lg font-semibold mb-1 mt-8">{t("language")}</h2>
+      <p className="text-xs text-muted-foreground mb-4 md:mb-6">{t("app_language_description")}</p>
+      <Card>
+        <CardContent className="p-4 md:p-5">
+          <SelectField
+            label={t("app_language")}
+            value={appLanguage}
+            onValueChange={(val) => void handleLanguageSave(val)}
+            options={APP_LANGUAGES.map((l) => ({ value: l.code, label: l.label }))}
+            disabled={savingLanguage}
+          />
+        </CardContent>
+      </Card>
+
       <ImageCropDialog
         open={cropDialogOpen}
         onOpenChange={handleCropDialogOpenChange}
@@ -385,14 +439,14 @@ export function ProfileSettings({ user }: ProfileSettingsProps) {
       <AlertDialog open={showUnsavedDialog} onOpenChange={setShowUnsavedDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Unsaved Changes</AlertDialogTitle>
-            <AlertDialogDescription>
-              You have unsaved profile changes. Save before leaving?
-            </AlertDialogDescription>
+            <AlertDialogTitle>{t("unsaved_changes")}</AlertDialogTitle>
+            <AlertDialogDescription>{t("unsaved_changes_description")}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={handleDiscardChanges}>Discard</AlertDialogCancel>
-            <AlertDialogAction onClick={handleSaveAndNavigate}>Save Changes</AlertDialogAction>
+            <AlertDialogCancel onClick={handleDiscardChanges}>{t("discard")}</AlertDialogCancel>
+            <AlertDialogAction onClick={handleSaveAndNavigate}>
+              {t("save_changes")}
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

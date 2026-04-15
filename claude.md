@@ -6,7 +6,7 @@
 
 ### Stack
 
-- **Frontend**: Next.js 14 (App Router), React, TypeScript, Tailwind CSS
+- **Frontend**: Next.js 16.2.3 (App Router), React 19, TypeScript, Tailwind CSS
 - **Backend**: FastAPI, async SQLAlchemy, Alembic migrations
 - **Database**: PostgreSQL 16
 - **Async Workflows**: Temporal (resume parsing, email processing)
@@ -57,7 +57,7 @@
 
 - **Local**: Docker Compose (all services)
 - **Staging/Prod**: AWS ECS (web, backend, worker), RDS (Postgres), ElastiCache (Redis), Temporal Cloud
-- **CI/CD**: GitHub Actions (CI on PR, deploy staging on push/merge to `develop`, deploy prod via manual `workflow_dispatch`)
+- **CI/CD**: GitHub Actions (CI on PR; deploy staging on push/merge to `develop` and manual `workflow_dispatch`; deploy prod on push/merge to `main` and manual `workflow_dispatch`; web/backend use ECS CodeDeploy blue/green, worker remains ECS rolling)
 
 ## Update Rules
 

@@ -5,7 +5,7 @@ import { shouldOmitLoginRedirect } from "@/lib/login-redirect";
 import { isCareersUuidSegment, parseLegacyCareersOrgSlug } from "@/lib/public-careers-org";
 
 const AUTH_ROUTES = new Set(["/login", "/signup"]);
-const LIFECYCLE_ROUTES = new Set(["/verify", "/onboarding"]);
+const LIFECYCLE_ROUTES = new Set(["/verify", "/onboarding", "/forgot", "/reset"]);
 const PUBLIC_ROUTES = new Set(["/health", "/favicon.ico"]);
 
 function getApiBaseUrl(): string {
@@ -24,13 +24,25 @@ function getJobsSubdomain(): string {
   return process.env.NEXT_PUBLIC_JOBS_SUBDOMAIN || "jobs";
 }
 
+function getHostSubdomain(host: string): string | null {
+  const hostname = host.split(":")[0]?.toLowerCase();
+  if (!hostname) return null;
+  const parts = hostname.split(".");
+  return parts.length > 2 ? parts[0] : null;
+}
+
 function isInvitePath(pathname: string): boolean {
   return pathname.startsWith("/invite/");
 }
 
 function isJobsHost(host: string): boolean {
-  const jobsSubdomain = getJobsSubdomain();
-  return host.startsWith(`${jobsSubdomain}.`);
+  const jobsSubdomain = getJobsSubdomain().toLowerCase();
+  const appSubdomain = (process.env.NEXT_PUBLIC_APP_SUBDOMAIN || "app").toLowerCase();
+  const hostSubdomain = getHostSubdomain(host);
+  if (!hostSubdomain) return false;
+  // Safety guard: app subdomain should never be treated as jobs host.
+  if (hostSubdomain === appSubdomain) return false;
+  return hostSubdomain === jobsSubdomain;
 }
 
 function isPublicCareersRoute(pathname: string): boolean {

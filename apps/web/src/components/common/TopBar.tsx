@@ -147,6 +147,8 @@ export function TopBar() {
             width={90}
             height={20}
             className="object-contain dark:invert dark:contrast-200"
+            style={{ width: "auto", height: "auto" }}
+            priority
           />
         </Link>
         <div className="hidden min-w-0 flex-1 flex-col justify-center md:flex">
@@ -207,7 +209,7 @@ export function TopBar() {
                 {menuLoadingMemberships ? (
                   <DropdownMenuItem disabled>
                     <Icon name="Loader" className="mr-2 h-4 w-4 animate-spin" />
-                    Loading organizations...
+                    {t("loading_organizations")}
                   </DropdownMenuItem>
                 ) : (
                   memberships.map((membership) => {
@@ -223,7 +225,7 @@ export function TopBar() {
                         <span className="truncate">{membership.org_name}</span>
                         {isCurrent ? (
                           <span className="text-[10px] rounded bg-muted px-1.5 py-0.5 text-muted-foreground">
-                            Current
+                            {t("current_org_badge")}
                           </span>
                         ) : isSwitching ? (
                           <Icon
@@ -249,10 +251,8 @@ export function TopBar() {
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Create organization</DialogTitle>
-            <DialogDescription>
-              Enter a name to create a new organization under your account.
-            </DialogDescription>
+            <DialogTitle>{t("create_organization")}</DialogTitle>
+            <DialogDescription>{t("create_org_description")}</DialogDescription>
           </DialogHeader>
 
           {orgError && (
@@ -262,10 +262,10 @@ export function TopBar() {
           )}
 
           <InputField
-            label="Organization name"
+            label={t("organization_name")}
             value={newOrgName}
             onChange={(e) => setNewOrgName(e.target.value)}
-            placeholder="e.g. Acme Recruiting"
+            placeholder={t("org_name_placeholder")}
             autoFocus
             disabled={creatingOrg}
             showAsterisk
@@ -278,14 +278,14 @@ export function TopBar() {
               onClick={() => setCreateOpen(false)}
               disabled={creatingOrg}
             >
-              Cancel
+              {t("cancel")}
             </Button>
             <Button
               type="button"
               onClick={handleCreateOrganization}
               disabled={creatingOrg || !newOrgName.trim()}
             >
-              {creatingOrg ? <Icon name="Loader" className="h-4 w-4 animate-spin" /> : "Create"}
+              {creatingOrg ? <Icon name="Loader" className="h-4 w-4 animate-spin" /> : t("create")}
             </Button>
           </DialogFooter>
         </DialogContent>

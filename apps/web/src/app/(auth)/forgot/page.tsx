@@ -9,6 +9,7 @@ import { Label } from "@onehash/ui/label";
 import { Icon } from "@onehash/ui/icon";
 import { LOGO_SVG_PATH, PLATFORM_NAME } from "@/lib/constants";
 import { useTranslation } from "react-i18next";
+import { forgotPassword } from "@/api";
 import { isValidEmail, normalizeEmail } from "@/lib/validation/contact";
 
 export default function ForgotPassword() {
@@ -34,8 +35,13 @@ export default function ForgotPassword() {
     const normalizedEmail = normalizeEmail(email);
     setEmail(normalizedEmail);
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 1500));
-    setLoading(false);
+    try {
+      await forgotPassword(normalizedEmail);
+    } catch {
+      // Always show "Check your email" regardless — prevents user enumeration
+    } finally {
+      setLoading(false);
+    }
     setSent(true);
     startResendTimer();
   };
@@ -57,8 +63,11 @@ export default function ForgotPassword() {
 
   const handleResend = async () => {
     startResendTimer();
-    // Simulate resend
-    await new Promise((r) => setTimeout(r, 1000));
+    try {
+      await forgotPassword(email);
+    } catch {
+      // Silently ignore — user already sees "Check your email"
+    }
   };
 
   return (

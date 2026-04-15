@@ -36,7 +36,6 @@ import {
 } from "../../../../lib/validations/setupValidation";
 import { useEffect, useState } from "react";
 import { useSetPageMetadata } from "@/hooks/useSetPageMetadata";
-import { JOB_WORKSPACE_PAGE_SUBTITLE, JOB_WORKSPACE_PAGE_TITLE } from "@/lib/job-page-metadata";
 
 function SetupLayoutInner({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -83,8 +82,8 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
   } = useJobSetup();
 
   useSetPageMetadata({
-    title: JOB_WORKSPACE_PAGE_TITLE,
-    subtitle: JOB_WORKSPACE_PAGE_SUBTITLE,
+    title: t("edit_candidates_title"),
+    subtitle: t("edit_candidates_subtitle"),
   });
 
   useEffect(() => {
@@ -205,14 +204,14 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
       </Button>
       <Separator />
       <div>
-        <p className="text-xs text-muted-foreground mb-1">Status</p>
+        <p className="text-xs text-muted-foreground mb-1">{t("status")}</p>
         <Badge variant={status === "open" ? "default" : "secondary"} className="capitalize text-xs">
           {status}
         </Badge>
       </div>
       <Separator />
       <div>
-        <p className="text-xs text-muted-foreground mb-1.5">Stages</p>
+        <p className="text-xs text-muted-foreground mb-1.5">{t("stages")}</p>
         <div className="flex flex-wrap gap-1">
           {hiringStages
             .filter((s) => s.name)
@@ -225,7 +224,7 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
       </div>
       <Separator />
       <div>
-        <p className="text-xs text-muted-foreground mb-1.5">Hiring Team</p>
+        <p className="text-xs text-muted-foreground mb-1.5">{t("hiring_team")}</p>
         <div className="space-y-1.5">
           {teamMembers.map((m) => (
             <div key={m.id} className="flex items-center gap-2">
@@ -236,7 +235,7 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
             </div>
           ))}
           {teamMembers.length === 0 && !hiringManager && (
-            <p className="text-xs text-muted-foreground/70">No members yet</p>
+            <p className="text-xs text-muted-foreground/70">{t("no_members_yet")}</p>
           )}
         </div>
       </div>
@@ -250,7 +249,9 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
           />
         </div>
       ) : savedAt ? (
-        <p className="text-[10px] text-muted-foreground text-center">Saved at {savedAt}</p>
+        <p className="text-[10px] text-muted-foreground text-center">
+          {t("saved_at", { time: savedAt })}
+        </p>
       ) : null}
     </div>
   );
@@ -278,7 +279,11 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
           <div className="flex-1 min-w-0">
             <h1 className="text-base font-semibold truncate">{title || t("create_job")}</h1>
             <p className="text-[10px] text-muted-foreground">
-              Step {currentStep + 1} of {sections.length} · {sections[currentStep].label}
+              {t("step_progress", {
+                current: currentStep + 1,
+                total: sections.length,
+                label: sections[currentStep].label,
+              })}
             </p>
           </div>
           <Button
@@ -320,16 +325,16 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
               disabled={isSaving || isPublishing}
               pending={published ? isSaving : isPublishing}
             >
-              {published ? "Save Changes" : "Publish Job"}
+              {published ? t("save_changes") : t("publish_job")}
             </Button>
           )}
         </div>
         <Sheet open={summaryOpen} onOpenChange={setSummaryOpen}>
           <SheetContent side="bottom" className="h-[70vh] rounded-t-2xl">
             <SheetHeader>
-              <SheetTitle className="text-base">Job Summary</SheetTitle>
+              <SheetTitle className="text-base">{t("job_summary")}</SheetTitle>
               <SheetDescription className="text-xs">
-                Review details before publishing.
+                {t("review_before_publishing")}
               </SheetDescription>
             </SheetHeader>
             <div className="mt-4">
@@ -349,7 +354,7 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
           <Icon name="ChevronLeft" className="h-4 w-4" />
         </Button>
         <div className="flex-1">
-          <h1 className="text-lg font-semibold">{title || "Create Job"}</h1>
+          <h1 className="text-lg font-semibold">{title || t("create_job_action")}</h1>
         </div>
         <Button
           variant="outline"
@@ -423,15 +428,15 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
             className="h-10 rounded-full shadow-md text-xs gap-1.5 bg-background"
             onClick={() => setSummaryOpen(true)}
           >
-            <Icon name="Eye" className="h-3.5 w-3.5" /> Summary
+            <Icon name="Eye" className="h-3.5 w-3.5" /> {t("summary")}
           </Button>
         </div>
         <Sheet open={summaryOpen} onOpenChange={setSummaryOpen}>
           <SheetContent side="bottom" className="h-[60vh] rounded-t-2xl lg:hidden">
             <SheetHeader>
-              <SheetTitle className="text-base">Job Summary</SheetTitle>
+              <SheetTitle className="text-base">{t("job_summary")}</SheetTitle>
               <SheetDescription className="text-xs">
-                Review details before publishing.
+                {t("review_before_publishing")}
               </SheetDescription>
             </SheetHeader>
             <div className="mt-4">
@@ -444,14 +449,14 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
       <AlertDialog open={showUnsavedDialog} onOpenChange={handleCancelNavigation}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Unsaved Changes</AlertDialogTitle>
-            <AlertDialogDescription>
-              You have unsaved changes. Do you want to save them before leaving?
-            </AlertDialogDescription>
+            <AlertDialogTitle>{t("unsaved_changes")}</AlertDialogTitle>
+            <AlertDialogDescription>{t("unsaved_changes_description")}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={handleDiscardChanges}>Discard</AlertDialogCancel>
-            <AlertDialogAction onClick={handleSaveAndNavigate}>Save Changes</AlertDialogAction>
+            <AlertDialogCancel onClick={handleDiscardChanges}>{t("discard")}</AlertDialogCancel>
+            <AlertDialogAction onClick={handleSaveAndNavigate}>
+              {t("save_changes")}
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -460,38 +465,26 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
 }
 
 const AI_ACTIONS: {
-  label: string;
-  desc: string;
+  labelKey: string;
+  descKey: string;
   action: JobDescriptionAiAction;
 }[] = [
   {
-    label: "Generate full description",
-    desc: "Create a complete JD from the job title and details",
+    labelKey: "ai_generate_full_description",
+    descKey: "ai_generate_full_description_hint",
     action: "generate_full",
   },
+  { labelKey: "ai_improve_tone", descKey: "ai_improve_tone_hint", action: "improve_tone" },
+  { labelKey: "ai_shorten", descKey: "ai_shorten_hint", action: "shorten" },
+  { labelKey: "ai_expand", descKey: "ai_expand_hint", action: "expand" },
   {
-    label: "Improve tone",
-    desc: "Make the language more professional and inclusive",
-    action: "improve_tone",
-  },
-  {
-    label: "Shorten",
-    desc: "Condense the description while keeping key points",
-    action: "shorten",
-  },
-  {
-    label: "Expand",
-    desc: "Add more detail to responsibilities and requirements",
-    action: "expand",
-  },
-  {
-    label: "Add responsibilities section",
-    desc: "Generate a structured list of responsibilities",
+    labelKey: "ai_add_responsibilities",
+    descKey: "ai_add_responsibilities_hint",
     action: "add_responsibilities",
   },
   {
-    label: "Add requirements section",
-    desc: "Generate a structured list of requirements",
+    labelKey: "ai_add_requirements",
+    descKey: "ai_add_requirements_hint",
     action: "add_requirements",
   },
 ];
@@ -501,11 +494,12 @@ function AiSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (v: bool
   const params = useParams();
   const jobId = params?.jobId as string | undefined;
   const { description, setDescription } = useJobSetup();
+  const { t } = useTranslation();
   const [loadingAction, setLoadingAction] = useState<JobDescriptionAiAction | null>(null);
 
   const runAction = async (action: JobDescriptionAiAction) => {
     if (!jobId) {
-      toast.error("Save the job first, then try again.");
+      toast.error(t("save_first_retry"));
       return;
     }
     setLoadingAction(action);
@@ -515,7 +509,7 @@ function AiSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (v: bool
         current_html: description,
       });
       setDescription(html);
-      toast.success("Description updated");
+      toast.success(t("description_updated"));
       onOpenChange(false);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "AI request failed");
@@ -531,10 +525,8 @@ function AiSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (v: bool
         className={isMobile ? "h-[85vh] rounded-t-2xl" : ""}
       >
         <SheetHeader>
-          <SheetTitle className="text-base">AI Writing Assistant</SheetTitle>
-          <SheetDescription className="text-xs">
-            Generate or improve your job description with AI.
-          </SheetDescription>
+          <SheetTitle className="text-base">{t("ai_writing_assistant")}</SheetTitle>
+          <SheetDescription className="text-xs">{t("ai_writing_description")}</SheetDescription>
         </SheetHeader>
         <div className="mt-6 space-y-3">
           {AI_ACTIONS.map((item) => {
@@ -558,8 +550,8 @@ function AiSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (v: bool
                   <Icon name="Sparkles" className="h-4 w-4 text-muted-foreground shrink-0" />
                 )}
                 <div>
-                  <p className="text-sm font-medium">{item.label}</p>
-                  <p className="text-xs text-muted-foreground">{item.desc}</p>
+                  <p className="text-sm font-medium">{t(item.labelKey)}</p>
+                  <p className="text-xs text-muted-foreground">{t(item.descKey)}</p>
                 </div>
               </button>
             );

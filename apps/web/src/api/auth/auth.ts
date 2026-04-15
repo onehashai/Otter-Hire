@@ -22,6 +22,8 @@ export type AuthSessionResponse = {
   org_avatar_url?: string | null;
   is_verified: boolean;
   is_onboarded: boolean;
+  auth_provider?: string; // "email" | "google" | "email,google" | "google,email"
+  preferences?: Record<string, unknown>;
 };
 
 export type MeResponse = {
@@ -216,6 +218,43 @@ export async function completeOnboarding(data: {
 
   const raw = (await res.json()) as Record<string, unknown>;
   return normalizeAuthSessionPayload(raw);
+}
+
+export async function forgotPassword(email: string): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/auth/forgot-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ email }),
+  });
+
+  if (!res.ok) {
+    if (res.status === 429) {
+      throw new Error(handle429Error(res));
+    }
+    const message = await parseErrorResponse(
+      res,
+      `Request failed: ${res.status} ${res.statusText}`,
+    );
+    throw new Error(message);
+  }
+}
+
+export async function resetPassword(token: string, newPassword: string): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/auth/reset-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ token, new_password: newPassword }),
+  });
+
+  if (!res.ok) {
+    if (res.status === 429) {
+      throw new Error(handle429Error(res));
+    }
+    const message = await parseErrorResponse(res, `Reset failed: ${res.status} ${res.statusText}`);
+    throw new Error(message);
+  }
 }
 
 export type OrgUserResponse = {

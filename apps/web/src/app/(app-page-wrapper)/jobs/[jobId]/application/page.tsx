@@ -65,16 +65,16 @@ interface CustomQuestion {
   allowOther?: boolean;
 }
 
-const answerTypeLabels: Record<AnswerType, string> = {
-  short_text: "Short Text",
-  long_text: "Long Text",
-  single_select: "Single Select",
-  multi_select: "Multi Select",
-  yes_no: "Yes / No",
-  file_upload: "File Upload",
-  url: "URL",
-  number: "Number",
-  date: "Date",
+const answerTypeKeys: Record<AnswerType, string> = {
+  short_text: "answer_type_short_text",
+  long_text: "answer_type_long_text",
+  single_select: "answer_type_single_select",
+  multi_select: "answer_type_multi_select",
+  yes_no: "answer_type_yes_no",
+  file_upload: "answer_type_file_upload",
+  url: "answer_type_url",
+  number: "answer_type_number",
+  date: "answer_type_date",
 };
 
 const defaultLinkFields: DefaultLinkField[] = [
@@ -138,10 +138,11 @@ function VisibilityDropdown({
   onChange: (v: FieldVisibility) => void;
   locked?: boolean;
 }) {
+  const { t } = useTranslation();
   const options = [
-    { value: "required", label: "Required" },
-    { value: "optional", label: "Optional" },
-    { value: "hidden", label: "Hidden" },
+    { value: "required", label: t("visibility_required") },
+    { value: "optional", label: t("visibility_optional") },
+    { value: "hidden", label: t("visibility_hidden") },
   ] as const;
   const label = options.find((o) => o.value === value)?.label ?? value;
 
@@ -248,7 +249,7 @@ export default function ApplicationFormPage() {
     const hasOptions = qType === "single_select" || qType === "multi_select";
     const finalOptions = hasOptions ? qOptions.filter((o) => o.trim()) : undefined;
     if (hasOptions && (!finalOptions || finalOptions.length < 2)) {
-      toast.error("Please add at least 2 options");
+      toast.error(t("add_at_least_2_options"));
       return;
     }
     if (editingQuestion) {
@@ -408,19 +409,20 @@ export default function ApplicationFormPage() {
     return (
       <>
         <InputField
-          label="Question Title"
+          label={t("question_title_label")}
           value={qTitle}
           onChange={(e) => setQTitle(e.target.value)}
-          placeholder="e.g., Why are you a good fit for this role?"
+          placeholder={t("question_title_placeholder")}
           className="h-9 text-sm"
         />
         <SelectField
-          label="Answer Type"
+          label={t("answer_type_label")}
           value={qType}
           onValueChange={(v) => setQType(v as AnswerType)}
-          options={(Object.entries(answerTypeLabels) as [AnswerType, string][]).map(
-            ([val, label]) => ({ value: val, label }),
-          )}
+          options={(Object.keys(answerTypeKeys) as AnswerType[]).map((val) => ({
+            value: val,
+            label: t(answerTypeKeys[val]),
+          }))}
         />
         {showOptions && (
           <div className="space-y-2">
@@ -434,7 +436,7 @@ export default function ApplicationFormPage() {
                     next[i] = e.target.value;
                     setQOptions(next);
                   }}
-                  placeholder={`Option ${i + 1}`}
+                  placeholder={t("option_n", { n: i + 1 })}
                   className="h-8 text-sm flex-1"
                 />
                 {qOptions.length > 2 && (
@@ -455,7 +457,7 @@ export default function ApplicationFormPage() {
               className="h-7 text-xs gap-1"
               onClick={() => setQOptions([...qOptions, ""])}
             >
-              <Plus className="h-3 w-3" /> Add Option
+              <Plus className="h-3 w-3" /> {t("add_option")}
             </Button>
             <div className="flex items-center gap-2 pt-1">
               <Checkbox
@@ -464,14 +466,14 @@ export default function ApplicationFormPage() {
                 id="allow-other"
               />
               <Label htmlFor="allow-other" className="text-xs text-muted-foreground cursor-pointer">
-                Allow "Other" answer
+                {t("allow_other_answer")}
               </Label>
             </div>
           </div>
         )}
         <Separator />
         <div className="flex items-center justify-between py-1">
-          <Label>Required Field</Label>
+          <Label>{t("required_field_toggle")}</Label>
           <Switch checked={qRequired} onCheckedChange={(v) => setQRequired(!!v)} />
         </div>
       </>
@@ -483,13 +485,13 @@ export default function ApplicationFormPage() {
       {/* ── Default Fields ── */}
       <div>
         <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-          Default Fields
+          {t("default_fields_section")}
         </h3>
         <div className="space-y-0 rounded-lg border border-border overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 bg-card">
             <div className="flex items-center gap-3">
               <User className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm font-medium">Full Name</span>
+              <span className="text-sm font-medium">{t("full_name_field")}</span>
             </div>
             <VisibilityDropdown value="required" onChange={() => {}} locked />
           </div>
@@ -497,7 +499,7 @@ export default function ApplicationFormPage() {
           <div className="flex items-center justify-between px-4 py-3 bg-card">
             <div className="flex items-center gap-3">
               <Mail className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm font-medium">Email</span>
+              <span className="text-sm font-medium">{t("email_field")}</span>
             </div>
             <VisibilityDropdown value="required" onChange={() => {}} locked />
           </div>
@@ -505,7 +507,7 @@ export default function ApplicationFormPage() {
           <div className="flex items-center justify-between px-4 py-3 bg-card">
             <div className="flex items-center gap-3">
               <Phone className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm font-medium">Phone Number</span>
+              <span className="text-sm font-medium">{t("phone_number_field")}</span>
             </div>
             <VisibilityDropdown value={phoneVisibility} onChange={setPhoneVisibility} />
           </div>
@@ -513,7 +515,7 @@ export default function ApplicationFormPage() {
           <div className="flex items-center justify-between px-4 py-3 bg-card">
             <div className="flex items-center gap-3">
               <Upload className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm font-medium">Resume Upload</span>
+              <span className="text-sm font-medium">{t("resume_upload_field")}</span>
             </div>
             <VisibilityDropdown value={resumeVisibility} onChange={setResumeVisibility} />
           </div>
@@ -521,7 +523,7 @@ export default function ApplicationFormPage() {
           <div className="flex items-center justify-between px-4 py-3 bg-card">
             <div className="flex items-center gap-3">
               <FileText className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm font-medium">Cover Letter Upload</span>
+              <span className="text-sm font-medium">{t("cover_letter_upload_field")}</span>
             </div>
             <VisibilityDropdown
               value={effectiveCoverVisibility}
@@ -534,7 +536,7 @@ export default function ApplicationFormPage() {
       {/* ── Profile Links ── */}
       <div>
         <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-          Profile Links
+          {t("profile_links")}
         </h3>
         <div className="space-y-0 rounded-lg border border-border overflow-hidden">
           {linkFields.map((link, idx) => (
@@ -564,7 +566,7 @@ export default function ApplicationFormPage() {
       <div>
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-            Additional Questions
+            {t("additional_questions")}
           </h3>
           {customQuestions.length > 0 && (
             <Button
@@ -573,7 +575,7 @@ export default function ApplicationFormPage() {
               className="h-7 text-xs gap-1"
               onClick={openAddQuestion}
             >
-              <Plus className="h-3 w-3" /> Add Question
+              <Plus className="h-3 w-3" /> {t("add_question")}
             </Button>
           )}
         </div>
@@ -583,9 +585,9 @@ export default function ApplicationFormPage() {
             <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-3">
               <FileText className="h-5 w-5 text-muted-foreground" />
             </div>
-            <p className="text-sm text-muted-foreground mb-1">No additional questions added yet.</p>
+            <p className="text-sm text-muted-foreground mb-1">{t("no_additional_questions")}</p>
             <p className="text-xs text-muted-foreground/70 mb-4">
-              Add screening questions for candidates to answer.
+              {t("add_screening_questions_hint")}
             </p>
             <Button
               variant="outline"
@@ -593,7 +595,7 @@ export default function ApplicationFormPage() {
               className="text-xs gap-1.5"
               onClick={openAddQuestion}
             >
-              <Plus className="h-3.5 w-3.5" /> Add Question
+              <Plus className="h-3.5 w-3.5" /> {t("add_question")}
             </Button>
           </div>
         ) : (
@@ -615,11 +617,11 @@ export default function ApplicationFormPage() {
                   <p className="text-sm font-medium truncate">{q.title}</p>
                   <div className="flex items-center gap-2 mt-0.5">
                     <Badge variant="secondary" className="text-[10px] font-normal">
-                      {answerTypeLabels[q.answerType]}
+                      {t(answerTypeKeys[q.answerType])}
                     </Badge>
                     {q.required && (
                       <Badge variant="outline" className="text-[10px] font-normal">
-                        Required
+                        {t("visibility_required")}
                       </Badge>
                     )}
                   </div>
@@ -654,7 +656,7 @@ export default function ApplicationFormPage() {
           <SheetContent side="bottom" className="h-[90vh] rounded-t-2xl overflow-y-auto">
             <SheetHeader>
               <SheetTitle className="text-base">
-                {editingQuestion ? "Edit Question" : "Add Application Question"}
+                {editingQuestion ? t("edit_question") : t("add_application_question")}
               </SheetTitle>
             </SheetHeader>
             <div className="mt-4 space-y-4 pb-20">{renderQuestionFormFields()}</div>
@@ -664,7 +666,7 @@ export default function ApplicationFormPage() {
                 onClick={saveQuestion}
                 disabled={!qTitle.trim()}
               >
-                {editingQuestion ? "Save Changes" : "Add Question"}
+                {editingQuestion ? t("save_changes") : t("add_question")}
               </Button>
             </div>
           </SheetContent>
@@ -674,16 +676,16 @@ export default function ApplicationFormPage() {
           <DialogContent className="sm:max-w-lg">
             <DialogHeader>
               <DialogTitle>
-                {editingQuestion ? "Edit Question" : "Add Application Question"}
+                {editingQuestion ? t("edit_question") : t("add_application_question")}
               </DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-2">{renderQuestionFormFields()}</div>
             <DialogFooter>
               <Button variant="outline" size="sm" onClick={() => setQuestionDialogOpen(false)}>
-                Cancel
+                {t("cancel")}
               </Button>
               <Button size="sm" onClick={saveQuestion} disabled={!qTitle.trim()}>
-                {editingQuestion ? "Save Changes" : "Add Question"}
+                {editingQuestion ? t("save_changes") : t("add_question")}
               </Button>
             </DialogFooter>
           </DialogContent>

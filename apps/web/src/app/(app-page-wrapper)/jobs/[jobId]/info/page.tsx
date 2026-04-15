@@ -154,11 +154,11 @@ export default function JobInfoPage() {
         }}
         onBlur={() => setTitleTouched(true)}
         error={titleError}
-        placeholder="e.g. Senior Frontend Engineer"
+        placeholder={t("job_title_placeholder")}
       />
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <SelectField
-          label="Job Categories"
+          label={t("job_categories")}
           value={category}
           onValueChange={setCategory}
           options={categories.map((c) => ({ value: c.name, label: c.name }))}
@@ -315,9 +315,7 @@ export default function JobInfoPage() {
             />
           </div>
           {salaryMin && salaryMax && Number(salaryMin) > Number(salaryMax) && (
-            <p className="text-xs text-destructive">
-              Minimum salary must be less than or equal to maximum.
-            </p>
+            <p className="text-xs text-destructive">{t("salary_min_max_error")}</p>
           )}
         </>
       )}

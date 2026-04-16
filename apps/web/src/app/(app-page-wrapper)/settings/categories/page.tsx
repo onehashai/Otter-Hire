@@ -4,7 +4,14 @@ import { useState, useEffect } from "react";
 import { Card, CardContent } from "@onehash/ui/card";
 import { Button } from "@onehash/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@onehash/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@onehash/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@onehash/ui/dialog";
 import { InputField } from "@onehash/ui/input";
 import { Icon } from "@onehash/ui/icon";
 import { toast } from "@onehash/ui/sonner";
@@ -12,16 +19,24 @@ import {
   getJobCategories,
   createJobCategory,
   deleteJobCategory,
+  updateJobCategory,
   type JobCategoryResponse,
 } from "@/api";
+import { useAuthSession } from "@/app/providers";
 
 export default function CategoriesPage() {
+  const { user } = useAuthSession();
+  const canEditCategory = ["owner", "admin", "recruiter"].includes(user?.membership_role ?? "");
+
   const [categories, setCategories] = useState<JobCategoryResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [categoryToDelete, setCategoryToDelete] = useState<JobCategoryResponse | null>(null);
+  const [categoryToEdit, setCategoryToEdit] = useState<JobCategoryResponse | null>(null);
   const [newCategoryName, setNewCategoryName] = useState("");
+  const [editCategoryName, setEditCategoryName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [inUseDialogOpen, setInUseDialogOpen] = useState(false);
   const [inUseCategoryName, setInUseCategoryName] = useState("");
@@ -86,6 +101,28 @@ export default function CategoriesPage() {
     }
   };
 
+  const handleSaveEdit = async () => {
+    if (!categoryToEdit) return;
+    const trimmed = editCategoryName.trim();
+    if (!trimmed) {
+      toast.error("Category name is required");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await updateJobCategory(categoryToEdit.id, { name: trimmed });
+      toast.success("Category updated");
+      setEditDialogOpen(false);
+      setCategoryToEdit(null);
+      setEditCategoryName("");
+      fetchCategories();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update category");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="space-y-6">
@@ -136,27 +173,47 @@ export default function CategoriesPage() {
                       <span className="text-sm">{cat.name}</span>
                     </TableCell>
                     <TableCell className="py-3 text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 w-8 p-0"
-                        onClick={() => {
-                          const usageCount = Number(cat.usage_count ?? 0);
-                          if (usageCount > 0) {
-                            setInUseCategoryName(cat.name);
-                            setInUseCount(usageCount);
-                            setInUseDialogOpen(true);
-                            return;
-                          }
-                          setCategoryToDelete(cat);
-                          setDeleteDialogOpen(true);
-                        }}
-                      >
-                        <Icon
-                          name="Trash2"
-                          className="h-4 w-4 text-muted-foreground hover:text-destructive"
-                        />
-                      </Button>
+                      <div className="inline-flex items-center justify-end gap-0.5">
+                        {canEditCategory ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0"
+                            onClick={() => {
+                              setCategoryToEdit(cat);
+                              setEditCategoryName(cat.name);
+                              setEditDialogOpen(true);
+                            }}
+                            aria-label={`Edit ${cat.name}`}
+                          >
+                            <Icon
+                              name="PenLine"
+                              className="h-4 w-4 text-muted-foreground hover:text-foreground"
+                            />
+                          </Button>
+                        ) : null}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 w-8 p-0"
+                          onClick={() => {
+                            const usageCount = Number(cat.usage_count ?? 0);
+                            if (usageCount > 0) {
+                              setInUseCategoryName(cat.name);
+                              setInUseCount(usageCount);
+                              setInUseDialogOpen(true);
+                              return;
+                            }
+                            setCategoryToDelete(cat);
+                            setDeleteDialogOpen(true);
+                          }}
+                        >
+                          <Icon
+                            name="Trash2"
+                            className="h-4 w-4 text-muted-foreground hover:text-destructive"
+                          />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -170,6 +227,10 @@ export default function CategoriesPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Add Category</DialogTitle>
+            <DialogDescription className="sr-only">
+              Enter a name for the new job category. It will be available when creating or editing
+              jobs.
+            </DialogDescription>
           </DialogHeader>
           <InputField
             value={newCategoryName}
@@ -188,15 +249,63 @@ export default function CategoriesPage() {
         </DialogContent>
       </Dialog>
 
+      <Dialog
+        open={editDialogOpen}
+        onOpenChange={(open) => {
+          setEditDialogOpen(open);
+          if (!open) {
+            setCategoryToEdit(null);
+            setEditCategoryName("");
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Category</DialogTitle>
+            <DialogDescription className="sr-only">
+              Change the category name. Jobs using this category will show the updated name.
+            </DialogDescription>
+          </DialogHeader>
+          <InputField
+            value={editCategoryName}
+            onChange={(e) => setEditCategoryName(e.target.value)}
+            placeholder="Category name"
+            className="mt-2"
+            autoFocus
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void handleSaveEdit();
+              }
+            }}
+          />
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setEditDialogOpen(false);
+                setCategoryToEdit(null);
+                setEditCategoryName("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button onClick={() => void handleSaveEdit()} disabled={submitting}>
+              {submitting ? "Saving..." : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Delete Category</DialogTitle>
+            <DialogDescription className="text-sm text-muted-foreground">
+              Are you sure you want to delete &quot;{categoryToDelete?.name}&quot;? This action
+              cannot be undone.
+            </DialogDescription>
           </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            Are you sure you want to delete "{categoryToDelete?.name}"? This action cannot be
-            undone.
-          </p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
               Cancel
@@ -212,12 +321,12 @@ export default function CategoriesPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Category In Use</DialogTitle>
+            <DialogDescription className="text-sm text-muted-foreground">
+              &quot;{inUseCategoryName}&quot; cannot be deleted because it is currently used by{" "}
+              <span className="font-medium text-foreground">{inUseCount ?? 0}</span> job
+              {(inUseCount ?? 0) === 1 ? "" : "s"}.
+            </DialogDescription>
           </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            "{inUseCategoryName}" cannot be deleted because it is currently used by{" "}
-            <span className="font-medium text-foreground">{inUseCount ?? 0}</span> job
-            {(inUseCount ?? 0) === 1 ? "" : "s"}.
-          </p>
           <DialogFooter>
             <Button onClick={() => setInUseDialogOpen(false)}>OK</Button>
           </DialogFooter>

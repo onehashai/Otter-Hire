@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@onehash/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@onehash/ui/tabs";
@@ -51,6 +51,8 @@ export function StandaloneCandidateProfile({
   candidateId: string | undefined;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const isMobile = useIsMobile();
   const [activeTab, setActiveTab] = useState("overview");
   const { t } = useTranslation();
@@ -291,6 +293,27 @@ export function StandaloneCandidateProfile({
     }
   };
 
+  const allowedTabs = useMemo(() => new Set(["overview", "messages", "documents"]), []);
+
+  const setActiveTabWithUrl = (tab: string) => {
+    if (!allowedTabs.has(tab)) return;
+    setActiveTab(tab);
+    const params = new URLSearchParams(searchParams.toString());
+    if (tab === "overview") {
+      params.delete("tab");
+    } else {
+      params.set("tab", tab);
+    }
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  };
+
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (!tab || !allowedTabs.has(tab) || tab === activeTab) return;
+    setActiveTab(tab);
+  }, [activeTab, allowedTabs, searchParams]);
+
   if (loading) {
     return <p className="text-sm text-muted-foreground">{t("loading_candidate")}</p>;
   }
@@ -331,7 +354,7 @@ export function StandaloneCandidateProfile({
           ) : null}
         </div>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <Tabs value={activeTab} onValueChange={setActiveTabWithUrl}>
           <TabsList className="h-9 w-full justify-start bg-transparent border-b rounded-none p-0 gap-0">
             {[
               { value: "overview", label: t("overview") },

@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiDelete } from "../client/client";
+import { apiGet, apiPost, apiDelete, apiFetch } from "../client/client";
 
 export type JobCategoryResponse = {
   id: string;
@@ -9,6 +9,10 @@ export type JobCategoryResponse = {
 };
 
 export type JobCategoryCreateRequest = {
+  name: string;
+};
+
+export type JobCategoryUpdateRequest = {
   name: string;
 };
 
@@ -24,4 +28,14 @@ export async function createJobCategory(
 
 export async function deleteJobCategory(id: string): Promise<void> {
   return apiDelete(`/organizations/categories/${id}`);
+}
+
+export async function updateJobCategory(
+  id: string,
+  data: JobCategoryUpdateRequest,
+): Promise<JobCategoryResponse> {
+  return apiFetch<JobCategoryResponse>(`/organizations/categories/${id}`, {
+    method: "PATCH",
+    body: data,
+  });
 }

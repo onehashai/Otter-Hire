@@ -6,7 +6,14 @@ import { Button } from "@onehash/ui/button";
 import { Badge } from "@onehash/ui/badge";
 import { Avatar } from "@onehash/ui/avatar";
 import { Separator } from "@onehash/ui/separator";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@onehash/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@onehash/ui/dialog";
 import { Icon } from "@onehash/ui/icon";
 import { InputField, PhoneNumberField, isValidPhoneNumber } from "@onehash/ui/input";
 import { formatTimestamp } from "@/lib/format-date";
@@ -519,6 +526,9 @@ export function SummaryPanel({
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Hiring Status Timeline</DialogTitle>
+            <DialogDescription className="sr-only">
+              Chronological list of hiring status changes and related events for this candidate.
+            </DialogDescription>
           </DialogHeader>
           <div className="max-h-[60vh] overflow-y-auto overflow-x-hidden pr-1">
             {timeline.length === 0 ? (

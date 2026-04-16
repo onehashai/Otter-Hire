@@ -144,14 +144,14 @@ jobs:
         run: |
           app_name="${CODEDEPLOY_APP_NAME:-otter-hire-prod-ecs}"
           dg_name="${CODEDEPLOY_BACKEND_DG:-otter-hire-prod-backend-dg}"
-          deployment_id="$(
+          deployment_id=$(
             aws deploy create-deployment \
               --application-name "$app_name" \
               --deployment-group-name "$dg_name" \
-              --revision "{\"revisionType\":\"AppSpecContent\",\"appSpecContent\":{\"content\":\"{\\\"version\\\":1,\\\"Resources\\\":[{\\\"TargetService\\\":{\\\"Type\\\":\\\"AWS::ECS::Service\\\",\\\"Properties\\\":{\\\"TaskDefinition\\\":\\\"${{ steps.deploy_backend.outputs.arn }}\\\",\\\"LoadBalancerInfo\\\":{\\\"ContainerName\\\":\\\"backend\\\",\\\"ContainerPort\\\":8000}}}}]}\"}}\" \
+              --revision '{"revisionType":"AppSpecContent","appSpecContent":{"content":"{\"version\":1,\"Resources\":[{\"TargetService\":{\"Type\":\"AWS::ECS::Service\",\"Properties\":{\"TaskDefinition\":\"${{ steps.deploy_backend.outputs.arn }}\",\"LoadBalancerInfo\":{\"ContainerName\":\"backend\",\"ContainerPort\":8000}}}}]}"}}' \
               --query 'deploymentId' \
               --output text
-          )"
+          )
           echo "deployment_id=$deployment_id" >> "$GITHUB_OUTPUT"
 
       - name: Deploy worker service
@@ -270,14 +270,14 @@ jobs:
         run: |
           app_name="${CODEDEPLOY_APP_NAME:-otter-hire-prod-ecs}"
           dg_name="${CODEDEPLOY_WEB_DG:-otter-hire-prod-web-dg}"
-          deployment_id="$(
+          deployment_id=$(
             aws deploy create-deployment \
               --application-name "$app_name" \
               --deployment-group-name "$dg_name" \
-              --revision "{\"revisionType\":\"AppSpecContent\",\"appSpecContent\":{\"content\":\"{\\\"version\\\":1,\\\"Resources\\\":[{\\\"TargetService\\\":{\\\"Type\\\":\\\"AWS::ECS::Service\\\",\\\"Properties\\\":{\\\"TaskDefinition\\\":\\\"${{ steps.deploy_web.outputs.arn }}\\\",\\\"LoadBalancerInfo\\\":{\\\"ContainerName\\\":\\\"web\\\",\\\"ContainerPort\\\":3000}}}}]}\"}}\" \
+              --revision '{"revisionType":"AppSpecContent","appSpecContent":{"content":"{\"version\":1,\"Resources\":[{\"TargetService\":{\"Type\":\"AWS::ECS::Service\",\"Properties\":{\"TaskDefinition\":\"${{ steps.deploy_web.outputs.arn }}\",\"LoadBalancerInfo\":{\"ContainerName\":\"web\",\"ContainerPort\":3000}}}}]}"}}' \
               --query 'deploymentId' \
               --output text
-          )"
+          )
           echo "deployment_id=$deployment_id" >> "$GITHUB_OUTPUT"
 
       - name: Wait for web deployment

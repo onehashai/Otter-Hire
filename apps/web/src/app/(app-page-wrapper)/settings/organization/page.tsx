@@ -7,6 +7,7 @@ import {
   deleteOrganizationAvatar,
   getMyOrganization,
   updateOrganization,
+  updateOrganizationLanguage,
   uploadOrganizationAvatar,
 } from "@/api";
 import { Card, CardContent } from "@onehash/ui/card";
@@ -18,6 +19,8 @@ import { Trash2, Upload } from "lucide-react";
 import { toast } from "@onehash/ui/sonner";
 import { useTranslation } from "react-i18next";
 import { ImageCropDialog } from "@/components/common/ImageCropDialog";
+import { JOBS_PAGE_LANGUAGES } from "@/i18n";
+import { SelectField } from "@onehash/ui/select";
 
 export default function OrganizationSettings() {
   const { t } = useTranslation();
@@ -38,6 +41,8 @@ export default function OrganizationSettings() {
   const [saving, setSaving] = useState(false);
   const [cropDialogOpen, setCropDialogOpen] = useState(false);
   const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
+  const [jobsPageLanguage, setJobsPageLanguage] = useState("en");
+  const [savingLanguage, setSavingLanguage] = useState(false);
 
   useEffect(() => {
     if (searchParams.get("tab") === "careers") {
@@ -64,6 +69,7 @@ export default function OrganizationSettings() {
         if (!cancelled) {
           setAvatarUrl(resp.avatar_url ?? null);
           setOriginalAvatarUrl(resp.avatar_url ?? null);
+          setJobsPageLanguage(resp.jobs_page_language ?? "en");
         }
       } catch {
         // keep page usable
@@ -78,6 +84,19 @@ export default function OrganizationSettings() {
     pendingAvatarRemoved || pendingAvatarFile !== null || avatarUrl !== originalAvatarUrl;
   const isDirty = name !== originalName || website !== originalWebsite || avatarDirty;
   const canSave = isDirty && name.trim().length > 0 && !saving;
+
+  const handleLanguageSave = async (lng: string) => {
+    setSavingLanguage(true);
+    try {
+      await updateOrganizationLanguage(lng);
+      setJobsPageLanguage(lng);
+      toast.success(t("language_saved"));
+    } catch {
+      toast.error(t("error"));
+    } finally {
+      setSavingLanguage(false);
+    }
+  };
 
   const getInitial = () => {
     const normalized = name.trim();
@@ -117,9 +136,9 @@ export default function OrganizationSettings() {
       }
       if (avatarInputRef.current) avatarInputRef.current.value = "";
 
-      toast.success("Organization settings saved");
+      toast.success(t("org_settings_saved"));
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to save settings";
+      const message = err instanceof Error ? err.message : t("settings_save_failed");
       toast.error(message);
     } finally {
       setSaving(false);
@@ -190,10 +209,8 @@ export default function OrganizationSettings() {
         onCropComplete={handleAvatarCropped}
       />
 
-      <h2 className="text-base md:text-lg font-semibold mb-1">Organization</h2>
-      <p className="text-xs text-muted-foreground mb-4 md:mb-6">
-        Manage your organization profile settings
-      </p>
+      <h2 className="text-base md:text-lg font-semibold mb-1">{t("nav_organization")}</h2>
+      <p className="text-xs text-muted-foreground mb-4 md:mb-6">{t("manage_org_settings")}</p>
 
       <Card>
         <CardContent className="p-4 md:p-5 space-y-4">
@@ -221,7 +238,7 @@ export default function OrganizationSettings() {
                 onClick={() => avatarInputRef.current?.click()}
               >
                 <Upload className="h-4 w-4 mr-1.5" />
-                Upload
+                {t("upload_photo")}
               </Button>
               {avatarUrl ? (
                 <Button
@@ -232,21 +249,21 @@ export default function OrganizationSettings() {
                   onClick={handleAvatarDelete}
                 >
                   <Trash2 className="h-4 w-4 mr-1.5" />
-                  Remove
+                  {t("remove_photo")}
                 </Button>
               ) : null}
             </div>
           </div>
           <Separator />
           <InputField
-            label="Organization Name"
+            label={t("org_name_label")}
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Enter organization name"
             className="text-sm h-10 md:h-9"
           />
           <InputField
-            label="Website"
+            label={t("org_website_label")}
             value={website}
             onChange={(e) => setWebsite(e.target.value)}
             placeholder="Enter company's website"
@@ -262,6 +279,22 @@ export default function OrganizationSettings() {
           >
             {t("save")}
           </Button>
+        </CardContent>
+      </Card>
+
+      <h2 className="text-base md:text-lg font-semibold mb-1 mt-8">{t("language")}</h2>
+      <p className="text-xs text-muted-foreground mb-4 md:mb-6">
+        {t("jobs_page_language_description")}
+      </p>
+      <Card>
+        <CardContent className="p-4 md:p-5">
+          <SelectField
+            label={t("jobs_page_language")}
+            value={jobsPageLanguage}
+            onValueChange={(val) => void handleLanguageSave(val)}
+            options={JOBS_PAGE_LANGUAGES.map((l) => ({ value: l.code, label: l.label }))}
+            disabled={savingLanguage}
+          />
         </CardContent>
       </Card>
     </>

@@ -1,6 +1,8 @@
 """
 Default email templates created for every organization on signup or when backfilling.
 Each entry: (name, subject, body) with placeholders like {{candidate_name}}, {{job_title}}, etc.
+
+Currently 6 templates are seeded (interview-related defaults are temporarily omitted; see TODOs below).
 """
 
 from __future__ import annotations
@@ -32,61 +34,64 @@ DEFAULT_EMAIL_TEMPLATES: list[DefaultTemplate] = [
             "</p>"
         ),
     ),
-    DefaultTemplate(
-        name="Interview Invitation",
-        subject="Interview Invitation — {{job_title}}",
-        body=(
-            "<p>Hi {{candidate_name}},</p>"
-            "<p>"
-            "We'd like to invite you for an interview for the "
-            "<strong>{{job_title}}</strong> position."
-            "</p>"
-            "<p>"
-            "<strong>Date:</strong> {{interview_date}}<br/>"
-            "<strong>Interviewer:</strong> {{interviewer_name}}"
-            "</p>"
-            "<p>Please confirm your availability.</p>"
-            "<br/>"
-            "<p>"
-            "Best regards,<br/>"
-            "The {{company_name}} Team"
-            "</p>"
-        ),
-    ),
-    DefaultTemplate(
-        name="Interview Confirmation",
-        subject="Interview confirmed — {{job_title}}",
-        body=(
-            "<p>Hi {{candidate_name}},</p>"
-            "<p>"
-            "This confirms your interview for the <strong>{{job_title}}</strong> position "
-            "on {{interview_date}} with {{interviewer_name}}."
-            "</p>"
-            "<p>We look forward to speaking with you.</p>"
-            "<br/>"
-            "<p>"
-            "Best regards,<br/>"
-            "The {{company_name}} Team"
-            "</p>"
-        ),
-    ),
-    DefaultTemplate(
-        name="Interview Reminder",
-        subject="Reminder: Upcoming Interview for {{job_title}}",
-        body=(
-            "<p>Hi {{candidate_name}},</p>"
-            "<p>"
-            "This is a friendly reminder about your upcoming interview for "
-            "<strong>{{job_title}}</strong> on {{interview_date}} with {{interviewer_name}}."
-            "</p>"
-            "<p>Good luck!</p>"
-            "<br/>"
-            "<p>"
-            "Best regards,<br/>"
-            "The {{company_name}} Team"
-            "</p>"
-        ),
-    ),
+    # TODO: Re-enable interview-related default templates in org bootstrap when product re-enables them.
+    # DefaultTemplate(
+    #     name="Interview Invitation",
+    #     subject="Interview Invitation — {{job_title}}",
+    #     body=(
+    #         "<p>Hi {{candidate_name}},</p>"
+    #         "<p>"
+    #         "We'd like to invite you for an interview for the "
+    #         "<strong>{{job_title}}</strong> position."
+    #         "</p>"
+    #         "<p>"
+    #         "<strong>Date:</strong> {{interview_date}}<br/>"
+    #         "<strong>Interviewer:</strong> {{interviewer_name}}"
+    #         "</p>"
+    #         "<p>Please confirm your availability.</p>"
+    #         "<br/>"
+    #         "<p>"
+    #         "Best regards,<br/>"
+    #         "The {{company_name}} Team"
+    #         "</p>"
+    #     ),
+    # ),
+    # TODO: Re-enable interview-related default templates in org bootstrap when product re-enables them.
+    # DefaultTemplate(
+    #     name="Interview Confirmation",
+    #     subject="Interview confirmed — {{job_title}}",
+    #     body=(
+    #         "<p>Hi {{candidate_name}},</p>"
+    #         "<p>"
+    #         "This confirms your interview for the <strong>{{job_title}}</strong> position "
+    #         "on {{interview_date}} with {{interviewer_name}}."
+    #         "</p>"
+    #         "<p>We look forward to speaking with you.</p>"
+    #         "<br/>"
+    #         "<p>"
+    #         "Best regards,<br/>"
+    #         "The {{company_name}} Team"
+    #         "</p>"
+    #     ),
+    # ),
+    # TODO: Re-enable interview-related default templates in org bootstrap when product re-enables them.
+    # DefaultTemplate(
+    #     name="Interview Reminder",
+    #     subject="Reminder: Upcoming Interview for {{job_title}}",
+    #     body=(
+    #         "<p>Hi {{candidate_name}},</p>"
+    #         "<p>"
+    #         "This is a friendly reminder about your upcoming interview for "
+    #         "<strong>{{job_title}}</strong> on {{interview_date}} with {{interviewer_name}}."
+    #         "</p>"
+    #         "<p>Good luck!</p>"
+    #         "<br/>"
+    #         "<p>"
+    #         "Best regards,<br/>"
+    #         "The {{company_name}} Team"
+    #         "</p>"
+    #     ),
+    # ),
     DefaultTemplate(
         name="Candidate Rejection",
         subject="Update on your application — {{job_title}}",
@@ -127,27 +132,28 @@ DEFAULT_EMAIL_TEMPLATES: list[DefaultTemplate] = [
             "</p>"
         ),
     ),
-    DefaultTemplate(
-        name="Interview Feedback Request",
-        subject="Quick feedback — your interview for {{job_title}}",
-        body=(
-            "<p>Hi {{candidate_name}},</p>"
-            "<p>"
-            "Thank you for interviewing with us for the "
-            "<strong>{{job_title}}</strong> position."
-            "</p>"
-            "<p>"
-            "We'd love to hear about your experience. If you have a moment, "
-            "please share your feedback so we can continue improving our "
-            "hiring process."
-            "</p>"
-            "<br/>"
-            "<p>"
-            "Best regards,<br/>"
-            "The {{company_name}} Team"
-            "</p>"
-        ),
-    ),
+    # TODO: Re-enable interview-related default templates in org bootstrap when product re-enables them.
+    # DefaultTemplate(
+    #     name="Interview Feedback Request",
+    #     subject="Quick feedback — your interview for {{job_title}}",
+    #     body=(
+    #         "<p>Hi {{candidate_name}},</p>"
+    #         "<p>"
+    #         "Thank you for interviewing with us for the "
+    #         "<strong>{{job_title}}</strong> position."
+    #         "</p>"
+    #         "<p>"
+    #         "We'd love to hear about your experience. If you have a moment, "
+    #         "please share your feedback so we can continue improving our "
+    #         "hiring process."
+    #         "</p>"
+    #         "<br/>"
+    #         "<p>"
+    #         "Best regards,<br/>"
+    #         "The {{company_name}} Team"
+    #         "</p>"
+    #     ),
+    # ),
     DefaultTemplate(
         name="Candidate Follow-up",
         subject="Following up — {{job_title}} at {{company_name}}",
@@ -210,7 +216,7 @@ DEFAULT_EMAIL_TEMPLATES: list[DefaultTemplate] = [
 
 def create_default_templates_for_org(session, org_id):
     """
-    Add the 8 default email templates for an organization.
+    Add the default email templates for an organization (currently 6; interview defaults omitted).
     Call this after creating a new org (signup, create_organization, OAuth).
     """
     from app.models.template import Template

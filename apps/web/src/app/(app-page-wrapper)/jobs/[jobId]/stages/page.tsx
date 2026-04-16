@@ -8,6 +8,7 @@ import { GripVertical, Plus, Trash2, Settings } from "lucide-react";
 import { toast } from "@onehash/ui/sonner";
 import { cn } from "@/lib/utils";
 import { useJobSetup } from "../context";
+import { useTranslation } from "react-i18next";
 
 export default function HiringStagesPage() {
   const {
@@ -17,6 +18,7 @@ export default function HiringStagesPage() {
     updateHiringStageName,
     reorderHiringStages,
   } = useJobSetup();
+  const { t } = useTranslation();
   const [stageDragIdx, setStageDragIdx] = useState<number | null>(null);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [newStageName, setNewStageName] = useState("");
@@ -33,17 +35,17 @@ export default function HiringStagesPage() {
 
   const handleRemoveStage = async (id: string, isRequired?: boolean) => {
     if (isRequired) {
-      toast.error("Required stages cannot be deleted");
+      toast.error(t("required_stages_cannot_delete"));
       return;
     }
     if (hiringStages.length <= 2) {
-      toast.error("Pipeline must have at least 2 stages");
+      toast.error(t("pipeline_min_stages"));
       return;
     }
     try {
       setIsSubmitting(true);
       await removeHiringStageAndSave(id);
-      toast.success("Stage deleted");
+      toast.success(t("stage_deleted"));
     } catch {
       // Error toast is handled in context executeSave
     } finally {
@@ -53,7 +55,7 @@ export default function HiringStagesPage() {
 
   const handleAddStage = async () => {
     if (!newStageName.trim()) {
-      toast.error("Stage name is required");
+      toast.error(t("stage_name_required"));
       return;
     }
     try {
@@ -61,7 +63,7 @@ export default function HiringStagesPage() {
       await addHiringStageAndSave(newStageName);
       setAddDialogOpen(false);
       setNewStageName("");
-      toast.success("Stage added");
+      toast.success(t("stage_added"));
     } catch {
       // Error toast is handled in context executeSave
     } finally {
@@ -72,9 +74,7 @@ export default function HiringStagesPage() {
   return (
     <div className="space-y-5">
       <div>
-        <p className="text-xs text-muted-foreground mb-1">
-          Define hiring stages for this job. Stages can be reordered by dragging.
-        </p>
+        <p className="text-xs text-muted-foreground mb-1">{t("define_hiring_stages")}</p>
       </div>
 
       <div className="space-y-1.5">
@@ -97,7 +97,7 @@ export default function HiringStagesPage() {
             <InputField
               value={stage.name}
               onChange={(e) => updateHiringStageName(stage.id, e.target.value)}
-              placeholder="Stage name"
+              placeholder={t("stage_name_placeholder")}
               className="h-8 text-sm flex-1 border-transparent bg-transparent hover:border-border focus-visible:border-muted-foreground transition-colors"
             />
             <Button
@@ -105,7 +105,7 @@ export default function HiringStagesPage() {
               size="icon"
               className="h-7 w-7 shrink-0 transition-opacity text-muted-foreground"
               onClick={() => handleRemoveStage(stage.id, stage.isRequired)}
-              tooltip={stage.isRequired ? "Required stage cannot be deleted" : "Delete"}
+              tooltip={stage.isRequired ? t("required_stage_tooltip") : t("delete")}
               disabled={isSubmitting || stage.isRequired}
             >
               <Trash2 className="h-3.5 w-3.5" />
@@ -121,19 +121,19 @@ export default function HiringStagesPage() {
         onClick={() => setAddDialogOpen(true)}
         disabled={isSubmitting}
       >
-        <Plus className="h-3.5 w-3.5" /> Add Stage
+        <Plus className="h-3.5 w-3.5" /> {t("add_stage")}
       </Button>
 
       <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Add Stage</DialogTitle>
+            <DialogTitle>{t("add_stage")}</DialogTitle>
           </DialogHeader>
           <InputField
-            label="Stage Name"
+            label={t("stage_name_label")}
             value={newStageName}
             onChange={(e) => setNewStageName(e.target.value)}
-            placeholder="e.g. Assignment"
+            placeholder={t("stage_name_example")}
             autoFocus
           />
           <DialogFooter>
@@ -145,10 +145,10 @@ export default function HiringStagesPage() {
               }}
               disabled={isSubmitting}
             >
-              Discard
+              {t("discard")}
             </Button>
             <Button onClick={handleAddStage} disabled={isSubmitting}>
-              Save
+              {t("save")}
             </Button>
           </DialogFooter>
         </DialogContent>

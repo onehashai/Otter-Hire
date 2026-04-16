@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslation } from "react-i18next";
 import { Button } from "@onehash/ui/button";
 import { SelectField } from "@onehash/ui/select";
 import {
@@ -32,16 +33,17 @@ export function DocumentUploadDialog({
   loading,
   onUpload,
 }: DocumentUploadDialogProps) {
+  const { t } = useTranslation();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Upload Document</DialogTitle>
-          <DialogDescription>Upload a PDF document (max 1MB).</DialogDescription>
+          <DialogTitle>{t("upload_document")}</DialogTitle>
+          <DialogDescription>{t("upload_pdf_max")}</DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div>
-            <p className="text-sm font-medium mb-1.5">PDF File *</p>
+            <p className="text-sm font-medium mb-1.5">{t("pdf_file_label")} *</p>
             <input
               type="file"
               accept="application/pdf,.pdf"
@@ -50,13 +52,13 @@ export function DocumentUploadDialog({
             />
           </div>
           <SelectField
-            label="Type"
+            label={t("doc_type_label")}
             value={docType}
             onValueChange={onDocTypeChange}
             options={[
-              { value: "attachment", label: "Attachment" },
-              { value: "portfolio", label: "Portfolio" },
-              { value: "certificate", label: "Certificate" },
+              { value: "attachment", label: t("doc_type_attachment") },
+              { value: "portfolio", label: t("doc_type_portfolio") },
+              { value: "certificate", label: t("doc_type_certificate") },
             ]}
           />
         </div>
@@ -67,10 +69,10 @@ export function DocumentUploadDialog({
             onClick={() => onOpenChange(false)}
             disabled={loading}
           >
-            Cancel
+            {t("cancel")}
           </Button>
           <Button type="button" onClick={() => void onUpload()} disabled={loading || !docFile}>
-            {loading ? "Uploading..." : "Upload Document"}
+            {loading ? t("uploading") : t("upload_document")}
           </Button>
         </DialogFooter>
       </DialogContent>

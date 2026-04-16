@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
 from app.core.config import settings
+from app.core.crypto import encrypt_value
 from app.models.candidate import Candidate
 from app.models.document import CandidateDocument
 from app.models.integration import Integration
@@ -158,8 +159,11 @@ async def save_linkedin_credential(
         "setup_complete": False,
     }
 
+    if not settings.encryption_key:
+        raise RuntimeError("ENCRYPTION_KEY is not configured. Cannot store LinkedIn credentials.")
+
     if existing_cred:
-        existing_cred.encrypted_credentials = access_token
+        existing_cred.encrypted_credentials = encrypt_value(access_token, settings.encryption_key)
         existing_cred.config = config
         existing_cred.status = "pending"
         await db.commit()
@@ -169,7 +173,7 @@ async def save_linkedin_credential(
         new_cred = IntegrationCredential(
             org_id=owner.org_id,
             integration_id=linkedin_integration.id,
-            encrypted_credentials=access_token,
+            encrypted_credentials=encrypt_value(access_token, settings.encryption_key),
             config=config,
             status="pending",
         )

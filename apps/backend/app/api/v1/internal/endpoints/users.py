@@ -11,14 +11,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.permissions import require_permission
+from app.core.security import hash_password, verify_password
 from app.db.session import get_db
 from app.deps.auth import require_active_user
 from app.models.org_membership import OrgMembership
 from app.models.organization import Organization
 from app.models.user import User
 from app.schemas.users import (
+    CreatePasswordRequest,
     InviteUserRequest,
     ProfileResponse,
+    SecurityStatusResponse,
+    UpdatePasswordRequest,
     UpdateProfileRequest,
     UpdateUserRoleRequest,
     UserPreferencesPatchRequest,
@@ -391,3 +395,114 @@ async def delete_user(
 
     await db.delete(membership)
     await db.commit()
+
+
+# ── Security endpoints ────────────────────────────────────────────────────────
+
+
+@router.get("/me/security", response_model=SecurityStatusResponse)
+async def get_security_status(
+    current_user: User = Depends(require_active_user),
+) -> SecurityStatusResponse:
+    """Return current auth methods for the logged-in user."""
+    return SecurityStatusResponse(
+        auth_provider=current_user.auth_provider,
+        has_password=bool(current_user.hashed_password),
+        google_connected=bool(
+            current_user.oauth_credentials
+            and current_user.oauth_credentials.get("provider") == "google"
+        ),
+    )
+
+
+@router.post("/me/password", status_code=status.HTTP_204_NO_CONTENT)
+async def set_password(
+    payload: CreatePasswordRequest,
+    current_user: User = Depends(require_active_user),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Create a password for a Google-first account (no existing password)."""
+    if current_user.hashed_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Account already has a password. Use PATCH /me/password to update it.",
+        )
+    if payload.new_password != payload.confirm_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Passwords do not match.",
+        )
+
+    user_result = await db.execute(select(User).where(User.id == current_user.id))
+    user = user_result.scalar_one()
+    user.hashed_password = hash_password(payload.new_password)
+    # Google-first user gains email auth; preserve Google in provider list
+    if user.auth_provider == "google":
+        user.auth_provider = "google,email"
+    await db.commit()
+
+
+@router.patch("/me/password", status_code=status.HTTP_204_NO_CONTENT)
+async def update_password(
+    payload: UpdatePasswordRequest,
+    current_user: User = Depends(require_active_user),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Update an existing password. Requires current password for verification."""
+    if not current_user.hashed_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No password set. Use POST /me/password to create one.",
+        )
+    if not verify_password(payload.current_password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect.",
+        )
+    if payload.new_password != payload.confirm_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Passwords do not match.",
+        )
+
+    user_result = await db.execute(select(User).where(User.id == current_user.id))
+    user = user_result.scalar_one()
+    user.hashed_password = hash_password(payload.new_password)
+    await db.commit()
+
+
+@router.delete("/me/google", response_model=SecurityStatusResponse)
+async def disconnect_google(
+    current_user: User = Depends(require_active_user),
+    db: AsyncSession = Depends(get_db),
+) -> SecurityStatusResponse:
+    """Disconnect Google from the account. Requires a password to already be set."""
+    if (
+        not current_user.oauth_credentials
+        or current_user.oauth_credentials.get("provider") != "google"
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No Google account is linked.",
+        )
+    if not current_user.hashed_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot disconnect Google — no password is set. Create a password first.",
+        )
+
+    user_result = await db.execute(select(User).where(User.id == current_user.id))
+    user = user_result.scalar_one()
+    user.oauth_credentials = None
+    # Normalize auth_provider to remove google
+    if user.auth_provider in ("email,google", "google,email"):
+        user.auth_provider = "email"
+    elif user.auth_provider == "google":
+        user.auth_provider = "email"
+    await db.commit()
+
+    return SecurityStatusResponse(
+        auth_provider=user.auth_provider,
+        has_password=True,
+        google_connected=False,
+    )

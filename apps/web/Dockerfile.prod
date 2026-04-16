@@ -9,7 +9,7 @@ RUN cd packages/ui && npm ci
 
 # Install Web/App dependencies
 COPY apps/web/package.json apps/web/package-lock.json* ./apps/web/
-RUN cd apps/web && npm ci
+RUN cd apps/web && npm ci --legacy-peer-deps
 
 # Alpine (musl): Rollup optional deps don’t always resolve; install the native binary for
 # this image’s CPU (arm64 vs amd64). Keeps package.json lockfile CI-friendly (no pinned @rollup/*).
@@ -65,7 +65,7 @@ RUN npm run build
 # ── Stage 3: runtime (lean) ────────────────────────────────────────────────────
 FROM node:20-alpine AS runner
 
-WORKDIR /app/apps/web
+WORKDIR /app
 
 ENV NODE_ENV=production
 
@@ -73,9 +73,9 @@ ENV NODE_ENV=production
 COPY --from=builder /app/apps/web/.next/standalone ./
 
 # Copy static assets
-COPY --from=builder /app/apps/web/.next/static ./.next/static
-COPY --from=builder /app/apps/web/public ./public
+COPY --from=builder /app/apps/web/.next/static ./apps/web/.next/static
+COPY --from=builder /app/apps/web/public ./apps/web/public
 
 EXPOSE 3000
 
-CMD ["node", "server.js"]
+CMD ["node", "apps/web/server.js"]

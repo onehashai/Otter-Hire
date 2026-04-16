@@ -227,10 +227,20 @@ export default function Login() {
                 name="password"
                 render={({ field, fieldState }) => (
                   <FormItem>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-medium text-muted-foreground">
+                        {t("password")}
+                      </span>
+                      <Link
+                        href="/forgot"
+                        className="text-xs text-muted-foreground hover:text-foreground hover:underline underline-offset-4 transition-colors"
+                      >
+                        Forgot Password?
+                      </Link>
+                    </div>
                     <FormControl>
                       <PasswordField
                         {...field}
-                        label={t("password")}
                         placeholder="••••••••"
                         autoComplete="current-password"
                         error={fieldState.error?.message}

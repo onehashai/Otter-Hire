@@ -146,6 +146,10 @@ services:
       - "api.localhost.com:host-gateway"
     ports:
       - "3000:3000"
+    volumes:
+      - ./apps/web/src:/app/apps/web/src
+      - ./apps/web/public:/app/apps/web/public
+      - ./packages/ui/src:/app/packages/ui/src
     depends_on:
       - backend
 

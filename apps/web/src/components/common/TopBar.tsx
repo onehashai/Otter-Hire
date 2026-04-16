@@ -19,7 +19,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
@@ -136,6 +135,7 @@ export function TopBar() {
   const userLabel = (user?.name?.trim() || user?.email || "").trim() || "Account";
   const initialsSource = user?.name?.trim() || user?.email;
   const initials = getPersonNameInitials(initialsSource, "U");
+  const orgDisplayName = (user?.org_name?.trim() || t("nav_organization")).trim();
 
   return (
     <header className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-border bg-background px-4 md:px-6">
@@ -147,6 +147,7 @@ export function TopBar() {
             width={90}
             height={20}
             className="object-contain dark:invert dark:contrast-200"
+            priority
           />
         </Link>
         <div className="hidden min-w-0 flex-1 flex-col justify-center md:flex">
@@ -184,7 +185,84 @@ export function TopBar() {
             </div>
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-48">
+        <DropdownMenuContent align="end" className="min-w-[14rem] w-56">
+          <div className="flex items-center gap-2 px-2 py-1.5">
+            {user?.org_avatar_url ? (
+              <Avatar
+                className="h-6 w-6 shrink-0 border border-border"
+                src={user.org_avatar_url}
+                alt={orgDisplayName}
+                fallbackClassName="text-[10px] bg-muted text-muted-foreground"
+              >
+                {getPersonNameInitials(orgDisplayName, "O")}
+              </Avatar>
+            ) : (
+              <Image
+                src={LOGO_SVG_PATH}
+                alt=""
+                width={20}
+                height={20}
+                className="h-5 w-auto shrink-0 object-contain dark:invert dark:contrast-200"
+              />
+            )}
+            <span
+              className="min-w-0 flex-1 truncate text-sm text-foreground"
+              title={orgDisplayName}
+            >
+              {orgDisplayName}
+            </span>
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger asChild hideChevron>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 shrink-0"
+                  aria-label={t("switch_organization")}
+                >
+                  <Icon name="ArrowRightLeft" className="h-4 w-4" />
+                </Button>
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent className="w-64" alignOffset={-4}>
+                <DropdownMenuItem className="cursor-pointer" onClick={() => setCreateOpen(true)}>
+                  <Icon name="Plus" className="mr-2 h-4 w-4" />
+                  {t("new_organization")}
+                </DropdownMenuItem>
+                {memberships.length > 1 &&
+                  (menuLoadingMemberships ? (
+                    <DropdownMenuItem disabled>
+                      <Icon name="Loader" className="mr-2 h-4 w-4 animate-spin" />
+                      {t("loading_organizations")}
+                    </DropdownMenuItem>
+                  ) : (
+                    memberships.map((membership) => {
+                      const isCurrent = membership.org_id === user?.org_id;
+                      const isSwitching = switchingOrgId === membership.org_id;
+                      return (
+                        <DropdownMenuItem
+                          key={membership.org_id}
+                          onClick={() => handleSwitchOrganization(membership.org_id)}
+                          disabled={Boolean(switchingOrgId) || isCurrent}
+                          className="cursor-pointer flex items-center justify-between gap-2"
+                        >
+                          <span className="truncate">{membership.org_name}</span>
+                          {isCurrent ? (
+                            <span className="text-[10px] rounded bg-muted px-1.5 py-0.5 text-muted-foreground">
+                              {t("current_org_badge")}
+                            </span>
+                          ) : isSwitching ? (
+                            <Icon
+                              name="Loader"
+                              className="h-3.5 w-3.5 animate-spin text-muted-foreground"
+                            />
+                          ) : null}
+                        </DropdownMenuItem>
+                      );
+                    })
+                  ))}
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+          </div>
           <DropdownMenuItem
             onClick={() => router.push("/settings/profile")}
             className="cursor-pointer"
@@ -192,53 +270,6 @@ export function TopBar() {
             <Icon name="Settings" className="mr-2 h-4 w-4" />
             {t("settings_title")}
           </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => setCreateOpen(true)} className="cursor-pointer">
-            <Icon name="Plus" className="mr-2 h-4 w-4" />
-            {t("new_organization")}
-          </DropdownMenuItem>
-          {memberships.length > 1 && (
-            <DropdownMenuSub>
-              <DropdownMenuSubTrigger className="cursor-pointer">
-                <Icon name="ArrowLeftRight" className="mr-2 h-4 w-4" />
-                {t("switch_organization")}
-              </DropdownMenuSubTrigger>
-              <DropdownMenuSubContent className="w-64">
-                {menuLoadingMemberships ? (
-                  <DropdownMenuItem disabled>
-                    <Icon name="Loader" className="mr-2 h-4 w-4 animate-spin" />
-                    Loading organizations...
-                  </DropdownMenuItem>
-                ) : (
-                  memberships.map((membership) => {
-                    const isCurrent = membership.org_id === user?.org_id;
-                    const isSwitching = switchingOrgId === membership.org_id;
-                    return (
-                      <DropdownMenuItem
-                        key={membership.org_id}
-                        onClick={() => handleSwitchOrganization(membership.org_id)}
-                        disabled={Boolean(switchingOrgId) || isCurrent}
-                        className="cursor-pointer flex items-center justify-between gap-2"
-                      >
-                        <span className="truncate">{membership.org_name}</span>
-                        {isCurrent ? (
-                          <span className="text-[10px] rounded bg-muted px-1.5 py-0.5 text-muted-foreground">
-                            Current
-                          </span>
-                        ) : isSwitching ? (
-                          <Icon
-                            name="Loader"
-                            className="h-3.5 w-3.5 animate-spin text-muted-foreground"
-                          />
-                        ) : null}
-                      </DropdownMenuItem>
-                    );
-                  })
-                )}
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
-          )}
-          <DropdownMenuSeparator />
           <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
             <Icon name="LogOut" className="mr-2 h-4 w-4" />
             {t("sign_out")}
@@ -249,10 +280,8 @@ export function TopBar() {
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Create organization</DialogTitle>
-            <DialogDescription>
-              Enter a name to create a new organization under your account.
-            </DialogDescription>
+            <DialogTitle>{t("create_organization")}</DialogTitle>
+            <DialogDescription>{t("create_org_description")}</DialogDescription>
           </DialogHeader>
 
           {orgError && (
@@ -262,10 +291,10 @@ export function TopBar() {
           )}
 
           <InputField
-            label="Organization name"
+            label={t("organization_name")}
             value={newOrgName}
             onChange={(e) => setNewOrgName(e.target.value)}
-            placeholder="e.g. Acme Recruiting"
+            placeholder={t("org_name_placeholder")}
             autoFocus
             disabled={creatingOrg}
             showAsterisk
@@ -278,14 +307,14 @@ export function TopBar() {
               onClick={() => setCreateOpen(false)}
               disabled={creatingOrg}
             >
-              Cancel
+              {t("cancel")}
             </Button>
             <Button
               type="button"
               onClick={handleCreateOrganization}
               disabled={creatingOrg || !newOrgName.trim()}
             >
-              {creatingOrg ? <Icon name="Loader" className="h-4 w-4 animate-spin" /> : "Create"}
+              {creatingOrg ? <Icon name="Loader" className="h-4 w-4 animate-spin" /> : t("create")}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -95,12 +95,12 @@ export default function TeamSettingsPage() {
       const failed = results.filter((r) => r.status === "rejected").length;
 
       if (succeeded > 0) {
-        toast.success(succeeded === 1 ? "Invite sent" : `${succeeded} invites sent`, {
+        toast.success(succeeded === 1 ? t("invite_sent") : t("invite_sent"), {
           description: `Invitation${succeeded > 1 ? "s" : ""} sent with role ${formatRole(role)}.`,
         });
       }
       if (failed > 0) {
-        toast.error(`${failed} invite${failed > 1 ? "s" : ""} failed`, {
+        toast.error(t("invite_failed"), {
           description: "Some invitations could not be sent.",
         });
       }
@@ -115,13 +115,13 @@ export default function TeamSettingsPage() {
     setRemoving(true);
     try {
       await removeOrgUser(removeTarget.id);
-      toast.success("Member removed", {
+      toast.success(t("member_removed"), {
         description: `${removeTarget.name || removeTarget.email} has been removed from the team.`,
       });
       setRemoveTarget(null);
       await fetchMembers();
     } catch (err) {
-      toast.error("Failed to remove member", {
+      toast.error(t("member_remove_failed"), {
         description: err instanceof Error ? err.message : "An error occurred.",
       });
     } finally {
@@ -134,13 +134,13 @@ export default function TeamSettingsPage() {
     setSavingRole(true);
     try {
       await updateOrgUserRole(roleChangeTarget.id, newRole);
-      toast.success("Role updated", {
+      toast.success(t("role_updated"), {
         description: `${roleChangeTarget.name || roleChangeTarget.email} is now ${formatRole(newRole)}.`,
       });
       setRoleChangeTarget(null);
       await fetchMembers();
     } catch (err) {
-      toast.error("Failed to update role", {
+      toast.error(t("role_update_failed"), {
         description: err instanceof Error ? err.message : "An error occurred.",
       });
     } finally {
@@ -151,9 +151,9 @@ export default function TeamSettingsPage() {
   const handleResendInvite = async (member: TeamMember) => {
     try {
       await inviteOrgUser(member.email);
-      toast.success("Invite resent", { description: `Invitation resent to ${member.email}.` });
+      toast.success(t("invite_resent"), { description: `Invitation resent to ${member.email}.` });
     } catch (err) {
-      toast.error("Failed to resend invite", {
+      toast.error(t("invite_resend_failed"), {
         description: err instanceof Error ? err.message : "An error occurred.",
       });
     }
@@ -163,13 +163,13 @@ export default function TeamSettingsPage() {
     if (!ownershipTransferTarget) return;
     try {
       await updateOrgUserRole(ownershipTransferTarget.id, "owner");
-      toast.success("Ownership transferred", {
+      toast.success(t("ownership_transferred"), {
         description: `${ownershipTransferTarget.name || ownershipTransferTarget.email} is now the owner.`,
       });
       setOwnershipTransferTarget(null);
       await fetchMembers();
     } catch (err) {
-      toast.error("Failed to transfer ownership", {
+      toast.error(t("ownership_transfer_failed"), {
         description: err instanceof Error ? err.message : "An error occurred.",
       });
     }
@@ -198,9 +198,9 @@ export default function TeamSettingsPage() {
     return (
       <div className="space-y-6">
         <div>
-          <h2 className="text-base md:text-lg font-semibold mb-1">Team</h2>
+          <h2 className="text-base md:text-lg font-semibold mb-1">{t("team")}</h2>
           <p className="text-xs text-muted-foreground">
-            Manage your team members, roles, and permissions.
+            {t("manage_your_team_members_roles_and_permissions")}
           </p>
         </div>
         <div className="py-16 text-center space-y-3">
@@ -221,9 +221,9 @@ export default function TeamSettingsPage() {
     return (
       <div className="space-y-6">
         <div>
-          <h2 className="text-base md:text-lg font-semibold mb-1">Team</h2>
+          <h2 className="text-base md:text-lg font-semibold mb-1">{t("team")}</h2>
           <p className="text-xs text-muted-foreground">
-            Manage your team members, roles, and permissions.
+            {t("manage_your_team_members_roles_and_permissions")}
           </p>
         </div>
         <div className="py-16 text-center space-y-3">
@@ -238,7 +238,7 @@ export default function TeamSettingsPage() {
               fetchMembers();
             }}
           >
-            Try again
+            {t("try_again")}
           </Button>
         </div>
       </div>
@@ -260,7 +260,7 @@ export default function TeamSettingsPage() {
           onClick={() => setInviteOpen(true)}
         >
           <Icon name="UserPlus" className="h-3.5 w-3.5" />
-          {!isMobile && "Invite Member"}
+          {!isMobile && t("invite_member")}
         </Button>
       </div>
 

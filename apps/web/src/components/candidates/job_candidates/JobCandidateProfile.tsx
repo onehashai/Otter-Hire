@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@onehash/ui/button";
 import { Badge } from "@onehash/ui/badge";
@@ -136,6 +136,8 @@ export function JobCandidateProfile({
   onStageMoved?: (stageId: string) => void | Promise<void>;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const isMobile = useIsMobile();
   const [activeTab, setActiveTab] = useState("overview");
   const { t } = useTranslation();
@@ -425,13 +427,44 @@ export function JobCandidateProfile({
     }
   };
 
+  const hasAdditionalQuestions = applicationResponses?.has_additional_questions ?? false;
+  const allowedTabs = useMemo(
+    () =>
+      new Set(
+        hasAdditionalQuestions
+          ? ["overview", "messages", "documents", "application_responses"]
+          : ["overview", "messages", "documents"],
+      ),
+    [hasAdditionalQuestions],
+  );
+
+  const setActiveTabWithUrl = useCallback(
+    (tab: string) => {
+      if (!allowedTabs.has(tab)) return;
+      setActiveTab(tab);
+      const params = new URLSearchParams(searchParams.toString());
+      if (tab === "overview") {
+        params.delete("tab");
+      } else {
+        params.set("tab", tab);
+      }
+      const query = params.toString();
+      router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+    },
+    [allowedTabs, pathname, router, searchParams],
+  );
+
   useEffect(() => {
     if (activeTab !== "application_responses") return;
     if (applicationResponses?.has_additional_questions) return;
-    setActiveTab("overview");
-  }, [activeTab, applicationResponses?.has_additional_questions]);
+    setActiveTabWithUrl("overview");
+  }, [activeTab, applicationResponses?.has_additional_questions, setActiveTabWithUrl]);
 
-  const hasAdditionalQuestions = applicationResponses?.has_additional_questions ?? false;
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (!tab || !allowedTabs.has(tab) || tab === activeTab) return;
+    setActiveTab(tab);
+  }, [activeTab, allowedTabs, searchParams]);
   const profileLinkFields = useMemo(() => {
     const schema = (jobDetail?.application_form_schema ?? {}) as Record<string, unknown>;
     const raw = Array.isArray(schema.profile_links)
@@ -533,7 +566,7 @@ export function JobCandidateProfile({
           />
         </div>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <Tabs value={activeTab} onValueChange={setActiveTabWithUrl}>
           <TabsList
             className={cn(
               "h-9 w-full justify-start bg-transparent border-b rounded-none p-0 gap-0",

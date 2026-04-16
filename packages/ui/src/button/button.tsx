@@ -53,70 +53,67 @@ export interface ButtonProps
   tooltipProps?: Omit<TooltipRootProps, "children">;
   tooltipContentProps?: Omit<TooltipContentProps, "children">;
   tooltipProviderProps?: TooltipProviderProps;
+  ref?: React.Ref<HTMLButtonElement>;
 }
 
-const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  (
-    {
-      className,
-      variant,
-      size,
-      asChild = false,
-      pending = false,
-      tooltip,
-      tooltipProps,
-      tooltipContentProps,
-      tooltipProviderProps,
-      disabled,
-      children,
-      ...props
-    },
-    ref,
-  ) => {
-    const useAsChild = asChild && !pending;
-    const Comp = useAsChild ? Slot : "button";
-    const isDisabled = Boolean(disabled) || pending;
+function Button({
+  ref,
+  className,
+  variant,
+  size,
+  asChild = false,
+  pending = false,
+  tooltip,
+  tooltipProps,
+  tooltipContentProps,
+  tooltipProviderProps,
+  disabled,
+  children,
+  ...props
+}: ButtonProps) {
+  const useAsChild = asChild && !pending;
+  const Comp = useAsChild ? Slot : "button";
+  const isDisabled = Boolean(disabled) || pending;
 
-    const buttonEl = (
-      <Comp
-        className={cn(buttonVariants({ variant, size, className }))}
-        ref={ref}
-        disabled={isDisabled}
-        aria-busy={pending}
-        {...props}
-      >
-        {pending ? (
-          <span className="inline-flex max-w-full items-center justify-center gap-2">
-            <Icon name="Loader" className="h-4 w-4 animate-spin shrink-0" aria-hidden />
-            {children}
-          </span>
-        ) : (
-          children
-        )}
-      </Comp>
-    );
-
-    if (tooltip == null || tooltip === "") {
-      return buttonEl;
-    }
-
-    const triggerChild =
-      isDisabled === true ? (
-        <span className="inline-flex cursor-not-allowed">{buttonEl}</span>
+  const buttonEl = (
+    <Comp
+      className={cn(buttonVariants({ variant, size, className }))}
+      ref={ref}
+      disabled={isDisabled}
+      aria-busy={pending}
+      {...props}
+    >
+      {pending ? (
+        <span className="inline-flex max-w-full items-center justify-center gap-2">
+          <Icon name="Loader" className="h-4 w-4 animate-spin shrink-0" aria-hidden />
+          {children}
+        </span>
       ) : (
-        buttonEl
-      );
+        children
+      )}
+    </Comp>
+  );
 
-    return (
-      <TooltipProvider {...tooltipProviderProps}>
-        <Tooltip {...tooltipProps}>
-          <TooltipTrigger asChild>{triggerChild}</TooltipTrigger>
-          <TooltipContent {...tooltipContentProps}>{tooltip}</TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
+  if (tooltip == null || tooltip === "") {
+    return buttonEl;
+  }
+
+  const triggerChild =
+    isDisabled === true ? (
+      <span className="inline-flex cursor-not-allowed">{buttonEl}</span>
+    ) : (
+      buttonEl
     );
-  },
-);
+
+  return (
+    <TooltipProvider {...tooltipProviderProps}>
+      <Tooltip {...tooltipProps}>
+        <TooltipTrigger asChild>{triggerChild}</TooltipTrigger>
+        <TooltipContent {...tooltipContentProps}>{tooltip}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
 Button.displayName = "Button";
 
 export { Button, buttonVariants };

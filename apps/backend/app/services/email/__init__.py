@@ -17,6 +17,7 @@ from app.services.email._dispatch import send_email
 from app.services.email._public import (
     send_candidate_note_mention_email,
     send_invite_email,
+    send_password_reset_email,
     send_verification_email,
 )
 
@@ -24,5 +25,6 @@ __all__ = [
     "send_email",
     "send_verification_email",
     "send_invite_email",
+    "send_password_reset_email",
     "send_candidate_note_mention_email",
 ]

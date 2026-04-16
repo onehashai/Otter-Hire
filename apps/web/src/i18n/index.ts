@@ -1,48 +1,68 @@
 import i18n from "i18next";
 import { initReactI18next } from "react-i18next";
-import HttpBackend from "i18next-http-backend";
-
-const isClient = typeof window !== "undefined";
-
-// Only use HttpBackend on the client — during SSR/build there is no server
-// to fetch translations from, which would cause the build to hang.
-if (isClient) {
-  i18n.use(HttpBackend);
-}
+import commonEn from "../../public/static/locales/en/common.json";
+import commonEs from "../../public/static/locales/es/common.json";
+import commonFr from "../../public/static/locales/fr/common.json";
+import commonDe from "../../public/static/locales/de/common.json";
+import commonPt from "../../public/static/locales/pt/common.json";
 
 i18n.use(initReactI18next).init({
-  lng: isClient ? localStorage.getItem("language") || "en" : "en",
+  lng: "en",
   fallbackLng: "en",
   defaultNS: "common",
   ns: ["common"],
-  interpolation: {
-    escapeValue: false,
+  resources: {
+    en: { common: commonEn },
+    es: { common: commonEs },
+    fr: { common: commonFr },
+    de: { common: commonDe },
+    pt: { common: commonPt },
   },
-  // HttpBackend options — only relevant on the client
-  ...(isClient && {
-    backend: {
-      loadPath: "/static/locales/{{lng}}/{{ns}}.json",
-    },
-  }),
-  // During SSR, provide empty resources so rendering doesn't block
-  ...(!isClient && {
-    resources: { en: { common: {} } },
-  }),
+  interpolation: { escapeValue: false },
 });
 
 export default i18n;
 
-/**
- * Available languages for the language switcher.
- */
-export const languages = [{ code: "en", label: "English" }] as const;
+/** Languages available for the app UI (recruiter dashboard). */
+export const APP_LANGUAGES = [
+  { code: "en", label: "English" },
+  { code: "es", label: "Español" },
+  { code: "fr", label: "Français" },
+  { code: "de", label: "Deutsch" },
+  { code: "pt", label: "Português" },
+] as const;
+
+export type AppLanguageCode = (typeof APP_LANGUAGES)[number]["code"];
+
+/** Languages available for the public jobs page (includes browser-detect option). */
+export const JOBS_PAGE_LANGUAGES = [
+  { code: "browser", label: "Visitor's Browser Language" },
+  { code: "en", label: "English" },
+  { code: "es", label: "Español" },
+  { code: "fr", label: "Français" },
+  { code: "de", label: "Deutsch" },
+  { code: "pt", label: "Português" },
+] as const;
+
+export type JobsPageLanguageCode = (typeof JOBS_PAGE_LANGUAGES)[number]["code"];
+
+const SUPPORTED_CODES = APP_LANGUAGES.map((l) => l.code) as string[];
 
 /**
- * Change the active language and persist to localStorage.
+ * Resolve a BCP-47 browser language tag (e.g. "fr-CA") to a supported code.
+ * Falls back to "en" if not supported.
  */
-export const changeLanguage = (lng: string) => {
-  i18n.changeLanguage(lng);
-  if (isClient) {
-    localStorage.setItem("language", lng);
+export function resolveBrowserLanguage(): AppLanguageCode {
+  if (typeof navigator === "undefined") return "en";
+  const tag = navigator.language ?? "en";
+  const base = tag.split("-")[0].toLowerCase();
+  return (SUPPORTED_CODES.includes(base) ? base : "en") as AppLanguageCode;
+}
+
+/** Change the active app language and persist to localStorage. */
+export const changeLanguage = async (lng: string): Promise<void> => {
+  await i18n.changeLanguage(lng);
+  if (typeof window !== "undefined") {
+    localStorage.setItem("app_language", lng);
   }
 };

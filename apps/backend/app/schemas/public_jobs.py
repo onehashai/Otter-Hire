@@ -30,6 +30,7 @@ class PublicJobsListResponse(BaseModel):
     jobs: list[PublicJobListItem]
     org_name: str
     org_avatar_url: str | None = None
+    jobs_page_language: str = "en"
 
 
 class PublicJobDetail(BaseModel):
@@ -51,6 +52,7 @@ class PublicJobDetail(BaseModel):
     org_avatar_url: str | None = None
     status: str
     application_form_schema: dict[str, Any] = {}
+    jobs_page_language: str = "en"
 
     class Config:
         from_attributes = True

@@ -515,7 +515,16 @@ export default function CandidatesPage() {
   const columnLabel = (columnKey: CandidateColumnKey) => {
     if (columnKey === "assigned_jobs") return t("candidates_assigned_jobs");
     if (columnKey === "created_at") return t("candidates_table_created");
-    return CANDIDATE_COLUMN_DEFS[columnKey].label;
+    if (columnKey === "name") return t("col_candidate");
+    if (columnKey === "email") return t("email");
+    if (columnKey === "phone") return t("col_phone");
+    if (columnKey === "source") return t("col_source");
+    if (columnKey === "status") return t("status");
+    if (columnKey === "location") return t("col_location");
+    if (columnKey === "updated_at") return t("col_updated");
+    if (columnKey === "tags") return t("tags");
+    if (columnKey === "stage_name") return t("stage");
+    return t("stage");
   };
   const columnPickerContent = (
     <div className="space-y-3">
@@ -553,7 +562,7 @@ export default function CandidatesPage() {
       </div>
       <div className="flex items-center justify-between gap-2">
         <Button variant="ghost" size="sm" className="h-7 text-xs px-2" onClick={resetColumns}>
-          Reset to default
+          {t("reset_to_default")}
         </Button>
         <Button
           variant="outline"
@@ -721,11 +730,11 @@ export default function CandidatesPage() {
                     setColumnPickerOpen(true);
                   }}
                 >
-                  Column picker
+                  {t("column_picker")}
                 </DropdownMenuItem>
               ) : (
                 <DropdownMenuSub open={columnSubmenuOpen} onOpenChange={setColumnSubmenuOpen}>
-                  <DropdownMenuSubTrigger>Column picker</DropdownMenuSubTrigger>
+                  <DropdownMenuSubTrigger>{t("column_picker")}</DropdownMenuSubTrigger>
                   <DropdownMenuSubContent className="w-80">
                     {columnPickerContent}
                   </DropdownMenuSubContent>
@@ -737,7 +746,7 @@ export default function CandidatesPage() {
                   handleExport();
                 }}
               >
-                Export Candidates
+                {t("export_candidates")}
               </DropdownMenuItem>
               <DropdownMenuItem
                 onSelect={(e) => {
@@ -745,7 +754,7 @@ export default function CandidatesPage() {
                   setImportOpen(true);
                 }}
               >
-                Import Candidates
+                {t("import_candidates")}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -787,7 +796,7 @@ export default function CandidatesPage() {
                 disabled={loading || page <= 1}
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
               >
-                Previous
+                {t("previous")}
               </Button>
               <Button
                 variant="outline"
@@ -796,7 +805,7 @@ export default function CandidatesPage() {
                 disabled={loading || page >= totalPages}
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               >
-                Next
+                {t("next")}
               </Button>
             </div>
           </div>
@@ -813,7 +822,7 @@ export default function CandidatesPage() {
                   className="h-8 text-xs"
                   onClick={() => setDeleteOpen(true)}
                 >
-                  Delete Candidates
+                  {t("delete_selected_candidates")}
                 </Button>
                 <Button
                   size="sm"
@@ -821,7 +830,7 @@ export default function CandidatesPage() {
                   onClick={openAssignDialog}
                   disabled={allAssigned}
                 >
-                  Assign Job
+                  {t("assign_job_title")}
                 </Button>
               </div>
             </div>
@@ -830,8 +839,8 @@ export default function CandidatesPage() {
           <Dialog open={assignOpen} onOpenChange={setAssignOpen}>
             <DialogContent className="sm:max-w-md">
               <DialogHeader>
-                <DialogTitle>Assign Job</DialogTitle>
-                <DialogDescription>Assign selected candidates to a job.</DialogDescription>
+                <DialogTitle>{t("assign_job_title")}</DialogTitle>
+                <DialogDescription>{t("assign_job_dialog_description")}</DialogDescription>
               </DialogHeader>
               <SelectField
                 label={t("jobs_title")}
@@ -889,8 +898,8 @@ export default function CandidatesPage() {
       <Dialog open={importOpen} onOpenChange={setImportOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Import Candidates</DialogTitle>
-            <DialogDescription>Upload CSV with required columns: name,email</DialogDescription>
+            <DialogTitle>{t("import_candidates_title")}</DialogTitle>
+            <DialogDescription>{t("import_csv_description")}</DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
             <div className="flex items-center justify-between">
@@ -907,7 +916,7 @@ export default function CandidatesPage() {
                   a.click();
                 }}
               >
-                Download Sample CSV
+                {t("download_sample_csv")}
               </button>
             </div>
             <input
@@ -934,7 +943,7 @@ export default function CandidatesPage() {
               disabled={importLoading || !importFile}
               pending={importLoading}
             >
-              Import
+              {t("importing")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -942,7 +951,7 @@ export default function CandidatesPage() {
       <Sheet open={columnPickerOpen} onOpenChange={setColumnPickerOpen}>
         <SheetContent side="bottom" className="h-[70vh] rounded-t-2xl overflow-y-auto">
           <SheetHeader>
-            <SheetTitle>Column picker</SheetTitle>
+            <SheetTitle>{t("column_picker")}</SheetTitle>
           </SheetHeader>
           <div className="mt-4">{columnPickerContent}</div>
         </SheetContent>

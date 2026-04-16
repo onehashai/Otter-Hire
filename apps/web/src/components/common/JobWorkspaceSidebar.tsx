@@ -34,6 +34,17 @@ export function JobWorkspaceSidebar({
   const pathname = usePathname();
   const [workspace, setWorkspace] = useState<JobWorkspaceResponse | null>(null);
 
+  const getStageLabel = (name: string) => {
+    const normalized = name.trim().toLowerCase();
+    if (normalized === "applied") return t("stage_applied");
+    if (normalized === "screening") return t("stage_screening");
+    if (normalized === "interview") return t("stage_interview");
+    if (normalized === "offer") return t("stage_offer");
+    if (normalized === "hired") return t("stage_hired");
+    if (normalized === "rejected") return t("stage_rejected");
+    return name;
+  };
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -73,7 +84,7 @@ export function JobWorkspaceSidebar({
     (workspace?.candidates ?? []).filter((c) => c.stage_id === stageId).length;
 
   const jobTitleForBack = workspace?.title?.trim() ?? "";
-  const backLabel = jobTitleForBack || "Jobs";
+  const backLabel = jobTitleForBack || t("jobs_title");
 
   const backLink = (
     <Link
@@ -85,7 +96,11 @@ export function JobWorkspaceSidebar({
       )}
     >
       <ChevronLeft className="h-4 w-4 shrink-0" />
-      {!collapsed && <span className="truncate">{backLabel}</span>}
+      {!collapsed && (
+        <span className="truncate" suppressHydrationWarning>
+          {backLabel}
+        </span>
+      )}
     </Link>
   );
 
@@ -138,8 +153,11 @@ export function JobWorkspaceSidebar({
         )}
 
         {!collapsed && (
-          <p className="text-[10px] font-semibold text-muted-foreground tracking-wide px-2.5 pt-3 pb-1">
-            Stages
+          <p
+            className="text-[10px] font-semibold text-muted-foreground tracking-wide px-2.5 pt-3 pb-1"
+            suppressHydrationWarning
+          >
+            {t("stages")}
           </p>
         )}
 
@@ -156,11 +174,11 @@ export function JobWorkspaceSidebar({
                 isActive && "bg-sidebar-accent text-sidebar-accent-foreground font-medium",
                 collapsed && "justify-center px-0",
               )}
-              title={collapsed ? `${s.name} (${count})` : undefined}
+              title={collapsed ? `${getStageLabel(s.name)} (${count})` : undefined}
             >
               {!collapsed ? (
                 <>
-                  <span className="truncate flex-1 text-left">{s.name}</span>
+                  <span className="truncate flex-1 text-left">{getStageLabel(s.name)}</span>
                   <span className="text-[10px] tabular-nums text-muted-foreground shrink-0">
                     ({count})
                   </span>
@@ -176,7 +194,7 @@ export function JobWorkspaceSidebar({
               <Tooltip key={s.id}>
                 <TooltipTrigger asChild>{item}</TooltipTrigger>
                 <TooltipContent side="right" className="text-xs">
-                  {s.name} · {count}
+                  {getStageLabel(s.name)} · {count}
                 </TooltipContent>
               </Tooltip>
             );
@@ -203,7 +221,7 @@ export function JobWorkspaceSidebar({
               </Link>
             </TooltipTrigger>
             <TooltipContent side="right" className="text-xs">
-              Edit job
+              {t("edit_job")}
             </TooltipContent>
           </Tooltip>
         ) : (
@@ -216,7 +234,9 @@ export function JobWorkspaceSidebar({
             )}
           >
             <Icon name="PenLine" className="h-3.5 w-3.5 shrink-0" />
-            <span className="truncate">Edit job</span>
+            <span className="truncate" suppressHydrationWarning>
+              {t("edit_job")}
+            </span>
           </Link>
         )}
       </nav>
@@ -239,7 +259,9 @@ export function JobWorkspaceSidebar({
             <Moon className="h-4 w-4 shrink-0" />
           )}
           {!collapsed && (
-            <span className="text-xs">{theme === "dark" ? "Light mode" : "Dark mode"}</span>
+            <span className="text-xs" suppressHydrationWarning>
+              {theme === "dark" ? t("light_mode") : t("dark_mode")}
+            </span>
           )}
         </Button>
 
@@ -256,7 +278,7 @@ export function JobWorkspaceSidebar({
             <Search className="h-3.5 w-3.5 shrink-0" />
             {!collapsed && (
               <>
-                <span>{t("search")}</span>
+                <span suppressHydrationWarning>{t("search")}</span>
                 <kbd className="pointer-events-none inline-flex h-5 select-none items-center rounded border border-border bg-muted px-1.5 text-[10px] font-medium text-muted-foreground ml-auto">
                   ⌘K
                 </kbd>

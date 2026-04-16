@@ -12,7 +12,7 @@ function defaultFallbackLabel(alt: string | undefined | null): string {
 }
 
 export type AvatarProps = Omit<
-  React.ComponentPropsWithoutRef<typeof AvatarPrimitive.Root>,
+  React.ComponentProps<typeof AvatarPrimitive.Root>,
   "children"
 > & {
   src?: string | null;
@@ -20,36 +20,35 @@ export type AvatarProps = Omit<
   children?: React.ReactNode;
   imageClassName?: string;
   fallbackClassName?: string;
+  ref?: React.Ref<HTMLSpanElement>;
 };
 
-const Avatar = React.forwardRef<React.ElementRef<typeof AvatarPrimitive.Root>, AvatarProps>(
-  ({ className, src, alt, children, imageClassName, fallbackClassName, ...props }, ref) => {
-    const fallbackContent = children !== undefined ? children : defaultFallbackLabel(alt);
-    return (
-      <AvatarPrimitive.Root
-        ref={ref}
-        className={cn("relative flex h-10 w-10 shrink-0 overflow-hidden rounded-full", className)}
-        {...props}
+function Avatar({ ref, className, src, alt, children, imageClassName, fallbackClassName, ...props }: AvatarProps) {
+  const fallbackContent = children !== undefined ? children : defaultFallbackLabel(alt);
+  return (
+    <AvatarPrimitive.Root
+      ref={ref}
+      className={cn("relative flex h-10 w-10 shrink-0 overflow-hidden rounded-full", className)}
+      {...props}
+    >
+      {src ? (
+        <AvatarPrimitive.Image
+          src={src}
+          alt={alt ?? ""}
+          className={cn("aspect-square h-full w-full object-cover", imageClassName)}
+        />
+      ) : null}
+      <AvatarPrimitive.Fallback
+        className={cn(
+          "flex h-full w-full items-center justify-center rounded-full bg-muted",
+          fallbackClassName,
+        )}
       >
-        {src ? (
-          <AvatarPrimitive.Image
-            src={src}
-            alt={alt ?? ""}
-            className={cn("aspect-square h-full w-full object-cover", imageClassName)}
-          />
-        ) : null}
-        <AvatarPrimitive.Fallback
-          className={cn(
-            "flex h-full w-full items-center justify-center rounded-full bg-muted",
-            fallbackClassName,
-          )}
-        >
-          {fallbackContent}
-        </AvatarPrimitive.Fallback>
-      </AvatarPrimitive.Root>
-    );
-  },
-);
+        {fallbackContent}
+      </AvatarPrimitive.Fallback>
+    </AvatarPrimitive.Root>
+  );
+}
 Avatar.displayName = AvatarPrimitive.Root.displayName;
 
 export { Avatar };

@@ -2215,6 +2215,49 @@ async def preview_candidate_document_inline(
 
 
 @router.post(
+    "/{candidate_id}/documents/upload-temp",
+    status_code=status.HTTP_200_OK,
+)
+async def upload_temp_message_attachment(
+    candidate_id: UUID,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("candidates:source")),
+):
+    """Upload a file to a temporary S3 prefix for use as a message attachment.
+
+    The file is stored under orgs/{org_id}/temp/{uuid}_{filename} and is NOT
+    written to the DB. The caller must include the returned s3_key when sending
+    the message. Lifecycle cleanup of orphaned temp files is handled by an S3
+    lifecycle rule (to be configured separately).
+    """
+    candidate_result = await db.execute(
+        select(Candidate).where(
+            Candidate.id == candidate_id, Candidate.org_id == current_user.org_id
+        )
+    )
+    if candidate_result.scalar_one_or_none() is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Candidate not found")
+
+    content = await file.read()
+    max_b = 10 * 1024 * 1024  # 10 MB per attachment
+    if len(content) > max_b:
+        raise HTTPException(status_code=422, detail="Attachment size must be <= 10 MB")
+    safe_name = (file.filename or "attachment").strip()
+    mime_type = (file.content_type or "application/octet-stream").strip()
+    file_id = uuid7()
+    s3_key = f"orgs/{current_user.org_id}/temp/{file_id}_{safe_name}"
+    await storage_service.write_bytes(s3_key, content, mime_type)
+
+    return {
+        "s3_key": s3_key,
+        "filename": safe_name,
+        "mime_type": mime_type,
+        "size": len(content),
+    }
+
+
+@router.post(
     "/{candidate_id}/documents/upload",
     response_model=CandidateDocumentResponse,
     status_code=status.HTTP_201_CREATED,

@@ -57,11 +57,80 @@ def send_email_via_ses(
     references: str | None = None,
     message_id_tag: str | None = None,
     org_id_tag: str | None = None,
+    attachments: list[dict] | None = None,
 ) -> str:
     """Send one email via SES API. Returns the SES MessageId for the sent message."""
     client = _ses_client()
     source = f"{from_name} <{from_email}>" if from_name else from_email
-    # Always include HTML so SES can inject open-tracking pixel when enabled on the configuration set
+
+    tags: list[dict[str, str]] = []
+    if message_id_tag:
+        tags.append({"Name": "message_id", "Value": message_id_tag})
+    if org_id_tag:
+        tags.append({"Name": "org_id", "Value": org_id_tag})
+
+    if attachments:
+        # Use Raw MIME path so we can include attachments
+        from email.mime.application import MIMEApplication
+        from email.mime.multipart import MIMEMultipart
+        from email.mime.text import MIMEText
+
+        msg = MIMEMultipart("mixed")
+        msg["Subject"] = subject
+        msg["From"] = source
+        msg["To"] = to_email
+        if reply_to:
+            msg["Reply-To"] = reply_to
+        if in_reply_to:
+            msg["In-Reply-To"] = _ensure_message_id_format(in_reply_to)
+        if references:
+            refs = " ".join(
+                _ensure_message_id_format(r.strip()) for r in references.split() if r.strip()
+            )
+            if refs:
+                msg["References"] = refs
+
+        body_part = MIMEMultipart("alternative")
+        effective_html = (
+            html_body
+            if html_body
+            else f'<p style="white-space: pre-wrap;">{html_module.escape(text_body)}</p>'
+        )
+        body_part.attach(MIMEText(text_body, "plain", "utf-8"))
+        body_part.attach(MIMEText(effective_html, "html", "utf-8"))
+        msg.attach(body_part)
+
+        for att in attachments:
+            part = MIMEApplication(att["content"])
+            part.add_header(
+                "Content-Disposition",
+                "attachment",
+                filename=att.get("filename", "attachment"),
+            )
+            part["Content-Type"] = att.get("mime_type", "application/octet-stream")
+            msg.attach(part)
+
+        params: dict[str, Any] = {
+            "FromEmailAddress": source,
+            "Destination": {"ToAddresses": [to_email]},
+            "Content": {"Raw": {"Data": msg.as_bytes()}},
+        }
+        if tags:
+            params["EmailTags"] = tags
+        if settings.ses_configuration_set:
+            params["ConfigurationSetName"] = settings.ses_configuration_set
+
+        resp = client.send_email(**params)
+        message_id = resp.get("MessageId") or ""
+        logger.info(
+            "SES send_email (raw+attachments): MessageId=%s to=%s attachments=%d",
+            message_id,
+            to_email,
+            len(attachments),
+        )
+        return message_id
+
+    # Simple path — no attachments (unchanged)
     effective_html = (
         html_body
         if html_body
@@ -100,11 +169,6 @@ def send_email_via_ses(
     if reply_to:
         params["ReplyToAddresses"] = [reply_to]
 
-    tags: list[dict[str, str]] = []
-    if message_id_tag:
-        tags.append({"Name": "message_id", "Value": message_id_tag})
-    if org_id_tag:
-        tags.append({"Name": "org_id", "Value": org_id_tag})
     if tags:
         params["EmailTags"] = tags
 

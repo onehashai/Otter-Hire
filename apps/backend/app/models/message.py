@@ -1,5 +1,5 @@
 from sqlalchemy import CheckConstraint, Column, DateTime, ForeignKey, Index, String, Text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -32,6 +32,7 @@ class Message(Base):
     to_email = Column(String(320), nullable=False)
     body = Column(Text, nullable=False)
     html_body = Column(Text, nullable=True)
+    attachments = Column(JSONB, nullable=False, server_default="[]")
     status = Column(String(32), nullable=False, server_default="queued")
     provider_message_id = Column(String(500), nullable=True)
     email_message_id = Column(String(998), nullable=True)

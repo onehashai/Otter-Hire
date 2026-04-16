@@ -23,6 +23,7 @@ from app.schemas.conversations import (
     CandidateSnippet,
     ConversationCreate,
     ConversationDetail,
+    MessageAttachment,
     MessageCreate,
     MessageRead,
 )
@@ -58,6 +59,11 @@ def _message_to_read(msg: Message, sender_name: str | None = None) -> MessageRea
     if msg.body:
         body_visible, body_quoted = parse_email_body(msg.body)
 
+    raw_attachments = msg.attachments or []
+    parsed_attachments = [
+        MessageAttachment(**a) if isinstance(a, dict) else a for a in raw_attachments
+    ]
+
     return MessageRead(
         id=msg.id,
         conversation_id=msg.conversation_id,
@@ -76,6 +82,7 @@ def _message_to_read(msg: Message, sender_name: str | None = None) -> MessageRea
         email_message_id=msg.email_message_id,
         in_reply_to=msg.in_reply_to,
         created_at=msg.created_at,
+        attachments=parsed_attachments,
     )
 
 
@@ -175,6 +182,7 @@ async def _append_outbound_message(
         to_email=conv.candidate.email,
         body=body.body,
         html_body=body.html_body,
+        attachments=[a.model_dump() for a in (body.attachments or [])],
         status="queued",
         in_reply_to=in_reply_to_msg_id,
         created_at=now,
@@ -203,6 +211,7 @@ async def _append_outbound_message(
                 in_reply_to=in_reply_to_msg_id,
                 references=references_val,
                 conversation_id=str(conv.id),
+                attachments=[a.model_dump() for a in (body.attachments or [])],
             )
         )
     except Exception:
@@ -314,7 +323,9 @@ async def create_conversation(
         if body.job_id is not None and existing.job_id is None:
             existing.job_id = body.job_id
             await db.flush()
-        msg_body = MessageCreate(body=body.body, html_body=body.html_body)
+        msg_body = MessageCreate(
+            body=body.body, html_body=body.html_body, attachments=body.attachments
+        )
         await _append_outbound_message(
             db,
             existing,
@@ -395,6 +406,7 @@ async def create_conversation(
                 org_name=org_name,
                 reply_to=reply_to,
                 conversation_id=str(conv.id),
+                attachments=[a.model_dump() for a in (body.attachments or [])],
             )
         )
     except Exception:

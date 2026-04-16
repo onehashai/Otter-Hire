@@ -5,6 +5,10 @@ class JobCategoryCreateRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
 
 
+class JobCategoryUpdateRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+
+
 class JobCategoryResponse(BaseModel):
     id: str
     name: str

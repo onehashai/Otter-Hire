@@ -13,9 +13,45 @@ const DropdownMenuPortal = DropdownMenuPrimitive.Portal;
 const DropdownMenuSub = DropdownMenuPrimitive.Sub;
 const DropdownMenuRadioGroup = DropdownMenuPrimitive.RadioGroup;
 
-function DropdownMenuSubTrigger({ ref, className, inset, children, ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.SubTrigger> & { inset?: boolean; ref?: React.Ref<HTMLDivElement> }) {
+function DropdownMenuSubTrigger({
+  ref,
+  className,
+  inset,
+  hideChevron,
+  children,
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.SubTrigger> & {
+  inset?: boolean;
+  hideChevron?: boolean;
+  ref?: React.Ref<HTMLDivElement>;
+}) {
+  // When hideChevron is true, render only children so `asChild` + Slot sees a single element
+  // (a second `null` sibling still breaks React.Children.only).
+  if (hideChevron) {
+    return (
+      <DropdownMenuPrimitive.SubTrigger
+        ref={ref}
+        className={cn(
+          "flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none data-[state=open]:bg-accent focus:bg-accent",
+          inset && "pl-8",
+          className
+        )}
+        {...props}
+      >
+        {children}
+      </DropdownMenuPrimitive.SubTrigger>
+    );
+  }
   return (
-    <DropdownMenuPrimitive.SubTrigger ref={ref} className={cn("flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none data-[state=open]:bg-accent focus:bg-accent", inset && "pl-8", className)} {...props}>
+    <DropdownMenuPrimitive.SubTrigger
+      ref={ref}
+      className={cn(
+        "flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none data-[state=open]:bg-accent focus:bg-accent",
+        inset && "pl-8",
+        className
+      )}
+      {...props}
+    >
       {children}
       <ChevronRight className="ml-auto h-4 w-4" />
     </DropdownMenuPrimitive.SubTrigger>

@@ -24,16 +24,17 @@ DEFAULT_AUTOMATIONS = [
         "template_name": "Application Received",
         "action_type": "send_email",
     },
-    {
-        "name": "Interview Invitation",
-        "description": "Send interview invite when candidate moves to Interview stage",
-        "trigger_type": "candidate",
-        "trigger_key": "candidate_moved",
-        "trigger_config": {"label": "Candidate moved to Interview", "stage": "Interview"},
-        "conditions": [],
-        "template_name": "Interview Invitation",
-        "action_type": "send_email",
-    },
+    # TODO: Re-enable when Interview Invitation default template is restored in org bootstrap.
+    # {
+    #     "name": "Interview Invitation",
+    #     "description": "Send interview invite when candidate moves to Interview stage",
+    #     "trigger_type": "candidate",
+    #     "trigger_key": "candidate_moved",
+    #     "trigger_config": {"label": "Candidate moved to Interview", "stage": "Interview"},
+    #     "conditions": [],
+    #     "template_name": "Interview Invitation",
+    #     "action_type": "send_email",
+    # },
     {
         "name": "Rejection Email",
         "description": "Send rejection email when candidate moves to Rejected stage",

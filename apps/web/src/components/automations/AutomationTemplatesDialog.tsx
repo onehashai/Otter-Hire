@@ -36,14 +36,15 @@ const templates: {
     triggerConfig: { label: "Candidate applied" },
     templateName: "Application Received",
   },
-  {
-    name: "Interview Invitation",
-    trigger: "Moved to Interview",
-    action: "Send Interview Invitation",
-    triggerKey: "candidate_moved",
-    triggerConfig: { stage: "Interview", label: "Candidate moved to Interview" },
-    templateName: "Interview Invitation",
-  },
+  // TODO: Re-enable interview automation starter when interview email templates are restored.
+  // {
+  //   name: "Interview Invitation",
+  //   trigger: "Moved to Interview",
+  //   action: "Send Interview Invitation",
+  //   triggerKey: "candidate_moved",
+  //   triggerConfig: { stage: "Interview", label: "Candidate moved to Interview" },
+  //   templateName: "Interview Invitation",
+  // },
   {
     name: "Rejection Email",
     trigger: "Moved to Rejected",

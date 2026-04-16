@@ -6,11 +6,12 @@ import { Button } from "@onehash/ui/button";
 import { InputField } from "@onehash/ui/input";
 import { Textarea } from "@onehash/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@onehash/ui/popover";
-import { Send, Paperclip, Smile } from "lucide-react";
+import { Send, Paperclip, Smile, X } from "lucide-react";
 import EmojiPicker from "emoji-picker-react";
 import { toast } from "@onehash/ui/sonner";
 import { cn } from "@/lib/utils";
 import { getTemplates, type TemplateResponse } from "@/api/templates";
+import { uploadTempAttachment, type MessageAttachment } from "@/api/conversations";
 import { convert as htmlToText } from "html-to-text";
 
 // Convert HTML template body to readable plain text using html-to-text.
@@ -41,14 +42,16 @@ export function substituteTemplateVariables(
 
 export interface ComposeMessageBoxProps {
   toEmail: string;
+  candidateId: string;
   jobTitle?: string;
   candidateName?: string;
   organizationName?: string;
-  onSend: (body: string) => Promise<void>;
+  onSend: (body: string, attachments?: MessageAttachment[]) => Promise<void>;
 }
 
 export function ComposeMessageBox({
   toEmail,
+  candidateId,
   jobTitle = "",
   candidateName,
   organizationName,
@@ -59,6 +62,9 @@ export function ComposeMessageBox({
   const [bcc, setBcc] = useState("");
   const [body, setBody] = useState("");
   const [sending, setSending] = useState(false);
+  const [uploadingCount, setUploadingCount] = useState(0);
+  const [attachments, setAttachments] = useState<File[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [templates, setTemplates] = useState<TemplateResponse[]>([]);
   const [templatesLoading, setTemplatesLoading] = useState(true);
   const [templatePickerIndex, setTemplatePickerIndex] = useState(0);
@@ -127,13 +133,30 @@ export function ComposeMessageBox({
   }, [showTemplatePicker, body]);
 
   const handleSend = async () => {
-    if (!body.trim() || sending) return;
+    if ((!body.trim() && attachments.length === 0) || sending) return;
     setSending(true);
+    let uploaded: MessageAttachment[] | undefined;
+    if (attachments.length > 0) {
+      setUploadingCount(attachments.length);
+      try {
+        uploaded = await Promise.all(
+          attachments.map((f) =>
+            uploadTempAttachment(candidateId, f).finally(() => setUploadingCount((n) => n - 1)),
+          ),
+        );
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Attachment upload failed");
+        setUploadingCount(0);
+        setSending(false);
+        return;
+      }
+    }
     try {
-      await onSend(body);
+      await onSend(body, uploaded);
       setBody("");
       setCc("");
       setBcc("");
+      setAttachments([]);
       toast.success(`Message sent${candidateName ? ` to ${candidateName}` : ""}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to send message");
@@ -270,6 +293,25 @@ export function ComposeMessageBox({
             </div>,
             document.body,
           )}
+        {attachments.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {attachments.map((file, i) => (
+              <span
+                key={i}
+                className="flex items-center gap-1 rounded bg-muted px-2 py-0.5 text-[11px] text-muted-foreground"
+              >
+                {file.name}
+                <button
+                  type="button"
+                  onClick={() => setAttachments((prev) => prev.filter((_, j) => j !== i))}
+                  className="ml-0.5 hover:text-foreground"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1">
             <Popover open={emojiPickerOpen} onOpenChange={setEmojiPickerOpen}>
@@ -295,7 +337,31 @@ export function ComposeMessageBox({
                 />
               </PopoverContent>
             </Popover>
-            <Button variant="ghost" size="icon" className="h-7 w-7" title="Attach file">
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                const files = Array.from(e.target.files ?? []);
+                if (!files.length) return;
+                if (attachments.length + files.length > 5) {
+                  toast.error("Maximum 5 attachments allowed");
+                  e.target.value = "";
+                  return;
+                }
+                setAttachments((prev) => [...prev, ...files]);
+                e.target.value = "";
+              }}
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              title="Attach file"
+              onClick={() => fileInputRef.current?.click()}
+            >
               <Paperclip className="h-3.5 w-3.5" />
             </Button>
           </div>
@@ -307,10 +373,14 @@ export function ComposeMessageBox({
               size="sm"
               className="h-7 text-xs gap-1.5"
               onClick={() => void handleSend()}
-              disabled={!body.trim() || sending}
+              disabled={(!body.trim() && attachments.length === 0) || sending || uploadingCount > 0}
             >
               <Send className="h-3 w-3" />
-              {sending ? "Sending..." : "Send"}
+              {uploadingCount > 0
+                ? `Uploading ${uploadingCount}…`
+                : sending
+                  ? "Sending..."
+                  : "Send"}
             </Button>
           </div>
         </div>

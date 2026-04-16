@@ -66,6 +66,7 @@ class ZeptoMailProvider(EmailProvider):
         references: str | None,
         message_id_tag: str | None,  # SES-only concept — ignored here
         org_id_tag: str | None,  # SES-only concept — ignored here
+        attachments: list[dict] | None = None,
     ) -> ConversationSendResult:
         # Generate an RFC 5322 Message-ID using the reply+ routing pattern so
         # inbound replies land back in the correct conversation.
@@ -93,6 +94,8 @@ class ZeptoMailProvider(EmailProvider):
             if refs:
                 mime_headers.append({"header_name": "References", "header_value": refs})
 
+        import base64 as _base64
+
         headers = {
             "Authorization": settings.zeptomail_api_key,
             "Content-Type": "application/json",
@@ -105,6 +108,16 @@ class ZeptoMailProvider(EmailProvider):
             "htmlbody": html_body or f"<p>{text_body}</p>",
             "mime_headers": mime_headers,
         }
+
+        if attachments:
+            payload["attachments"] = [
+                {
+                    "name": att.get("filename", "attachment"),
+                    "mime_type": att.get("mime_type", "application/octet-stream"),
+                    "content": _base64.b64encode(att["content"]).decode("ascii"),
+                }
+                for att in attachments
+            ]
 
         async with httpx.AsyncClient() as client:
             response = await client.post(self._API_URL, json=payload, headers=headers)

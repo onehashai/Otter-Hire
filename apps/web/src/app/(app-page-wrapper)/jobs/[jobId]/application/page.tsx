@@ -31,7 +31,11 @@ import { SelectField } from "@onehash/ui/select";
 import { toast } from "@onehash/ui/sonner";
 import { generateId } from "@/lib/utils";
 import { cn } from "@/lib/utils";
-import { useJobSetup } from "../context";
+import {
+  DEFAULT_APPLICATION_FORM_DRAFT,
+  type ApplicationQuestionAnswerType,
+  useJobSetup,
+} from "../context";
 import { useTranslation } from "react-i18next";
 import { useIsMobile } from "@/hooks/use-mobile";
 
@@ -45,16 +49,7 @@ interface DefaultLinkField {
   visibility: FieldVisibility;
 }
 
-type AnswerType =
-  | "short_text"
-  | "long_text"
-  | "single_select"
-  | "multi_select"
-  | "yes_no"
-  | "file_upload"
-  | "url"
-  | "number"
-  | "date";
+type AnswerType = ApplicationQuestionAnswerType;
 
 interface CustomQuestion {
   id: string;
@@ -181,7 +176,10 @@ export default function ApplicationFormPage() {
     setCollectCover,
     applicationFormSchema,
     setApplicationFormSchema,
+    applicationFormDraft,
+    setApplicationFormDraft,
   } = useJobSetup();
+  const draft = applicationFormDraft ?? DEFAULT_APPLICATION_FORM_DRAFT;
 
   const parsedSchema = useMemo(() => {
     const schema = (applicationFormSchema ?? {}) as Record<string, unknown>;
@@ -210,44 +208,48 @@ export default function ApplicationFormPage() {
     defaultLinkFields.map((l) => ({ ...l })),
   );
   const [customQuestions, setCustomQuestions] = useState<CustomQuestion[]>([]);
-  const [questionDialogOpen, setQuestionDialogOpen] = useState(false);
-  const [editingQuestion, setEditingQuestion] = useState<CustomQuestion | null>(null);
-  const [qTitle, setQTitle] = useState("");
-  const [qType, setQType] = useState<AnswerType>("short_text");
-  const [qRequired, setQRequired] = useState(false);
-  const [qOptions, setQOptions] = useState<string[]>(["", ""]);
-  const [qAllowOther, setQAllowOther] = useState(false);
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const initializedFromSchemaRef = useRef(false);
+
+  const editingQuestion = useMemo(
+    () => customQuestions.find((q) => q.id === draft.editingQuestionId) ?? null,
+    [draft.editingQuestionId, customQuestions],
+  );
 
   const setLinkVisibility = (idx: number, val: FieldVisibility) => {
     setLinkFields((prev) => prev.map((l, i) => (i === idx ? { ...l, visibility: val } : l)));
   };
 
   const openAddQuestion = () => {
-    setEditingQuestion(null);
-    setQTitle("");
-    setQType("short_text");
-    setQRequired(false);
-    setQOptions(["", ""]);
-    setQAllowOther(false);
-    setQuestionDialogOpen(true);
+    setApplicationFormDraft((prev) => ({
+      ...prev,
+      questionDialogOpen: true,
+      editingQuestionId: null,
+      qTitle: "",
+      qType: "short_text",
+      qRequired: false,
+      qOptions: ["", ""],
+      qAllowOther: false,
+    }));
   };
 
   const openEditQuestion = (q: CustomQuestion) => {
-    setEditingQuestion(q);
-    setQTitle(q.title);
-    setQType(q.answerType);
-    setQRequired(q.required);
-    setQOptions(q.options?.length ? [...q.options] : ["", ""]);
-    setQAllowOther(q.allowOther ?? false);
-    setQuestionDialogOpen(true);
+    setApplicationFormDraft((prev) => ({
+      ...prev,
+      questionDialogOpen: true,
+      editingQuestionId: q.id,
+      qTitle: q.title,
+      qType: q.answerType,
+      qRequired: q.required,
+      qOptions: q.options?.length ? [...q.options] : ["", ""],
+      qAllowOther: q.allowOther ?? false,
+    }));
   };
 
   const saveQuestion = () => {
-    if (!qTitle.trim()) return;
-    const hasOptions = qType === "single_select" || qType === "multi_select";
-    const finalOptions = hasOptions ? qOptions.filter((o) => o.trim()) : undefined;
+    if (!draft.qTitle.trim()) return;
+    const hasOptions = draft.qType === "single_select" || draft.qType === "multi_select";
+    const finalOptions = hasOptions ? draft.qOptions.filter((o) => o.trim()) : undefined;
     if (hasOptions && (!finalOptions || finalOptions.length < 2)) {
       toast.error(t("add_at_least_2_options"));
       return;
@@ -258,11 +260,11 @@ export default function ApplicationFormPage() {
           q.id === editingQuestion.id
             ? {
                 ...q,
-                title: qTitle.trim(),
-                answerType: qType,
-                required: qRequired,
+                title: draft.qTitle.trim(),
+                answerType: draft.qType,
+                required: draft.qRequired,
                 options: finalOptions,
-                allowOther: qAllowOther,
+                allowOther: draft.qAllowOther,
               }
             : q,
         ),
@@ -272,15 +274,19 @@ export default function ApplicationFormPage() {
         ...prev,
         {
           id: generateId(),
-          title: qTitle.trim(),
-          answerType: qType,
-          required: qRequired,
+          title: draft.qTitle.trim(),
+          answerType: draft.qType,
+          required: draft.qRequired,
           options: finalOptions,
-          allowOther: qAllowOther,
+          allowOther: draft.qAllowOther,
         },
       ]);
     }
-    setQuestionDialogOpen(false);
+    setApplicationFormDraft((prev) => ({
+      ...prev,
+      questionDialogOpen: false,
+      editingQuestionId: null,
+    }));
   };
 
   const deleteQuestion = (id: string) => {
@@ -405,20 +411,22 @@ export default function ApplicationFormPage() {
   ]);
 
   const renderQuestionFormFields = () => {
-    const showOptions = qType === "single_select" || qType === "multi_select";
+    const showOptions = draft.qType === "single_select" || draft.qType === "multi_select";
     return (
       <>
         <InputField
           label={t("question_title_label")}
-          value={qTitle}
-          onChange={(e) => setQTitle(e.target.value)}
+          value={draft.qTitle}
+          onChange={(e) => setApplicationFormDraft((prev) => ({ ...prev, qTitle: e.target.value }))}
           placeholder={t("question_title_placeholder")}
           className="h-9 text-sm"
         />
         <SelectField
           label={t("answer_type_label")}
-          value={qType}
-          onValueChange={(v) => setQType(v as AnswerType)}
+          value={draft.qType}
+          onValueChange={(v) =>
+            setApplicationFormDraft((prev) => ({ ...prev, qType: v as AnswerType }))
+          }
           options={(Object.keys(answerTypeKeys) as AnswerType[]).map((val) => ({
             value: val,
             label: t(answerTypeKeys[val]),
@@ -426,25 +434,30 @@ export default function ApplicationFormPage() {
         />
         {showOptions && (
           <div className="space-y-2">
-            {qOptions.map((opt, i) => (
+            {draft.qOptions.map((opt, i) => (
               <div key={i} className="flex items-center gap-2">
                 <span className="text-xs text-muted-foreground w-4 shrink-0">{i + 1}</span>
                 <InputField
                   value={opt}
                   onChange={(e) => {
-                    const next = [...qOptions];
+                    const next = [...draft.qOptions];
                     next[i] = e.target.value;
-                    setQOptions(next);
+                    setApplicationFormDraft((prev) => ({ ...prev, qOptions: next }));
                   }}
                   placeholder={t("option_n", { n: i + 1 })}
                   className="h-8 text-sm flex-1"
                 />
-                {qOptions.length > 2 && (
+                {draft.qOptions.length > 2 && (
                   <Button
                     variant="ghost"
                     size="icon"
                     className="h-7 w-7 shrink-0"
-                    onClick={() => setQOptions(qOptions.filter((_, idx) => idx !== i))}
+                    onClick={() =>
+                      setApplicationFormDraft((prev) => ({
+                        ...prev,
+                        qOptions: prev.qOptions.filter((_, idx) => idx !== i),
+                      }))
+                    }
                   >
                     <X className="h-3 w-3" />
                   </Button>
@@ -455,14 +468,18 @@ export default function ApplicationFormPage() {
               variant="outline"
               size="sm"
               className="h-7 text-xs gap-1"
-              onClick={() => setQOptions([...qOptions, ""])}
+              onClick={() =>
+                setApplicationFormDraft((prev) => ({ ...prev, qOptions: [...prev.qOptions, ""] }))
+              }
             >
               <Plus className="h-3 w-3" /> {t("add_option")}
             </Button>
             <div className="flex items-center gap-2 pt-1">
               <Checkbox
-                checked={qAllowOther}
-                onCheckedChange={(v) => setQAllowOther(!!v)}
+                checked={draft.qAllowOther}
+                onCheckedChange={(v) =>
+                  setApplicationFormDraft((prev) => ({ ...prev, qAllowOther: !!v }))
+                }
                 id="allow-other"
               />
               <Label htmlFor="allow-other" className="text-xs text-muted-foreground cursor-pointer">
@@ -474,7 +491,12 @@ export default function ApplicationFormPage() {
         <Separator />
         <div className="flex items-center justify-between py-1">
           <Label>{t("required_field_toggle")}</Label>
-          <Switch checked={qRequired} onCheckedChange={(v) => setQRequired(!!v)} />
+          <Switch
+            checked={draft.qRequired}
+            onCheckedChange={(v) =>
+              setApplicationFormDraft((prev) => ({ ...prev, qRequired: !!v }))
+            }
+          />
         </div>
       </>
     );
@@ -652,7 +674,12 @@ export default function ApplicationFormPage() {
 
       {/* ── Add/Edit Question Dialog or Sheet ── */}
       {isMobile ? (
-        <Sheet open={questionDialogOpen} onOpenChange={setQuestionDialogOpen}>
+        <Sheet
+          open={draft.questionDialogOpen}
+          onOpenChange={(open) =>
+            setApplicationFormDraft((prev) => ({ ...prev, questionDialogOpen: open }))
+          }
+        >
           <SheetContent side="bottom" className="h-[90vh] rounded-t-2xl overflow-y-auto">
             <SheetHeader>
               <SheetTitle className="text-base">
@@ -664,7 +691,7 @@ export default function ApplicationFormPage() {
               <Button
                 className="w-full h-11 text-sm"
                 onClick={saveQuestion}
-                disabled={!qTitle.trim()}
+                disabled={!draft.qTitle.trim()}
               >
                 {editingQuestion ? t("save_changes") : t("add_question")}
               </Button>
@@ -672,7 +699,12 @@ export default function ApplicationFormPage() {
           </SheetContent>
         </Sheet>
       ) : (
-        <Dialog open={questionDialogOpen} onOpenChange={setQuestionDialogOpen}>
+        <Dialog
+          open={draft.questionDialogOpen}
+          onOpenChange={(open) =>
+            setApplicationFormDraft((prev) => ({ ...prev, questionDialogOpen: open }))
+          }
+        >
           <DialogContent className="sm:max-w-lg">
             <DialogHeader>
               <DialogTitle>
@@ -681,10 +713,16 @@ export default function ApplicationFormPage() {
             </DialogHeader>
             <div className="space-y-4 py-2">{renderQuestionFormFields()}</div>
             <DialogFooter>
-              <Button variant="outline" size="sm" onClick={() => setQuestionDialogOpen(false)}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setApplicationFormDraft((prev) => ({ ...prev, questionDialogOpen: false }))
+                }
+              >
                 {t("cancel")}
               </Button>
-              <Button size="sm" onClick={saveQuestion} disabled={!qTitle.trim()}>
+              <Button size="sm" onClick={saveQuestion} disabled={!draft.qTitle.trim()}>
                 {editingQuestion ? t("save_changes") : t("add_question")}
               </Button>
             </DialogFooter>

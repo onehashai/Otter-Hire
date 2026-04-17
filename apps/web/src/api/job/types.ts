@@ -12,6 +12,7 @@ export type JobTeamMemberResponse = {
   email: string | null;
   role: string;
   user_role: string | null;
+  avatar_url?: string | null;
 };
 
 export type JobWorkspaceCandidateResponse = {

@@ -7,6 +7,7 @@ import { InputField } from "@onehash/ui/input";
 import { Separator } from "@onehash/ui/separator";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@onehash/ui/sheet";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@onehash/ui/dialog";
+import { Avatar } from "@onehash/ui/avatar";
 import { Plus, X, Search, Users } from "lucide-react";
 import { useJobSetup } from "../context";
 import { type TeamRoleType } from "../constants";
@@ -66,6 +67,7 @@ export default function HiringTeamPage() {
       email: user.email,
       role: mapUserRoleToTeamRole(user.role),
       userRole: user.role,
+      avatar_url: user.avatar_url ?? null,
     });
     setMemberSearch("");
     setAddMemberOpen(false);
@@ -94,9 +96,14 @@ export default function HiringTeamPage() {
               onClick={() => addTeamMemberFromUser(user)}
               className="w-full flex items-center gap-3 rounded-lg p-2.5 text-left hover:bg-muted/50 transition-colors"
             >
-              <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-xs font-medium text-muted-foreground shrink-0">
+              <Avatar
+                className="h-8 w-8 shrink-0"
+                src={user.avatar_url}
+                alt={user.name ?? user.email}
+                fallbackClassName="text-xs font-medium text-muted-foreground bg-muted"
+              >
                 {user.name ? getInitialsFromName(user.name, "U") : "U"}
-              </div>
+              </Avatar>
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium truncate">{user.name ?? user.email}</p>
                 <p className="text-xs text-muted-foreground truncate">{user.email}</p>
@@ -149,9 +156,14 @@ export default function HiringTeamPage() {
             <div key={member.id}>
               {i > 0 && <Separator />}
               <div className="flex items-center gap-3 px-4 py-3 bg-card">
-                <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-xs font-medium text-muted-foreground shrink-0">
+                <Avatar
+                  className="h-8 w-8 shrink-0"
+                  src={member.avatar_url}
+                  alt={member.name}
+                  fallbackClassName="text-xs font-medium text-muted-foreground bg-muted"
+                >
                   {getInitialsFromName(member.name)}
-                </div>
+                </Avatar>
                 <p className="flex-1 min-w-0 text-sm font-medium truncate">{member.name}</p>
                 <Button
                   variant="ghost"

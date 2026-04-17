@@ -1,3 +1,6 @@
+import base64
+import hashlib
+import logging
 import secrets
 import urllib.parse
 from datetime import datetime, timedelta, timezone
@@ -13,6 +16,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.crypto import hmac_hash
+from app.core.redis_client import (
+    blacklist_access_token,
+    clear_failed_logins,
+    is_login_locked,
+    is_token_blacklisted,
+    record_failed_login,
+)
 from app.core.security import (
     create_access_token,
     generate_opaque_refresh_token,
@@ -42,6 +52,8 @@ from app.services.default_categories import create_default_job_categories_for_or
 from app.services.default_email_templates import create_default_templates_for_org
 from app.services.email import send_password_reset_email, send_verification_email
 from app.utils.uuid import uuid7
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 limiter = Limiter(key_func=get_remote_address)
@@ -237,9 +249,23 @@ async def login(
     request: Request, payload: LoginRequest, response: Response, db: AsyncSession = Depends(get_db)
 ) -> AuthUserResponse:
     normalized_email = payload.email.lower()
+
+    # Account-level brute-force guard — checked before DB lookup so the
+    # lockout behaviour is identical whether or not the account exists,
+    # preventing user-enumeration via differential lockout timing.
+    if await is_login_locked(normalized_email):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={
+                "code": "AUTH_ACCOUNT_LOCKED",
+                "message": "Too many failed attempts. Please try again in 15 minutes.",
+            },
+        )
+
     result = await db.execute(select(User).where(User.email == normalized_email))
     user = result.scalar_one_or_none()
     if user is None:
+        await record_failed_login(normalized_email)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={
@@ -248,6 +274,7 @@ async def login(
             },
         )
     if not user.hashed_password:
+        await record_failed_login(normalized_email)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={
@@ -256,6 +283,7 @@ async def login(
             },
         )
     if not verify_password(payload.password, user.hashed_password):
+        await record_failed_login(normalized_email)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={
@@ -263,6 +291,9 @@ async def login(
                 "message": "Email or password is incorrect.",
             },
         )
+
+    # Successful authentication — clear any accumulated failure count
+    await clear_failed_logins(normalized_email)
 
     membership_result = await db.execute(
         select(OrgMembership)
@@ -294,8 +325,11 @@ async def login(
 
 
 @router.get("/me", response_model=AuthUserResponse)
+@limiter.limit("60/minute")
 async def me(
-    current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ) -> AuthUserResponse:
     membership_result = await db.execute(
         select(OrgMembership).where(
@@ -322,7 +356,20 @@ async def logout(
     response: Response,
     db: AsyncSession = Depends(get_db),
     refresh_token: str | None = Cookie(default=None),
+    access_token: str | None = Cookie(default=None),
 ) -> Response:
+    # Immediately revoke the access token in Redis so it cannot be used
+    # even within its remaining 15-minute natural lifetime.
+    if access_token:
+        try:
+            payload = verify_access_token(access_token)
+            jti = payload.get("jti")
+            exp = payload.get("exp")
+            if jti and exp:
+                await blacklist_access_token(str(jti), int(exp))
+        except ValueError:
+            pass  # Token already invalid/expired — nothing to blacklist
+
     # Revoke the refresh token in DB so it cannot be reused after logout
     if refresh_token:
         token_hash = sha256(refresh_token.encode()).hexdigest()
@@ -352,7 +399,9 @@ async def logout(
 
 
 @router.get("/validate-session", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("60/minute")
 async def validate_session(
+    request: Request,
     current_user: User = Depends(get_current_user),
 ) -> Response:
     """Lightweight endpoint to validate session without returning user data."""
@@ -366,6 +415,7 @@ async def refresh_token(
     response: Response,
     db: AsyncSession = Depends(get_db),
     refresh_token: str | None = Cookie(default=None),
+    access_token: str | None = Cookie(default=None),
 ) -> AuthUserResponse:
     """Refresh access token using opaque refresh token with rotation and reuse detection."""
     if not refresh_token:
@@ -381,7 +431,15 @@ async def refresh_token(
     user = result.scalar_one_or_none()
 
     if user is None:
-        # Token not found — could be reuse of a rotated token; force re-login
+        # Token not found — likely reuse of an already-rotated token.
+        # This is a strong signal of token theft: an attacker used the stolen token
+        # first, rotating it, and now the legitimate client's copy no longer matches.
+        client_ip = request.client.host if request.client else "unknown"
+        logger.warning(
+            "Refresh token reuse detected — possible token theft. ip=%s user_agent=%s",
+            client_ip,
+            request.headers.get("user-agent", ""),
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={
@@ -429,6 +487,18 @@ async def refresh_token(
 
     new_access_token = _create_session_token(user, membership)
     _set_access_cookie(response, new_access_token)
+
+    # Blacklist the previous access token so it cannot be used for the rest of
+    # its natural lifetime now that a fresh one has been issued.
+    if access_token:
+        try:
+            old_payload = verify_access_token(access_token)
+            old_jti = old_payload.get("jti")
+            old_exp = old_payload.get("exp")
+            if old_jti and old_exp:
+                await blacklist_access_token(str(old_jti), int(old_exp))
+        except ValueError:
+            pass  # Already expired — nothing to revoke
 
     org_result = await db.execute(select(Organization).where(Organization.id == membership.org_id))
     organization = org_result.scalar_one()
@@ -815,6 +885,16 @@ _GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v3/userinfo"
 _OAUTH_STATE_COOKIE = "oauth_state"
 _OAUTH_LINK_MODE_COOKIE = "oauth_link_mode"
 _OAUTH_STATE_TTL_SECONDS = 600  # 10 minutes
+# PKCE (RFC 7636) code verifier cookie — httpOnly, same TTL as state
+_OAUTH_CODE_VERIFIER_COOKIE = "_oauth_cv"
+
+
+def _build_pkce_pair() -> tuple[str, str]:
+    """Return (code_verifier, code_challenge) for PKCE S256 flow."""
+    verifier = secrets.token_urlsafe(96)  # 128 bytes → URL-safe base64 string
+    digest = hashlib.sha256(verifier.encode()).digest()
+    challenge = base64.urlsafe_b64encode(digest).rstrip(b"=").decode()
+    return verifier, challenge
 
 
 def _enc_key() -> str:
@@ -833,6 +913,7 @@ async def google_oauth_enabled() -> dict:
 
 
 @router.get("/google")
+@limiter.limit("20/hour")
 async def google_oauth_redirect(request: Request, response: Response) -> RedirectResponse:
     if not settings.google_oauth_enabled:
         raise HTTPException(
@@ -842,6 +923,7 @@ async def google_oauth_redirect(request: Request, response: Response) -> Redirec
 
     state_token = secrets.token_urlsafe(32)
     state_hash = sha256(state_token.encode()).hexdigest()
+    code_verifier, code_challenge = _build_pkce_pair()
 
     callback_uri = f"{settings.api_base_url}/v1/internal/auth/google/callback"
     params = {
@@ -852,6 +934,8 @@ async def google_oauth_redirect(request: Request, response: Response) -> Redirec
         "state": state_token,
         "access_type": "offline",
         "prompt": "select_account",
+        "code_challenge": code_challenge,
+        "code_challenge_method": "S256",
     }
     auth_url = f"{_GOOGLE_AUTH_URL}?{urllib.parse.urlencode(params)}"
 
@@ -859,6 +943,15 @@ async def google_oauth_redirect(request: Request, response: Response) -> Redirec
     redirect.set_cookie(
         key=_OAUTH_STATE_COOKIE,
         value=state_hash,
+        httponly=True,
+        samesite="lax",
+        secure=settings.is_production,
+        max_age=_OAUTH_STATE_TTL_SECONDS,
+        domain=settings.cookie_domain or None,
+    )
+    redirect.set_cookie(
+        key=_OAUTH_CODE_VERIFIER_COOKIE,
+        value=code_verifier,
         httponly=True,
         samesite="lax",
         secure=settings.is_production,
@@ -887,6 +980,9 @@ async def google_oauth_callback(
         redir.delete_cookie(
             key=_OAUTH_LINK_MODE_COOKIE, path="/", domain=settings.cookie_domain or None
         )
+        redir.delete_cookie(
+            key=_OAUTH_CODE_VERIFIER_COOKIE, path="/", domain=settings.cookie_domain or None
+        )
 
     def _error_redirect(message: str) -> RedirectResponse:
         if is_link_mode:
@@ -912,6 +1008,11 @@ async def google_oauth_callback(
     if not stored_state_hash or sha256(state.encode()).hexdigest() != stored_state_hash:
         return _error_redirect("OAuth state mismatch. Please try signing in again.")
 
+    # Retrieve PKCE code_verifier stored in the initiation cookie
+    code_verifier = request.cookies.get(_OAUTH_CODE_VERIFIER_COOKIE)
+    if not code_verifier:
+        return _error_redirect("OAuth session missing. Please try signing in again.")
+
     # Exchange code for tokens — must match exactly what was sent to Google
     callback_uri = f"{settings.api_base_url}/v1/internal/auth/google/callback"
     try:
@@ -924,6 +1025,7 @@ async def google_oauth_callback(
                     "client_secret": settings.google_client_secret,
                     "redirect_uri": callback_uri,
                     "grant_type": "authorization_code",
+                    "code_verifier": code_verifier,
                 },
                 timeout=10.0,
             )
@@ -961,6 +1063,9 @@ async def google_oauth_callback(
             return _error_redirect("Session expired. Please sign in and try again.")
         try:
             payload = verify_access_token(jwt_token)
+            jti = payload.get("jti")
+            if jti and await is_token_blacklisted(str(jti)):
+                return _error_redirect("Session expired. Please sign in and try again.")
             user_id = payload.get("user_id")
         except ValueError:
             return _error_redirect("Session expired. Please sign in and try again.")
@@ -1014,7 +1119,16 @@ async def google_oauth_callback(
         user = result.scalar_one_or_none()
 
         if user is not None:
-            # Auto-link: existing email account — attach Google identity
+            # Auto-link: existing email account — attach Google identity.
+            # Log for security audit: this silently grants Google sign-in access to an
+            # existing account. The entry lets security teams detect abuse patterns.
+            client_ip = request.client.host if request.client else "unknown"
+            logger.info(
+                "Google OAuth auto-link: attaching Google identity to existing email account. "
+                "user_id=%s ip=%s",
+                str(user.id),
+                client_ip,
+            )
             user.oauth_credentials = {"provider": "google", "google_id_hash": gid_hash}
             user.auth_provider = "email,google" if user.hashed_password else "google"
             if not user.avatar_url and picture:
@@ -1100,6 +1214,7 @@ async def google_oauth_callback(
 
 
 @router.get("/google/link")
+@limiter.limit("10/hour")
 async def google_link_redirect(
     request: Request,
     response: Response,
@@ -1122,6 +1237,7 @@ async def google_link_redirect(
 
     state_token = secrets.token_urlsafe(32)
     state_hash = sha256(state_token.encode()).hexdigest()
+    code_verifier, code_challenge = _build_pkce_pair()
 
     # Reuse the same redirect URI as regular Google OAuth — only one URI needs to be
     # registered in Google Cloud Console.
@@ -1134,6 +1250,8 @@ async def google_link_redirect(
         "state": state_token,
         "access_type": "offline",
         "prompt": "select_account",
+        "code_challenge": code_challenge,
+        "code_challenge_method": "S256",
     }
     auth_url = _GOOGLE_AUTH_URL + "?" + urllib.parse.urlencode(params)
 
@@ -1141,6 +1259,15 @@ async def google_link_redirect(
     redir.set_cookie(
         key=_OAUTH_STATE_COOKIE,
         value=state_hash,
+        httponly=True,
+        samesite="lax",
+        secure=settings.is_production,
+        max_age=_OAUTH_STATE_TTL_SECONDS,
+        path="/",
+    )
+    redir.set_cookie(
+        key=_OAUTH_CODE_VERIFIER_COOKIE,
+        value=code_verifier,
         httponly=True,
         samesite="lax",
         secure=settings.is_production,

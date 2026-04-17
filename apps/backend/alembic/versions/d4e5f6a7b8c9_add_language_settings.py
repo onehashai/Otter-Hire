@@ -8,6 +8,7 @@ Create Date: 2025-01-01 00:00:00.000000
 from typing import Sequence, Union
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision: str = "d4e5f6a7b8c9"
@@ -31,7 +32,7 @@ def upgrade() -> None:
     op.create_check_constraint(
         "ck_organizations_jobs_page_language",
         "organizations",
-        f"jobs_page_language IN ({', '.join(repr(l) for l in SUPPORTED_LANGUAGES)})",
+        f"jobs_page_language IN ({', '.join(repr(lang) for lang in SUPPORTED_LANGUAGES)})",
     )
 
 

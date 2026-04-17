@@ -38,7 +38,8 @@ function formatSalary(job: PublicJobListItem): string | null {
 }
 
 function formatLocation(job: PublicJobListItem): string {
-  return job.location || job.workplace_type || "Remote";
+  const raw = job.location || job.workplace_type || "Remote";
+  return raw.charAt(0).toUpperCase() + raw.slice(1);
 }
 
 function formatEmploymentType(type: string): string {

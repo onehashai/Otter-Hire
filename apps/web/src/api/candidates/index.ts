@@ -314,6 +314,29 @@ export async function createCandidate(
   });
 }
 
+export async function createCandidateFromResume(
+  file: File,
+  jobId?: string | null,
+  stageId?: string | null,
+): Promise<CandidateDetailResponse> {
+  const formData = new FormData();
+  formData.append("file", file);
+  if (jobId) formData.append("job_id", jobId);
+  if (stageId) formData.append("stage_id", stageId);
+  const res = await fetch(`${API_BASE_URL}/candidates/from-resume`, {
+    method: "POST",
+    credentials: "include",
+    body: formData,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(
+      (err as { detail?: string }).detail || "Failed to create candidate from resume",
+    );
+  }
+  return res.json() as Promise<CandidateDetailResponse>;
+}
+
 export async function getCandidateOverview(id: string): Promise<CandidateOverviewResponse> {
   return apiFetch<CandidateOverviewResponse>(`/candidates/${id}/overview`, { method: "GET" });
 }

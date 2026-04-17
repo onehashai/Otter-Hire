@@ -20,7 +20,13 @@ jobs:
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/heads/')
     env:
+      # GITHUB_TOKEN is used for label management / reads.
+      # GH_PAT (a user PAT) is used for PR creation so that the resulting PR
+      # fires a `pull_request` event and triggers CI automatically.
+      # If GH_PAT is not set, PR creation falls back to GITHUB_TOKEN
+      # (CI will NOT fire automatically in that case).
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_PAT: ${{ secrets.GH_PAT }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       OPENAI_MODEL: gpt-4.1-mini
       # Strict validator compatibility: keep this aligned with your semantic PR rules.
@@ -418,17 +424,21 @@ jobs:
             local existing
             existing="$(gh pr list --head "${head_branch}" --base "${base}" --state open --json number --jq '.[0].number' || true)"
 
+            # Use PAT for PR create/edit so the resulting PR fires pull_request
+            # events and triggers CI. Fall back to GITHUB_TOKEN if PAT not set.
+            PR_TOKEN="${GH_PAT:-${GH_TOKEN}}"
+
             if [ -n "${existing}" ] && [ "${existing}" != "null" ]; then
               echo "Updating existing PR #${existing} (${head_branch} -> ${base})."
-              gh pr edit "${existing}" --title "${title}" --body "${body}"
-              gh pr edit "${existing}" --add-label "${label}" || true
+              GH_TOKEN="${PR_TOKEN}" gh pr edit "${existing}" --title "${title}" --body "${body}"
+              GH_TOKEN="${PR_TOKEN}" gh pr edit "${existing}" --add-label "${label}" || true
               echo "PR updated: #${existing}"
             else
               echo "Creating PR (${head_branch} -> ${base})."
               # gh pr create prints URL on success; capture for summary.
-              pr_url="$(gh pr create --base "${base}" --head "${head_branch}" --title "${title}" --body "${body}")"
+              pr_url="$(GH_TOKEN="${PR_TOKEN}" gh pr create --base "${base}" --head "${head_branch}" --title "${title}" --body "${body}")"
               # Label after creation to keep create minimal.
-              gh pr edit "${pr_url}" --add-label "${label}" || true
+              GH_TOKEN="${PR_TOKEN}" gh pr edit "${pr_url}" --add-label "${label}" || true
               echo "PR created: ${pr_url}"
             fi
           }

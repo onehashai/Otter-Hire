@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import re
 
+from pydantic import HttpUrl
+
 from app.services.resume.canonical import (
     Certification,
     Education,
-    HttpUrl,
     PersonalInfo,
     ResumeProfile,
     Skill,

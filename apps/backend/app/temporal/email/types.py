@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass
@@ -25,3 +25,5 @@ class OutboundWorkflowInput:
     in_reply_to: str | None = None  # Message-ID of the email we're replying to (for threading)
     references: str | None = None  # Space-separated Message-IDs for thread (References header)
     conversation_id: str | None = None  # Conversation ID to build References chain
+    # Each dict: { s3_key, filename, mime_type }
+    attachments: list[dict] = field(default_factory=list)

@@ -56,6 +56,7 @@ class EmailProvider(ABC):
         references: str | None,
         message_id_tag: str | None,
         org_id_tag: str | None,
+        attachments: list[dict] | None = None,
     ) -> ConversationSendResult:
         """
         Send one outbound conversation / automation email.
@@ -64,5 +65,6 @@ class EmailProvider(ABC):
         in_reply_to / references — RFC 5322 threading headers.
         message_id_tag / org_id_tag — SES event-tracking only; providers that
                                        do not support tagging must ignore these.
+        attachments — list of { filename, mime_type, content: bytes }.
         Raises on failure.
         """

@@ -1,11 +1,18 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 # ---------------------------------------------------------------------------
 # Message schemas
 # ---------------------------------------------------------------------------
+
+
+class MessageAttachment(BaseModel):
+    s3_key: str
+    filename: str
+    mime_type: str
+    size: int
 
 
 class MessageRead(BaseModel):
@@ -26,13 +33,21 @@ class MessageRead(BaseModel):
     email_message_id: str | None = None
     in_reply_to: str | None = None
     created_at: datetime
+    attachments: list[MessageAttachment] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
 
 
 class MessageCreate(BaseModel):
-    body: str = Field(..., min_length=1)
+    body: str = Field(default="")
     html_body: str | None = None
+    attachments: list[MessageAttachment] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def body_or_attachments_required(self):
+        if not self.body.strip() and not self.attachments:
+            raise ValueError("body or at least one attachment is required")
+        return self
 
 
 # ---------------------------------------------------------------------------
@@ -67,5 +82,12 @@ class ConversationCreate(BaseModel):
     candidate_id: UUID
     job_id: UUID | None = None
     subject: str = Field(..., min_length=1, max_length=1000)
-    body: str = Field(..., min_length=1)
+    body: str = Field(default="")
     html_body: str | None = None
+    attachments: list[MessageAttachment] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def body_or_attachments_required(self):
+        if not self.body.strip() and not self.attachments:
+            raise ValueError("body or at least one attachment is required")
+        return self

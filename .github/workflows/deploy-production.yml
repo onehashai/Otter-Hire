@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: deploy-production
@@ -28,19 +28,42 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Detect changed paths
-        id: changes
-        uses: dorny/paths-filter@v3
-        with:
-          base: ${{ github.event.before }}
-          ref: ${{ github.sha }}
-          filters: |
-            backend:
-              - 'apps/backend/**'
-            web:
-              - 'apps/web/**'
-              - 'packages/ui/**'
+      - name: Resolve diff base per service
+        id: base
+        run: |
+          git fetch --tags
+
+          if git rev-parse "deployed/production/backend" >/dev/null 2>&1; then
+            echo "backend_base=$(git rev-parse deployed/production/backend)" >> "$GITHUB_OUTPUT"
+          else
+            echo "backend_base=$(git rev-list --max-parents=0 HEAD)" >> "$GITHUB_OUTPUT"
+          fi
+
+          if git rev-parse "deployed/production/web" >/dev/null 2>&1; then
+            echo "web_base=$(git rev-parse deployed/production/web)" >> "$GITHUB_OUTPUT"
+          else
+            echo "web_base=$(git rev-list --max-parents=0 HEAD)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Detect backend changes
+        id: backend_changes
+        run: |
+          if git diff --quiet "${{ steps.base.outputs.backend_base }}" "${{ github.sha }}" -- apps/backend/; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Detect web changes
+        id: web_changes
+        run: |
+          if git diff --quiet "${{ steps.base.outputs.web_base }}" "${{ github.sha }}" -- apps/web/ packages/ui/; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Set up AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -61,7 +84,7 @@ jobs:
           echo "WEB_IMAGE=${{ vars.ECR_REGISTRY }}/${{ vars.ECR_REPOSITORY }}:web-${GITHUB_SHA}-amd64" >> "$GITHUB_ENV"
 
       - name: Build and push backend image
-        if: steps.changes.outputs.backend == 'true'
+        if: steps.backend_changes.outputs.changed == 'true'
         uses: docker/build-push-action@v6
         with:
           context: apps/backend
@@ -71,7 +94,7 @@ jobs:
           tags: ${{ env.BACKEND_IMAGE }}
 
       - name: Deploy backend service
-        if: steps.changes.outputs.backend == 'true'
+        if: steps.backend_changes.outputs.changed == 'true'
         id: deploy_backend
         run: |
           arn="$(scripts/ecs_register_and_update.sh \
@@ -83,7 +106,7 @@ jobs:
           echo "arn=$arn" >> "$GITHUB_OUTPUT"
 
       - name: Stop active backend CodeDeploy deployments
-        if: steps.changes.outputs.backend == 'true'
+        if: steps.backend_changes.outputs.changed == 'true'
         run: |
           app_name="${CODEDEPLOY_APP_NAME:-otter-hire-prod-ecs}"
           dg_name="${CODEDEPLOY_BACKEND_DG:-otter-hire-prod-backend-dg}"
@@ -116,23 +139,23 @@ jobs:
           done
 
       - name: Deploy backend via CodeDeploy
-        if: steps.changes.outputs.backend == 'true'
+        if: steps.backend_changes.outputs.changed == 'true'
         id: codedeploy_backend
         run: |
           app_name="${CODEDEPLOY_APP_NAME:-otter-hire-prod-ecs}"
           dg_name="${CODEDEPLOY_BACKEND_DG:-otter-hire-prod-backend-dg}"
-          deployment_id="$(
+          deployment_id=$(
             aws deploy create-deployment \
               --application-name "$app_name" \
               --deployment-group-name "$dg_name" \
-              --revision "{\"revisionType\":\"AppSpecContent\",\"appSpecContent\":{\"content\":\"{\\\"version\\\":1,\\\"Resources\\\":[{\\\"TargetService\\\":{\\\"Type\\\":\\\"AWS::ECS::Service\\\",\\\"Properties\\\":{\\\"TaskDefinition\\\":\\\"${{ steps.deploy_backend.outputs.arn }}\\\",\\\"LoadBalancerInfo\\\":{\\\"ContainerName\\\":\\\"backend\\\",\\\"ContainerPort\\\":8000}}}}]}\"}}" \
+              --revision '{"revisionType":"AppSpecContent","appSpecContent":{"content":"{\"version\":1,\"Resources\":[{\"TargetService\":{\"Type\":\"AWS::ECS::Service\",\"Properties\":{\"TaskDefinition\":\"${{ steps.deploy_backend.outputs.arn }}\",\"LoadBalancerInfo\":{\"ContainerName\":\"backend\",\"ContainerPort\":8000}}}}]}"}}' \
               --query 'deploymentId' \
               --output text
-          )"
+          )
           echo "deployment_id=$deployment_id" >> "$GITHUB_OUTPUT"
 
       - name: Deploy worker service
-        if: steps.changes.outputs.backend == 'true'
+        if: steps.backend_changes.outputs.changed == 'true'
         id: deploy_worker
         run: |
           arn="$(scripts/ecs_register_and_update.sh \
@@ -143,14 +166,14 @@ jobs:
           echo "arn=$arn" >> "$GITHUB_OUTPUT"
 
       - name: Wait for worker service
-        if: steps.changes.outputs.backend == 'true'
+        if: steps.backend_changes.outputs.changed == 'true'
         run: |
           aws ecs wait services-stable \
             --cluster "${{ vars.ECS_CLUSTER }}" \
             --services "${{ vars.ECS_WORKER_SERVICE }}"
 
       - name: Wait for backend deployment
-        if: steps.changes.outputs.backend == 'true'
+        if: steps.backend_changes.outputs.changed == 'true'
         run: |
           deployment_id="${{ steps.codedeploy_backend.outputs.deployment_id }}"
           while true; do
@@ -167,12 +190,18 @@ jobs:
           done
 
       - name: Check backend health
-        if: steps.changes.outputs.backend == 'true'
+        if: steps.backend_changes.outputs.changed == 'true'
         run: |
           curl --fail --show-error --silent "${{ vars.API_HEALTHCHECK_URL }}"
 
+      - name: Tag backend deployed
+        if: steps.backend_changes.outputs.changed == 'true'
+        run: |
+          git tag -f deployed/production/backend "${{ github.sha }}"
+          git push origin -f refs/tags/deployed/production/backend
+
       - name: Build and push web image
-        if: steps.changes.outputs.web == 'true'
+        if: steps.web_changes.outputs.changed == 'true'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -189,8 +218,9 @@ jobs:
             NEXT_PUBLIC_TEMPORAL_UI_URL=${{ vars.NEXT_PUBLIC_TEMPORAL_UI_URL }}
             NEXT_PUBLIC_SENTRY_DSN=${{ vars.NEXT_PUBLIC_SENTRY_DSN }}
             SENTRY_PROJECT=${{ vars.SENTRY_PROJECT }}
+
       - name: Deploy web service
-        if: steps.changes.outputs.web == 'true'
+        if: steps.web_changes.outputs.changed == 'true'
         id: deploy_web
         run: |
           arn="$(scripts/ecs_register_and_update.sh \
@@ -202,7 +232,7 @@ jobs:
           echo "arn=$arn" >> "$GITHUB_OUTPUT"
 
       - name: Stop active web CodeDeploy deployments
-        if: steps.changes.outputs.web == 'true'
+        if: steps.web_changes.outputs.changed == 'true'
         run: |
           app_name="${CODEDEPLOY_APP_NAME:-otter-hire-prod-ecs}"
           dg_name="${CODEDEPLOY_WEB_DG:-otter-hire-prod-web-dg}"
@@ -235,23 +265,23 @@ jobs:
           done
 
       - name: Deploy web via CodeDeploy
-        if: steps.changes.outputs.web == 'true'
+        if: steps.web_changes.outputs.changed == 'true'
         id: codedeploy_web
         run: |
           app_name="${CODEDEPLOY_APP_NAME:-otter-hire-prod-ecs}"
           dg_name="${CODEDEPLOY_WEB_DG:-otter-hire-prod-web-dg}"
-          deployment_id="$(
+          deployment_id=$(
             aws deploy create-deployment \
               --application-name "$app_name" \
               --deployment-group-name "$dg_name" \
-              --revision "{\"revisionType\":\"AppSpecContent\",\"appSpecContent\":{\"content\":\"{\\\"version\\\":1,\\\"Resources\\\":[{\\\"TargetService\\\":{\\\"Type\\\":\\\"AWS::ECS::Service\\\",\\\"Properties\\\":{\\\"TaskDefinition\\\":\\\"${{ steps.deploy_web.outputs.arn }}\\\",\\\"LoadBalancerInfo\\\":{\\\"ContainerName\\\":\\\"web\\\",\\\"ContainerPort\\\":3000}}}}]}\"}}" \
+              --revision '{"revisionType":"AppSpecContent","appSpecContent":{"content":"{\"version\":1,\"Resources\":[{\"TargetService\":{\"Type\":\"AWS::ECS::Service\",\"Properties\":{\"TaskDefinition\":\"${{ steps.deploy_web.outputs.arn }}\",\"LoadBalancerInfo\":{\"ContainerName\":\"web\",\"ContainerPort\":3000}}}}]}"}}' \
               --query 'deploymentId' \
               --output text
-          )"
+          )
           echo "deployment_id=$deployment_id" >> "$GITHUB_OUTPUT"
 
       - name: Wait for web deployment
-        if: steps.changes.outputs.web == 'true'
+        if: steps.web_changes.outputs.changed == 'true'
         run: |
           deployment_id="${{ steps.codedeploy_web.outputs.deployment_id }}"
           while true; do
@@ -267,23 +297,29 @@ jobs:
             sleep 10
           done
 
-      - name: Check web route
-        if: steps.changes.outputs.web == 'true'
+      - name: Check web health
+        if: steps.web_changes.outputs.changed == 'true'
         run: |
           curl --fail --show-error --silent "${{ vars.WEB_HEALTHCHECK_URL }}" > /dev/null
 
+      - name: Tag web deployed
+        if: steps.web_changes.outputs.changed == 'true'
+        run: |
+          git tag -f deployed/production/web "${{ github.sha }}"
+          git push origin -f refs/tags/deployed/production/web
+
       - name: Prune old backend images
-        if: steps.changes.outputs.backend == 'true'
+        if: steps.backend_changes.outputs.changed == 'true'
         run: |
           scripts/ecr_prune_managed_tags.sh "${{ vars.ECR_REPOSITORY }}" "backend-" 3
 
       - name: Prune old web images
-        if: steps.changes.outputs.web == 'true'
+        if: steps.web_changes.outputs.changed == 'true'
         run: |
           scripts/ecr_prune_managed_tags.sh "${{ vars.ECR_REPOSITORY }}" "web-" 3
 
       - name: No deployable changes
-        if: steps.changes.outputs.backend != 'true' && steps.changes.outputs.web != 'true'
+        if: steps.backend_changes.outputs.changed != 'true' && steps.web_changes.outputs.changed != 'true'
         run: echo "No deployable changes detected."
 
       - name: Workflow summary
@@ -292,15 +328,15 @@ jobs:
             echo "## Production deployment"
             echo ""
             echo "- Commit: \`${GITHUB_SHA}\`"
-            echo "- Backend changed: \`${{ steps.changes.outputs.backend }}\`"
-            echo "- Web changed: \`${{ steps.changes.outputs.web }}\`"
-            if [ "${{ steps.changes.outputs.backend }}" = "true" ]; then
+            echo "- Backend changed: \`${{ steps.backend_changes.outputs.changed }}\`"
+            echo "- Web changed: \`${{ steps.web_changes.outputs.changed }}\`"
+            if [ "${{ steps.backend_changes.outputs.changed }}" = "true" ]; then
               echo "- Backend image: \`${BACKEND_IMAGE}\`"
               echo "- Backend task def: \`${{ steps.deploy_backend.outputs.arn }}\`"
               echo "- Backend deployment: \`${{ steps.codedeploy_backend.outputs.deployment_id }}\`"
               echo "- Worker task def: \`${{ steps.deploy_worker.outputs.arn }}\`"
             fi
-            if [ "${{ steps.changes.outputs.web }}" = "true" ]; then
+            if [ "${{ steps.web_changes.outputs.changed }}" = "true" ]; then
               echo "- Web image: \`${WEB_IMAGE}\`"
               echo "- Web task def: \`${{ steps.deploy_web.outputs.arn }}\`"
               echo "- Web deployment: \`${{ steps.codedeploy_web.outputs.deployment_id }}\`"

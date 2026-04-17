@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Check, CheckCheck, ChevronDown, Mail } from "lucide-react";
+import { Check, CheckCheck, ChevronDown, Mail, Paperclip } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getWebSocketBaseUrl } from "@/api/client/client";
 import {
@@ -10,6 +10,7 @@ import {
   getConversationByCandidateId,
   sendMessage,
   type ConversationDetail,
+  type MessageAttachment,
   type MessageRead,
 } from "@/api/conversations";
 import { formatTimestamp } from "@/lib/format-date";
@@ -218,10 +219,11 @@ export function CandidateMessagesTab({
     requestAnimationFrame(scrollToBottom);
   }, [loading, detail?.id, detail?.messages.length]);
 
-  /** `ComposeMessageBox` passes the message body; errors bubble so the box can toast. */
-  const handleSend = async (body: string) => {
+  /** `ComposeMessageBox` passes the message body and already-uploaded attachments. */
+  const handleSend = async (body: string, attachments?: MessageAttachment[]) => {
     const text = body.trim();
-    if (!text) return;
+    const atts = attachments ?? [];
+    if (!text && atts.length === 0) return;
 
     if (!detail) {
       const created = await createConversation({
@@ -229,6 +231,7 @@ export function CandidateMessagesTab({
         job_id: jobId ?? null,
         subject: defaultEmailSubject(jobTitle, candidateName),
         body: text,
+        attachments: atts,
       });
       setDetail(created);
       const last = created.messages[created.messages.length - 1];
@@ -239,7 +242,7 @@ export function CandidateMessagesTab({
       return;
     }
 
-    const msg = await sendMessage(detail.id, { body: text });
+    const msg = await sendMessage(detail.id, { body: text, attachments: atts });
     setDetail((prev) => (prev ? { ...prev, messages: [...prev.messages, msg] } : prev));
     if (msg.status === "queued") {
       pendingMessageIds.current.add(msg.id);
@@ -326,11 +329,34 @@ export function CandidateMessagesTab({
                         </p>
                       </div>
                       <div className="bg-background px-3 py-2.5 text-xs">
-                        <div
-                          className="whitespace-pre-wrap break-words text-foreground leading-relaxed prose prose-sm max-w-none"
-                          dangerouslySetInnerHTML={{ __html: preview }}
-                        />
+                        {preview ? (
+                          <div
+                            className="whitespace-pre-wrap break-words text-foreground leading-relaxed prose prose-sm max-w-none"
+                            dangerouslySetInnerHTML={{ __html: preview }}
+                          />
+                        ) : null}
                         {msg.body_quoted ? <QuotedBodyToggle text={msg.body_quoted} /> : null}
+                        {msg.attachments && msg.attachments.length > 0 ? (
+                          <div
+                            className={cn(
+                              "flex flex-wrap gap-1",
+                              preview ? "mt-2 pt-2 border-t border-border/50" : "",
+                            )}
+                          >
+                            {msg.attachments.map((att, i) => (
+                              <span
+                                key={i}
+                                className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/60 px-2 py-1 text-[11px] text-muted-foreground"
+                              >
+                                <Paperclip className="h-3 w-3 shrink-0" aria-hidden />
+                                <span className="max-w-[180px] truncate">{att.filename}</span>
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
+                        {!preview && (!msg.attachments || msg.attachments.length === 0) ? (
+                          <span className="text-muted-foreground italic">(empty message)</span>
+                        ) : null}
                       </div>
                     </div>
                     {outbound ? <OutboundStatus status={msg.status} /> : null}
@@ -345,6 +371,7 @@ export function CandidateMessagesTab({
       <div className="rounded-xl border border-border bg-background overflow-hidden">
         <ComposeMessageBox
           toEmail={candidateEmail}
+          candidateId={candidateId}
           jobTitle={jobTitle ?? ""}
           candidateName={candidateName}
           organizationName={organizationName ?? undefined}

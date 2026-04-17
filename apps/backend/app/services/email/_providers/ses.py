@@ -60,6 +60,7 @@ class SesProvider(EmailProvider):
         references: str | None,
         message_id_tag: str | None,
         org_id_tag: str | None,
+        attachments: list[dict] | None = None,
     ) -> ConversationSendResult:
         from app.services.ses_outbound import send_email_via_ses
 
@@ -76,6 +77,7 @@ class SesProvider(EmailProvider):
             references=references,
             message_id_tag=message_id_tag,
             org_id_tag=org_id_tag,
+            attachments=attachments,
         )
 
         logger.info(

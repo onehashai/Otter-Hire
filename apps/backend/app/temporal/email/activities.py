@@ -308,6 +308,33 @@ async def send_outbound_email_activity(input_data: OutboundWorkflowInput) -> dic
 
         html_body = input_data.html_body
 
+        # Download attachment bytes from S3 if present
+        from app.services.storage import storage_service
+
+        resolved_attachments: list[dict] = []
+        temp_s3_keys: list[str] = []  # keys to delete after successful send
+        for att in input_data.attachments or []:
+            s3_key = att.get("s3_key", "")
+            if not s3_key:
+                continue
+            try:
+                content = await storage_service.read_bytes(s3_key)
+                resolved_attachments.append(
+                    {
+                        "filename": att.get("filename", "attachment"),
+                        "mime_type": att.get("mime_type", "application/octet-stream"),
+                        "content": content,
+                    }
+                )
+                if "/temp/" in s3_key:
+                    temp_s3_keys.append(s3_key)
+            except Exception:
+                logger.exception(
+                    "Activity: failed to download attachment s3_key=%s message_id=%s",
+                    s3_key,
+                    input_data.message_id,
+                )
+
         # Build References header chain for proper email threading
         references_header = input_data.references
         if input_data.conversation_id:
@@ -336,6 +363,7 @@ async def send_outbound_email_activity(input_data: OutboundWorkflowInput) -> dic
             references=references_header,
             message_id_tag=input_data.message_id,
             org_id_tag=input_data.org_id,
+            attachments=resolved_attachments,
         )
 
         provider_message_id = send_result.provider_message_id
@@ -357,6 +385,16 @@ async def send_outbound_email_activity(input_data: OutboundWorkflowInput) -> dic
                 input_data.message_id,
             )
             raise RuntimeError(f"Message {message_id} not found in database after sending email")
+
+        # Clean up temp attachment files from S3 now that email is sent
+        for s3_key in temp_s3_keys:
+            try:
+                await storage_service.delete_object(s3_key)
+                logger.info(
+                    "Deleted temp attachment s3_key=%s message_id=%s", s3_key, input_data.message_id
+                )
+            except Exception:
+                logger.warning("Failed to delete temp attachment s3_key=%s (non-fatal)", s3_key)
 
     logger.info(
         "Activity completed: send_outbound_email message_id=%s status=sent",

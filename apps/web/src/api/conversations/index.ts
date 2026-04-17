@@ -1,4 +1,4 @@
-import { ApiError, apiFetch, apiGet } from "../client/client";
+import { ApiError, apiFetch, apiGet, API_BASE_URL } from "../client/client";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -14,6 +14,13 @@ export type ConversationStatus = "open" | "closed" | "archived";
 
 export type MessageDirection = "inbound" | "outbound";
 export type MessageStatus = "queued" | "sent" | "delivered" | "read" | "failed" | "received";
+
+export type MessageAttachment = {
+  s3_key: string;
+  filename: string;
+  mime_type: string;
+  size: number;
+};
 
 export type MessageRead = {
   id: string;
@@ -31,6 +38,7 @@ export type MessageRead = {
   status: MessageStatus;
   provider_message_id: string | null;
   created_at: string;
+  attachments?: MessageAttachment[];
 };
 
 export type ConversationDetail = {
@@ -52,11 +60,13 @@ export type ConversationCreateRequest = {
   subject: string;
   body: string;
   html_body?: string | null;
+  attachments?: MessageAttachment[];
 };
 
 export type MessageCreateRequest = {
   body: string;
   html_body?: string | null;
+  attachments?: MessageAttachment[];
 };
 
 // ---------------------------------------------------------------------------
@@ -93,4 +103,21 @@ export function sendMessage(
     method: "POST",
     body: data,
   });
+}
+
+export async function uploadTempAttachment(
+  candidateId: string,
+  file: File,
+): Promise<MessageAttachment> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch(
+    `${API_BASE_URL}/candidates/${encodeURIComponent(candidateId)}/documents/upload-temp`,
+    { method: "POST", credentials: "include", body: form },
+  );
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error((body as { detail?: string }).detail ?? `Upload failed: ${res.status}`);
+  }
+  return res.json() as Promise<MessageAttachment>;
 }

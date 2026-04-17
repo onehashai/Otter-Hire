@@ -28,7 +28,7 @@ class User(Base):
     # The google_id_hash is HMAC-SHA256(google_sub, ENCRYPTION_KEY) — deterministic, non-reversible.
     # Uniqueness on the hash is enforced via a partial functional index (see migration).
     oauth_credentials = Column(JSONB, nullable=True)
-    auth_provider = Column(String, nullable=False, server_default="email")
+    auth_provider = Column(String, nullable=False, default="email", server_default="email")
     name = Column(String, nullable=False)
     status = Column(String, nullable=False)
     is_verified = Column(Boolean, nullable=False, default=False)

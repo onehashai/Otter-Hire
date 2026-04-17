@@ -28,7 +28,14 @@ def create_access_token(data: dict[str, Any], expires_delta: timedelta | None = 
         expire = datetime.now(timezone.utc) + timedelta(
             minutes=settings.access_token_expire_minutes
         )
-    payload.update({"exp": expire, "iat": datetime.now(timezone.utc).timestamp()})
+    payload.update(
+        {
+            "exp": expire,
+            "iat": datetime.now(timezone.utc).timestamp(),
+            # jti (JWT ID) — unique per token so it can be individually revoked in Redis on logout.
+            "jti": _secrets.token_hex(16),
+        }
+    )
     return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
 
 

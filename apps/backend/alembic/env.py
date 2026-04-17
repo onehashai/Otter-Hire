@@ -12,9 +12,9 @@ from alembic import context
 BASE_DIR = Path(__file__).resolve().parents[1]  # backend/
 sys.path.insert(0, str(BASE_DIR))
 
-from app.core.config import settings
-from app.db.base import Base
-from app.models import *  # noqa: F401, F403
+from app.core.config import settings  # noqa: E402
+from app.db.base import Base  # noqa: E402
+from app.models import *  # noqa: E402, F401, F403
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.database_url)

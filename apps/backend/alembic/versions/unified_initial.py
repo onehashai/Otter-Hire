@@ -13,9 +13,9 @@ Revises: None
 
 from typing import Sequence, Union
 
-from alembic import op
 from sqlalchemy import text
 
+from alembic import op
 from app.db.base import Base
 
 revision: str = "unified_initial"

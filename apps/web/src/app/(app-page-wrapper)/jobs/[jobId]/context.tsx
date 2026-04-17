@@ -16,16 +16,48 @@ import type { HiringStage, TeamMember } from "./constants";
 import { useTranslation } from "react-i18next";
 import {
   getJobById,
+  getOrgUsers,
   updateJob,
   publishJob as apiPublishJob,
   unpublishJob as apiUnpublishJob,
   archiveJob as apiArchiveJob,
   type JobDetailResponse,
   type JobUpdatePayload,
+  type OrgUserResponse,
 } from "@/api";
 import { generateId } from "@/lib/utils";
 
 export type Stage = { name: string; interviewer: string };
+export type ApplicationQuestionAnswerType =
+  | "short_text"
+  | "long_text"
+  | "single_select"
+  | "multi_select"
+  | "yes_no"
+  | "file_upload"
+  | "url"
+  | "number"
+  | "date";
+
+export interface ApplicationFormDraftState {
+  questionDialogOpen: boolean;
+  editingQuestionId: string | null;
+  qTitle: string;
+  qType: ApplicationQuestionAnswerType;
+  qRequired: boolean;
+  qOptions: string[];
+  qAllowOther: boolean;
+}
+
+export const DEFAULT_APPLICATION_FORM_DRAFT: ApplicationFormDraftState = {
+  questionDialogOpen: false,
+  editingQuestionId: null,
+  qTitle: "",
+  qType: "short_text",
+  qRequired: false,
+  qOptions: ["", ""],
+  qAllowOther: false,
+};
 
 export interface JobSetupState {
   jobId: string | null;
@@ -72,6 +104,7 @@ export interface JobSetupState {
   hasUnsavedChanges: boolean;
   showUnsavedDialog: boolean;
   pendingNavigation: string | null;
+  applicationFormDraft: ApplicationFormDraftState;
 }
 
 const defaultState: JobSetupState = {
@@ -123,6 +156,7 @@ const defaultState: JobSetupState = {
   hasUnsavedChanges: false,
   showUnsavedDialog: false,
   pendingNavigation: null,
+  applicationFormDraft: DEFAULT_APPLICATION_FORM_DRAFT,
 };
 
 function stableStringify(value: unknown): string {
@@ -196,9 +230,11 @@ function mapApiToState(job: JobDetailResponse): Partial<JobSetupState> {
       email: m.email ?? "",
       role: m.role as TeamRoleType,
       userRole: m.user_role,
+      avatar_url: m.avatar_url ?? null,
     })),
     published: job.status === "open",
     isLoading: false,
+    applicationFormDraft: DEFAULT_APPLICATION_FORM_DRAFT,
   };
 }
 
@@ -259,6 +295,11 @@ type JobSetupContextValue = JobSetupState & {
   handleSaveAndNavigate: () => void;
   handleCancelNavigation: () => void;
   showUnsavedWarning: (path: string) => void;
+  setApplicationFormDraft: (
+    value:
+      | ApplicationFormDraftState
+      | ((prev: ApplicationFormDraftState) => ApplicationFormDraftState),
+  ) => void;
 };
 
 const JobSetupContext = createContext<JobSetupContextValue | null>(null);
@@ -285,9 +326,21 @@ export function JobSetupProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     (async () => {
       try {
-        const job = await getJobById(id);
+        const [job, orgUsersRaw] = await Promise.all([
+          getJobById(id),
+          getOrgUsers().catch((): OrgUserResponse[] => []),
+        ]);
         if (!cancelled) {
-          setState((s) => ({ ...s, ...mapApiToState(job) }));
+          const avatarsByUserId = new Map<string, string | null>(
+            orgUsersRaw.map((orgUser) => [orgUser.id, orgUser.avatar_url ?? null]),
+          );
+          const mappedState = mapApiToState(job);
+          const mappedTeamMembers = (mappedState.teamMembers ?? []).map((member) => ({
+            ...member,
+            avatar_url:
+              avatarsByUserId.get(member.user_id ?? member.id) ?? member.avatar_url ?? null,
+          }));
+          setState((s) => ({ ...s, ...mappedState, teamMembers: mappedTeamMembers }));
         }
       } catch {
         if (!cancelled) {
@@ -798,6 +851,22 @@ export function JobSetupProvider({ children }: { children: ReactNode }) {
     handleSaveAndNavigate,
     handleCancelNavigation,
     showUnsavedWarning,
+    setApplicationFormDraft: (value) => {
+      setState((s) => {
+        const prevDraft = s.applicationFormDraft ?? DEFAULT_APPLICATION_FORM_DRAFT;
+        const nextDraft =
+          typeof value === "function"
+            ? (value as (prev: ApplicationFormDraftState) => ApplicationFormDraftState)(prevDraft)
+            : value;
+        if (stableStringify(nextDraft) === stableStringify(prevDraft)) {
+          return s;
+        }
+        return {
+          ...s,
+          applicationFormDraft: nextDraft,
+        };
+      });
+    },
   };
 
   return <JobSetupContext.Provider value={value}>{children}</JobSetupContext.Provider>;

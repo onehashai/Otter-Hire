@@ -1,9 +1,38 @@
 import { useEffect } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
+
+const jobSetupTabs = new Set([
+  "info",
+  "description",
+  "application",
+  "stages",
+  "team",
+  "integration",
+]);
+
+function toSegments(path: string): string[] {
+  const cleanPath = path.split("?")[0].split("#")[0];
+  return cleanPath.split("/").filter(Boolean);
+}
+
+function isJobSetupTabPath(path: string): boolean {
+  const segments = toSegments(path);
+  if (segments.length !== 3 || segments[0] !== "jobs") {
+    return false;
+  }
+  return jobSetupTabs.has(segments[2]);
+}
+
+function getJobBase(path: string): string | null {
+  const segments = toSegments(path);
+  if (segments.length < 2 || segments[0] !== "jobs") {
+    return null;
+  }
+  return `/jobs/${segments[1]}`;
+}
 
 export function useNavigationGuard(shouldBlock: boolean, onNavigate: (path: string) => void) {
   const pathname = usePathname();
-  const router = useRouter();
 
   useEffect(() => {
     if (!shouldBlock) return;
@@ -19,12 +48,12 @@ export function useNavigationGuard(shouldBlock: boolean, onNavigate: (path: stri
 
       // Check if it's an internal link
       if (href.startsWith("/")) {
-        // Check if navigating outside current job page
-        const currentJobMatch = pathname.match(/^\/jobs\/[^/]+/);
-        const targetJobMatch = href.match(/^\/jobs\/[^/]+/);
+        const currentBase = getJobBase(pathname);
+        const targetBase = getJobBase(href);
+        const sameJob = currentBase !== null && currentBase === targetBase;
 
-        // Allow navigation within same job page (different tabs)
-        if (currentJobMatch && targetJobMatch && currentJobMatch[0] === targetJobMatch[0]) {
+        // Allow navigation between setup tabs of same job only.
+        if (sameJob && isJobSetupTabPath(pathname) && isJobSetupTabPath(href)) {
           return;
         }
 

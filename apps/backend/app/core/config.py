@@ -1,6 +1,6 @@
 import json
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -230,6 +230,16 @@ class Settings(BaseSettings):
     sentry_profiles_sample_rate: float = Field(
         default=0.0, validation_alias="SENTRY_PROFILES_SAMPLE_RATE"
     )
+
+    @model_validator(mode="after")
+    def _validate_jwt_secret_key(self) -> "Settings":
+        if len(self.jwt_secret_key) < 32:
+            raise ValueError(
+                "JWT_SECRET_KEY must be at least 32 characters long. "
+                "Generate a secure key with: "
+                'python -c "import secrets; print(secrets.token_hex(32))"'
+            )
+        return self
 
     @property
     def _scheme(self) -> str:

@@ -76,6 +76,7 @@ export type TeamMember = {
   email: string;
   role: TeamRoleType;
   userRole?: string | null;
+  avatar_url?: string | null;
 };
 
 export const teamRoleLabels: Record<TeamRoleType, string> = {

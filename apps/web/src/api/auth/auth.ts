@@ -1,4 +1,4 @@
-import { refresh401MeansSessionExpired } from "@/lib/auth-refresh-codes";
+import { sharedRefresh } from "@/lib/shared-refresh";
 import {
   API_BASE_URL,
   apiGet,
@@ -87,34 +87,14 @@ export type RefreshSessionResult =
   | { ok: false; sessionInvalidated: boolean };
 
 export async function refreshSessionDetailed(): Promise<RefreshSessionResult> {
-  try {
-    const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
-      method: "POST",
-      headers: { Accept: "application/json" },
-      credentials: "include",
-      cache: "no-store",
-    });
-
-    if (res.ok) {
-      const raw = (await res.json()) as Record<string, unknown>;
-      return { ok: true, user: normalizeAuthSessionPayload(raw) };
-    }
-
-    if (res.status === 401) {
-      let code: string | undefined;
-      try {
-        const body = (await res.json()) as { code?: string };
-        code = typeof body.code === "string" ? body.code : undefined;
-      } catch {
-        code = undefined;
-      }
-      return { ok: false, sessionInvalidated: refresh401MeansSessionExpired(code) };
-    }
-
-    return { ok: false, sessionInvalidated: false };
-  } catch {
-    return { ok: false, sessionInvalidated: false };
+  const result = await sharedRefresh();
+  if (result.ok) {
+    return { ok: true, user: normalizeAuthSessionPayload(result.rawUser) };
   }
+  if ("sessionInvalidated" in result) {
+    return { ok: false, sessionInvalidated: result.sessionInvalidated };
+  }
+  return { ok: false, sessionInvalidated: false };
 }
 
 export async function refreshSession(): Promise<AuthSessionResponse | null> {

@@ -10,6 +10,7 @@ import { useAuthSession } from "@/app/providers";
 import { Button } from "@onehash/ui/button";
 import { Card, CardContent } from "@onehash/ui/card";
 import { Badge } from "@onehash/ui/badge";
+import { Avatar } from "@onehash/ui/avatar";
 import { Separator } from "@onehash/ui/separator";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@onehash/ui/sheet";
 import {
@@ -228,9 +229,14 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
         <div className="space-y-1.5">
           {teamMembers.map((m) => (
             <div key={m.id} className="flex items-center gap-2">
-              <div className="h-6 w-6 rounded-full bg-muted flex items-center justify-center text-[10px] font-medium text-muted-foreground shrink-0">
+              <Avatar
+                className="h-6 w-6 shrink-0"
+                src={m.avatar_url}
+                alt={m.name}
+                fallbackClassName="text-[10px] font-medium text-muted-foreground bg-muted"
+              >
                 {getInitialsFromName(m.name)}
-              </div>
+              </Avatar>
               <span className="text-xs">{m.name}</span>
             </div>
           ))}

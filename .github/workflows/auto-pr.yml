@@ -27,6 +27,7 @@ jobs:
       # (CI will NOT fire automatically in that case).
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GH_PAT: ${{ secrets.GH_PAT }}
+      GH_REPO: ${{ github.repository }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       OPENAI_MODEL: gpt-4.1-mini
       # Strict validator compatibility: keep this aligned with your semantic PR rules.

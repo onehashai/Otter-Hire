@@ -64,7 +64,7 @@ from app.schemas.candidates import (
 from app.schemas.validators import is_valid_email, is_valid_phone
 from app.services.automation import execute_automations_for_trigger
 from app.services.email import send_candidate_note_mention_email
-from app.services.media import ensure_pdf_type, read_upload_with_size_check
+from app.services.media import ensure_pdf_type, ensure_resume_type, read_upload_with_size_check
 from app.services.resume.pipeline import run_resume_pipeline
 from app.services.storage import storage_service
 from app.utils.uuid import uuid7
@@ -660,18 +660,30 @@ async def create_candidate_from_resume(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("candidates:source")),
 ):
-    ensure_pdf_type(file.content_type)
+    ensure_resume_type(file.content_type)
     content = await read_upload_with_size_check(file)
+    actual_mime = (file.content_type or "application/octet-stream").lower()
     safe_name = (file.filename or "resume.pdf").strip()
 
-    # Parse resume synchronously in a thread pool to extract contact info
+    # Parse resume synchronously in a thread pool to extract contact info + full profile
+    parsed_resume_profile: dict | None = None
+    parsed_profile_links: dict = {}
     try:
-        result = await asyncio.to_thread(run_resume_pipeline, safe_name, "application/pdf", content)
+        result = await asyncio.to_thread(run_resume_pipeline, safe_name, actual_mime, content)
         personal = result.profile.personal
         parsed_name = (personal.full_name or "").strip() or None
         parsed_email = (personal.email or "").strip().lower() or None
         parsed_phone = (personal.phone or "").strip() or None
         parsed_address = (personal.address or "").strip() or None
+        parsed_resume_profile = result.profile.model_dump(mode="json")
+        # Extract profile links from parsed resume (linkedin, github, portfolio, etc.)
+        for key, url in [
+            ("linkedin", personal.linkedin_url),
+            ("github", personal.github_url),
+            ("portfolio", personal.website_url),
+        ]:
+            if url and str(url).strip():
+                parsed_profile_links[key] = str(url).strip()
     except Exception:
         parsed_name = None
         parsed_email = None
@@ -740,7 +752,8 @@ async def create_candidate_from_resume(
         email=parsed_email,
         phone=parsed_phone,
         address=parsed_address,
-        profile_links={},
+        profile_links=parsed_profile_links,
+        parsed_resume=parsed_resume_profile,
         source="Manual",
         tags=[],
     )
@@ -780,7 +793,7 @@ async def create_candidate_from_resume(
         name=safe_name,
         url=resolved_url,
         object_key=object_key,
-        mime_type="application/pdf",
+        mime_type=actual_mime,
         size_bytes=len(content),
         uploaded_by_user_id=current_user.id,
     )

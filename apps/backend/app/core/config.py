@@ -220,6 +220,12 @@ class Settings(BaseSettings):
     # OpenAI key
     openai_api_key: str | None = Field(default=None, validation_alias="OPENAI_API_KEY")
 
+    # Resume parsing tuning
+    resume_parse_max_tokens: int = Field(default=6000, validation_alias="RESUME_PARSE_MAX_TOKENS")
+    resume_parse_cache_ttl_days: int = Field(
+        default=30, validation_alias="RESUME_PARSE_CACHE_TTL_DAYS"
+    )
+
     # Sentry observability
     sentry_dsn: str = Field(default="", validation_alias="SENTRY_DSN")
     sentry_environment: str = Field(default="development", validation_alias="SENTRY_ENVIRONMENT")

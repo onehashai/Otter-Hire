@@ -39,6 +39,13 @@ def _sanitize_url(url: str | None) -> str | None:
         return None
 
 
+def _normalize_skill_name(name: str) -> str:
+    """Title-case the skill name for consistent display (e.g. 'python' → 'Python').
+    Preserves known all-caps acronyms (e.g. 'AWS', 'SQL') by only title-casing
+    words that are all-lowercase."""
+    return " ".join(word if not word.islower() else word.capitalize() for word in name.split())
+
+
 def _dedupe_skills(skills: list[Skill], limit: int = 80) -> list[Skill]:
     seen: set[str] = set()
     out: list[Skill] = []
@@ -46,11 +53,13 @@ def _dedupe_skills(skills: list[Skill], limit: int = 80) -> list[Skill]:
         name = (s.name or "").strip()
         if not name:
             continue
+        # Deduplicate case-insensitively; normalize display name
         key = name.lower()
         if key in seen:
             continue
         seen.add(key)
-        out.append(Skill(name=name[:120], category=_trim(s.category, 80)))
+        normalized = _normalize_skill_name(name)
+        out.append(Skill(name=normalized[:120], category=_trim(s.category, 80)))
         if len(out) >= limit:
             break
     return out
@@ -99,17 +108,15 @@ def sanitize_resume_profile(profile: ResumeProfile) -> ResumeProfile:
             )
         )
 
-    certs = []
-    for c in _cap_list(profile.certifications, 30):
-        if not (c.name or "").strip():
-            continue
-        certs.append(
-            Certification(
-                name=(c.name or "").strip()[:160],
-                issuer=_trim(c.issuer, 120),
-                date=_trim(c.date, 40),
-            )
+    certs = [
+        Certification(
+            name=(c.name or "").strip()[:160],
+            issuer=_trim(c.issuer, 120),
+            date=_trim(c.date, 40),
         )
+        for c in _cap_list(profile.certifications, 30)
+        if (c.name or "").strip()
+    ]
 
     section_map = {k[:80]: v[:8000] for k, v in list(profile.section_map.items())[:30] if k and v}
 

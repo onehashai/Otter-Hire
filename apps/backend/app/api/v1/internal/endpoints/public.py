@@ -65,6 +65,7 @@ from app.schemas.public_jobs import (
     PublicJobsListResponse,
 )
 from app.services.automation import execute_automations_for_trigger
+from app.services.resume.pipeline import run_resume_pipeline
 from app.services.resume_links import resolve_resume_from_body
 from app.services.storage import storage_service
 from app.temporal.email.queue import enqueue_ses_raw_key
@@ -2205,6 +2206,57 @@ async def ingest_inbound_email(
             "org_id": str(org_id),
         }
 
+    # ── LLM pipeline: run full structured extraction on the resume bytes ──────
+    # We already have the raw bytes in memory (from stored_attachments) and the
+    # confidence check passed, so run the same pipeline used by manual uploads.
+    # This sets parsed_resume on the candidate and enriches name/email/phone/address.
+    inbound_parsed_resume_profile: dict | None = None
+    _inbound_profile_links: dict = {}
+    if resume_attachment is not None:
+        _resume_content: bytes | None = None
+        for attachment_row, content in stored_attachments:
+            if attachment_row is resume_attachment:
+                _resume_content = content
+                break
+        if _resume_content is not None:
+            try:
+                _llm_result = await asyncio.to_thread(
+                    run_resume_pipeline,
+                    str(resume_attachment.get("filename") or "resume.pdf"),
+                    str(resume_attachment.get("content_type") or "application/pdf"),
+                    _resume_content,
+                )
+                if _llm_result is not None:
+                    inbound_parsed_resume_profile = _llm_result.profile.model_dump(mode="json")
+                    _personal = _llm_result.profile.personal
+                    # Prefer LLM-extracted contact fields over simple heuristics
+                    if _personal.full_name and _personal.full_name.strip():
+                        extracted_name = _personal.full_name.strip()
+                    if _personal.email and _personal.email.strip():
+                        extracted_email = _personal.email.strip()
+                    if _personal.phone and _personal.phone.strip():
+                        extracted_phone = _personal.phone.strip()
+                    if _personal.address and _personal.address.strip():
+                        extracted_location = _personal.address.strip()
+                    # Enrich profile_links from LLM
+                    for _key, _url in [
+                        ("linkedin", _personal.linkedin_url),
+                        ("github", _personal.github_url),
+                        ("portfolio", _personal.website_url),
+                    ]:
+                        if _url and str(_url).strip():
+                            _inbound_profile_links[_key] = str(_url).strip()
+                    logger.info(
+                        "inbound LLM resume parse succeeded candidate=%s skills=%d edu=%d exp=%d",
+                        extracted_name,
+                        len(_llm_result.profile.skills),
+                        len(_llm_result.profile.education),
+                        len(_llm_result.profile.work_experience),
+                    )
+            except Exception as _llm_exc:
+                logger.warning("inbound LLM resume parse failed (non-fatal): %s", _llm_exc)
+    # ─────────────────────────────────────────────────────────────────────────
+
     candidate_query = None
     if job_inbox is not None and extracted_email and extracted_name:
         candidate_query = await db.execute(
@@ -2244,7 +2296,8 @@ async def ingest_inbound_email(
             email=extracted_email or f"unknown+{inbound_email.id}@invalid.local",
             phone=extracted_phone,
             address=extracted_location,
-            profile_links={},
+            profile_links=_inbound_profile_links if inbound_parsed_resume_profile else {},
+            parsed_resume=inbound_parsed_resume_profile,
             source="Email",
             tags=[],
         )
@@ -2258,6 +2311,11 @@ async def ingest_inbound_email(
             candidate.phone = extracted_phone
         if _should_replace_location(candidate.address, extracted_location):
             candidate.address = extracted_location
+        # Update parsed_resume on existing candidate if LLM succeeded
+        if inbound_parsed_resume_profile is not None:
+            candidate.parsed_resume = inbound_parsed_resume_profile
+            if _inbound_profile_links:
+                candidate.profile_links = _inbound_profile_links
 
     latest_version_result = await db.execute(
         select(func.max(CandidateDocument.version)).where(

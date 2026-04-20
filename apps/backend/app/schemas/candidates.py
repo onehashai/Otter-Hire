@@ -15,7 +15,7 @@ class CandidateListItemResponse(BaseModel):
     email: str
     phone: Optional[str] = None
     address: Optional[str] = None
-    profile_links: dict[str, Any] = {}
+    profile_links: Optional[dict[str, Any]] = None
     parsed_resume: Optional[dict[str, Any]] = None
     source: Optional[str] = None
     tags: list[str] = []

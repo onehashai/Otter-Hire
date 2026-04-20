@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 from uuid import UUID
 
@@ -12,6 +13,36 @@ from app.temporal.resume_parsing.types import JobApplyResumeParseInput
 
 logger = logging.getLogger("ats_worker")
 
+_CACHE_PREFIX = "ats:resume:parse:"
+
+
+def _cache_ttl() -> int:
+    from app.core.config import settings
+
+    return 60 * 60 * 24 * settings.resume_parse_cache_ttl_days
+
+
+async def _get_cached_profile_json(content_hash: str) -> str | None:
+    """Return cached JSON string for this resume hash, or None on miss/error."""
+    try:
+        from app.core.redis_client import get_redis_client
+
+        client = get_redis_client()
+        return await client.get(f"{_CACHE_PREFIX}{content_hash}")
+    except Exception:
+        return None
+
+
+async def _set_cached_profile_json(content_hash: str, profile_json: str) -> None:
+    """Store parsed profile JSON in Redis with 30-day TTL. Fails silently."""
+    try:
+        from app.core.redis_client import get_redis_client
+
+        client = get_redis_client()
+        await client.setex(f"{_CACHE_PREFIX}{content_hash}", _cache_ttl(), profile_json)
+    except Exception:
+        pass
+
 
 @activity.defn(name="parse_job_apply_resume_activity")
 async def parse_job_apply_resume_activity(input_data: JobApplyResumeParseInput) -> dict:
@@ -19,6 +50,7 @@ async def parse_job_apply_resume_activity(input_data: JobApplyResumeParseInput) 
 
     from app.db.session import AsyncSessionLocal
     from app.models.candidate import Candidate
+    from app.services.resume.canonical import ResumeProfile
     from app.services.resume.pipeline import run_resume_pipeline
     from app.services.storage import storage_service
 
@@ -38,6 +70,37 @@ async def parse_job_apply_resume_activity(input_data: JobApplyResumeParseInput) 
         )
         return {"status": "failed", "reason": "storage_read"}
 
+    # --- Content-hash cache check ---
+    content_hash = hashlib.sha256(content).hexdigest()
+    cached_json = await _get_cached_profile_json(content_hash)
+
+    if cached_json:
+        logger.info(
+            "parse_job_apply_resume: cache hit hash=%s candidate_id=%s",
+            content_hash[:12],
+            input_data.candidate_id,
+        )
+        try:
+            profile = ResumeProfile.model_validate_json(cached_json)
+            async with AsyncSessionLocal() as session:
+                row = await session.execute(
+                    select(Candidate).where(
+                        Candidate.id == candidate_id, Candidate.org_id == org_id
+                    )
+                )
+                cand = row.scalar_one_or_none()
+                if not cand:
+                    return {"status": "failed", "reason": "candidate_not_found"}
+                cand.parsed_resume = profile.model_dump(mode="json")
+                await session.commit()
+            return {"status": "ok", "parse_method": "cache", "candidate_id": str(candidate_id)}
+        except Exception:
+            logger.warning(
+                "parse_job_apply_resume: cache entry invalid, re-parsing candidate_id=%s",
+                input_data.candidate_id,
+            )
+
+    # --- Full pipeline ---
     try:
         result = await asyncio.to_thread(
             run_resume_pipeline,
@@ -68,6 +131,9 @@ async def parse_job_apply_resume_activity(input_data: JobApplyResumeParseInput) 
 
         cand.parsed_resume = result.profile.model_dump(mode="json")
         await session.commit()
+
+    # Store in cache for future duplicate uploads (fire-and-forget)
+    await _set_cached_profile_json(content_hash, result.profile.model_dump_json())
 
     return {
         "status": "ok",

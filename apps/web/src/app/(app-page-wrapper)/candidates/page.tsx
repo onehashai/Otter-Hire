@@ -811,7 +811,7 @@ export default function CandidatesPage() {
           </div>
 
           {selectedCount > 0 ? (
-            <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50">
+            <div className="fixed bottom-[calc(3.5rem+1rem)] md:bottom-4 left-1/2 -translate-x-1/2 z-[60]">
               <div className="rounded-lg border border-border bg-card shadow-md px-3 py-2 flex items-center gap-2">
                 <span className="text-xs text-muted-foreground whitespace-nowrap">
                   {selectedCount} selected

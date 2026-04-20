@@ -138,7 +138,7 @@ export function TopBar() {
   const orgDisplayName = (user?.org_name?.trim() || t("nav_organization")).trim();
 
   return (
-    <header className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-border bg-background px-4 md:px-6">
+    <header className="sticky top-0 z-10 flex h-12 md:h-[49px] shrink-0 items-center justify-between gap-2 border-b border-border bg-background px-4 md:px-6">
       <div className="flex min-w-0 flex-1 items-center pr-2 md:pr-3">
         <Link href="/" className="-ml-2 flex items-center md:ml-0 md:hidden">
           <Image

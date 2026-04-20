@@ -44,6 +44,7 @@ import {
   type OrgUserResponse,
 } from "@/api";
 import { toast } from "@onehash/ui/sonner";
+import { mapCandidateBase } from "@/lib/resume-insights";
 
 const toTitle = (value: string) =>
   value
@@ -252,41 +253,16 @@ export function JobCandidateProfile({
 
   const uiCandidate = useMemo(() => {
     if (!candidate) return null;
-    const stage = currentAssignment?.stage_name ?? candidate.stage_name ?? "Applied";
-
     const timeline = (overview?.activities ?? [])
       .filter((a) => HIRING_TIMELINE_TYPES.has(a.type))
       .map((a) => mapHiringTimelineItem(a));
 
     return {
-      name: candidate.name,
+      ...mapCandidateBase(candidate, documents, overview),
       role: currentAssignment?.job_title ?? candidate.job_title ?? "—",
-      email: candidate.email,
-      phone: candidate.phone ?? "—",
-      address: candidate.address ?? "—",
-      stage,
-      source: candidate.source ?? "job_portal",
-      appliedDate: candidate.created_at,
-      documents: [
-        ...documents.map((d) => ({
-          id: d.id,
-          name: d.name,
-          type: d.doc_type,
-          date: new Date(d.created_at).toLocaleDateString(),
-          size: d.size_label ?? "—",
-          url: d.url,
-        })),
-      ],
-      profileLinks: ((candidate.profile_links ?? {}) as Record<string, string>) || {},
+      stage: currentAssignment?.stage_name ?? candidate.stage_name ?? "Applied",
       coverLetter: false,
-      tags: candidate.tags ?? [],
       timeline,
-      notes: (overview?.notes ?? []).map((n) => ({
-        user: n.author_name ?? "Unknown",
-        date: n.created_at,
-        text: n.content,
-        mentions: n.mentions,
-      })),
     };
   }, [candidate, currentAssignment, overview, documents]);
 

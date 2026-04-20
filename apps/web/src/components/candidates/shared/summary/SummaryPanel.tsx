@@ -572,7 +572,6 @@ export function SummaryPanel({
       </Card>
 
       {((candidate.skills && candidate.skills.length > 0) ||
-        candidate.yearsOfExperience != null ||
         (candidate.allEducation && candidate.allEducation.length > 0) ||
         (candidate.workExperiences && candidate.workExperiences.length > 0) ||
         (candidate.certifications && candidate.certifications.length > 0)) && (
@@ -662,13 +661,6 @@ export function SummaryPanel({
                 <Label className="text-[10px] text-muted-foreground uppercase tracking-wider flex items-center gap-1">
                   <Briefcase className="h-3 w-3" />
                   Work Experience
-                  {candidate.yearsOfExperience != null && (
-                    <span className="ml-auto font-normal normal-case">
-                      {candidate.yearsOfExperience === 0
-                        ? "< 1 yr"
-                        : `${candidate.yearsOfExperience} yr${candidate.yearsOfExperience === 1 ? "" : "s"} total`}
-                    </span>
-                  )}
                 </Label>
                 <div className="flex flex-col gap-2.5">
                   {candidate.workExperiences.map((exp, i) => (

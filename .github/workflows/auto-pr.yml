@@ -367,6 +367,61 @@ jobs:
             printf "%s" "${text}" | jq -r '.body'
           }
 
+          # REST API helpers — no GraphQL, no defaultBranchRef lookup.
+          REPO_OWNER="${GITHUB_REPOSITORY%%/*}"
+          REPO_NAME="${GITHUB_REPOSITORY##*/}"
+          API="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}"
+
+          rest_list_pr() {
+            local base="$1" head="$2" token="$3"
+            curl -fsS \
+              -H "Authorization: Bearer ${token}" \
+              -H "Accept: application/vnd.github+json" \
+              "${API}/pulls?head=${REPO_OWNER}:${head}&base=${base}&state=open&per_page=1" \
+              | jq -r '.[0].number // empty'
+          }
+
+          rest_create_pr() {
+            local base="$1" head="$2" title="$3" body="$4" token="$5"
+            curl -fsS -X POST \
+              -H "Authorization: Bearer ${token}" \
+              -H "Accept: application/vnd.github+json" \
+              -H "Content-Type: application/json" \
+              "${API}/pulls" \
+              -d "$(jq -n \
+                    --arg title "${title}" \
+                    --arg body "${body}" \
+                    --arg head "${head}" \
+                    --arg base "${base}" \
+                    '{title:$title,body:$body,head:$head,base:$base}')" \
+              | jq -r '.number'
+          }
+
+          rest_update_pr() {
+            local number="$1" title="$2" body="$3" token="$4"
+            curl -fsS -X PATCH \
+              -H "Authorization: Bearer ${token}" \
+              -H "Accept: application/vnd.github+json" \
+              -H "Content-Type: application/json" \
+              "${API}/pulls/${number}" \
+              -d "$(jq -n \
+                    --arg title "${title}" \
+                    --arg body "${body}" \
+                    '{title:$title,body:$body}')" \
+              | jq -r '.number'
+          }
+
+          rest_add_label() {
+            local number="$1" label="$2" token="$3"
+            curl -fsS -X POST \
+              -H "Authorization: Bearer ${token}" \
+              -H "Accept: application/vnd.github+json" \
+              -H "Content-Type: application/json" \
+              "${API}/issues/${number}/labels" \
+              -d "$(jq -n --arg l "${label}" '{"labels":[$l]}')" \
+              > /dev/null || true
+          }
+
           upsert_pr() {
             local base="$1"
             local label="$2"
@@ -416,31 +471,29 @@ jobs:
               body="$(repair_body_with_openai "${base}" "${merge_base}" "${log_text}" "${diff_stat}" "${body}")"
             fi
 
-            # Ensure required body sections exist; if still invalid, use deterministic fallback.
             if ! validate_body_shape "${body}"; then
               echo "Body still invalid after repair; using deterministic fallback body." >&2
               body="$(printf "## Summary\nAuto-generated PR.\n\n## Changes\n- Changed files:\n%s\n\n- Diff summary:\n%s\n\n## Testing Notes\n- Review and run CI.\n" "$(printf "%s" "${file_list}" | sed -E 's/^/- /')" "$(printf "%s" "${diff_stat}" | sed -E 's/^/- /')")"
             fi
 
-            local existing
-            existing="$(gh pr list --head "${head_branch}" --base "${base}" --state open --json number --jq '.[0].number' || true)"
-
             # Use PAT for PR create/edit so the resulting PR fires pull_request
             # events and triggers CI. Fall back to GITHUB_TOKEN if PAT not set.
             PR_TOKEN="${GH_PAT:-${GH_TOKEN}}"
 
-            if [ -n "${existing}" ] && [ "${existing}" != "null" ]; then
+            local existing
+            existing="$(rest_list_pr "${base}" "${head_branch}" "${PR_TOKEN}")"
+
+            if [ -n "${existing}" ]; then
               echo "Updating existing PR #${existing} (${head_branch} -> ${base})."
-              GH_TOKEN="${PR_TOKEN}" gh pr edit "${existing}" --title "${title}" --body "${body}"
-              GH_TOKEN="${PR_TOKEN}" gh pr edit "${existing}" --add-label "${label}" || true
+              rest_update_pr "${existing}" "${title}" "${body}" "${PR_TOKEN}"
+              rest_add_label "${existing}" "${label}" "${PR_TOKEN}"
               echo "PR updated: #${existing}"
             else
               echo "Creating PR (${head_branch} -> ${base})."
-              # gh pr create prints URL on success; capture for summary.
-              pr_url="$(GH_TOKEN="${PR_TOKEN}" gh pr create --base "${base}" --head "${head_branch}" --title "${title}" --body "${body}")"
-              # Label after creation to keep create minimal.
-              GH_TOKEN="${PR_TOKEN}" gh pr edit "${pr_url}" --add-label "${label}" || true
-              echo "PR created: ${pr_url}"
+              local pr_number
+              pr_number="$(rest_create_pr "${base}" "${head_branch}" "${title}" "${body}" "${PR_TOKEN}")"
+              rest_add_label "${pr_number}" "${label}" "${PR_TOKEN}"
+              echo "PR created: https://github.com/${REPO_OWNER}/${REPO_NAME}/pull/${pr_number}"
             fi
           }
 

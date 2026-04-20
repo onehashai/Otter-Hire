@@ -44,6 +44,7 @@ import {
   type OrgUserResponse,
 } from "@/api";
 import { toast } from "@onehash/ui/sonner";
+import { mapCandidateBase } from "@/lib/resume-insights";
 
 export function StandaloneCandidateProfile({
   candidateId: id,
@@ -133,35 +134,12 @@ export function StandaloneCandidateProfile({
   const uiCandidate = useMemo(() => {
     if (!candidate) return null;
     const primaryAssignment = candidate.assignments?.[0];
-    const stage = candidate.stage_name ?? primaryAssignment?.stage_name ?? "Applied";
-    const role = candidate.job_title ?? primaryAssignment?.job_title ?? "—";
 
     return {
-      name: candidate.name,
-      role,
-      email: candidate.email,
-      phone: candidate.phone ?? "—",
-      address: candidate.address ?? "—",
-      stage,
-      source: candidate.source ?? "job_portal",
-      appliedDate: candidate.created_at,
-      documents: documents.map((d) => ({
-        id: d.id,
-        name: d.name,
-        type: d.doc_type,
-        date: new Date(d.created_at).toLocaleDateString(),
-        size: d.size_label ?? "—",
-        url: d.url,
-      })),
-      profileLinks: ((candidate.profile_links ?? {}) as Record<string, string>) || {},
+      ...mapCandidateBase(candidate, documents, overview),
+      role: candidate.job_title ?? primaryAssignment?.job_title ?? "—",
+      stage: candidate.stage_name ?? primaryAssignment?.stage_name ?? "Applied",
       coverLetter: false,
-      tags: candidate.tags ?? [],
-      notes: (overview?.notes ?? []).map((n) => ({
-        user: n.author_name ?? "Unknown",
-        date: n.created_at,
-        text: n.content,
-        mentions: n.mentions,
-      })),
     };
   }, [candidate, overview, documents]);
 
@@ -331,30 +309,31 @@ export function StandaloneCandidateProfile({
 
   return (
     <>
-      <div className="space-y-4">
-        <div className="flex w-full min-w-0 items-center justify-between gap-3">
-          <Button variant="ghost" size="sm" className="h-8 shrink-0 text-xs gap-1.5" asChild>
-            <Link href="/candidates">
-              <Icon name="ChevronLeft" className="h-3.5 w-3.5" /> {t("candidates_title")}
-            </Link>
-          </Button>
-          {assignableJobs.length > 0 ? (
-            <Button
-              type="button"
-              size="sm"
-              className="h-9 md:h-8 shrink-0 gap-2 rounded-md px-4 text-xs font-medium"
-              onClick={() => {
-                setAssignJobId(assignableJobs[0]?.id ?? "");
-                setAssignOpen(true);
-              }}
-            >
-              <Icon name="UserCheck" className="h-4 w-4" />
-              {t("assign_job")}
+      <Tabs value={activeTab} onValueChange={setActiveTabWithUrl}>
+        {/* Sticky header: back/assign row + tab list */}
+        <div className="sticky top-0 z-10 bg-background -mt-4 md:-mt-6 pt-4 md:pt-6 space-y-3">
+          <div className="flex w-full min-w-0 items-center justify-between gap-3">
+            <Button variant="ghost" size="sm" className="h-8 shrink-0 text-xs gap-1.5" asChild>
+              <Link href="/candidates">
+                <Icon name="ChevronLeft" className="h-3.5 w-3.5" /> {t("candidates_title")}
+              </Link>
             </Button>
-          ) : null}
-        </div>
+            {assignableJobs.length > 0 ? (
+              <Button
+                type="button"
+                size="sm"
+                className="h-9 md:h-8 shrink-0 gap-2 rounded-md px-4 text-xs font-medium"
+                onClick={() => {
+                  setAssignJobId(assignableJobs[0]?.id ?? "");
+                  setAssignOpen(true);
+                }}
+              >
+                <Icon name="UserCheck" className="h-4 w-4" />
+                {t("assign_job")}
+              </Button>
+            ) : null}
+          </div>
 
-        <Tabs value={activeTab} onValueChange={setActiveTabWithUrl}>
           <TabsList className="h-9 w-full justify-start bg-transparent border-b rounded-none p-0 gap-0">
             {[
               { value: "overview", label: t("overview") },
@@ -370,63 +349,64 @@ export function StandaloneCandidateProfile({
               </TabsTrigger>
             ))}
           </TabsList>
+        </div>
 
-          <div
-            className={`mt-4 min-w-0 overflow-x-hidden ${isMobile ? "space-y-4" : "grid grid-cols-[1fr_320px] gap-4"}`}
-          >
-            <div className="min-w-0 overflow-x-hidden">
-              <TabsContent
-                value="overview"
-                className={`mt-0 space-y-4 ${isMobile ? "space-y-4" : ""}`}
-              >
-                <ResumeTab
-                  resumeUrl={resumeDoc?.url ?? null}
-                  previewUrl={
-                    id && resumeDoc?.id
-                      ? `${getApiBase()}/v1/internal/candidates/${encodeURIComponent(id)}/documents/${encodeURIComponent(
-                          resumeDoc.id,
-                        )}/preview`
-                      : null
-                  }
-                  resumeName={resumeDoc?.name ?? null}
-                  onUploadResumeFile={handleReplaceResume}
-                />
-                <OverviewTab
-                  timeline={[]}
-                  notes={uiCandidate.notes}
-                  mentionableUsers={orgUsers}
-                  onAddNote={handleAddNote}
-                  showTimeline={false}
-                />
-              </TabsContent>
-              <TabsContent value="messages" className="mt-0">
-                <CandidateMessagesTab
-                  candidateId={candidate!.id}
-                  candidateName={uiCandidate.name}
-                  candidateEmail={candidate!.email}
-                  jobId={candidate?.job_id ?? null}
-                  jobTitle={candidate?.job_title ?? null}
-                />
-              </TabsContent>
-              <TabsContent value="documents" className="mt-0">
-                <DocumentsTab
-                  documents={uiCandidate.documents}
-                  onUploadDocument={() => setDocumentOpen(true)}
-                  onDeleteDocument={handleDeleteDocument}
-                />
-              </TabsContent>
-            </div>
-            <SummaryPanel
-              variant="standalone"
-              candidate={uiCandidate}
-              onSaveProfile={handleSaveSummaryProfile}
-              onSaveLinks={handleSaveSummaryLinks}
-              onReplaceResume={handleReplaceResume}
-              onRemoveResume={handleRemoveResume}
-            />
+        {/* Scrollable tab content */}
+        <div
+          className={`mt-4 min-w-0 overflow-x-hidden ${isMobile ? "space-y-4" : "grid grid-cols-[1fr_320px] gap-4"}`}
+        >
+          <div className="min-w-0 overflow-x-hidden">
+            <TabsContent
+              value="overview"
+              className={`mt-0 space-y-4 ${isMobile ? "space-y-4" : ""}`}
+            >
+              <ResumeTab
+                resumeUrl={resumeDoc?.url ?? null}
+                previewUrl={
+                  id && resumeDoc?.id
+                    ? `${getApiBase()}/v1/internal/candidates/${encodeURIComponent(id)}/documents/${encodeURIComponent(
+                        resumeDoc.id,
+                      )}/preview`
+                    : null
+                }
+                resumeName={resumeDoc?.name ?? null}
+                onUploadResumeFile={handleReplaceResume}
+              />
+              <OverviewTab
+                timeline={[]}
+                notes={uiCandidate.notes}
+                mentionableUsers={orgUsers}
+                onAddNote={handleAddNote}
+                showTimeline={false}
+              />
+            </TabsContent>
+            <TabsContent value="messages" className="mt-0">
+              <CandidateMessagesTab
+                candidateId={candidate!.id}
+                candidateName={uiCandidate.name}
+                candidateEmail={candidate!.email}
+                jobId={candidate?.job_id ?? null}
+                jobTitle={candidate?.job_title ?? null}
+              />
+            </TabsContent>
+            <TabsContent value="documents" className="mt-0">
+              <DocumentsTab
+                documents={uiCandidate.documents}
+                onUploadDocument={() => setDocumentOpen(true)}
+                onDeleteDocument={handleDeleteDocument}
+              />
+            </TabsContent>
           </div>
-        </Tabs>
-      </div>
+          <SummaryPanel
+            variant="standalone"
+            candidate={uiCandidate}
+            onSaveProfile={handleSaveSummaryProfile}
+            onSaveLinks={handleSaveSummaryLinks}
+            onReplaceResume={handleReplaceResume}
+            onRemoveResume={handleRemoveResume}
+          />
+        </div>
+      </Tabs>
 
       <Dialog open={assignOpen} onOpenChange={setAssignOpen}>
         <DialogContent className="sm:max-w-md">

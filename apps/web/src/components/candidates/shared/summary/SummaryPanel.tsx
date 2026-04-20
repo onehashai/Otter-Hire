@@ -22,7 +22,20 @@ import { formatPhoneForDisplay, parseStoredPhone } from "@/lib/phone";
 import { getInitialsFromName } from "@/lib/name-initials";
 import { useTranslation } from "react-i18next";
 import { isValidEmail, normalizeEmail, sanitizePhoneInput } from "@/lib/validation/contact";
-import { Dribbble, Github, Globe, Link2, Linkedin, Palette, Twitter } from "lucide-react";
+import {
+  Award,
+  Briefcase,
+  Building2,
+  Dribbble,
+  GraduationCap,
+  Github,
+  Globe,
+  Link2,
+  Linkedin,
+  Palette,
+  Star,
+  Twitter,
+} from "lucide-react";
 
 interface Document {
   id?: string;
@@ -31,6 +44,32 @@ interface Document {
   date: string;
   size: string;
   url?: string;
+}
+
+interface MappedEducation {
+  degree: string | null;
+  field: string | null;
+  institution: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  gradeValue: string | null;
+  gradeType: string | null;
+  gradeMax: string | null;
+}
+
+interface MappedWorkExperience {
+  company: string | null;
+  title: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  location: string | null;
+  highlights: string[];
+}
+
+interface MappedCertification {
+  name: string;
+  issuer: string | null;
+  date: string | null;
 }
 
 interface CandidateSummary {
@@ -45,6 +84,16 @@ interface CandidateSummary {
   documents: Document[];
   profileLinks?: Record<string, string>;
   tags: string[];
+  /** All skills from parsed resume */
+  skills?: string[];
+  /** Total years of experience (null when no parseable dates) */
+  yearsOfExperience?: number | null;
+  /** All education entries, most recent first */
+  allEducation?: MappedEducation[];
+  /** All work experiences */
+  workExperiences?: MappedWorkExperience[];
+  /** All certifications */
+  certifications?: MappedCertification[];
 }
 
 interface TimelineItem {
@@ -521,6 +570,158 @@ export function SummaryPanel({
           )}
         </CardContent>
       </Card>
+
+      {((candidate.skills && candidate.skills.length > 0) ||
+        candidate.yearsOfExperience != null ||
+        (candidate.allEducation && candidate.allEducation.length > 0) ||
+        (candidate.workExperiences && candidate.workExperiences.length > 0) ||
+        (candidate.certifications && candidate.certifications.length > 0)) && (
+        <Card>
+          <CardHeader className="p-4 pb-2">
+            <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+              Resume Insights
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-4 pt-0 space-y-4">
+            {/* ── Skills ── */}
+            {candidate.skills && candidate.skills.length > 0 && (
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-[10px] text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                  <Star className="h-3 w-3" />
+                  Skills
+                </Label>
+                <div className="flex flex-wrap gap-1">
+                  {candidate.skills.slice(0, 30).map((skill) => (
+                    <Badge
+                      key={skill}
+                      variant="secondary"
+                      className="text-[10px] px-1.5 py-0.5 h-auto"
+                    >
+                      {skill}
+                    </Badge>
+                  ))}
+                  {candidate.skills.length > 30 && (
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] px-1.5 py-0.5 h-auto text-muted-foreground"
+                    >
+                      +{candidate.skills.length - 30} more
+                    </Badge>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ── Education ── */}
+            {candidate.allEducation && candidate.allEducation.length > 0 && (
+              <div className="flex flex-col gap-2">
+                <Label className="text-[10px] text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                  <GraduationCap className="h-3 w-3" />
+                  Education
+                </Label>
+                <div className="flex flex-col gap-2.5">
+                  {candidate.allEducation.map((edu, i) => (
+                    <div key={i} className="flex flex-col gap-0.5 pl-1 border-l-2 border-muted">
+                      {(edu.degree || edu.field) && (
+                        <span className="text-xs font-medium leading-tight">
+                          {[edu.degree, edu.field].filter(Boolean).join(" in ")}
+                        </span>
+                      )}
+                      {edu.institution && (
+                        <span className="text-[11px] text-muted-foreground leading-tight">
+                          {edu.institution}
+                        </span>
+                      )}
+                      {(edu.startDate || edu.endDate) && (
+                        <span className="text-[10px] text-muted-foreground tabular-nums">
+                          {[edu.startDate, edu.endDate].filter(Boolean).join(" – ")}
+                        </span>
+                      )}
+                      {edu.gradeValue && (
+                        <span className="text-[10px] text-muted-foreground">
+                          {edu.gradeType === "gpa"
+                            ? `GPA: ${edu.gradeValue}${edu.gradeMax ? ` / ${edu.gradeMax}` : ""}`
+                            : edu.gradeType === "percentage"
+                              ? `${edu.gradeValue}${edu.gradeMax ? ` / ${edu.gradeMax}` : ""}%`
+                              : edu.gradeType === "marks"
+                                ? `Marks: ${edu.gradeValue}${edu.gradeMax ? ` / ${edu.gradeMax}` : ""}`
+                                : edu.gradeType === "grade"
+                                  ? `Grade: ${edu.gradeValue}`
+                                  : edu.gradeValue}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ── Work Experience ── */}
+            {candidate.workExperiences && candidate.workExperiences.length > 0 && (
+              <div className="flex flex-col gap-2">
+                <Label className="text-[10px] text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                  <Briefcase className="h-3 w-3" />
+                  Work Experience
+                  {candidate.yearsOfExperience != null && (
+                    <span className="ml-auto font-normal normal-case">
+                      {candidate.yearsOfExperience === 0
+                        ? "< 1 yr"
+                        : `${candidate.yearsOfExperience} yr${candidate.yearsOfExperience === 1 ? "" : "s"} total`}
+                    </span>
+                  )}
+                </Label>
+                <div className="flex flex-col gap-2.5">
+                  {candidate.workExperiences.map((exp, i) => (
+                    <div key={i} className="flex flex-col gap-0.5 pl-1 border-l-2 border-muted">
+                      {exp.title && (
+                        <span className="text-xs font-medium leading-tight">{exp.title}</span>
+                      )}
+                      {(exp.company || exp.location) && (
+                        <span className="text-[11px] text-muted-foreground leading-tight flex items-center gap-1">
+                          {exp.company && (
+                            <>
+                              <Building2 className="h-3 w-3 shrink-0" />
+                              {exp.company}
+                            </>
+                          )}
+                          {exp.location && <span className="text-[10px]">· {exp.location}</span>}
+                        </span>
+                      )}
+                      {(exp.startDate || exp.endDate) && (
+                        <span className="text-[10px] text-muted-foreground tabular-nums">
+                          {[exp.startDate, exp.endDate].filter(Boolean).join(" – ")}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ── Certifications ── */}
+            {candidate.certifications && candidate.certifications.length > 0 && (
+              <div className="flex flex-col gap-2">
+                <Label className="text-[10px] text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                  <Award className="h-3 w-3" />
+                  Certifications
+                </Label>
+                <div className="flex flex-col gap-1.5">
+                  {candidate.certifications.map((cert, i) => (
+                    <div key={i} className="flex flex-col gap-0.5 pl-1 border-l-2 border-muted">
+                      <span className="text-xs font-medium leading-tight">{cert.name}</span>
+                      {(cert.issuer || cert.date) && (
+                        <span className="text-[10px] text-muted-foreground">
+                          {[cert.issuer, cert.date].filter(Boolean).join(" · ")}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Dialog open={timelineOpen} onOpenChange={setTimelineOpen}>
         <DialogContent className="sm:max-w-lg">

@@ -35,7 +35,14 @@ class Education(BaseModel):
     institution: str | None = None
     degree: str | None = None
     field: str | None = None
+    start_date: str | None = None
     end_date: str | None = None
+    # Grade/score — store as a free-form string to cover GPA, %, marks, letter grades
+    grade_value: str | None = None
+    # One of: "gpa", "percentage", "marks", "grade", or null when unknown
+    grade_type: str | None = None
+    # Denominator / max value (e.g. "4.0" for GPA, "100" for %)
+    grade_max: str | None = None
 
 
 class Skill(BaseModel):

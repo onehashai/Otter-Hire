@@ -25,7 +25,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <PageMetadataProvider>
-      <div className="flex min-h-screen w-full bg-background">
+      <div className="flex h-screen w-full bg-background">
         {!isMobile && jobWorkspaceId ? (
           <Suspense fallback={null}>
             <JobWorkspaceSidebar

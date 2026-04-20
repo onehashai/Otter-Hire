@@ -37,7 +37,18 @@ def score_phone(value: Optional[str]) -> int:
     return score
 
 
+_E164_PATTERN = re.compile(r"\+[1-9]\d{7,14}")
+
+
 def extract_phone(text: str) -> Optional[str]:
+    # E.164 international numbers take highest priority (+CC followed by 7-14 digits)
+    e164_match = _E164_PATTERN.search(text)
+    if e164_match:
+        candidate = e164_match.group(0)
+        digits = re.sub(r"\D", "", candidate)
+        if 8 <= len(digits) <= 15:
+            return candidate
+
     candidates = re.finditer(r"(?:\+?\d[\d()\-\s]{8,}\d)", text)
     best: Optional[str] = None
     best_score = -1

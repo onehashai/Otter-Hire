@@ -490,6 +490,7 @@
   "import_candidates": "Import Candidates",
   "reset_to_default": "Reset to default",
   "previous": "Previous",
+  "delete_selected_candidate": "Delete Candidate",
   "delete_selected_candidates": "Delete Candidates",
   "assign_job_title": "Assign Job",
   "assign_job_dialog_description": "Assign selected candidates to a job.",

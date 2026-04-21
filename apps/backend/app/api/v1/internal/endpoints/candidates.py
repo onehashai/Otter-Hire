@@ -64,7 +64,7 @@ from app.schemas.candidates import (
 from app.schemas.validators import is_valid_email, is_valid_phone
 from app.services.automation import execute_automations_for_trigger
 from app.services.email import send_candidate_note_mention_email
-from app.services.media import ensure_pdf_type, ensure_resume_type, read_upload_with_size_check
+from app.services.media import ensure_resume_type, read_upload_with_size_check
 from app.services.resume.pipeline import run_resume_pipeline
 from app.services.storage import storage_service
 from app.utils.uuid import uuid7
@@ -124,6 +124,58 @@ async def _stream_candidate_pdf_inline(
         raise HTTPException(status_code=404, detail="File not found")
 
     return FileResponse(full_path, media_type="application/pdf", headers=headers)
+
+
+async def _stream_candidate_docx_as_html(*, normalized_key: str, filename: str) -> Response:
+    """Convert a DOCX/DOC file to HTML and return it inline for browser rendering."""
+    import io
+
+    import mammoth
+
+    if settings.s3_enabled and storage_service.use_s3 and storage_service.s3_client:
+        try:
+            s3_obj = storage_service.s3_client.get_object(
+                Bucket=storage_service.bucket,
+                Key=storage_service._s3_key(normalized_key),
+            )
+            content = s3_obj["Body"].read()
+        except Exception:
+            raise HTTPException(status_code=404, detail="File not found")
+    else:
+        root = Path(settings.local_storage_root).resolve()
+        full_path = (root / normalized_key).resolve()
+        if not str(full_path).startswith(str(root)) or not full_path.exists():
+            raise HTTPException(status_code=404, detail="File not found")
+        content = full_path.read_bytes()
+
+    result = mammoth.convert_to_html(io.BytesIO(content))
+    safe_filename = (filename or "document.docx").strip()
+    html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{safe_filename}</title>
+  <style>
+    body {{ font-family: Georgia, 'Times New Roman', serif; padding: 2.5rem; max-width: 860px; margin: 0 auto; line-height: 1.7; color: #1a1a1a; background: #fff; }}
+    h1, h2, h3, h4, h5, h6 {{ margin-top: 1.4em; margin-bottom: 0.4em; color: #111; line-height: 1.3; }}
+    p {{ margin: 0.5em 0; }}
+    ul, ol {{ padding-left: 1.8em; margin: 0.5em 0; }}
+    table {{ border-collapse: collapse; width: 100%; margin: 1em 0; }}
+    td, th {{ border: 1px solid #ccc; padding: 6px 12px; text-align: left; }}
+    th {{ background: #f5f5f5; font-weight: bold; }}
+    strong, b {{ font-weight: 600; }}
+    em, i {{ font-style: italic; }}
+    a {{ color: #1a6bbf; }}
+    hr {{ border: none; border-top: 1px solid #ddd; margin: 1.5em 0; }}
+  </style>
+</head>
+<body>
+{result.value}
+</body>
+</html>"""
+    headers = {"Content-Disposition": f'inline; filename="{safe_filename}"'}
+    return Response(content=html.encode("utf-8"), media_type="text/html", headers=headers)
 
 
 async def _resolve_candidate_document_url(doc: CandidateDocument) -> str:
@@ -2379,16 +2431,22 @@ async def preview_candidate_document_inline(
     if doc is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
 
-    # Inline preview is only supported for PDFs. We intentionally accept common cases where
-    # the stored MIME type is inaccurate (e.g., application/octet-stream) but the filename
-    # indicates a PDF.
+    # Detect file type for inline preview. Filename extension takes priority over stored
+    # MIME type because older uploads incorrectly stored "application/pdf" for all files.
     mime = (doc.mime_type or "").strip().lower()
     name = (doc.name or "").strip().lower()
-    is_pdf = mime == "application/pdf" or name.endswith(".pdf")
-    if not is_pdf:
+
+    # Filename extension is the authoritative signal — check it first.
+    is_docx = name.endswith((".docx", ".doc")) or mime in {
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/msword",
+    }
+    is_pdf = not is_docx and (name.endswith(".pdf") or mime == "application/pdf")
+
+    if not is_pdf and not is_docx:
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            detail="Preview is only available for PDF documents",
+            detail="Preview is only available for PDF and Word documents (.docx/.doc)",
         )
 
     normalized_key = (doc.object_key or "").strip() or _object_key_from_stored_file_url(doc.url)
@@ -2400,7 +2458,9 @@ async def preview_candidate_document_inline(
     if not normalized_key.startswith(org_prefix):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
 
-    return await _stream_candidate_pdf_inline(normalized_key=normalized_key, filename=doc.name)
+    if is_pdf:
+        return await _stream_candidate_pdf_inline(normalized_key=normalized_key, filename=doc.name)
+    return await _stream_candidate_docx_as_html(normalized_key=normalized_key, filename=doc.name)
 
 
 @router.post(
@@ -2469,14 +2529,15 @@ async def upload_candidate_document(
     if candidate is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Candidate not found")
 
-    ensure_pdf_type(file.content_type)
+    ensure_resume_type(file.content_type)
     content = await read_upload_with_size_check(file)
-    safe_name = (file.filename or "document.pdf").strip()
+    actual_mime = (file.content_type or "application/octet-stream").strip()
+    safe_name = (file.filename or "document").strip()
     doc_id = uuid7()
     object_key = (
         f"orgs/{current_user.org_id}/candidates/{candidate.id}/documents/{doc_id}_{safe_name}"
     )
-    await storage_service.write_bytes(object_key, content, "application/pdf")
+    await storage_service.write_bytes(object_key, content, actual_mime)
     resolved_url = await storage_service.resolve_url(object_key)
 
     document = CandidateDocument(
@@ -2490,7 +2551,7 @@ async def upload_candidate_document(
         name=safe_name,
         url=resolved_url,
         object_key=object_key,
-        mime_type="application/pdf",
+        mime_type=actual_mime,
         size_bytes=len(content),
         uploaded_by_user_id=current_user.id,
     )

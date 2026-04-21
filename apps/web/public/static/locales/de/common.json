@@ -487,6 +487,7 @@
   "import_candidates": "Kandidaten importieren",
   "reset_to_default": "Auf Standard zurücksetzen",
   "previous": "Zurück",
+  "delete_selected_candidate": "Kandidat löschen",
   "delete_selected_candidates": "Kandidaten löschen",
   "assign_job_title": "Stelle zuweisen",
   "assign_job_dialog_description": "Ausgewählte Kandidaten einer Stelle zuweisen.",

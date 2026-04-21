@@ -487,6 +487,7 @@
   "import_candidates": "Importar candidatos",
   "reset_to_default": "Restablecer por defecto",
   "previous": "Anterior",
+  "delete_selected_candidate": "Eliminar candidato",
   "delete_selected_candidates": "Eliminar candidatos",
   "assign_job_title": "Asignar empleo",
   "assign_job_dialog_description": "Asignar candidatos seleccionados a un empleo.",

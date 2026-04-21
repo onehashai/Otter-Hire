@@ -102,20 +102,18 @@ Each queue has dedicated worker listening for tasks.
 
 ### Resume Parsing Workflow
 
-**Trigger**: Candidate uploads resume → FastAPI creates document record → Temporal workflow
+**Note**: Resume parsing now runs synchronously via `run_resume_pipeline()` called directly in the candidates endpoint (on manual upload) and in the inbound email handler. The Temporal workflow code exists but is not the primary trigger path.
 
-**Flow**:
-1. `ResumeParsingWorkflow` receives document ID
-2. Activity `parse_resume_activity`:
+**Flow** (synchronous pipeline):
+1. Candidate created with resume document
+2. `run_resume_pipeline()` called directly:
    - Fetches resume from S3
-   - Calls AI service (OpenAI, Anthropic, etc.)
-   - Extracts structured data (name, email, skills, experience)
-3. Activity `update_candidate_with_parsed_data`:
-   - Updates candidate record with extracted data
-   - Stores parsed JSON in candidate.parsed_resume
-4. Workflow completes
+   - Calls LLM service with structured outputs and confidence gating
+   - Normalizes skills and certifications
+   - Caches result in Redis (30-day TTL)
+   - Updates candidate record with extracted data (`parsed_resume_profile`)
 
-**Retry Policy**:
+**Retry Policy** (Temporal workflow, if used):
 - Initial interval: 2 seconds
 - Maximum attempts: 3
 - Timeout: 3 minutes per activity

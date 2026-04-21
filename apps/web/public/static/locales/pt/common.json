@@ -487,6 +487,7 @@
   "import_candidates": "Importar candidatos",
   "reset_to_default": "Redefinir para padrão",
   "previous": "Anterior",
+  "delete_selected_candidate": "Excluir candidato",
   "delete_selected_candidates": "Excluir candidatos",
   "assign_job_title": "Atribuir vaga",
   "assign_job_dialog_description": "Atribuir candidatos selecionados a uma vaga.",

@@ -46,7 +46,7 @@ export function DocumentUploadDialog({
             <p className="text-sm font-medium mb-1.5">{t("pdf_file_label")} *</p>
             <input
               type="file"
-              accept="application/pdf,.pdf"
+              accept="application/pdf,.pdf,.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
               onChange={(e) => onDocFileChange(e.target.files?.[0] ?? null)}
               className="block w-full text-sm"
             />

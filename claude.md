@@ -9,7 +9,7 @@
 - **Frontend**: Next.js 16.2.3 (App Router), React 19, TypeScript, Tailwind CSS
 - **Backend**: FastAPI, async SQLAlchemy, Alembic migrations
 - **Database**: PostgreSQL 16
-- **Async Workflows**: Temporal (resume parsing, email processing)
+- **Async Workflows**: Temporal (email processing); resume parsing runs synchronously
 - **Cache/Queue**: Redis
 - **Storage**: Config-driven (local filesystem default, AWS S3 when enabled)
 - **Email**: ZeptoMail or AWS SES for all outbound (credential-based selection); AWS SES for inbound
@@ -21,15 +21,15 @@
 - **Subdomain routing**: `app.domain.com` (authenticated app), `jobs.domain.com` (public careers)
 - **Auth**: JWT-based (access + refresh tokens), cookie-based session; Google OAuth supported
 - **Pages**: Jobs, Candidates, Automations, Templates, Settings, Reports
-- **Features**: Email integration, LinkedIn integration, AI job descriptions, automation builder
+- **Features**: Email integration, LinkedIn integration, AI job descriptions, automation builder, resume insights panel
 
 #### Backend (`apps/backend`)
 
 - **API**: FastAPI with `/v1/internal` (authenticated, plus current public jobs/apply + inbound endpoints) and `/v1/public` (currently minimal/health)
 - **Auth**: JWT + refresh tokens, role/permission model (`owner`, `admin`, `recruiter`, `hiring_manager`, `interviewer`, `employee`)
-- **Services**: Resume parsing, email processing, automation execution, storage, AI job descriptions
+- **Services**: Resume parsing (PDF/DOCX, LLM extraction with Redis caching, resume insights), email processing, automation execution, storage, AI job descriptions, media validation
 - **Integrations**: Email (SMTP/SES), Google OAuth, LinkedIn OAuth, inbound email via SES/SNS
-- **Async**: Temporal workflows for resume parsing and email processing
+- **Async**: Temporal workflows for email processing; resume parsing runs synchronously via pipeline
 
 #### Shared (`packages/ui`)
 
@@ -39,7 +39,7 @@
 
 1. **Multi-tenancy**: Organization-scoped data with role-based access control
 2. **Subdomain routing**: Separate public careers site from authenticated app
-3. **Async workflows**: Temporal handles long-running tasks (resume parsing, email processing)
+3. **Async workflows**: Temporal handles long-running tasks (email processing); resume parsing runs synchronously via pipeline
 4. **Inbound email**: SES → SNS → webhook → Temporal workflow → candidate creation
 5. **Storage**: S3 with environment-based prefixes (`ats-production`, `ats-staging`)
 6. **Migrations**: Alembic for schema versioning

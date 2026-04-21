@@ -391,6 +391,7 @@ export function StandaloneCandidateProfile({
             </TabsContent>
             <TabsContent value="documents" className="mt-0">
               <DocumentsTab
+                candidateId={id}
                 documents={uiCandidate.documents}
                 onUploadDocument={() => setDocumentOpen(true)}
                 onDeleteDocument={handleDeleteDocument}

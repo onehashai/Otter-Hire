@@ -52,7 +52,9 @@
 - Move between stages (dialog); column reordering in candidates table uses drag-drop
 - Reject with reason
 - Multi-job assignment (candidate can apply to multiple jobs)
-- Resume parsing (Temporal workflow)
+- Resume parsing (synchronous pipeline; PDF and DOCX supported)
+- Resume insights panel: skills, education, work experience, certifications extracted from parsed resume
+- Document upload supports PDF and DOCX/DOC; inline preview via backend endpoint (PDF native, DOCX converted to HTML via mammoth)
 
 ### Automations
 

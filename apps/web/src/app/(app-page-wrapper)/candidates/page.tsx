@@ -623,7 +623,9 @@ export default function CandidatesPage() {
     try {
       setAssignLoading(true);
       const res = await bulkAssignCandidatesToJob(Array.from(selectedIds), assignJobId);
-      toast.success(`Assigned ${res.updated_count} candidates`);
+      toast.success(
+        `Assigned ${res.updated_count} ${res.updated_count === 1 ? "candidate" : "candidates"}`,
+      );
       setAssignOpen(false);
       setSelectedIds(new Set());
       await refresh();
@@ -642,8 +644,12 @@ export default function CandidatesPage() {
       const results = await Promise.allSettled(ids.map((id) => deleteCandidate(id)));
       const success = results.filter((r) => r.status === "fulfilled").length;
       const failed = results.length - success;
-      if (failed === 0) toast.success(`Deleted ${success} candidates`);
-      else toast.message(`Deleted ${success}, failed ${failed}`);
+      if (failed === 0)
+        toast.success(`Deleted ${success} ${success === 1 ? "candidate" : "candidates"}`);
+      else
+        toast.message(
+          `Deleted ${success} ${success === 1 ? "candidate" : "candidates"}, failed ${failed}`,
+        );
       setDeleteOpen(false);
       setSelectedIds(new Set());
       await refresh();
@@ -814,7 +820,7 @@ export default function CandidatesPage() {
             <div className="fixed bottom-[calc(3.5rem+1rem)] md:bottom-4 left-1/2 -translate-x-1/2 z-[60]">
               <div className="rounded-lg border border-border bg-card shadow-md px-3 py-2 flex items-center gap-2">
                 <span className="text-xs text-muted-foreground whitespace-nowrap">
-                  {selectedCount} selected
+                  {selectedCount} {selectedCount === 1 ? "candidate" : "candidates"} selected
                 </span>
                 <Button
                   variant="destructive"
@@ -822,7 +828,9 @@ export default function CandidatesPage() {
                   className="h-8 text-xs"
                   onClick={() => setDeleteOpen(true)}
                 >
-                  {t("delete_selected_candidates")}
+                  {selectedCount === 1
+                    ? t("delete_selected_candidate")
+                    : t("delete_selected_candidates")}
                 </Button>
                 <Button
                   size="sm"
@@ -872,9 +880,14 @@ export default function CandidatesPage() {
           <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>Delete selected candidates?</AlertDialogTitle>
+                <AlertDialogTitle>
+                  {selectedCount === 1
+                    ? "Delete selected candidate?"
+                    : "Delete selected candidates?"}
+                </AlertDialogTitle>
                 <AlertDialogDescription>
-                  This action will permanently remove {selectedCount} candidate(s).
+                  This action will permanently remove {selectedCount}{" "}
+                  {selectedCount === 1 ? "candidate" : "candidates"}.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>

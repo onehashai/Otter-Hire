@@ -5,6 +5,7 @@ from fastapi import Cookie, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.redis_client import is_token_blacklisted
 from app.core.security import verify_access_token
 from app.db.session import get_db
 from app.models.org_membership import OrgMembership
@@ -30,6 +31,15 @@ async def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={"code": "AUTH_INVALID_TOKEN", "message": "Invalid or expired session."},
         ) from exc
+
+    # Reject explicitly revoked tokens (logout or rotation) even if the JWT is
+    # still within its natural expiry window.
+    jti = payload.get("jti")
+    if jti and await is_token_blacklisted(str(jti)):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "AUTH_TOKEN_REVOKED", "message": "Session has been revoked."},
+        )
 
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()

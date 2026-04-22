@@ -1,4 +1,4 @@
-import { refresh401MeansSessionExpired } from "@/lib/auth-refresh-codes";
+import { sharedRefresh } from "@/lib/shared-refresh";
 import { buildLoginHref } from "@/lib/login-redirect";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
@@ -40,34 +40,11 @@ export function getApiBase(): string {
 
 type SilentRefreshOutcome = "ok" | "anonymous" | "session_dead";
 
-// Shared in-flight refresh promise — prevents concurrent 401s from triggering
-// multiple simultaneous refresh calls.
-let _refreshPromise: Promise<SilentRefreshOutcome> | null = null;
-
 async function _silentRefreshOutcome(): Promise<SilentRefreshOutcome> {
-  if (_refreshPromise) return _refreshPromise;
-  _refreshPromise = (async () => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
-        method: "POST",
-        headers: { Accept: "application/json" },
-        credentials: "include",
-        cache: "no-store",
-      });
-      if (res.ok) return "ok";
-      if (res.status === 401) {
-        const body = await readApiErrorBody(res);
-        const code = typeof body?.code === "string" ? body.code : undefined;
-        return refresh401MeansSessionExpired(code) ? "session_dead" : "anonymous";
-      }
-      return "anonymous";
-    } catch {
-      return "anonymous";
-    } finally {
-      _refreshPromise = null;
-    }
-  })();
-  return _refreshPromise;
+  const result = await sharedRefresh();
+  if (result.ok) return "ok";
+  if ("sessionInvalidated" in result && result.sessionInvalidated) return "session_dead";
+  return "anonymous";
 }
 
 let isHandling401 = false;
@@ -107,6 +84,12 @@ async function handle401Response(sessionExpired: boolean): Promise<void> {
     window.location.search,
     sessionExpired,
   );
+
+  // Safety net: reset flag after 10s in case navigation is blocked (e.g. test env,
+  // navigation interceptors). Under normal page unload the module resets naturally.
+  setTimeout(() => {
+    isHandling401 = false;
+  }, 10_000);
 }
 
 /* =========================

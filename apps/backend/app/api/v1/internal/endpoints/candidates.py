@@ -255,6 +255,15 @@ async def _upsert_candidate_job_assignment(
     return existing
 
 
+def _assignment_status_from_stage_name(stage_name: str | None) -> str:
+    normalized = (stage_name or "").strip().lower()
+    if normalized == "hired":
+        return "hired"
+    if normalized == "rejected":
+        return "rejected"
+    return "active"
+
+
 async def _load_candidate_assignments(
     db: AsyncSession, *, org_id: UUID, candidate_ids: list[UUID]
 ) -> dict[UUID, list[CandidateAssignmentItemResponse]]:
@@ -1698,10 +1707,14 @@ async def update_candidate_stage(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid stage for candidate job"
         )
 
+    next_status = _assignment_status_from_stage_name(stage.name)
     if assignment is not None:
         assignment.stage_id = stage.id
-        assignment.assignment_status = "active"
+        assignment.assignment_status = next_status
         assignment.assigned_at = datetime.now(timezone.utc)
+    if candidate.job_id == target_job_id:
+        candidate.stage_id = stage.id
+        candidate.status = next_status
     await _log_activity(
         db,
         org_id=current_user.org_id,
@@ -1796,6 +1809,10 @@ async def update_candidate_status(
                 candidate.stage_id = (
                     terminal_stage.id if candidate.job_id == target_job_id else candidate.stage_id
                 )
+        elif candidate.job_id == target_job_id:
+            candidate.stage_id = assignment.stage_id
+    if candidate.job_id == target_job_id:
+        candidate.status = body.status
     await _log_activity(
         db,
         org_id=current_user.org_id,
@@ -1868,7 +1885,25 @@ async def bulk_update_candidate_stage(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Invalid stage for candidate job: {candidate.id}",
             )
+        assignment_result = await db.execute(
+            select(CandidateJobs).where(
+                CandidateJobs.org_id == current_user.org_id,
+                CandidateJobs.candidate_id == candidate.id,
+                CandidateJobs.job_id == candidate.job_id,
+            )
+        )
+        assignment = assignment_result.scalar_one_or_none()
+        if assignment is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Candidate is not assigned to this job: {candidate.id}",
+            )
+        next_status = _assignment_status_from_stage_name(stage.name)
         candidate.stage_id = stage.id
+        candidate.status = next_status
+        assignment.stage_id = stage.id
+        assignment.assignment_status = next_status
+        assignment.assigned_at = datetime.now(timezone.utc)
         await _log_activity(
             db,
             org_id=current_user.org_id,
@@ -1898,6 +1933,33 @@ async def bulk_update_candidate_status(
     candidates = result.scalars().all()
     for candidate in candidates:
         candidate.status = body.status
+        if candidate.job_id is not None:
+            assignment_result = await db.execute(
+                select(CandidateJobs).where(
+                    CandidateJobs.org_id == current_user.org_id,
+                    CandidateJobs.candidate_id == candidate.id,
+                    CandidateJobs.job_id == candidate.job_id,
+                )
+            )
+            assignment = assignment_result.scalar_one_or_none()
+            if assignment is not None:
+                assignment.assignment_status = body.status
+                assignment.assigned_at = datetime.now(timezone.utc)
+                if body.status in {"rejected", "hired"}:
+                    terminal_stage_name = "rejected" if body.status == "rejected" else "hired"
+                    terminal_stage_result = await db.execute(
+                        select(Stage)
+                        .where(
+                            Stage.org_id == current_user.org_id,
+                            Stage.job_id == candidate.job_id,
+                            func.lower(Stage.name) == terminal_stage_name,
+                        )
+                        .limit(1)
+                    )
+                    terminal_stage = terminal_stage_result.scalar_one_or_none()
+                    if terminal_stage is not None:
+                        assignment.stage_id = terminal_stage.id
+                        candidate.stage_id = terminal_stage.id
         await _log_activity(
             db,
             org_id=current_user.org_id,

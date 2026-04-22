@@ -2,7 +2,15 @@
 
 import { Card, CardContent } from "@onehash/ui/card";
 import { TrendingUp, TrendingDown } from "lucide-react";
-import type { KPIDataItem } from "./data";
+import type { LucideIcon } from "lucide-react";
+
+export type KPIDataItem = {
+  title: string;
+  value: string;
+  change: number;
+  trend: "up" | "down";
+  icon: LucideIcon;
+};
 
 export function KPICard({ title, value, change, trend, icon: Icon }: KPIDataItem) {
   const isPositive = trend === "up";

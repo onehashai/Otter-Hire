@@ -140,7 +140,7 @@ export default function IntegrationsSettingsPage() {
                       )}
                     </div>
                     <span className="text-[10px] uppercase tracking-wide text-muted-foreground mt-0.5 block">
-                      {app.category}
+                      {app.category.replaceAll("_", " ")}
                     </span>
                   </div>
                 </div>

@@ -107,6 +107,15 @@ export function JobEmailIntegrationManager({ jobId, onChanged }: JobEmailIntegra
   const canSaveInbox = !inboxSaving && !inboxLoading && isValidEmail(inboxAddress);
   const isVerificationReady = verificationStatus === "action_required";
   const isVerificationDone = verificationStatus === "verified" || inboxStatus === "active";
+  const forwardingSteps = [
+    "Copy the inbound address shown above.",
+    "Open your email provider settings and find forwarding settings.",
+    "Add the inbound address as a forwarding destination and complete the provider identity check.",
+    "Return to Otter and wait until the Verify Now button becomes available.",
+    "Click Verify Now, finish the provider confirmation in the opened window, then return here.",
+    "Click I Have Verified to activate forwarding in Otter.",
+    "Go back to your email provider and enable forwarding to the verified inbound address.",
+  ];
 
   const handleInboxSave = async () => {
     if (!inboxAddress.trim()) {
@@ -200,6 +209,37 @@ export function JobEmailIntegrationManager({ jobId, onChanged }: JobEmailIntegra
 
   return (
     <div className="space-y-4">
+      <div className="w-full">
+        <label className="text-xs font-medium text-muted-foreground">Inbound Address</label>
+        <div className="relative mt-1">
+          <input
+            readOnly
+            value={forwardingAddress}
+            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 pr-11 text-sm font-mono text-base placeholder:text-muted-foreground focus-visible:outline-none focus-visible:border-muted-foreground disabled:cursor-not-allowed disabled:opacity-50 transition-colors md:text-sm"
+          />
+          <button
+            type="button"
+            onClick={async (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              await handleCopyForwardingAddress();
+            }}
+            className="absolute inset-y-0 right-2 my-auto flex h-7 w-7 shrink-0 items-center justify-center rounded border-0 bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            aria-label="Copy inbound address"
+          >
+            {copiedForwarding ? (
+              <Check className="h-4 w-4 text-green-600" />
+            ) : (
+              <Copy className="h-4 w-4" />
+            )}
+          </button>
+        </div>
+        <p className="mt-2 text-xs text-muted-foreground">
+          This address always receives inbound candidate emails directly for this job. Connect
+          forwarding below only if you want another mailbox to forward messages here automatically.
+        </p>
+      </div>
+
       <InputField
         label="Email"
         value={inboxAddress}
@@ -236,32 +276,14 @@ export function JobEmailIntegrationManager({ jobId, onChanged }: JobEmailIntegra
       {hasInboxConfig ? (
         <>
           <Separator />
-          <div className="w-full">
-            <label className="text-xs font-medium text-muted-foreground">
-              Inbound Email Address
-            </label>
-            <div className="relative mt-1">
-              <input
-                readOnly
-                value={forwardingAddress}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 pr-11 text-sm font-mono placeholder:text-muted-foreground focus-visible:outline-none focus-visible:border-muted-foreground disabled:cursor-not-allowed disabled:opacity-50 transition-colors md:text-sm"
-              />
-              <button
-                type="button"
-                onClick={async (e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  await handleCopyForwardingAddress();
-                }}
-                className="absolute inset-y-0 right-2 my-auto flex h-7 w-7 shrink-0 items-center justify-center rounded border-0 bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-                aria-label="Copy forwarding address"
-              >
-                {copiedForwarding ? (
-                  <Check className="h-4 w-4 text-green-600" />
-                ) : (
-                  <Copy className="h-4 w-4" />
-                )}
-              </button>
+          <div className="space-y-2 rounded-md border border-border/60 bg-muted/20 p-3">
+            <div className="text-xs font-medium text-foreground">Forwarding setup steps</div>
+            <div className="space-y-1.5 text-xs text-muted-foreground">
+              {forwardingSteps.map((step, idx) => (
+                <div key={step}>
+                  {idx + 1}. {step}
+                </div>
+              ))}
             </div>
           </div>
           {verificationError ? (
@@ -288,7 +310,8 @@ export function JobEmailIntegrationManager({ jobId, onChanged }: JobEmailIntegra
             </div>
           ) : (
             <div className="text-xs text-green-600 font-medium">
-              Verified and active. Job email ingestion is enabled.
+              Verified and active. Forwarding is enabled. The inbound address above continues to
+              accept direct candidate emails for this job.
             </div>
           )}
         </>
@@ -304,14 +327,15 @@ export function JobEmailIntegrationManager({ jobId, onChanged }: JobEmailIntegra
           </DialogHeader>
           {isVerificationDone ? (
             <div className="text-sm text-green-600 font-medium">
-              Configured successfully. Inbox is active.
+              Configured successfully. Forwarding is active.
             </div>
           ) : (
             <div className="space-y-2 text-sm">
-              <div>1. Complete provider verification in the opened tab.</div>
-              <div>
-                2. Return here and click <span className="font-medium">I Have Verified</span>.
-              </div>
+              {forwardingSteps.slice(4, 6).map((step, idx) => (
+                <div key={step}>
+                  {idx + 1}. {step}
+                </div>
+              ))}
               {verificationError ? <div className="text-red-600">{verificationError}</div> : null}
             </div>
           )}

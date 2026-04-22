@@ -65,6 +65,8 @@ from app.schemas.public_jobs import (
     PublicJobsListResponse,
 )
 from app.services.automation import execute_automations_for_trigger
+from app.services.resume.heuristics import should_replace_name
+from app.services.resume.pipeline import run_resume_pipeline
 from app.services.resume_links import resolve_resume_from_body
 from app.services.storage import storage_service
 from app.temporal.email.queue import enqueue_ses_raw_key
@@ -455,14 +457,70 @@ def _should_replace_location(existing_location: Optional[str], new_location: Opt
 
 
 def _extract_name(text: str, fallback_email: Optional[str]) -> Optional[str]:
+    blocked = {
+        "functional",
+        "resume",
+        "curriculum vitae",
+        "professional profile",
+        "professional summary",
+        "summary",
+        "objective",
+        "experience",
+        "work experience",
+        "employment history",
+        "education",
+        "skills",
+        "certifications",
+        "projects",
+        "references",
+        "profile",
+    }
+    email_tokens: set[str] = set()
+    if fallback_email and "@" in fallback_email:
+        local = fallback_email.split("@", 1)[0].lower()
+        email_tokens = {token for token in re.split(r"[^a-z]+", local) if len(token) >= 2}
+
+    best_line: Optional[str] = None
+    best_score = -100
     lines = [line.strip() for line in text.splitlines() if line.strip()]
-    for line in lines[:12]:
-        if len(line) > 80:
+    for idx, line in enumerate(lines[:12]):
+        value = re.sub(r"\s+", " ", line).strip()
+        lowered = value.lower()
+        if not value or len(value) > 60 or "@" in value:
             continue
-        if "@" in line:
+        if lowered in blocked:
             continue
-        if re.fullmatch(r"[A-Za-z][A-Za-z .'-]{1,60}", line):
-            return line
+        if any(token in lowered for token in blocked):
+            continue
+        if not re.fullmatch(r"[A-Za-z][A-Za-z .'-]{1,60}", value):
+            continue
+
+        parts = [p for p in re.split(r"\s+", value) if p]
+        alpha_parts = [p for p in parts if any(ch.isalpha() for ch in p)]
+        score = max(0, 12 - idx)
+        if len(alpha_parts) >= 2:
+            score += 18
+        else:
+            score -= 10
+        if any(re.fullmatch(r"[A-Za-z]\.", p) for p in alpha_parts):
+            score += 4
+        if alpha_parts and alpha_parts[-1].upper() in {"JR", "SR", "II", "III", "IV", "V"}:
+            score += 4
+        if value.isupper() and len(alpha_parts) <= 1:
+            score -= 15
+        lowered_parts = re.findall(r"[a-z]+", lowered)
+        if email_tokens and any(
+            part in email_tokens or any(part in token for token in email_tokens)
+            for part in lowered_parts
+        ):
+            score += 10
+
+        if score > best_score:
+            best_score = score
+            best_line = value
+
+    if best_line and best_score > 0:
+        return best_line
     if fallback_email and "@" in fallback_email:
         local = fallback_email.split("@", 1)[0].replace(".", " ").replace("_", " ")
         local = " ".join(part for part in local.split() if part)
@@ -1573,6 +1631,18 @@ def _parse_job_forwarding_id(inbox_address: str) -> UUID | None:
         return None
 
 
+def _extract_org_id_from_forwarding_address(inbox_address: str) -> str | None:
+    """If inbox_address is org-<32hex>@..., return UUID string with dashes."""
+    if not inbox_address:
+        return None
+    addr = inbox_address.strip().lower()
+    m = re.match(r"^org-([0-9a-f]{32})@", addr)
+    if not m:
+        return None
+    raw = m.group(1)
+    return f"{raw[0:8]}-{raw[8:12]}-{raw[12:16]}-{raw[16:20]}-{raw[20:32]}"
+
+
 async def _resolve_org_inbox_for_reply_address(
     db: "AsyncSession", inbox_address: str
 ) -> tuple["IntegrationCredential", UUID] | None:
@@ -1833,25 +1903,62 @@ async def ingest_inbound_email(
     job_inbox = await credential_store.get_job_credential_by_address(db, inbox_address)
     org_inbox = None
     reply_to_conv_id: UUID | None = None
+    alias_job_id = _parse_job_forwarding_id(inbox_address)
+    alias_job: Job | None = None
+    alias_org_id: UUID | None = None
+    alias_direct_routing = False
 
     if job_inbox is None:
-        forward_job_id = _parse_job_forwarding_id(inbox_address)
-        if forward_job_id is not None:
+        if alias_job_id is not None:
             job_by_id_result = await db.execute(
-                select(IntegrationCredential).where(IntegrationCredential.job_id == forward_job_id)
+                select(IntegrationCredential).where(IntegrationCredential.job_id == alias_job_id)
             )
             job_inbox = job_by_id_result.scalar_one_or_none()
 
     if job_inbox is None:
         org_inbox = await credential_store.get_org_credential_by_address(db, inbox_address)
 
+    if job_inbox is None:
+        alias_org_id_str = _extract_org_id_from_forwarding_address(inbox_address)
+        if alias_org_id_str:
+            try:
+                alias_org_id = UUID(alias_org_id_str)
+            except (ValueError, TypeError):
+                alias_org_id = None
+
     if org_inbox is None and job_inbox is None:
         # To: reply+<conversation_id>@... → resolve org_inbox via conversation lookup
         resolved = await _resolve_org_inbox_for_reply_address(db, inbox_address)
         if resolved is not None:
             org_inbox, reply_to_conv_id = resolved
+        elif alias_job_id is not None:
+            job_result = await db.execute(select(Job).where(Job.id == alias_job_id))
+            alias_job = job_result.scalar_one_or_none()
+            if alias_job is None:
+                raise HTTPException(status_code=404, detail="Job not found")
+            job_by_id_result = await db.execute(
+                select(IntegrationCredential).where(IntegrationCredential.job_id == alias_job_id)
+            )
+            job_inbox = job_by_id_result.scalar_one_or_none()
+            alias_direct_routing = True
         else:
-            raise HTTPException(status_code=404, detail="Inbox configuration not found")
+            if alias_org_id is not None:
+                org_result = await db.execute(
+                    select(Organization).where(Organization.id == alias_org_id)
+                )
+                alias_org = org_result.scalar_one_or_none()
+                if alias_org is None:
+                    raise HTTPException(status_code=404, detail="Organization not found")
+                org_cred_result = await db.execute(
+                    select(IntegrationCredential).where(
+                        IntegrationCredential.org_id == alias_org_id,
+                        IntegrationCredential.job_id.is_(None),
+                    )
+                )
+                org_inbox = org_cred_result.scalar_one_or_none()
+                alias_direct_routing = True
+            else:
+                raise HTTPException(status_code=404, detail="Inbox configuration not found")
     elif org_inbox is not None:
         # Exact match: still use reply+ conversation id from address or payload
         reply_to_conv_id = _parse_reply_conversation_id(inbox_address)
@@ -1861,15 +1968,34 @@ async def ingest_inbound_email(
             except (ValueError, TypeError):
                 pass
 
-    org_id = job_inbox.org_id if job_inbox is not None else org_inbox.org_id
+    org_id = (
+        job_inbox.org_id
+        if job_inbox is not None
+        else (
+            org_inbox.org_id
+            if org_inbox is not None
+            else (
+                alias_job.org_id if alias_job is not None and alias_direct_routing else alias_org_id
+            )
+        )
+    )
     job_cfg = dict(job_inbox.config or {}) if job_inbox is not None else {}
     org_cfg = dict(org_inbox.config or {}) if org_inbox is not None else {}
     resolved_inbox_status = (
-        (job_inbox.status or "inactive")
-        if job_inbox is not None
-        else (org_inbox.status or "inactive")
+        "active"
+        if alias_direct_routing
+        else (
+            (job_inbox.status or "inactive")
+            if job_inbox is not None
+            else (org_inbox.status or "inactive")
+        )
     )
-    conversation_job_id = job_inbox.job_id if job_inbox is not None else None
+    conversation_job_id = (
+        job_inbox.job_id
+        if job_inbox is not None
+        else (alias_job_id if alias_direct_routing and alias_job_id is not None else None)
+    )
+    target_job_id = conversation_job_id
     secret = (
         job_cfg.get("secret_hash") if job_inbox is not None else org_cfg.get("secret_hash")
     ) or settings.inbound_webhook_secret
@@ -1898,7 +2024,7 @@ async def ingest_inbound_email(
     )
     inbound_email = InboundEmail(
         org_id=org_id,
-        job_id=job_inbox.job_id if job_inbox is not None else None,
+        job_id=target_job_id,
         inbox_address=inbox_address,
         from_email=(payload.from_email or "").strip().lower() or None,
         from_name=(payload.from_name or "").strip() or None,
@@ -2205,8 +2331,64 @@ async def ingest_inbound_email(
             "org_id": str(org_id),
         }
 
+    # ── LLM pipeline: run full structured extraction on the resume bytes ──────
+    # We already have the raw bytes in memory (from stored_attachments) and the
+    # confidence check passed, so run the same pipeline used by manual uploads.
+    # This sets parsed_resume on the candidate and enriches name/email/phone/address.
+    inbound_parsed_resume_profile: dict | None = None
+    _inbound_profile_links: dict = {}
+    if resume_attachment is not None:
+        _resume_content: bytes | None = None
+        for attachment_row, content in stored_attachments:
+            if attachment_row is resume_attachment:
+                _resume_content = content
+                break
+        if _resume_content is not None:
+            try:
+                _llm_result = await asyncio.to_thread(
+                    run_resume_pipeline,
+                    str(resume_attachment.get("filename") or "resume.pdf"),
+                    str(resume_attachment.get("content_type") or "application/pdf"),
+                    _resume_content,
+                )
+                if _llm_result is not None:
+                    inbound_parsed_resume_profile = _llm_result.profile.model_dump(mode="json")
+                    _personal = _llm_result.profile.personal
+                    # Prefer LLM-extracted contact fields over simple heuristics
+                    llm_name = (_personal.full_name or "").strip() or None
+                    if should_replace_name(
+                        extracted_name,
+                        llm_name,
+                        fallback_email=extracted_email,
+                    ):
+                        extracted_name = llm_name or extracted_name
+                    if _personal.email and _personal.email.strip():
+                        extracted_email = _personal.email.strip()
+                    if _personal.phone and _personal.phone.strip():
+                        extracted_phone = _personal.phone.strip()
+                    if _personal.address and _personal.address.strip():
+                        extracted_location = _personal.address.strip()
+                    # Enrich profile_links from LLM
+                    for _key, _url in [
+                        ("linkedin", _personal.linkedin_url),
+                        ("github", _personal.github_url),
+                        ("portfolio", _personal.website_url),
+                    ]:
+                        if _url and str(_url).strip():
+                            _inbound_profile_links[_key] = str(_url).strip()
+                    logger.info(
+                        "inbound LLM resume parse succeeded candidate=%s skills=%d edu=%d exp=%d",
+                        extracted_name,
+                        len(_llm_result.profile.skills),
+                        len(_llm_result.profile.education),
+                        len(_llm_result.profile.work_experience),
+                    )
+            except Exception as _llm_exc:
+                logger.warning("inbound LLM resume parse failed (non-fatal): %s", _llm_exc)
+    # ─────────────────────────────────────────────────────────────────────────
+
     candidate_query = None
-    if job_inbox is not None and extracted_email and extracted_name:
+    if target_job_id is not None and extracted_email and extracted_name:
         candidate_query = await db.execute(
             select(Candidate).where(
                 Candidate.org_id == org_id,
@@ -2237,14 +2419,15 @@ async def ingest_inbound_email(
     if candidate is None:
         candidate = Candidate(
             org_id=org_id,
-            job_id=job_inbox.job_id if job_inbox is not None else None,
+            job_id=target_job_id,
             stage_id=None,
             status="active",
             name=extracted_name,
             email=extracted_email or f"unknown+{inbound_email.id}@invalid.local",
             phone=extracted_phone,
             address=extracted_location,
-            profile_links={},
+            profile_links=_inbound_profile_links if inbound_parsed_resume_profile else {},
+            parsed_resume=inbound_parsed_resume_profile,
             source="Email",
             tags=[],
         )
@@ -2258,6 +2441,11 @@ async def ingest_inbound_email(
             candidate.phone = extracted_phone
         if _should_replace_location(candidate.address, extracted_location):
             candidate.address = extracted_location
+        # Update parsed_resume on existing candidate if LLM succeeded
+        if inbound_parsed_resume_profile is not None:
+            candidate.parsed_resume = inbound_parsed_resume_profile
+            if _inbound_profile_links:
+                candidate.profile_links = _inbound_profile_links
 
     latest_version_result = await db.execute(
         select(func.max(CandidateDocument.version)).where(
@@ -2285,7 +2473,7 @@ async def ingest_inbound_email(
             CandidateDocument(
                 org_id=org_id,
                 candidate_id=candidate.id,
-                job_id=job_inbox.job_id if job_inbox is not None else None,
+                job_id=target_job_id,
                 field_key="resume",
                 field_label_snapshot="Resume",
                 doc_type="resume",
@@ -2300,10 +2488,10 @@ async def ingest_inbound_email(
         )
     parsed_candidate = candidate
 
-    if job_inbox is not None:
+    if target_job_id is not None:
         first_stage_result = await db.execute(
             select(Stage)
-            .where(Stage.org_id == org_id, Stage.job_id == job_inbox.job_id)
+            .where(Stage.org_id == org_id, Stage.job_id == target_job_id)
             .order_by(Stage.position.asc())
             .limit(1)
         )
@@ -2313,7 +2501,7 @@ async def ingest_inbound_email(
             db,
             org_id=org_id,
             candidate_id=parsed_candidate.id,
-            job_id=job_inbox.job_id,
+            job_id=target_job_id,
             stage_id=first_stage.id if first_stage else None,
             assignment_status="active",
             source=parsed_candidate.source,
@@ -2425,13 +2613,13 @@ async def ingest_inbound_email(
     # Use candidate_email_received trigger for email inbound candidates
     if candidate is not None:
         try:
-            if job_inbox is not None:
+            if target_job_id is not None:
                 await execute_automations_for_trigger(
                     db=db,
                     trigger_key="candidate_applied",
                     org_id=org_id,
                     candidate_id=parsed_candidate.id,
-                    job_id=job_inbox.job_id,
+                    job_id=target_job_id,
                     metadata={
                         "source": "email_inbound_job",
                         "stage_name": None,

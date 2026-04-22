@@ -14,6 +14,7 @@ from app.api.v1.internal.endpoints.jobs import router as jobs_router
 from app.api.v1.internal.endpoints.linkedin import router as linkedin_router
 from app.api.v1.internal.endpoints.organizations import router as organizations_router
 from app.api.v1.internal.endpoints.public import router as public_router
+from app.api.v1.internal.endpoints.reports import router as reports_router
 from app.api.v1.internal.endpoints.templates import router as templates_router
 from app.api.v1.internal.endpoints.users import router as users_router
 from app.api.v1.internal.endpoints.webhooks import router as webhooks_router
@@ -46,5 +47,6 @@ internal_router.include_router(conversations_router)
 internal_router.include_router(files_router)
 internal_router.include_router(integrations_router)
 internal_router.include_router(linkedin_router)
+internal_router.include_router(reports_router)
 internal_router.include_router(public_router, tags=["public"])
 internal_router.include_router(webhooks_router)

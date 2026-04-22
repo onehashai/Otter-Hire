@@ -123,10 +123,16 @@ export function AddCandidateDialog({
   };
 
   // ── File helpers ───────────────────────────────────────────────────────────
+  const ALLOWED_RESUME_TYPES = new Set([
+    "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ]);
+
   const acceptFile = (file: File | undefined) => {
     if (!file) return;
-    if (file.type !== "application/pdf") {
-      toast.error("Only PDF files are accepted");
+    if (!ALLOWED_RESUME_TYPES.has(file.type)) {
+      toast.error("Only PDF and Word documents (.doc / .docx) are accepted");
       return;
     }
     if (file.size > 1 * 1024 * 1024) {
@@ -227,7 +233,7 @@ export function AddCandidateDialog({
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="application/pdf,.pdf"
+                accept="application/pdf,.pdf,application/msword,.doc,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx"
                 className="hidden"
                 onChange={(e) => {
                   acceptFile(e.target.files?.[0]);

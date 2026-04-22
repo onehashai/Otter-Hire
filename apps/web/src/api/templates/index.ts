@@ -57,3 +57,9 @@ export function updateTemplate(
 export function deleteTemplate(id: string): Promise<void> {
   return apiFetch<void>(`/templates/${id}`, { method: "DELETE" });
 }
+
+export function getTemplateUsages(
+  id: string,
+): Promise<{ automations: { id: string; name: string }[] }> {
+  return apiFetch(`/templates/${id}/usages`, { method: "GET" });
+}

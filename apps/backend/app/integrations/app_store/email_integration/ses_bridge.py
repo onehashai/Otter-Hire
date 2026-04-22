@@ -322,9 +322,16 @@ async def _resolve_inbox_context(
             if by_id is not None:
                 cfg = by_id.config or {}
                 secret = cfg.get("secret_hash") or settings.inbound_webhook_secret
-                canonical = cfg.get("inbound_address") or inbox_address
-                if secret and (by_id.status or "") in {"pending", "active"}:
-                    return str(secret), str(canonical), None
+                if secret:
+                    # Preserve the alias as the canonical recipient so direct mail
+                    # to job-<job_id>@... keeps using the alias-based ingestion path
+                    # even when a forwarding inbox config exists but is not active.
+                    return str(secret), inbox_address, None
+            # Allow direct mail to job-<job_id>@... even when no inbox integration
+            # has been configured for the job yet. In that case, use the alias as
+            # the canonical address and the global inbound webhook secret.
+            if settings.inbound_webhook_secret:
+                return str(settings.inbound_webhook_secret), inbox_address, None
 
         direct_inbox = await credential_store.get_org_credential_by_address(db, inbox_address)
         if direct_inbox is not None:
@@ -350,7 +357,15 @@ async def _resolve_inbox_context(
                 cfg = org_inbox.config or {}
                 secret = cfg.get("secret_hash") or settings.inbound_webhook_secret
                 if secret:
-                    return str(secret), str(cfg.get("inbound_address") or inbox_address), None
+                    # Preserve the alias as the canonical recipient so direct mail
+                    # to org-<org_id>@... keeps using the alias-based ingestion path
+                    # even when a forwarding inbox config exists but is not active.
+                    return str(secret), inbox_address, None
+            # Allow direct mail to org-<org_id>@... even when no inbox integration
+            # has been configured for the org yet. In that case, use the alias as
+            # the canonical address and the global inbound webhook secret.
+            if settings.inbound_webhook_secret:
+                return str(settings.inbound_webhook_secret), inbox_address, None
 
         # reply+<conversation_id>@... -> resolve via conversation
         m = _REPLY_CONVERSATION_PATTERN.match((inbox_address or "").strip().lower())

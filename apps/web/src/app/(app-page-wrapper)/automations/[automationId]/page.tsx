@@ -25,6 +25,14 @@ import { ExecutionDetailsDialog } from "@/components/automations/tabs/ExecutionD
 import { getAutomationById, getAutomationExecutions } from "@/api/automations";
 import { formatTimestamp } from "@/lib/format-date";
 
+function formatExecutionEventLabel(value: string): string {
+  return value
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 export default function AutomationDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -88,7 +96,7 @@ export default function AutomationDetailPage() {
           id: e.id,
           candidateName: e.candidate_name || "N/A",
           candidateEmail: e.candidate_email || "N/A",
-          event: e.trigger_event,
+          event: formatExecutionEventLabel(e.trigger_event),
           action: "",
           timestamp: formatTimestamp(e.created_at, "en-GB", { showRelative: true }),
           status: e.status as "success" | "failed",

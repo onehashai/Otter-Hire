@@ -189,15 +189,22 @@ function JobCard({ job, onJobArchived }: { job: JobListItemResponse; onJobArchiv
   );
 }
 
+const PAGE_SIZE = 12;
+
 export function JobsList({ jobs, onJobArchived }: JobsListProps) {
   const { t } = useTranslation();
   const [createOpen, setCreateOpen] = useState(false);
   const [archivedOpen, setArchivedOpen] = useState(false);
+  const [page, setPage] = useState(1);
 
   const activeJobs = jobs
     .filter((j) => j.status !== "archived")
     .sort((a, b) => (a.status === "open" ? -1 : b.status === "open" ? 1 : 0));
   const archivedJobs = jobs.filter((j) => j.status === "archived");
+
+  const totalPages = Math.max(1, Math.ceil(activeJobs.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const pagedActiveJobs = activeJobs.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
   if (jobs.length === 0) {
     return (
@@ -216,10 +223,41 @@ export function JobsList({ jobs, onJobArchived }: JobsListProps) {
 
   return (
     <div className="space-y-2">
-      {activeJobs.map((job) => (
+      {pagedActiveJobs.map((job) => (
         <JobCard key={job.id} job={job} onJobArchived={onJobArchived} />
       ))}
 
+      {/* Pagination — only for active jobs */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between pt-4">
+          <p className="text-xs text-muted-foreground">
+            {t("page")} {safePage} / {totalPages} · {activeJobs.length}{" "}
+            {activeJobs.length === 1 ? t("job") : t("jobs_title").toLowerCase()}
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs w-20"
+              disabled={safePage <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+            >
+              {t("previous")}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs w-20"
+              disabled={safePage >= totalPages}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            >
+              {t("next")}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Archived section — always visible regardless of active page */}
       {archivedJobs.length > 0 && (
         <>
           <button

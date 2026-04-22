@@ -14,6 +14,11 @@ ALLOWED_AVATAR_TYPES = {
     "image/tiff",
 }
 ALLOWED_PDF_TYPES = {"application/pdf"}
+ALLOWED_RESUME_TYPES = {
+    "application/pdf",
+    "application/msword",  # .doc
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",  # .docx
+}
 
 
 def _size_exceeded_detail(max_bytes: int) -> str:
@@ -49,3 +54,10 @@ def ensure_avatar_type(content_type: str | None) -> None:
 def ensure_pdf_type(content_type: str | None) -> None:
     if (content_type or "").lower() not in ALLOWED_PDF_TYPES:
         raise HTTPException(status_code=422, detail="Only PDF is allowed")
+
+
+def ensure_resume_type(content_type: str | None) -> None:
+    if (content_type or "").lower() not in ALLOWED_RESUME_TYPES:
+        raise HTTPException(
+            status_code=422, detail="Only PDF and Word documents (.doc/.docx) are allowed"
+        )

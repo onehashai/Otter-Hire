@@ -42,7 +42,9 @@
 
 ### Services (`app/services`)
 
-- **Resume parsing** (`resume/`): Extract text (PDF/DOCX/OCR), LLM-based extraction, heuristics fallback
+- **Resume parsing** (`resume/`): Extract text (PDF/DOCX/OCR), LLM-based extraction with structured outputs and confidence gating, Redis caching (30-day TTL), skills/certifications normalization; runs synchronously on candidate create and inbound email
+- **Media validation** (`media.py`): File type and size validation for avatars and resume/document uploads (PDF, DOCX/DOC)
+- **Document preview** (`candidates.py`): Inline preview endpoint serves PDF natively and converts DOCX/DOC → HTML via `mammoth`; filename extension takes priority over stored MIME type for detection
 - **Email** (`email/`): Provider abstraction (`_factory.py`) selects ZeptoMail or SES based on credentials; handles transactional, conversation, and automation emails
 - **Storage** (`storage.py`): Config-driven local/S3 selection
 - **Automation** (`automation/`): Executor, action handlers, template rendering
@@ -51,7 +53,7 @@
 
 ### Temporal Workflows (`app/temporal`)
 
-- **Resume parsing**: Workflow code exists; trigger wiring is partial/incomplete in current app flow
+- **Resume parsing**: Workflow code exists but primary path is synchronous (`run_resume_pipeline()` called directly on candidate create and inbound email)
 - **Email processing**: Triggered on inbound email (SES → SNS → webhook), creates candidate + application
 - **Worker**: Separate process (`python -m app.temporal`) polls Temporal server
 

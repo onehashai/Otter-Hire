@@ -2,7 +2,17 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, FileText, MoreHorizontal, Eye, Copy, Trash2, Pencil } from "lucide-react";
+import {
+  Plus,
+  FileText,
+  MoreHorizontal,
+  Eye,
+  Copy,
+  Trash2,
+  Pencil,
+  ExternalLink,
+  AlertTriangle,
+} from "lucide-react";
 import { Button } from "@onehash/ui/button";
 import { Badge } from "@onehash/ui/badge";
 import { Card, CardContent } from "@onehash/ui/card";
@@ -22,9 +32,22 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@onehash/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@onehash/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { getTemplates, createTemplate, deleteTemplate as deleteTemplateApi } from "@/api/templates";
-import { classifyError } from "@/api/client/client";
+import {
+  getTemplates,
+  createTemplate,
+  deleteTemplate as deleteTemplateApi,
+  getTemplateUsages,
+} from "@/api/templates";
+import { ApiError, classifyError } from "@/api/client/client";
 import { TemplatePreviewModal } from "./components/TemplatePreviewModal";
 
 export interface Template {
@@ -65,7 +88,17 @@ export default function TemplatesList({ searchValue, onSearchChange }: Templates
   const [internalSearch, setInternalSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [previewTemplate, setPreviewTemplate] = useState<Template | null>(null);
-  const [deleteTemplate, setDeleteTemplate] = useState<Template | null>(null);
+
+  // Confirmation dialog state (for templates NOT in use)
+  const [confirmDelete, setConfirmDelete] = useState<Template | null>(null);
+  const [checking, setChecking] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  // In-use dialog state (for templates that are used in automations)
+  const [inUseInfo, setInUseInfo] = useState<{
+    template: Template;
+    automations: { id: string; name: string }[];
+  } | null>(null);
 
   const search = typeof searchValue === "string" ? searchValue : internalSearch;
   const setSearch = typeof onSearchChange === "function" ? onSearchChange : setInternalSearch;
@@ -112,15 +145,69 @@ export default function TemplatesList({ searchValue, onSearchChange }: Templates
     }
   };
 
-  const handleDelete = async () => {
-    if (!deleteTemplate) return;
+  // Step 1 — dropdown Delete click:
+  //   • check if template is in use via GET /usages
+  //   • in use  → open in-use dialog directly (skip confirmation)
+  //   • not in use → open confirmation dialog
+  //   • if GET /usages is unavailable (backend not restarted yet), fall back to calling
+  //     DELETE directly: 409 → in-use dialog, 204 → deleted without confirmation
+  const handleDeleteClick = async (t: Template) => {
+    if (checking === t.id) return;
+    setChecking(t.id);
     try {
-      await deleteTemplateApi(deleteTemplate.id);
-      setTemplates((prev) => prev.filter((t) => t.id !== deleteTemplate.id));
-      toast({ title: "Template deleted" });
-      setDeleteTemplate(null);
+      const { automations } = await getTemplateUsages(t.id);
+      if (automations.length > 0) {
+        setInUseInfo({ template: t, automations });
+      } else {
+        setConfirmDelete(t);
+      }
     } catch {
-      toast({ title: "Failed to delete template", variant: "destructive" });
+      // GET /usages not available — call DELETE directly as the check
+      try {
+        await deleteTemplateApi(t.id);
+        setTemplates((prev) => prev.filter((tmpl) => tmpl.id !== t.id));
+        toast({ title: "Template deleted" });
+      } catch (deleteErr) {
+        if (
+          deleteErr instanceof ApiError &&
+          deleteErr.status === 409 &&
+          deleteErr.code === "TEMPLATE_IN_USE"
+        ) {
+          const details = deleteErr.details as
+            | { automations: { id: string; name: string }[] }
+            | undefined;
+          setInUseInfo({ template: t, automations: details?.automations ?? [] });
+        } else {
+          toast({ title: "Failed to delete template", variant: "destructive" });
+        }
+      }
+    } finally {
+      setChecking(null);
+    }
+  };
+
+  // Step 2 — user confirmed deletion: call DELETE API
+  //   • 204 → deleted successfully
+  //   • 409 TEMPLATE_IN_USE → close confirmation, open in-use dialog
+  const handleConfirmDelete = async () => {
+    if (!confirmDelete) return;
+    const target = confirmDelete;
+    setDeleting(true);
+    try {
+      await deleteTemplateApi(target.id);
+      setTemplates((prev) => prev.filter((t) => t.id !== target.id));
+      toast({ title: "Template deleted" });
+      setConfirmDelete(null);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 409 && err.code === "TEMPLATE_IN_USE") {
+        const details = err.details as { automations: { id: string; name: string }[] } | undefined;
+        setConfirmDelete(null);
+        setInUseInfo({ template: target, automations: details?.automations ?? [] });
+      } else {
+        toast({ title: "Failed to delete template", variant: "destructive" });
+      }
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -134,26 +221,77 @@ export default function TemplatesList({ searchValue, onSearchChange }: Templates
           body={previewTemplate.body}
         />
       )}
-      <AlertDialog open={!!deleteTemplate} onOpenChange={() => setDeleteTemplate(null)}>
+
+      {/* Confirmation dialog — template NOT in use */}
+      <AlertDialog
+        open={!!confirmDelete}
+        onOpenChange={(open) => !open && !deleting && setConfirmDelete(null)}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete template?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete &quot;{deleteTemplate?.name}&quot;. This action cannot be
+              This will permanently delete &quot;{confirmDelete?.name}&quot;. This action cannot be
               undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={handleDelete}
+              onClick={handleConfirmDelete}
+              disabled={deleting}
             >
-              Delete
+              {deleting ? "Deleting…" : "Delete"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* In-use dialog — template is referenced by one or more automations */}
+      <Dialog open={!!inUseInfo} onOpenChange={(open) => !open && setInUseInfo(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0" />
+              <DialogTitle>Template in use</DialogTitle>
+            </div>
+            <DialogDescription className="pt-1">
+              &quot;{inUseInfo?.template.name}&quot; is used in the following automation
+              {inUseInfo && inUseInfo.automations.length !== 1 ? "s" : ""}. Remove or update{" "}
+              {inUseInfo && inUseInfo.automations.length !== 1 ? "them" : "it"} first before
+              deleting this template.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-2 py-1">
+            {inUseInfo?.automations.map((a) => (
+              <div
+                key={a.id}
+                className="flex items-center justify-between rounded-md border px-3 py-2 text-sm"
+              >
+                <span className="font-medium truncate">{a.name}</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="ml-2 shrink-0 h-7 px-2 text-xs"
+                  onClick={() => {
+                    router.push(`/automations/${a.id}`);
+                    setInUseInfo(null);
+                  }}
+                >
+                  <ExternalLink className="h-3.5 w-3.5 mr-1" />
+                  Open
+                </Button>
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setInUseInfo(null)}>
+              Got it
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 
@@ -255,10 +393,12 @@ export default function TemplatesList({ searchValue, onSearchChange }: Templates
                         <Copy className="h-3.5 w-3.5 mr-2" /> Duplicate
                       </DropdownMenuItem>
                       <DropdownMenuItem
-                        onClick={() => setDeleteTemplate(t)}
+                        onClick={() => handleDeleteClick(t)}
+                        disabled={checking === t.id}
                         className="text-destructive"
                       >
-                        <Trash2 className="h-3.5 w-3.5 mr-2" /> Delete
+                        <Trash2 className="h-3.5 w-3.5 mr-2" />
+                        {checking === t.id ? "Checking…" : "Delete"}
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>

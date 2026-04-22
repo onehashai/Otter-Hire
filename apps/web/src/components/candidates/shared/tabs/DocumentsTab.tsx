@@ -5,6 +5,7 @@ import { Button } from "@onehash/ui/button";
 import { Icon } from "@onehash/ui/icon";
 import { useTranslation } from "react-i18next";
 import { formatTimestamp } from "@/lib/format-date";
+import { getApiBase } from "@/api";
 interface Document {
   id?: string;
   name: string;
@@ -16,6 +17,7 @@ interface Document {
 
 interface DocumentsTabProps {
   documents: Document[];
+  candidateId?: string;
   onUploadDocument?: () => void;
   onDeleteDocument?: (documentId: string) => void;
 }
@@ -28,7 +30,19 @@ function formatDisplayFileName(rawName: string): string {
   return clean || base;
 }
 
-export function DocumentsTab({ documents, onUploadDocument, onDeleteDocument }: DocumentsTabProps) {
+function getPreviewUrl(doc: Document, candidateId?: string): string | undefined {
+  if (candidateId && doc.id) {
+    return `${getApiBase()}/v1/internal/candidates/${encodeURIComponent(candidateId)}/documents/${encodeURIComponent(doc.id)}/preview`;
+  }
+  return doc.url;
+}
+
+export function DocumentsTab({
+  documents,
+  candidateId,
+  onUploadDocument,
+  onDeleteDocument,
+}: DocumentsTabProps) {
   const { t } = useTranslation();
   return (
     <div className="space-y-3">
@@ -66,7 +80,7 @@ export function DocumentsTab({ documents, onUploadDocument, onDeleteDocument }: 
                         variant="ghost"
                         size="sm"
                         className="h-8 w-8 p-0"
-                        onClick={() => window.open(doc.url, "_blank")}
+                        onClick={() => window.open(getPreviewUrl(doc, candidateId), "_blank")}
                         tooltip={t("view")}
                       >
                         <Icon name="Eye" className="h-4 w-4" />

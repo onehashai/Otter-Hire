@@ -27,7 +27,7 @@ How it fits:
 - `page.tsx`: Job workspace root (candidate pipeline view)
 - `constants.ts`: Type definitions and setup step configuration
 - Sub-routes:
-  - `info/`, `description/`, `application/`, `details/`, `stages/`, `team/`, `distribution/`, `integration/`: Setup wizard steps
+  - `info/`, `description/`, `application/`, `details/`, `stages/`, `team/`, `integration/`: Setup wizard steps (distribution route does not exist)
   - `stage/[stageId]/`: Stage-specific candidate view
   - `candidates/[candidateId]/`: Candidate detail view
   - `stage/[stageId]/candidates/[candidateId]/`: Candidate detail within stage context
@@ -94,8 +94,7 @@ Defined in `constants.ts` as `SETUP_SECTIONS`:
 4. **Details**: Salary, openings, LinkedIn distribution
 5. **Stages**: Hiring pipeline stages
 6. **Team**: Team member roles (hiring manager, recruiter, interviewer)
-7. **Distribution**: Job portal settings (future)
-8. **Integration**: Email integration settings (future)
+7. **Integration**: Email integration settings
 
 ### Validation
 

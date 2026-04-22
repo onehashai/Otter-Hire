@@ -102,6 +102,23 @@ def extract_email(text: str) -> Optional[str]:
     return match.group(0).strip().lower()
 
 
+def extract_partial_email(text: str) -> Optional[str]:
+    patterns = [
+        r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\b",
+        r"\b[A-Z0-9._%+-]+@\b",
+        r"\b[A-Z0-9._%+-]+\.(?:com|org|net|io|co|dev)\b",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if not match:
+            continue
+        candidate = match.group(0).strip()
+        if extract_email(candidate):
+            continue
+        return candidate
+    return None
+
+
 def score_phone(value: Optional[str]) -> int:
     if not value:
         return 0

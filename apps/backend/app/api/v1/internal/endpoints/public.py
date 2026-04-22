@@ -1574,6 +1574,18 @@ def _parse_job_forwarding_id(inbox_address: str) -> UUID | None:
         return None
 
 
+def _extract_org_id_from_forwarding_address(inbox_address: str) -> str | None:
+    """If inbox_address is org-<32hex>@..., return UUID string with dashes."""
+    if not inbox_address:
+        return None
+    addr = inbox_address.strip().lower()
+    m = re.match(r"^org-([0-9a-f]{32})@", addr)
+    if not m:
+        return None
+    raw = m.group(1)
+    return f"{raw[0:8]}-{raw[8:12]}-{raw[12:16]}-{raw[16:20]}-{raw[20:32]}"
+
+
 async def _resolve_org_inbox_for_reply_address(
     db: "AsyncSession", inbox_address: str
 ) -> tuple["IntegrationCredential", UUID] | None:
@@ -1834,25 +1846,62 @@ async def ingest_inbound_email(
     job_inbox = await credential_store.get_job_credential_by_address(db, inbox_address)
     org_inbox = None
     reply_to_conv_id: UUID | None = None
+    alias_job_id = _parse_job_forwarding_id(inbox_address)
+    alias_job: Job | None = None
+    alias_org_id: UUID | None = None
+    alias_direct_routing = False
 
     if job_inbox is None:
-        forward_job_id = _parse_job_forwarding_id(inbox_address)
-        if forward_job_id is not None:
+        if alias_job_id is not None:
             job_by_id_result = await db.execute(
-                select(IntegrationCredential).where(IntegrationCredential.job_id == forward_job_id)
+                select(IntegrationCredential).where(IntegrationCredential.job_id == alias_job_id)
             )
             job_inbox = job_by_id_result.scalar_one_or_none()
 
     if job_inbox is None:
         org_inbox = await credential_store.get_org_credential_by_address(db, inbox_address)
 
+    if job_inbox is None:
+        alias_org_id_str = _extract_org_id_from_forwarding_address(inbox_address)
+        if alias_org_id_str:
+            try:
+                alias_org_id = UUID(alias_org_id_str)
+            except (ValueError, TypeError):
+                alias_org_id = None
+
     if org_inbox is None and job_inbox is None:
         # To: reply+<conversation_id>@... → resolve org_inbox via conversation lookup
         resolved = await _resolve_org_inbox_for_reply_address(db, inbox_address)
         if resolved is not None:
             org_inbox, reply_to_conv_id = resolved
+        elif alias_job_id is not None:
+            job_result = await db.execute(select(Job).where(Job.id == alias_job_id))
+            alias_job = job_result.scalar_one_or_none()
+            if alias_job is None:
+                raise HTTPException(status_code=404, detail="Job not found")
+            job_by_id_result = await db.execute(
+                select(IntegrationCredential).where(IntegrationCredential.job_id == alias_job_id)
+            )
+            job_inbox = job_by_id_result.scalar_one_or_none()
+            alias_direct_routing = True
         else:
-            raise HTTPException(status_code=404, detail="Inbox configuration not found")
+            if alias_org_id is not None:
+                org_result = await db.execute(
+                    select(Organization).where(Organization.id == alias_org_id)
+                )
+                alias_org = org_result.scalar_one_or_none()
+                if alias_org is None:
+                    raise HTTPException(status_code=404, detail="Organization not found")
+                org_cred_result = await db.execute(
+                    select(IntegrationCredential).where(
+                        IntegrationCredential.org_id == alias_org_id,
+                        IntegrationCredential.job_id.is_(None),
+                    )
+                )
+                org_inbox = org_cred_result.scalar_one_or_none()
+                alias_direct_routing = True
+            else:
+                raise HTTPException(status_code=404, detail="Inbox configuration not found")
     elif org_inbox is not None:
         # Exact match: still use reply+ conversation id from address or payload
         reply_to_conv_id = _parse_reply_conversation_id(inbox_address)
@@ -1862,15 +1911,33 @@ async def ingest_inbound_email(
             except (ValueError, TypeError):
                 pass
 
-    org_id = job_inbox.org_id if job_inbox is not None else org_inbox.org_id
+    org_id = (
+        job_inbox.org_id
+        if job_inbox is not None
+        else (
+            org_inbox.org_id
+            if org_inbox is not None
+            else (
+                alias_job.org_id if alias_job is not None and alias_direct_routing else alias_org_id
+            )
+        )
+    )
     job_cfg = dict(job_inbox.config or {}) if job_inbox is not None else {}
     org_cfg = dict(org_inbox.config or {}) if org_inbox is not None else {}
     resolved_inbox_status = (
-        (job_inbox.status or "inactive")
-        if job_inbox is not None
-        else (org_inbox.status or "inactive")
+        "active"
+        if alias_direct_routing
+        else (
+            (job_inbox.status or "inactive")
+            if job_inbox is not None
+            else (org_inbox.status or "inactive")
+        )
     )
-    conversation_job_id = job_inbox.job_id if job_inbox is not None else None
+    conversation_job_id = (
+        job_inbox.job_id
+        if job_inbox is not None
+        else (alias_job_id if alias_direct_routing and alias_job_id is not None else None)
+    )
     secret = (
         job_cfg.get("secret_hash") if job_inbox is not None else org_cfg.get("secret_hash")
     ) or settings.inbound_webhook_secret

@@ -2,9 +2,13 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@onehash/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@onehash/ui/table";
-import { recruiterData } from "./data";
+import type { RecruiterItem } from "@/api/reports";
 
-export function RecruiterComparisonTable() {
+interface RecruiterComparisonTableProps {
+  data: RecruiterItem[];
+}
+
+export function RecruiterComparisonTable({ data }: RecruiterComparisonTableProps) {
   return (
     <Card>
       <CardHeader className="pb-2">
@@ -25,21 +29,28 @@ export function RecruiterComparisonTable() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {recruiterData.map((r) => (
-                <TableRow key={r.name}>
+              {data.map((r) => (
+                <TableRow key={r.user_id}>
                   <TableCell className="text-xs py-2.5 font-medium">{r.name}</TableCell>
                   <TableCell className="text-xs py-2.5 text-right text-muted-foreground">
-                    {r.handled}
+                    {r.candidates}
                   </TableCell>
                   <TableCell className="text-xs py-2.5 text-right text-muted-foreground hidden sm:table-cell">
                     {r.interviews}
                   </TableCell>
                   <TableCell className="text-xs py-2.5 text-right">{r.hires}</TableCell>
                   <TableCell className="text-xs py-2.5 text-right text-muted-foreground">
-                    {r.avgDays}d
+                    {r.avg_days > 0 ? `${Math.round(r.avg_days)}d` : "—"}
                   </TableCell>
                 </TableRow>
               ))}
+              {data.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-xs text-muted-foreground text-center py-8">
+                    No recruiter data for this period
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </div>

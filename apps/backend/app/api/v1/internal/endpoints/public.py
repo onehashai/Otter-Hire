@@ -2306,7 +2306,7 @@ async def ingest_inbound_email(
             "org_id": str(org_id),
         }
 
-    extracted_email = _extract_email(resume_text) or inbound_email.from_email
+    extracted_email = _extract_email(resume_text)
     extracted_phone = _extract_phone(resume_text)
     extracted_name = _extract_name(resume_text, extracted_email) or "Unknown Candidate"
     extracted_location = _extract_location(resume_text)
@@ -2350,6 +2350,7 @@ async def ingest_inbound_email(
                     str(resume_attachment.get("filename") or "resume.pdf"),
                     str(resume_attachment.get("content_type") or "application/pdf"),
                     _resume_content,
+                    fallback_email=inbound_email.from_email or "",
                 )
                 if _llm_result is not None:
                     inbound_parsed_resume_profile = _llm_result.profile.model_dump(mode="json")
@@ -2362,8 +2363,9 @@ async def ingest_inbound_email(
                         fallback_email=extracted_email,
                     ):
                         extracted_name = llm_name or extracted_name
-                    if _personal.email and _personal.email.strip():
-                        extracted_email = _personal.email.strip()
+                    llm_email = _extract_email((_personal.email or "").strip().lower())
+                    if llm_email:
+                        extracted_email = llm_email
                     if _personal.phone and _personal.phone.strip():
                         extracted_phone = _personal.phone.strip()
                     if _personal.address and _personal.address.strip():
@@ -2385,6 +2387,8 @@ async def ingest_inbound_email(
                     )
             except Exception as _llm_exc:
                 logger.warning("inbound LLM resume parse failed (non-fatal): %s", _llm_exc)
+    if not extracted_email:
+        extracted_email = inbound_email.from_email
     # ─────────────────────────────────────────────────────────────────────────
 
     candidate_query = None

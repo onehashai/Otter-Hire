@@ -13,6 +13,7 @@ from app.services.resume.heuristics import (
     extract_phone,
     should_replace_name,
 )
+from app.services.resume.hyperlinks import ResumeHyperlink, extract_best_links
 from app.services.resume.llm_extract import extract_personalinfo_llm, extract_resume_profile_llm
 from app.services.resume.sections import SectionSegment, detect_sections, sections_to_prompt_hint
 from app.services.resume.validation import sanitize_resume_profile
@@ -26,11 +27,9 @@ def _sections_to_map(segments: list[SectionSegment]) -> dict[str, str]:
 
 
 def _profile_from_heuristics(text: str, fallback_email: str) -> ResumeProfile:
-    email = extract_email(text) or (
-        fallback_email.strip().lower() if "@" in fallback_email else None
-    )
+    email = extract_email(text)
     phone = extract_phone(text)
-    name = extract_name(text, email)
+    name = extract_name(text, email or fallback_email)
     address = extract_location(text)
     return ResumeProfile(
         personal=PersonalInfo(
@@ -42,15 +41,43 @@ def _profile_from_heuristics(text: str, fallback_email: str) -> ResumeProfile:
     )
 
 
+def _merge_hyperlinks(
+    profile: ResumeProfile,
+    hyperlinks: list[ResumeHyperlink],
+    *,
+    fallback_email: str,
+) -> ResumeProfile:
+    profile_links, hyperlink_email = extract_best_links(hyperlinks)
+    personal = profile.personal
+    valid_personal_email = extract_email(personal.email or "")
+    fallback = fallback_email.strip().lower() if "@" in fallback_email else None
+    email = valid_personal_email or hyperlink_email or fallback or personal.email
+    linkedin_url = personal.linkedin_url or profile_links.get("linkedin")
+    github_url = personal.github_url or profile_links.get("github")
+    website_url = personal.website_url or profile_links.get("portfolio")
+    return profile.model_copy(
+        update={
+            "personal": personal.model_copy(
+                update={
+                    "email": email,
+                    "linkedin_url": linkedin_url,
+                    "github_url": github_url,
+                    "website_url": website_url,
+                }
+            )
+        }
+    )
+
+
 def enrich_with_heuristics(
     profile: ResumeProfile,
     text: str,
     fallback_email: str,
 ) -> ResumeProfile:
     """Keep identity fields heuristic-first; use LLM as enrichment only."""
-    fe = fallback_email.strip().lower() if "@" in fallback_email else ""
-    heuristic_email = extract_email(text) or fe or None
-    email = heuristic_email or profile.personal.email
+    heuristic_email = extract_email(text)
+    llm_email = extract_email(profile.personal.email or "")
+    email = heuristic_email or llm_email
 
     heuristic_phone = extract_phone(text)
     phone = heuristic_phone or profile.personal.phone
@@ -58,7 +85,8 @@ def enrich_with_heuristics(
     heuristic_name = extract_name(text, email)
     name = heuristic_name or profile.personal.full_name
     llm_name = profile.personal.full_name
-    if should_replace_name(name, llm_name, fallback_email=email):
+    name_fallback_email = email or fallback_email
+    if should_replace_name(name, llm_name, fallback_email=name_fallback_email):
         name = llm_name
 
     address = profile.personal.address or extract_location(text)
@@ -84,6 +112,7 @@ class ResumeParseResult:
     sections: list[SectionSegment]
     document_warnings: list[str]
     parse_method: str
+    hyperlinks: list[ResumeHyperlink] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 
 
@@ -101,6 +130,7 @@ def run_resume_pipeline(
     warnings: list[str] = []
     extracted = extract_document(filename, content_type, content)
     text = extracted.text or ""
+    hyperlinks = extracted.hyperlinks or []
     document_warnings = list(extracted.warnings)
     warnings.extend(document_warnings)
 
@@ -141,6 +171,8 @@ def run_resume_pipeline(
     else:
         profile = enrich_with_heuristics(profile, text, fallback_email)
 
+    profile = _merge_hyperlinks(profile, hyperlinks, fallback_email=fallback_email)
+
     profile = profile.model_copy(update={"section_map": section_map})
     profile = sanitize_resume_profile(profile)
 
@@ -150,5 +182,6 @@ def run_resume_pipeline(
         sections=segments,
         document_warnings=document_warnings,
         parse_method=parse_method,
+        hyperlinks=hyperlinks,
         warnings=warnings,
     )

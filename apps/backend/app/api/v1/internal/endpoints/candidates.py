@@ -65,6 +65,7 @@ from app.schemas.validators import is_valid_email, is_valid_phone
 from app.services.automation import execute_automations_for_trigger
 from app.services.email import send_candidate_note_mention_email
 from app.services.media import ensure_resume_type, read_upload_with_size_check
+from app.services.resume.heuristics import extract_partial_email
 from app.services.resume.pipeline import run_resume_pipeline
 from app.services.storage import storage_service
 from app.utils.uuid import uuid7
@@ -729,6 +730,7 @@ async def create_candidate_from_resume(
     # Parse resume synchronously in a thread pool to extract contact info + full profile
     parsed_resume_profile: dict | None = None
     parsed_profile_links: dict = {}
+    partial_resume_email: str | None = None
     try:
         result = await asyncio.to_thread(run_resume_pipeline, safe_name, actual_mime, content)
         personal = result.profile.personal
@@ -745,20 +747,22 @@ async def create_candidate_from_resume(
         ]:
             if url and str(url).strip():
                 parsed_profile_links[key] = str(url).strip()
+        if not parsed_email:
+            partial_resume_email = extract_partial_email(result.text)
     except Exception:
         parsed_name = None
         parsed_email = None
         parsed_phone = None
         parsed_address = None
+        partial_resume_email = None
 
     # Fallback: derive name from filename stem
     if not parsed_name:
         stem = Path(safe_name).stem.replace("_", " ").replace("-", " ").strip()
         parsed_name = stem.title() if stem else "Unknown Candidate"
 
-    # Fallback: generate placeholder email if not found in resume
     if not parsed_email:
-        parsed_email = f"resume-{uuid7()}@noreply.placeholder"
+        parsed_email = partial_resume_email or ""
 
     # Resolve optional job/stage UUIDs
     parsed_job_id: UUID | None = None

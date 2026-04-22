@@ -316,6 +316,7 @@ export function JobSetupProvider({ children }: { children: ReactNode }) {
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savingRef = useRef(false);
   const pendingSaveRef = useRef<JobUpdatePayload | null>(null);
+  const lastSavedStateRef = useRef<Partial<JobSetupState>>({});
 
   useEffect(() => {
     if (!id) {
@@ -340,7 +341,9 @@ export function JobSetupProvider({ children }: { children: ReactNode }) {
             avatar_url:
               avatarsByUserId.get(member.user_id ?? member.id) ?? member.avatar_url ?? null,
           }));
-          setState((s) => ({ ...s, ...mappedState, teamMembers: mappedTeamMembers }));
+          const fullMapped = { ...mappedState, teamMembers: mappedTeamMembers };
+          lastSavedStateRef.current = fullMapped;
+          setState((s) => ({ ...s, ...fullMapped }));
         }
       } catch {
         if (!cancelled) {
@@ -409,9 +412,11 @@ export function JobSetupProvider({ children }: { children: ReactNode }) {
       setState((s) => ({ ...s, isSaving: true }));
       try {
         const job = await updateJob(id, payload);
+        const savedState = mapApiToState(job);
+        lastSavedStateRef.current = savedState;
         setState((s) => ({
           ...s,
-          ...mapApiToState(job),
+          ...savedState,
           isSaving: false,
           hasUnsavedChanges: false,
           savedAt: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
@@ -675,13 +680,22 @@ export function JobSetupProvider({ children }: { children: ReactNode }) {
   }, [id]);
 
   const handleDiscardChanges = useCallback(() => {
-    setState((s) => ({ ...s, hasUnsavedChanges: false, showUnsavedDialog: false }));
-    const nav = state.pendingNavigation;
-    setState((s) => ({ ...s, pendingNavigation: null }));
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    const nav = stateRef.current.pendingNavigation;
+    setState((s) => ({
+      ...s,
+      ...lastSavedStateRef.current,
+      hasUnsavedChanges: false,
+      showUnsavedDialog: false,
+      pendingNavigation: null,
+    }));
     if (nav) {
       router.push(nav);
     }
-  }, [router, state.pendingNavigation]);
+  }, [router]);
 
   const handleSaveAndNavigate = useCallback(() => {
     const currentState = stateRef.current;

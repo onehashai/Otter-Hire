@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import csv
 from datetime import datetime, timezone
 from pathlib import Path
@@ -64,6 +65,7 @@ from app.schemas.validators import is_valid_email, is_valid_phone
 from app.services.automation import execute_automations_for_trigger
 from app.services.email import send_candidate_note_mention_email
 from app.services.media import ensure_pdf_type, read_upload_with_size_check
+from app.services.resume.pipeline import run_resume_pipeline
 from app.services.storage import storage_service
 from app.utils.uuid import uuid7
 
@@ -644,6 +646,180 @@ async def import_candidates_csv(
         failed_count=len(errors),
         errors=errors,
     )
+
+
+@router.post(
+    "/from-resume",
+    response_model=CandidateDetailResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_candidate_from_resume(
+    file: UploadFile = File(...),
+    job_id: str | None = Form(default=None),
+    stage_id: str | None = Form(default=None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("candidates:source")),
+):
+    ensure_pdf_type(file.content_type)
+    content = await read_upload_with_size_check(file)
+    safe_name = (file.filename or "resume.pdf").strip()
+
+    # Parse resume synchronously in a thread pool to extract contact info
+    try:
+        result = await asyncio.to_thread(run_resume_pipeline, safe_name, "application/pdf", content)
+        personal = result.profile.personal
+        parsed_name = (personal.full_name or "").strip() or None
+        parsed_email = (personal.email or "").strip().lower() or None
+        parsed_phone = (personal.phone or "").strip() or None
+        parsed_address = (personal.address or "").strip() or None
+    except Exception:
+        parsed_name = None
+        parsed_email = None
+        parsed_phone = None
+        parsed_address = None
+
+    # Fallback: derive name from filename stem
+    if not parsed_name:
+        stem = Path(safe_name).stem.replace("_", " ").replace("-", " ").strip()
+        parsed_name = stem.title() if stem else "Unknown Candidate"
+
+    # Fallback: generate placeholder email if not found in resume
+    if not parsed_email:
+        parsed_email = f"resume-{uuid7()}@noreply.placeholder"
+
+    # Resolve optional job/stage UUIDs
+    parsed_job_id: UUID | None = None
+    parsed_stage_id: UUID | None = None
+    job = None
+    if job_id:
+        try:
+            parsed_job_id = UUID(job_id)
+        except ValueError:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid job_id")
+        job_result = await db.execute(
+            select(Job).where(Job.id == parsed_job_id, Job.org_id == current_user.org_id)
+        )
+        job = job_result.scalar_one_or_none()
+        if job is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+
+    if stage_id:
+        try:
+            parsed_stage_id = UUID(stage_id)
+        except ValueError:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid stage_id")
+
+    # Resolve stage: use provided stage or auto-assign first stage for job
+    resolved_stage_id: UUID | None = None
+    if parsed_stage_id is not None and parsed_job_id is not None:
+        stage_result = await db.execute(
+            select(Stage).where(
+                Stage.id == parsed_stage_id,
+                Stage.org_id == current_user.org_id,
+                Stage.job_id == parsed_job_id,
+            )
+        )
+        if stage_result.scalar_one_or_none() is not None:
+            resolved_stage_id = parsed_stage_id
+    elif parsed_job_id is not None:
+        first_stage_result = await db.execute(
+            select(Stage)
+            .where(Stage.org_id == current_user.org_id, Stage.job_id == parsed_job_id)
+            .order_by(Stage.position.asc())
+            .limit(1)
+        )
+        first_stage = first_stage_result.scalar_one_or_none()
+        resolved_stage_id = first_stage.id if first_stage else None
+
+    candidate = Candidate(
+        org_id=current_user.org_id,
+        job_id=parsed_job_id,
+        stage_id=resolved_stage_id,
+        status="active",
+        name=parsed_name,
+        email=parsed_email,
+        phone=parsed_phone,
+        address=parsed_address,
+        profile_links={},
+        source="Manual",
+        tags=[],
+    )
+    db.add(candidate)
+    await db.flush()
+
+    created_assignment: CandidateJobs | None = None
+    if candidate.job_id is not None:
+        created_assignment = await _upsert_candidate_job_assignment(
+            db,
+            org_id=current_user.org_id,
+            candidate_id=candidate.id,
+            job_id=candidate.job_id,
+            stage_id=candidate.stage_id,
+            assignment_status="active",
+            source=candidate.source,
+            applied_at=None,
+            assigned_at=candidate.updated_at,
+        )
+
+    # Store resume as a CandidateDocument (same pattern as existing document upload)
+    doc_id = uuid7()
+    object_key = (
+        f"orgs/{current_user.org_id}/candidates/{candidate.id}/documents/{doc_id}_{safe_name}"
+    )
+    await storage_service.write_bytes(object_key, content, "application/pdf")
+    resolved_url = await storage_service.resolve_url(object_key)
+
+    document = CandidateDocument(
+        id=doc_id,
+        org_id=current_user.org_id,
+        candidate_id=candidate.id,
+        job_id=candidate.job_id,
+        field_key="resume",
+        field_label_snapshot="Resume",
+        doc_type="resume",
+        name=safe_name,
+        url=resolved_url,
+        object_key=object_key,
+        mime_type="application/pdf",
+        size_bytes=len(content),
+        uploaded_by_user_id=current_user.id,
+    )
+    db.add(document)
+
+    await _log_activity(
+        db,
+        org_id=current_user.org_id,
+        candidate_id=candidate.id,
+        created_by_user_id=current_user.id,
+        activity_type="candidate_created",
+        metadata={
+            "job_id": str(candidate.job_id) if candidate.job_id else None,
+            "source": candidate.source,
+        },
+    )
+    await db.commit()
+
+    if candidate.job_id is not None:
+        stage_name = None
+        if candidate.stage_id:
+            stage_result = await db.execute(
+                select(Stage.name).where(Stage.id == candidate.stage_id)
+            )
+            stage_name = stage_result.scalar_one_or_none()
+        await execute_automations_for_trigger(
+            db=db,
+            trigger_key="candidate_applied",
+            org_id=current_user.org_id,
+            candidate_id=candidate.id,
+            job_id=candidate.job_id,
+            metadata={
+                "source": candidate.source,
+                "stage_name": stage_name,
+                "assigned_id": str(created_assignment.assigned_id) if created_assignment else None,
+            },
+        )
+
+    return await get_candidate(candidate.id, db, current_user)
 
 
 @router.get("", response_model=list[CandidateListItemResponse])

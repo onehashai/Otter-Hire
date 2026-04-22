@@ -11,6 +11,7 @@ from app.services.resume.heuristics import (
     extract_location,
     extract_name,
     extract_phone,
+    should_replace_name,
 )
 from app.services.resume.llm_extract import extract_personalinfo_llm, extract_resume_profile_llm
 from app.services.resume.sections import SectionSegment, detect_sections, sections_to_prompt_hint
@@ -46,11 +47,20 @@ def enrich_with_heuristics(
     text: str,
     fallback_email: str,
 ) -> ResumeProfile:
-    """Fill missing contact fields from regex heuristics."""
+    """Keep identity fields heuristic-first; use LLM as enrichment only."""
     fe = fallback_email.strip().lower() if "@" in fallback_email else ""
-    email = profile.personal.email or extract_email(text) or fe or None
-    phone = profile.personal.phone or extract_phone(text)
-    name = profile.personal.full_name or extract_name(text, email)
+    heuristic_email = extract_email(text) or fe or None
+    email = heuristic_email or profile.personal.email
+
+    heuristic_phone = extract_phone(text)
+    phone = heuristic_phone or profile.personal.phone
+
+    heuristic_name = extract_name(text, email)
+    name = heuristic_name or profile.personal.full_name
+    llm_name = profile.personal.full_name
+    if should_replace_name(name, llm_name, fallback_email=email):
+        name = llm_name
+
     address = profile.personal.address or extract_location(text)
 
     return profile.model_copy(

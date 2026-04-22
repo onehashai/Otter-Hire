@@ -65,6 +65,7 @@ from app.schemas.public_jobs import (
     PublicJobsListResponse,
 )
 from app.services.automation import execute_automations_for_trigger
+from app.services.resume.heuristics import should_replace_name
 from app.services.resume.pipeline import run_resume_pipeline
 from app.services.resume_links import resolve_resume_from_body
 from app.services.storage import storage_service
@@ -456,14 +457,70 @@ def _should_replace_location(existing_location: Optional[str], new_location: Opt
 
 
 def _extract_name(text: str, fallback_email: Optional[str]) -> Optional[str]:
+    blocked = {
+        "functional",
+        "resume",
+        "curriculum vitae",
+        "professional profile",
+        "professional summary",
+        "summary",
+        "objective",
+        "experience",
+        "work experience",
+        "employment history",
+        "education",
+        "skills",
+        "certifications",
+        "projects",
+        "references",
+        "profile",
+    }
+    email_tokens: set[str] = set()
+    if fallback_email and "@" in fallback_email:
+        local = fallback_email.split("@", 1)[0].lower()
+        email_tokens = {token for token in re.split(r"[^a-z]+", local) if len(token) >= 2}
+
+    best_line: Optional[str] = None
+    best_score = -100
     lines = [line.strip() for line in text.splitlines() if line.strip()]
-    for line in lines[:12]:
-        if len(line) > 80:
+    for idx, line in enumerate(lines[:12]):
+        value = re.sub(r"\s+", " ", line).strip()
+        lowered = value.lower()
+        if not value or len(value) > 60 or "@" in value:
             continue
-        if "@" in line:
+        if lowered in blocked:
             continue
-        if re.fullmatch(r"[A-Za-z][A-Za-z .'-]{1,60}", line):
-            return line
+        if any(token in lowered for token in blocked):
+            continue
+        if not re.fullmatch(r"[A-Za-z][A-Za-z .'-]{1,60}", value):
+            continue
+
+        parts = [p for p in re.split(r"\s+", value) if p]
+        alpha_parts = [p for p in parts if any(ch.isalpha() for ch in p)]
+        score = max(0, 12 - idx)
+        if len(alpha_parts) >= 2:
+            score += 18
+        else:
+            score -= 10
+        if any(re.fullmatch(r"[A-Za-z]\.", p) for p in alpha_parts):
+            score += 4
+        if alpha_parts and alpha_parts[-1].upper() in {"JR", "SR", "II", "III", "IV", "V"}:
+            score += 4
+        if value.isupper() and len(alpha_parts) <= 1:
+            score -= 15
+        lowered_parts = re.findall(r"[a-z]+", lowered)
+        if email_tokens and any(
+            part in email_tokens or any(part in token for token in email_tokens)
+            for part in lowered_parts
+        ):
+            score += 10
+
+        if score > best_score:
+            best_score = score
+            best_line = value
+
+    if best_line and best_score > 0:
+        return best_line
     if fallback_email and "@" in fallback_email:
         local = fallback_email.split("@", 1)[0].replace(".", " ").replace("_", " ")
         local = " ".join(part for part in local.split() if part)
@@ -1938,6 +1995,7 @@ async def ingest_inbound_email(
         if job_inbox is not None
         else (alias_job_id if alias_direct_routing and alias_job_id is not None else None)
     )
+    target_job_id = conversation_job_id
     secret = (
         job_cfg.get("secret_hash") if job_inbox is not None else org_cfg.get("secret_hash")
     ) or settings.inbound_webhook_secret
@@ -1966,7 +2024,7 @@ async def ingest_inbound_email(
     )
     inbound_email = InboundEmail(
         org_id=org_id,
-        job_id=job_inbox.job_id if job_inbox is not None else None,
+        job_id=target_job_id,
         inbox_address=inbox_address,
         from_email=(payload.from_email or "").strip().lower() or None,
         from_name=(payload.from_name or "").strip() or None,
@@ -2297,8 +2355,13 @@ async def ingest_inbound_email(
                     inbound_parsed_resume_profile = _llm_result.profile.model_dump(mode="json")
                     _personal = _llm_result.profile.personal
                     # Prefer LLM-extracted contact fields over simple heuristics
-                    if _personal.full_name and _personal.full_name.strip():
-                        extracted_name = _personal.full_name.strip()
+                    llm_name = (_personal.full_name or "").strip() or None
+                    if should_replace_name(
+                        extracted_name,
+                        llm_name,
+                        fallback_email=extracted_email,
+                    ):
+                        extracted_name = llm_name or extracted_name
                     if _personal.email and _personal.email.strip():
                         extracted_email = _personal.email.strip()
                     if _personal.phone and _personal.phone.strip():
@@ -2325,7 +2388,7 @@ async def ingest_inbound_email(
     # ─────────────────────────────────────────────────────────────────────────
 
     candidate_query = None
-    if job_inbox is not None and extracted_email and extracted_name:
+    if target_job_id is not None and extracted_email and extracted_name:
         candidate_query = await db.execute(
             select(Candidate).where(
                 Candidate.org_id == org_id,
@@ -2356,7 +2419,7 @@ async def ingest_inbound_email(
     if candidate is None:
         candidate = Candidate(
             org_id=org_id,
-            job_id=job_inbox.job_id if job_inbox is not None else None,
+            job_id=target_job_id,
             stage_id=None,
             status="active",
             name=extracted_name,
@@ -2410,7 +2473,7 @@ async def ingest_inbound_email(
             CandidateDocument(
                 org_id=org_id,
                 candidate_id=candidate.id,
-                job_id=job_inbox.job_id if job_inbox is not None else None,
+                job_id=target_job_id,
                 field_key="resume",
                 field_label_snapshot="Resume",
                 doc_type="resume",
@@ -2425,10 +2488,10 @@ async def ingest_inbound_email(
         )
     parsed_candidate = candidate
 
-    if job_inbox is not None:
+    if target_job_id is not None:
         first_stage_result = await db.execute(
             select(Stage)
-            .where(Stage.org_id == org_id, Stage.job_id == job_inbox.job_id)
+            .where(Stage.org_id == org_id, Stage.job_id == target_job_id)
             .order_by(Stage.position.asc())
             .limit(1)
         )
@@ -2438,7 +2501,7 @@ async def ingest_inbound_email(
             db,
             org_id=org_id,
             candidate_id=parsed_candidate.id,
-            job_id=job_inbox.job_id,
+            job_id=target_job_id,
             stage_id=first_stage.id if first_stage else None,
             assignment_status="active",
             source=parsed_candidate.source,
@@ -2550,13 +2613,13 @@ async def ingest_inbound_email(
     # Use candidate_email_received trigger for email inbound candidates
     if candidate is not None:
         try:
-            if job_inbox is not None:
+            if target_job_id is not None:
                 await execute_automations_for_trigger(
                     db=db,
                     trigger_key="candidate_applied",
                     org_id=org_id,
                     candidate_id=parsed_candidate.id,
-                    job_id=job_inbox.job_id,
+                    job_id=target_job_id,
                     metadata={
                         "source": "email_inbound_job",
                         "stage_name": None,

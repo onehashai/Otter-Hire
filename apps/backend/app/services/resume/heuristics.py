@@ -5,6 +5,95 @@ from __future__ import annotations
 import re
 from typing import Optional
 
+_NAME_BLOCKLIST = {
+    "functional",
+    "resume",
+    "curriculum vitae",
+    "professional profile",
+    "professional summary",
+    "summary",
+    "objective",
+    "experience",
+    "work experience",
+    "employment history",
+    "education",
+    "skills",
+    "certifications",
+    "projects",
+    "references",
+    "profile",
+}
+
+
+def _fallback_email_tokens(fallback_email: Optional[str]) -> set[str]:
+    if not fallback_email or "@" not in fallback_email:
+        return set()
+    local = fallback_email.split("@", 1)[0].lower()
+    tokens = re.split(r"[^a-z]+", local)
+    return {token for token in tokens if len(token) >= 2}
+
+
+def score_name_candidate(line: str, *, index: int = 0, fallback_email: Optional[str] = None) -> int:
+    email_tokens = _fallback_email_tokens(fallback_email)
+    value = re.sub(r"\s+", " ", (line or "")).strip()
+    lowered = value.lower()
+    if not value or len(value) > 60 or "@" in value:
+        return -100
+    if lowered in _NAME_BLOCKLIST:
+        return -100
+    if any(token in lowered for token in _NAME_BLOCKLIST):
+        return -25
+    if not re.fullmatch(r"[A-Za-z][A-Za-z .'-]{1,60}", value):
+        return -100
+
+    parts = [p for p in re.split(r"\s+", value) if p]
+    alpha_parts = [p for p in parts if any(ch.isalpha() for ch in p)]
+    score = 0
+
+    # Resume names are usually near the top.
+    score += max(0, 12 - index)
+
+    # Prefer multi-token person names over single-word headings.
+    if len(alpha_parts) >= 2:
+        score += 18
+    elif len(alpha_parts) == 1:
+        score -= 10
+
+    # Reward initials / suffix patterns like "A." or "IV".
+    if any(re.fullmatch(r"[A-Za-z]\.", p) for p in alpha_parts):
+        score += 4
+    if alpha_parts and alpha_parts[-1].upper() in {"JR", "SR", "II", "III", "IV", "V"}:
+        score += 4
+
+    # Penalize all-caps single-word headings like FUNCTIONAL.
+    if value.isupper() and len(alpha_parts) <= 1:
+        score -= 15
+
+    # Prefer candidates that overlap with the email local-part.
+    lowered_parts = re.findall(r"[a-z]+", lowered)
+    if email_tokens and any(
+        part in email_tokens or any(part in token for token in email_tokens)
+        for part in lowered_parts
+    ):
+        score += 10
+
+    return score
+
+
+def should_replace_name(
+    existing_name: Optional[str],
+    new_name: Optional[str],
+    *,
+    fallback_email: Optional[str] = None,
+) -> bool:
+    if not new_name:
+        return False
+    if not existing_name:
+        return True
+    existing_score = score_name_candidate(existing_name, index=0, fallback_email=fallback_email)
+    new_score = score_name_candidate(new_name, index=0, fallback_email=fallback_email)
+    return new_score > existing_score
+
 
 def extract_email(text: str) -> Optional[str]:
     match = re.search(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", text, re.IGNORECASE)
@@ -201,13 +290,15 @@ def should_replace_location(existing_location: Optional[str], new_location: Opti
 
 def extract_name(text: str, fallback_email: Optional[str]) -> Optional[str]:
     lines = [line.strip() for line in text.splitlines() if line.strip()]
-    for line in lines[:12]:
-        if len(line) > 80:
-            continue
-        if "@" in line:
-            continue
-        if re.fullmatch(r"[A-Za-z][A-Za-z .'-]{1,60}", line):
-            return line
+    best_line: Optional[str] = None
+    best_score = -100
+    for idx, line in enumerate(lines[:12]):
+        score = score_name_candidate(line, index=idx, fallback_email=fallback_email)
+        if score > best_score:
+            best_score = score
+            best_line = re.sub(r"\s+", " ", line).strip()
+    if best_line and best_score > 0:
+        return best_line
     if fallback_email and "@" in fallback_email:
         local = fallback_email.split("@", 1)[0].replace(".", " ").replace("_", " ")
         local = " ".join(part for part in local.split() if part)

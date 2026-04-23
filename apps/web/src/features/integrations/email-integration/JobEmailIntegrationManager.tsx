@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { ReactNode, useCallback, useEffect, useState } from "react";
 import {
   getJobEmailIntegrationConfig,
   rotateJobEmailIntegrationSecret,
@@ -19,7 +19,7 @@ import {
 } from "@onehash/ui/dialog";
 import { InputField } from "@onehash/ui/input";
 import { Separator } from "@onehash/ui/separator";
-import { Check, Copy, Loader2 } from "lucide-react";
+import { Check, ChevronRight, Copy, Loader2, Mail, Settings } from "lucide-react";
 import { toast } from "@onehash/ui/sonner";
 
 import { copyToClipboard } from "@/lib/clipboard";
@@ -34,20 +34,38 @@ type JobEmailIntegrationManagerProps = {
 type ProviderKey = "google" | "microsoft" | "zoho";
 type VerificationMode = "link" | "code" | "none";
 
+function GmailPath() {
+  return (
+    <span className="inline-flex items-center gap-1 align-middle whitespace-nowrap">
+      <Mail className="h-3.5 w-3.5 shrink-0" />
+      <span className="whitespace-nowrap">Gmail</span>
+      <ChevronRight className="h-3 w-3 shrink-0" />
+      <Settings className="h-3.5 w-3.5 shrink-0" />
+      <span className="whitespace-nowrap">Settings</span>
+      <ChevronRight className="h-3 w-3 shrink-0" />
+      <span className="whitespace-nowrap">See all settings</span>
+      <ChevronRight className="h-3 w-3 shrink-0" />
+      <span className="whitespace-nowrap">Forwarding and POP/IMAP</span>
+    </span>
+  );
+}
+
 function getForwardingSteps(
   provider: ProviderKey,
   mailboxType: string | null,
   mode: VerificationMode,
-) {
+): ReactNode[] {
   const isGooglePersonal = provider === "google" && mailboxType === "personal";
   const isAdaptiveGoogleWorkspace =
     provider === "google" && mailboxType !== "personal" && mode === "none";
   if (isAdaptiveGoogleWorkspace) {
     return [
       "Copy the inbound address shown above.",
-      "Open Gmail forwarding settings and add the inbound address.",
-      "If a verification link appears below, click Verify Now and finish Google verification.",
-      "If no link appears, forwarding will start after the first forwarded email arrives.",
+      "If you are an admin, add forwarding from Google Workspace admin settings and start using forwarding.",
+      <span key="google-workspace-non-admin-step">
+        If you are a non-admin user, open <GmailPath />, add the inbound address, then click{" "}
+        <span className="font-medium text-foreground">Verify Now</span> when it appears below.
+      </span>,
     ];
   }
   if (mode === "none") {
@@ -68,8 +86,13 @@ function getForwardingSteps(
   }
   return [
     "Copy the inbound address shown above.",
-    "Open Gmail forwarding settings and add the inbound address.",
-    "Click Verify Now after the Google verification link appears below.",
+    <span key="gmail-personal-open-path">
+      Open <GmailPath />, then add the inbound address.
+    </span>,
+    <span key="gmail-personal-verify-now">
+      Click <span className="font-medium text-foreground">Verify Now</span> when it appears below
+      and complete Google verification.
+    </span>,
     "Finish Google verification and click I Have Verified.",
   ];
 }
@@ -96,7 +119,7 @@ export function JobEmailIntegrationManager({ jobId, onChanged }: JobEmailIntegra
   const [hasInboxConfig, setHasInboxConfig] = useState(false);
   const [copiedForwarding, setCopiedForwarding] = useState(false);
 
-  const resetConfigState = (message?: string | null) => {
+  const resetConfigState = useCallback((message?: string | null) => {
     setHasInboxConfig(false);
     setProviderKey("");
     setMailboxType(null);
@@ -108,13 +131,23 @@ export function JobEmailIntegrationManager({ jobId, onChanged }: JobEmailIntegra
     setVerificationCode("");
     setVerifyDialogOpen(false);
     setVerificationError(message ?? null);
-  };
+  }, []);
+
+  const resetExpiredConfigState = useCallback(
+    (message?: string | null) => {
+      resetConfigState(message);
+      void onChanged?.();
+    },
+    [onChanged, resetConfigState],
+  );
 
   const refreshInboxStatus = useCallback(async () => {
     try {
       const config = await getJobEmailIntegrationConfig(jobId);
       if (config.status === "timed_out") {
-        resetConfigState("Request timed out after 15 minutes. Please set up forwarding again.");
+        resetExpiredConfigState(
+          "Request timed out after 15 minutes. Please set up forwarding again.",
+        );
         return;
       }
       const inbox = config.inbox;
@@ -131,7 +164,7 @@ export function JobEmailIntegrationManager({ jobId, onChanged }: JobEmailIntegra
     } catch {
       // ignore
     }
-  }, [jobId]);
+  }, [jobId, resetExpiredConfigState]);
 
   const forwardingDomain = process.env.NEXT_PUBLIC_SES_MAIL_DOMAIN || "applications.smartats.in";
   const forwardingAddress = `job-${jobId.replace(/-/g, "")}@${forwardingDomain}`;
@@ -151,7 +184,9 @@ export function JobEmailIntegrationManager({ jobId, onChanged }: JobEmailIntegra
       try {
         const config = await getJobEmailIntegrationConfig(jobId);
         if (!cancelled && config.status === "timed_out") {
-          resetConfigState("Request timed out after 15 minutes. Please set up forwarding again.");
+          resetExpiredConfigState(
+            "Request timed out after 15 minutes. Please set up forwarding again.",
+          );
           return;
         }
         const inbox = config.inbox;
@@ -177,7 +212,7 @@ export function JobEmailIntegrationManager({ jobId, onChanged }: JobEmailIntegra
     return () => {
       cancelled = true;
     };
-  }, [jobId]);
+  }, [jobId, resetExpiredConfigState]);
 
   useEffect(() => {
     const verificationDone = verificationStatus === "verified" || inboxStatus === "active";
@@ -367,7 +402,7 @@ export function JobEmailIntegrationManager({ jobId, onChanged }: JobEmailIntegra
               <div className="text-xs font-medium text-foreground">Forwarding setup steps</div>
               <div className="space-y-1.5 text-xs text-muted-foreground">
                 {forwardingSteps.map((step, idx) => (
-                  <div key={step}>
+                  <div key={idx}>
                     {idx + 1}. {step}
                   </div>
                 ))}
@@ -420,12 +455,12 @@ export function JobEmailIntegrationManager({ jobId, onChanged }: JobEmailIntegra
                 </div>
               </div>
             ) : verificationMode === "none" ? (
-              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                {isAdaptiveGoogleWorkspace
-                  ? "Waiting for either the Google verification link or the first forwarded email..."
-                  : "Waiting for the first forwarded email to activate forwarding automatically..."}
-              </span>
+              !isAdaptiveGoogleWorkspace && (
+                <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Waiting for the first forwarded email to activate forwarding automatically...
+                </span>
+              )
             ) : (
               <div className="flex flex-wrap items-center gap-2">
                 <Button
@@ -470,7 +505,7 @@ export function JobEmailIntegrationManager({ jobId, onChanged }: JobEmailIntegra
           ) : (
             <div className="space-y-2 text-sm">
               {forwardingSteps.slice(4, 6).map((step, idx) => (
-                <div key={step}>
+                <div key={idx}>
                   {idx + 1}. {step}
                 </div>
               ))}

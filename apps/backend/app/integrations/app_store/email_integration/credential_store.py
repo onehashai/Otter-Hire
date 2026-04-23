@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 import redis
@@ -17,6 +17,7 @@ VERIFY_ACTION_TTL_SECONDS = 3600
 VERIFY_TOKEN_TTL_SECONDS = 3600
 VERIFY_ERROR_TTL_SECONDS = 24 * 3600
 INBOUND_LOOKUP_TTL_SECONDS = 300
+VERIFICATION_TIMEOUT_MINUTES = 15
 
 
 def _redis_client() -> redis.Redis:
@@ -52,6 +53,10 @@ def build_config(
 
 def parse_verified_at(config: dict) -> datetime | None:
     value = (config or {}).get("verified_at")
+    return parse_iso_datetime(value)
+
+
+def parse_iso_datetime(value: str | None) -> datetime | None:
     if not value:
         return None
     try:
@@ -153,6 +158,18 @@ def _cache_key_lookup(inbound_address: str) -> str:
     return f"email_integration:inbound_lookup:{(inbound_address or '').strip().lower()}"
 
 
+def clear_verification_cache(credential_id: UUID) -> None:
+    try:
+        client = _redis_client()
+        client.delete(
+            _cache_key_action(credential_id),
+            _cache_key_token(credential_id),
+            _cache_key_error(credential_id),
+        )
+    except Exception:
+        return
+
+
 def cache_set_verify_action(credential_id: UUID, payload: dict) -> None:
     try:
         _redis_client().setex(
@@ -218,3 +235,32 @@ def cache_get_inbound_lookup(inbound_address: str) -> dict | None:
         return json.loads(raw) if raw else None
     except Exception:
         return None
+
+
+def verification_started_at(config: dict) -> datetime | None:
+    return parse_iso_datetime((config or {}).get("verification_started_at"))
+
+
+def is_verification_expired(config: dict) -> bool:
+    status = str((config or {}).get("verification_status") or "pending").strip().lower()
+    if status in {"verified"}:
+        return False
+    started_at = verification_started_at(config)
+    if started_at is None:
+        return False
+    if started_at.tzinfo is None:
+        started_at = started_at.replace(tzinfo=timezone.utc)
+    return started_at + timedelta(minutes=VERIFICATION_TIMEOUT_MINUTES) < datetime.now(timezone.utc)
+
+
+async def expire_pending_credential_if_needed(
+    db: AsyncSession, credential: IntegrationCredential | None
+) -> bool:
+    if credential is None:
+        return False
+    if not is_verification_expired(credential.config or {}):
+        return False
+    clear_verification_cache(credential.id)
+    await db.delete(credential)
+    await db.commit()
+    return True

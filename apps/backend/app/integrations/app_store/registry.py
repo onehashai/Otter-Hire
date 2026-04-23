@@ -87,6 +87,12 @@ class EmailIntegrationModule(AppStoreIntegration):
         result = await email_integration_service.verify_complete(db, owner)
         return IntegrationEmailConfigActionResponse(**result.model_dump())
 
+    async def verify_code(
+        self, db: AsyncSession, owner: IntegrationOwnerContext, body
+    ) -> IntegrationEmailConfigActionResponse:
+        result = await email_integration_service.verify_code(db, owner, body)
+        return IntegrationEmailConfigActionResponse(**result.model_dump())
+
 
 @dataclass(frozen=True)
 class LinkedInIntegrationModule(AppStoreIntegration):

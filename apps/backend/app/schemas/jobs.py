@@ -153,11 +153,19 @@ class JobEmailInboxResponse(BaseModel):
     org_id: UUID
     inbox_address: str
     provider: str
+    provider_key: str = ""
+    provider_detection_source: Optional[str] = None
+    provider_detection_confidence: Optional[str] = None
+    mailbox_type: Optional[str] = None
+    expected_verification_mode: str = "link"
+    active_verification_mode: str = "link"
     status: Literal["inactive", "pending", "active"]
     verification_status: Literal["pending", "action_required", "verified", "failed"]
     verification_provider: Optional[str] = None
+    verification_confirmed_via: Optional[str] = None
     verification_action_type: Optional[str] = None
     verification_action_url: Optional[str] = None
+    verification_code_value: Optional[str] = None
     verification_detected_at: Optional[datetime] = None
     verification_error: Optional[str] = None
     verified_at: Optional[datetime] = None
@@ -173,7 +181,6 @@ class JobEmailConfigResponse(BaseModel):
 
 class JobEmailConfigUpsertRequest(BaseModel):
     inbox_address: str = Field(min_length=3, max_length=320)
-    provider: str = Field(default="ses", min_length=1, max_length=32)
 
 
 class JobEmailActionResponse(BaseModel):
@@ -181,3 +188,7 @@ class JobEmailActionResponse(BaseModel):
     status: str
     message: str
     action_url: Optional[str] = None
+
+
+class JobEmailCodeVerifyRequest(BaseModel):
+    code: str = Field(min_length=4, max_length=16)

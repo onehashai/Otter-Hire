@@ -28,6 +28,7 @@ from app.schemas.jobs import (
     JobDescriptionAiResponse,
     JobDetailResponse,
     JobEmailActionResponse,
+    JobEmailCodeVerifyRequest,
     JobEmailConfigResponse,
     JobEmailConfigUpsertRequest,
     JobListItemResponse,
@@ -557,6 +558,17 @@ async def verify_job_email_integration_complete(
 ):
     await require_job_access(job_id, db, current_user)
     return await job_email_service.verify_complete_job_email(db, current_user.org_id, job_id)
+
+
+@router.post("/{job_id}/integrations/email/verify-code", response_model=JobEmailActionResponse)
+async def verify_job_email_integration_code(
+    job_id: UUID,
+    body: JobEmailCodeVerifyRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("jobs:update")),
+):
+    await require_job_access(job_id, db, current_user)
+    return await job_email_service.verify_code_job_email(db, current_user.org_id, job_id, body)
 
 
 @router.post("/{job_id}/integrations/email/disconnect")

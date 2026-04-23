@@ -9,10 +9,16 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.integrations.app_store.email_integration import credential_store
+from app.integrations.app_store.email_integration.provider_logic import (
+    build_verification_state,
+    detect_provider,
+    hash_verification_code,
+)
 from app.models.integration_credential import IntegrationCredential
 from app.models.job import Job
 from app.schemas.jobs import (
     JobEmailActionResponse,
+    JobEmailCodeVerifyRequest,
     JobEmailConfigResponse,
     JobEmailConfigUpsertRequest,
     JobEmailInboxResponse,
@@ -65,11 +71,21 @@ def _to_job_inbox_response_from_cred(
         org_id=job.org_id,
         inbox_address=str(cfg.get("inbound_address") or ""),
         provider=str(cfg.get("provider") or "ses"),
+        provider_key=str(cfg.get("provider_key") or cfg.get("provider") or ""),
+        provider_detection_source=str(cfg.get("provider_detection_source") or "") or None,
+        provider_detection_confidence=str(cfg.get("provider_detection_confidence") or "") or None,
+        mailbox_type=str(cfg.get("mailbox_type") or "") or None,
+        expected_verification_mode=str(cfg.get("expected_verification_mode") or "link"),
+        active_verification_mode=str(
+            cfg.get("active_verification_mode") or cfg.get("expected_verification_mode") or "link"
+        ),
         status=cred.status or "inactive",
         verification_status=str(cfg.get("verification_status") or "pending"),
         verification_provider=str(cfg.get("verification_provider") or "") or None,
+        verification_confirmed_via=str(cfg.get("verification_confirmed_via") or "") or None,
         verification_action_type=action_type or None,
         verification_action_url=verification_action_url,
+        verification_code_value=str(cfg.get("verification_code_value") or "") or None,
         verification_detected_at=None,
         verification_error=credential_store.cache_get_verify_error(cred.id),
         verified_at=credential_store.parse_verified_at(cfg),
@@ -90,6 +106,8 @@ async def get_job_email_config(
 ) -> JobEmailConfigResponse:
     job = await _get_job_or_404(db, org_id, job_id)
     cred = await credential_store.get_credential(db, org_id=org_id, job_id=job.id)
+    if await credential_store.expire_pending_credential_if_needed(db, cred):
+        return JobEmailConfigResponse(inbox=None, configured=False, status="timed_out")
     configured = bool((cred and (cred.config or {}).get("inbound_address")))
     if not configured:
         return JobEmailConfigResponse(inbox=None, configured=False, status="not_configured")
@@ -108,6 +126,13 @@ async def upsert_job_email_config(
 ) -> JobEmailConfigResponse:
     job = await _get_job_or_404(db, org_id, job_id)
     normalized_address = _normalize_inbox_address(body.inbox_address)
+    detection = detect_provider(normalized_address)
+    provider_key = detection["provider_key"]
+    if not provider_key:
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported provider. Only Google, Microsoft, and Zoho mailboxes are supported.",
+        )
     collision_result = await db.execute(
         select(IntegrationCredential).where(
             IntegrationCredential.job_id.is_not(None),
@@ -122,14 +147,22 @@ async def upsert_job_email_config(
     cfg = dict((cred.config if cred else {}) or {})
     address_unchanged = (
         str(cfg.get("inbound_address") or "").strip().lower()
-    ) == normalized_address
-    cfg["inbound_address"] = normalized_address
-    cfg["provider"] = body.provider.strip().lower() or "ses"
+    ) == normalized_address and str(
+        cfg.get("provider_key") or cfg.get("provider") or ""
+    ).strip().lower() == provider_key
     if not address_unchanged:
-        cfg["verification_status"] = "pending"
-        cfg.pop("verified_at", None)
-        cfg.pop("verification_provider", None)
-        cfg.pop("verification_email_id", None)
+        cfg = build_verification_state(
+            normalized_address,
+            preserve_secret=str(cfg.get("secret_hash") or "") or None,
+        )
+    else:
+        cfg["provider_key"] = provider_key
+        cfg["provider"] = provider_key
+        cfg["mailbox_email"] = normalized_address
+        cfg["inbound_address"] = normalized_address
+        cfg["provider_detection_source"] = detection["detection_source"]
+        cfg["provider_detection_confidence"] = detection["detection_confidence"]
+        cfg["mailbox_type"] = detection["mailbox_type"]
 
     row = await credential_store.upsert_credential(
         db,
@@ -153,6 +186,8 @@ async def rotate_job_email_secret(
 ) -> JobEmailActionResponse:
     job = await _get_job_or_404(db, org_id, job_id)
     cred = await credential_store.get_credential(db, org_id=org_id, job_id=job.id)
+    if await credential_store.expire_pending_credential_if_needed(db, cred):
+        raise HTTPException(status_code=410, detail="Verification request timed out")
     if cred is None or not (cred.config or {}).get("inbound_address"):
         raise HTTPException(status_code=404, detail="Job inbox configuration not found")
 
@@ -160,6 +195,15 @@ async def rotate_job_email_secret(
     cfg = dict(cred.config or {})
     cfg["secret_hash"] = plain_secret
     cfg["verification_status"] = "pending"
+    cfg["verification_started_at"] = datetime.now(timezone.utc).isoformat()
+    cfg["active_verification_mode"] = str(
+        cfg.get("expected_verification_mode") or cfg.get("active_verification_mode") or "link"
+    )
+    cfg["verification_action_type"] = None
+    cfg["verification_confirmed_via"] = None
+    cfg["verification_code_hash"] = None
+    cfg["verification_code_expires_at"] = None
+    cfg["verification_code_value"] = None
     cfg.pop("verified_at", None)
     cfg.pop("verification_provider", None)
     cfg.pop("verification_email_id", None)
@@ -186,6 +230,8 @@ async def verify_now_job_email(
 ) -> JobEmailActionResponse:
     job = await _get_job_or_404(db, org_id, job_id)
     cred = await credential_store.get_credential(db, org_id=org_id, job_id=job.id)
+    if await credential_store.expire_pending_credential_if_needed(db, cred):
+        raise HTTPException(status_code=410, detail="Verification request timed out")
     if cred is None:
         raise HTTPException(status_code=404, detail="Job inbox configuration not found")
     cfg = dict(cred.config or {})
@@ -193,7 +239,9 @@ async def verify_now_job_email(
         raise HTTPException(status_code=409, detail="Verification action not available")
 
     payload = credential_store.cache_get_verify_action(cred.id) or {}
-    action_type = str(payload.get("type") or "").strip().lower()
+    action_type = (
+        str(payload.get("type") or cfg.get("verification_action_type") or "").strip().lower()
+    )
     if action_type != "link":
         raise HTTPException(status_code=409, detail="Unsupported verification action")
     verify_url = str(payload.get("url") or "").strip()
@@ -218,6 +266,8 @@ async def verify_complete_job_email(
 ) -> JobEmailActionResponse:
     job = await _get_job_or_404(db, org_id, job_id)
     cred = await credential_store.get_credential(db, org_id=org_id, job_id=job.id)
+    if await credential_store.expire_pending_credential_if_needed(db, cred):
+        raise HTTPException(status_code=410, detail="Verification request timed out")
     if cred is None:
         raise HTTPException(status_code=404, detail="Job inbox configuration not found")
     cfg = dict(cred.config or {})
@@ -226,6 +276,43 @@ async def verify_complete_job_email(
 
     cfg["verification_status"] = "verified"
     cfg["verified_at"] = datetime.now(timezone.utc).isoformat()
+    cfg["verification_confirmed_via"] = "link"
+    cfg["verification_code_value"] = None
+    cred.config = cfg
+    cred.status = "active"
+    await db.commit()
+    return JobEmailActionResponse(status="active", message="Inbox verified and active")
+
+
+async def verify_code_job_email(
+    db: AsyncSession,
+    org_id: UUID,
+    job_id: UUID,
+    body: JobEmailCodeVerifyRequest,
+) -> JobEmailActionResponse:
+    job = await _get_job_or_404(db, org_id, job_id)
+    cred = await credential_store.get_credential(db, org_id=org_id, job_id=job.id)
+    if await credential_store.expire_pending_credential_if_needed(db, cred):
+        raise HTTPException(status_code=410, detail="Verification request timed out")
+    if cred is None:
+        raise HTTPException(status_code=404, detail="Job inbox configuration not found")
+    cfg = dict(cred.config or {})
+    if str(cfg.get("active_verification_mode") or "") != "code":
+        raise HTTPException(status_code=409, detail="Verification code is not required")
+    expected_hash = str(cfg.get("verification_code_hash") or "").strip()
+    if not expected_hash:
+        raise HTTPException(status_code=409, detail="Verification code not available")
+    expires_at = credential_store.parse_iso_datetime(cfg.get("verification_code_expires_at"))
+    if expires_at and expires_at < datetime.now(timezone.utc):
+        raise HTTPException(status_code=409, detail="Verification code expired")
+    if hash_verification_code(body.code.strip()) != expected_hash:
+        raise HTTPException(status_code=400, detail="Invalid verification code")
+    cfg["verification_status"] = "verified"
+    cfg["verified_at"] = datetime.now(timezone.utc).isoformat()
+    cfg["verification_confirmed_via"] = "code"
+    cfg["verification_code_hash"] = None
+    cfg["verification_code_expires_at"] = None
+    cfg["verification_code_value"] = None
     cred.config = cfg
     cred.status = "active"
     await db.commit()

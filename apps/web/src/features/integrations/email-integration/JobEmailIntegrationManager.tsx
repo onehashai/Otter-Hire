@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   getJobEmailIntegrationConfig,
   rotateJobEmailIntegrationSecret,
@@ -24,20 +24,70 @@ import { toast } from "@onehash/ui/sonner";
 
 import { copyToClipboard } from "@/lib/clipboard";
 import { isValidEmail, normalizeEmail } from "@/lib/validation/contact";
+import { EmailProviderIcon } from "./EmailProviderIcon";
 
 type JobEmailIntegrationManagerProps = {
   jobId: string;
   onChanged?: () => Promise<void> | void;
 };
 
+type ProviderKey = "google" | "microsoft" | "zoho";
+type VerificationMode = "link" | "code" | "none";
+
+function getForwardingSteps(
+  provider: ProviderKey,
+  mailboxType: string | null,
+  mode: VerificationMode,
+) {
+  const isGooglePersonal = provider === "google" && mailboxType === "personal";
+  const isAdaptiveGoogleWorkspace =
+    provider === "google" && mailboxType !== "personal" && mode === "none";
+  if (isAdaptiveGoogleWorkspace) {
+    return [
+      "Copy the inbound address shown above.",
+      "Open Gmail forwarding settings and add the inbound address.",
+      "If a verification link appears below, click Verify Now and finish Google verification.",
+      "If no link appears, forwarding will start after the first forwarded email arrives.",
+    ];
+  }
+  if (mode === "none") {
+    return [
+      "Copy the inbound address shown above.",
+      `Open ${provider === "microsoft" ? "Outlook" : isGooglePersonal ? "Google Workspace or Gmail admin" : "your provider"} forwarding settings and add the inbound address.`,
+      "Save the forwarding rule.",
+      "Forwarding will start after the first forwarded email arrives.",
+    ];
+  }
+  if (mode === "code") {
+    return [
+      "Copy the inbound address shown above.",
+      "Open Zoho forwarding settings, add the inbound address, and click Verify.",
+      "Copy the verification code shown below after clicking Verify, then paste it into the Zoho verification popup.",
+      "Click Verify to finish setup. Your account will be configured and forwarding will start after Zoho confirmation or the first forwarded email.",
+    ];
+  }
+  return [
+    "Copy the inbound address shown above.",
+    "Open Gmail forwarding settings and add the inbound address.",
+    "Click Verify Now after the Google verification link appears below.",
+    "Finish Google verification and click I Have Verified.",
+  ];
+}
+
 export function JobEmailIntegrationManager({ jobId, onChanged }: JobEmailIntegrationManagerProps) {
   const [inboxAddress, setInboxAddress] = useState("");
+  const [providerKey, setProviderKey] = useState<ProviderKey | "">("");
+  const [mailboxType, setMailboxType] = useState<string | null>(null);
   const [inboxStatus, setInboxStatus] = useState<"inactive" | "pending" | "active">("inactive");
   const [verificationStatus, setVerificationStatus] = useState<
     "pending" | "action_required" | "verified" | "failed"
   >("pending");
+  const [expectedVerificationMode, setExpectedVerificationMode] =
+    useState<VerificationMode>("link");
+  const [activeVerificationMode, setActiveVerificationMode] = useState<VerificationMode>("link");
   const [verificationError, setVerificationError] = useState<string | null>(null);
   const [verificationActionUrl, setVerificationActionUrl] = useState<string | null>(null);
+  const [verificationCode, setVerificationCode] = useState("");
   const [inboxLoading, setInboxLoading] = useState(true);
   const [inboxSaving, setInboxSaving] = useState(false);
   const [inboxVerifying, setInboxVerifying] = useState(false);
@@ -46,33 +96,77 @@ export function JobEmailIntegrationManager({ jobId, onChanged }: JobEmailIntegra
   const [hasInboxConfig, setHasInboxConfig] = useState(false);
   const [copiedForwarding, setCopiedForwarding] = useState(false);
 
-  const refreshInboxStatus = async () => {
+  const resetConfigState = (message?: string | null) => {
+    setHasInboxConfig(false);
+    setProviderKey("");
+    setMailboxType(null);
+    setInboxStatus("inactive");
+    setVerificationStatus("pending");
+    setExpectedVerificationMode("link");
+    setActiveVerificationMode("link");
+    setVerificationActionUrl(null);
+    setVerificationCode("");
+    setVerifyDialogOpen(false);
+    setVerificationError(message ?? null);
+  };
+
+  const refreshInboxStatus = useCallback(async () => {
     try {
       const config = await getJobEmailIntegrationConfig(jobId);
+      if (config.status === "timed_out") {
+        resetConfigState("Request timed out after 15 minutes. Please set up forwarding again.");
+        return;
+      }
       const inbox = config.inbox;
       if (!inbox) return;
       setInboxStatus(inbox.status ?? "inactive");
       setVerificationStatus(inbox.verification_status ?? "pending");
+      setProviderKey((inbox.provider_key as ProviderKey) ?? "");
+      setMailboxType(inbox.mailbox_type ?? null);
+      setExpectedVerificationMode(inbox.expected_verification_mode ?? "link");
+      setActiveVerificationMode(inbox.active_verification_mode ?? "link");
       setVerificationError(inbox.verification_error ?? null);
       setVerificationActionUrl(inbox.verification_action_url ?? null);
+      setVerificationCode(inbox.verification_code_value ?? "");
     } catch {
       // ignore
     }
-  };
+  }, [jobId]);
+
+  const forwardingDomain = process.env.NEXT_PUBLIC_SES_MAIL_DOMAIN || "applications.smartats.in";
+  const forwardingAddress = `job-${jobId.replace(/-/g, "")}@${forwardingDomain}`;
+  const canSaveInbox = !inboxSaving && !inboxLoading && isValidEmail(inboxAddress);
+  const isVerificationReady = verificationStatus === "action_required";
+  const isVerificationDone = verificationStatus === "verified" || inboxStatus === "active";
+  const verificationMode = hasInboxConfig ? activeVerificationMode : expectedVerificationMode;
+  const isAdaptiveGoogleWorkspace =
+    providerKey === "google" && mailboxType !== "personal" && verificationMode === "none";
+  const forwardingSteps = providerKey
+    ? getForwardingSteps(providerKey, mailboxType, verificationMode)
+    : [];
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         const config = await getJobEmailIntegrationConfig(jobId);
+        if (!cancelled && config.status === "timed_out") {
+          resetConfigState("Request timed out after 15 minutes. Please set up forwarding again.");
+          return;
+        }
         const inbox = config.inbox;
         if (!cancelled && inbox) {
           setHasInboxConfig(true);
           setInboxAddress(inbox.inbox_address ?? "");
+          setProviderKey((inbox.provider_key as ProviderKey) ?? "");
+          setMailboxType(inbox.mailbox_type ?? null);
           setInboxStatus(inbox.status ?? "inactive");
           setVerificationStatus(inbox.verification_status ?? "pending");
+          setExpectedVerificationMode(inbox.expected_verification_mode ?? "link");
+          setActiveVerificationMode(inbox.active_verification_mode ?? "link");
           setVerificationError(inbox.verification_error ?? null);
           setVerificationActionUrl(inbox.verification_action_url ?? null);
+          setVerificationCode(inbox.verification_code_value ?? "");
         }
       } catch {
         // Keep page usable.
@@ -87,35 +181,21 @@ export function JobEmailIntegrationManager({ jobId, onChanged }: JobEmailIntegra
 
   useEffect(() => {
     const verificationDone = verificationStatus === "verified" || inboxStatus === "active";
-    const waitingForEmail = hasInboxConfig && !verificationDone && verificationStatus === "pending";
+    const waitingForEmail =
+      hasInboxConfig &&
+      !verificationDone &&
+      (verificationStatus === "pending" || verificationMode === "code");
     if (!waitingForEmail) return;
     const timer = window.setInterval(refreshInboxStatus, 8000);
     return () => window.clearInterval(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasInboxConfig, verificationStatus, inboxStatus]);
+  }, [hasInboxConfig, verificationStatus, inboxStatus, verificationMode, refreshInboxStatus]);
 
   useEffect(() => {
     const verificationDone = verificationStatus === "verified" || inboxStatus === "active";
     if (!verifyDialogOpen || verificationDone) return;
     const timer = window.setInterval(refreshInboxStatus, 12000);
     return () => window.clearInterval(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [verifyDialogOpen, verificationStatus, inboxStatus]);
-
-  const forwardingDomain = process.env.NEXT_PUBLIC_SES_MAIL_DOMAIN || "applications.smartats.in";
-  const forwardingAddress = `job-${jobId.replace(/-/g, "")}@${forwardingDomain}`;
-  const canSaveInbox = !inboxSaving && !inboxLoading && isValidEmail(inboxAddress);
-  const isVerificationReady = verificationStatus === "action_required";
-  const isVerificationDone = verificationStatus === "verified" || inboxStatus === "active";
-  const forwardingSteps = [
-    "Copy the inbound address shown above.",
-    "Open your email provider settings and find forwarding settings.",
-    "Add the inbound address as a forwarding destination and complete the provider identity check.",
-    "Return to Otter and wait until the Verify Now button becomes available.",
-    "Click Verify Now, finish the provider confirmation in the opened window, then return here.",
-    "Click I Have Verified to activate forwarding in Otter.",
-    "Go back to your email provider and enable forwarding to the verified inbound address.",
-  ];
+  }, [verifyDialogOpen, verificationStatus, inboxStatus, refreshInboxStatus]);
 
   const handleInboxSave = async () => {
     if (!inboxAddress.trim()) {
@@ -126,15 +206,19 @@ export function JobEmailIntegrationManager({ jobId, onChanged }: JobEmailIntegra
     try {
       const config = await upsertJobEmailIntegrationConfig(jobId, {
         inbox_address: normalizeEmail(inboxAddress),
-        provider: "ses",
       });
       await rotateJobEmailIntegrationSecret(jobId);
       const inbox = config.inbox;
       if (inbox) {
         setHasInboxConfig(true);
+        setProviderKey((inbox.provider_key as ProviderKey) ?? "");
+        setMailboxType(inbox.mailbox_type ?? null);
         setInboxStatus(inbox.status ?? "pending");
         setVerificationStatus(inbox.verification_status ?? "pending");
+        setExpectedVerificationMode(inbox.expected_verification_mode ?? "link");
+        setActiveVerificationMode(inbox.active_verification_mode ?? "link");
         setVerificationError(inbox.verification_error ?? null);
+        setVerificationCode(inbox.verification_code_value ?? "");
       }
       setVerificationActionUrl(null);
       toast.success("Job email integration saved");
@@ -199,12 +283,7 @@ export function JobEmailIntegrationManager({ jobId, onChanged }: JobEmailIntegra
   };
 
   const handleChangeEmail = () => {
-    setHasInboxConfig(false);
-    setInboxStatus("inactive");
-    setVerificationStatus("pending");
-    setVerificationError(null);
-    setVerificationActionUrl(null);
-    setVerifyDialogOpen(false);
+    resetConfigState();
   };
 
   return (
@@ -240,14 +319,21 @@ export function JobEmailIntegrationManager({ jobId, onChanged }: JobEmailIntegra
         </p>
       </div>
 
-      <InputField
-        label="Email"
-        value={inboxAddress}
-        onChange={(e) => setInboxAddress(e.target.value)}
-        placeholder="careers@yourcompany.com"
-        className="text-sm h-10 md:h-9"
-        disabled={hasInboxConfig}
-      />
+      {!hasInboxConfig ? (
+        <InputField
+          label="Email"
+          value={inboxAddress}
+          onChange={(e) => setInboxAddress(e.target.value)}
+          placeholder="careers@yourcompany.com"
+          className="text-sm h-10 md:h-9"
+        />
+      ) : null}
+      {hasInboxConfig && providerKey ? (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <EmailProviderIcon provider={providerKey} className="h-4 w-4 shrink-0" />
+          <span>{inboxAddress}</span>
+        </div>
+      ) : null}
       <div className="flex flex-wrap gap-2">
         {!hasInboxConfig ? (
           <Button
@@ -276,38 +362,90 @@ export function JobEmailIntegrationManager({ jobId, onChanged }: JobEmailIntegra
       {hasInboxConfig ? (
         <>
           <Separator />
-          <div className="space-y-2 rounded-md border border-border/60 bg-muted/20 p-3">
-            <div className="text-xs font-medium text-foreground">Forwarding setup steps</div>
-            <div className="space-y-1.5 text-xs text-muted-foreground">
-              {forwardingSteps.map((step, idx) => (
-                <div key={step}>
-                  {idx + 1}. {step}
-                </div>
-              ))}
+          {providerKey ? (
+            <div className="space-y-2 rounded-md border border-border/60 bg-muted/20 p-3">
+              <div className="text-xs font-medium text-foreground">Forwarding setup steps</div>
+              <div className="space-y-1.5 text-xs text-muted-foreground">
+                {forwardingSteps.map((step, idx) => (
+                  <div key={step}>
+                    {idx + 1}. {step}
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
+          ) : null}
           {verificationError ? (
             <div className="text-xs text-red-600">Verification error: {verificationError}</div>
           ) : null}
           {!isVerificationDone ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                size="sm"
-                type="button"
-                variant="outline"
-                className="text-xs h-8"
-                onClick={handleVerifyNow}
-                disabled={!isVerificationReady || inboxVerifying}
-              >
-                {inboxVerifying ? "Opening..." : "Verify Now"}
-              </Button>
-              {!isVerificationReady ? (
-                <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  Waiting for verification email from provider...
-                </span>
-              ) : null}
-            </div>
+            verificationMode === "code" ? (
+              <div className="space-y-2">
+                <InputField
+                  label="Verification Code"
+                  value={verificationCode}
+                  readOnly
+                  placeholder="Waiting for Zoho verification code"
+                  className="text-sm h-10 md:h-9"
+                />
+                <div className="flex flex-wrap items-center gap-2">
+                  {verificationStatus === "pending" ? (
+                    <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Waiting for Zoho verification email...
+                    </span>
+                  ) : verificationCode.trim() ? (
+                    <>
+                      <Button
+                        size="sm"
+                        type="button"
+                        variant="outline"
+                        className="text-xs h-8"
+                        onClick={async () => {
+                          const ok = await copyToClipboard(verificationCode.trim());
+                          if (ok) {
+                            toast.success("Verification code copied");
+                          } else {
+                            toast.error("Failed to copy verification code");
+                          }
+                        }}
+                      >
+                        Copy Code
+                      </Button>
+                      <span className="inline-flex items-center gap-1 text-xs text-green-600">
+                        Copy this code into the Zoho verification popup. Otter will activate
+                        automatically afterward.
+                      </span>
+                    </>
+                  ) : null}
+                </div>
+              </div>
+            ) : verificationMode === "none" ? (
+              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                {isAdaptiveGoogleWorkspace
+                  ? "Waiting for either the Google verification link or the first forwarded email..."
+                  : "Waiting for the first forwarded email to activate forwarding automatically..."}
+              </span>
+            ) : (
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                  className="text-xs h-8"
+                  onClick={handleVerifyNow}
+                  disabled={!isVerificationReady || inboxVerifying}
+                >
+                  {inboxVerifying ? "Opening..." : "Verify Now"}
+                </Button>
+                {!isVerificationReady ? (
+                  <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Waiting for verification email from provider...
+                  </span>
+                ) : null}
+              </div>
+            )
           ) : (
             <div className="text-xs text-green-600 font-medium">
               Verified and active. Forwarding is enabled. The inbound address above continues to

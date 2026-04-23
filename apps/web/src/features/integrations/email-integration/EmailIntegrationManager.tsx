@@ -510,7 +510,7 @@ export function EmailIntegrationManager({ onChanged }: EmailIntegrationManagerPr
           ) : (
             <div className="space-y-2 text-sm">
               {forwardingSteps.slice(4, 6).map((step, idx) => (
-                <div key={step}>
+                <div key={idx}>
                   {idx + 1}. {step}
                 </div>
               ))}

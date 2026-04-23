@@ -36,7 +36,10 @@ export type IntegrationEmailConfigResponse = {
 
 export type IntegrationEmailConfigUpsertRequest = {
   inbox_address: string;
-  provider: string;
+};
+
+export type EmailIntegrationCodeVerifyRequest = {
+  code: string;
 };
 
 export type IntegrationEmailConfigActionResponse = IntegrationInboxActionResponse & {
@@ -88,6 +91,15 @@ export function verifyCompleteEmailIntegration(): Promise<IntegrationEmailConfig
   });
 }
 
+export function verifyCodeEmailIntegration(
+  data: EmailIntegrationCodeVerifyRequest,
+): Promise<IntegrationEmailConfigActionResponse> {
+  return apiFetch<IntegrationEmailConfigActionResponse>("/integrations/email/verify-code", {
+    method: "POST",
+    body: data,
+  });
+}
+
 export function disconnectEmailIntegration(): Promise<{ status: string; message: string }> {
   return apiFetch<{ status: string; message: string }>("/integrations/email/disconnect", {
     method: "POST",
@@ -98,11 +110,19 @@ export type IntegrationOrgInboxResponse = {
   org_id: string;
   inbox_address: string;
   provider: string;
+  provider_key: string;
+  provider_detection_source: string | null;
+  provider_detection_confidence: string | null;
+  mailbox_type: string | null;
+  expected_verification_mode: "link" | "code" | "none";
+  active_verification_mode: "link" | "code" | "none";
   status: "inactive" | "pending" | "active";
   verification_status: "pending" | "action_required" | "verified" | "failed";
   verification_provider: string | null;
+  verification_confirmed_via: string | null;
   verification_action_type: string | null;
   verification_action_url: string | null;
+  verification_code_value: string | null;
   verification_detected_at: string | null;
   verification_error: string | null;
   verified_at: string | null;
@@ -124,7 +144,6 @@ export type JobIntegrationEmailConfigResponse = {
 
 export type JobIntegrationEmailConfigUpsertRequest = {
   inbox_address: string;
-  provider: string;
 };
 
 export type JobIntegrationInboxResponse = {
@@ -132,11 +151,19 @@ export type JobIntegrationInboxResponse = {
   org_id: string;
   inbox_address: string;
   provider: string;
+  provider_key: string;
+  provider_detection_source: string | null;
+  provider_detection_confidence: string | null;
+  mailbox_type: string | null;
+  expected_verification_mode: "link" | "code" | "none";
+  active_verification_mode: "link" | "code" | "none";
   status: "inactive" | "pending" | "active";
   verification_status: "pending" | "action_required" | "verified" | "failed";
   verification_provider: string | null;
+  verification_confirmed_via: string | null;
   verification_action_type: string | null;
   verification_action_url: string | null;
+  verification_code_value: string | null;
   verification_detected_at: string | null;
   verification_error: string | null;
   verified_at: string | null;
@@ -197,6 +224,19 @@ export function verifyCompleteJobEmailIntegration(
     `/jobs/${jobId}/integrations/email/verify-complete`,
     {
       method: "POST",
+    },
+  );
+}
+
+export function verifyCodeJobEmailIntegration(
+  jobId: string,
+  data: EmailIntegrationCodeVerifyRequest,
+): Promise<JobIntegrationEmailActionResponse> {
+  return apiFetch<JobIntegrationEmailActionResponse>(
+    `/jobs/${jobId}/integrations/email/verify-code`,
+    {
+      method: "POST",
+      body: data,
     },
   );
 }

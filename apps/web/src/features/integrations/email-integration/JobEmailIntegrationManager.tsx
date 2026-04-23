@@ -119,29 +119,35 @@ export function JobEmailIntegrationManager({ jobId, onChanged }: JobEmailIntegra
   const [hasInboxConfig, setHasInboxConfig] = useState(false);
   const [copiedForwarding, setCopiedForwarding] = useState(false);
 
-  const resetConfigState = useCallback(
+  const resetConfigState = useCallback((message?: string | null) => {
+    setHasInboxConfig(false);
+    setProviderKey("");
+    setMailboxType(null);
+    setInboxStatus("inactive");
+    setVerificationStatus("pending");
+    setExpectedVerificationMode("link");
+    setActiveVerificationMode("link");
+    setVerificationActionUrl(null);
+    setVerificationCode("");
+    setVerifyDialogOpen(false);
+    setVerificationError(message ?? null);
+  }, []);
+
+  const resetExpiredConfigState = useCallback(
     (message?: string | null) => {
-      setHasInboxConfig(false);
-      setProviderKey("");
-      setMailboxType(null);
-      setInboxStatus("inactive");
-      setVerificationStatus("pending");
-      setExpectedVerificationMode("link");
-      setActiveVerificationMode("link");
-      setVerificationActionUrl(null);
-      setVerificationCode("");
-      setVerifyDialogOpen(false);
-      setVerificationError(message ?? null);
+      resetConfigState(message);
       void onChanged?.();
     },
-    [onChanged],
+    [onChanged, resetConfigState],
   );
 
   const refreshInboxStatus = useCallback(async () => {
     try {
       const config = await getJobEmailIntegrationConfig(jobId);
       if (config.status === "timed_out") {
-        resetConfigState("Request timed out after 15 minutes. Please set up forwarding again.");
+        resetExpiredConfigState(
+          "Request timed out after 15 minutes. Please set up forwarding again.",
+        );
         return;
       }
       const inbox = config.inbox;
@@ -158,7 +164,7 @@ export function JobEmailIntegrationManager({ jobId, onChanged }: JobEmailIntegra
     } catch {
       // ignore
     }
-  }, [jobId]);
+  }, [jobId, resetExpiredConfigState]);
 
   const forwardingDomain = process.env.NEXT_PUBLIC_SES_MAIL_DOMAIN || "applications.smartats.in";
   const forwardingAddress = `job-${jobId.replace(/-/g, "")}@${forwardingDomain}`;
@@ -178,7 +184,9 @@ export function JobEmailIntegrationManager({ jobId, onChanged }: JobEmailIntegra
       try {
         const config = await getJobEmailIntegrationConfig(jobId);
         if (!cancelled && config.status === "timed_out") {
-          resetConfigState("Request timed out after 15 minutes. Please set up forwarding again.");
+          resetExpiredConfigState(
+            "Request timed out after 15 minutes. Please set up forwarding again.",
+          );
           return;
         }
         const inbox = config.inbox;
@@ -204,7 +212,7 @@ export function JobEmailIntegrationManager({ jobId, onChanged }: JobEmailIntegra
     return () => {
       cancelled = true;
     };
-  }, [jobId]);
+  }, [jobId, resetExpiredConfigState]);
 
   useEffect(() => {
     const verificationDone = verificationStatus === "verified" || inboxStatus === "active";

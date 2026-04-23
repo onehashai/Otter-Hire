@@ -120,22 +120,26 @@ export function EmailIntegrationManager({ onChanged }: EmailIntegrationManagerPr
   const [hasInboxConfig, setHasInboxConfig] = useState(false);
   const [copiedForwarding, setCopiedForwarding] = useState(false);
 
-  const resetConfigState = useCallback(
+  const resetConfigState = useCallback((message?: string | null) => {
+    setHasInboxConfig(false);
+    setProviderKey("");
+    setMailboxType(null);
+    setInboxStatus("inactive");
+    setVerificationStatus("pending");
+    setExpectedVerificationMode("link");
+    setActiveVerificationMode("link");
+    setVerificationActionUrl(null);
+    setVerificationCode("");
+    setVerifyDialogOpen(false);
+    setVerificationError(message ?? null);
+  }, []);
+
+  const resetExpiredConfigState = useCallback(
     (message?: string | null) => {
-      setHasInboxConfig(false);
-      setProviderKey("");
-      setMailboxType(null);
-      setInboxStatus("inactive");
-      setVerificationStatus("pending");
-      setExpectedVerificationMode("link");
-      setActiveVerificationMode("link");
-      setVerificationActionUrl(null);
-      setVerificationCode("");
-      setVerifyDialogOpen(false);
-      setVerificationError(message ?? null);
+      resetConfigState(message);
       void onChanged?.();
     },
-    [onChanged],
+    [onChanged, resetConfigState],
   );
 
   useEffect(() => {
@@ -144,7 +148,9 @@ export function EmailIntegrationManager({ onChanged }: EmailIntegrationManagerPr
       try {
         const config = await getEmailIntegrationConfig();
         if (!cancelled && config.status === "timed_out") {
-          resetConfigState("Request timed out after 15 minutes. Please set up forwarding again.");
+          resetExpiredConfigState(
+            "Request timed out after 15 minutes. Please set up forwarding again.",
+          );
           return;
         }
         const inbox = config.inbox;
@@ -170,13 +176,15 @@ export function EmailIntegrationManager({ onChanged }: EmailIntegrationManagerPr
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [resetExpiredConfigState]);
 
   const refreshInboxStatus = useCallback(async () => {
     try {
       const config = await getEmailIntegrationConfig();
       if (config.status === "timed_out") {
-        resetConfigState("Request timed out after 15 minutes. Please set up forwarding again.");
+        resetExpiredConfigState(
+          "Request timed out after 15 minutes. Please set up forwarding again.",
+        );
         return;
       }
       const inbox = config.inbox;
@@ -193,7 +201,7 @@ export function EmailIntegrationManager({ onChanged }: EmailIntegrationManagerPr
     } catch {
       // ignore
     }
-  }, []);
+  }, [resetExpiredConfigState]);
 
   const forwardingDomain = process.env.NEXT_PUBLIC_SES_MAIL_DOMAIN || "applications.smartats.in";
   const forwardingAddress = user?.org_id

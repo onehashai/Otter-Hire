@@ -3,6 +3,7 @@
 import { Card, CardContent } from "@onehash/ui/card";
 import { Button } from "@onehash/ui/button";
 import { Icon } from "@onehash/ui/icon";
+import { TruncatedText } from "@/components/common/TruncatedText";
 
 type InterviewItem = {
   id: string;
@@ -52,7 +53,9 @@ export function InterviewsTab({
           <CardContent className="p-4 space-y-2">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
-                <p className="text-sm font-medium truncate">{i.title}</p>
+                <TruncatedText as="p" className="text-sm font-medium">
+                  {i.title}
+                </TruncatedText>
                 <p className="text-xs text-muted-foreground">
                   {i.date} · {i.time} · {i.interviewer}
                 </p>

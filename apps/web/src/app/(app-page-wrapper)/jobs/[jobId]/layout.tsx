@@ -26,6 +26,7 @@ import {
 import { toast } from "@onehash/ui/sonner";
 import { cn } from "@/lib/utils";
 import { getInitialsFromName } from "@/lib/name-initials";
+import { TruncatedText } from "@/components/common/TruncatedText";
 import { JobSetupProvider, useJobSetup } from "./context";
 import { aiJobDescription, type JobDescriptionAiAction } from "@/api";
 import { Loader2 } from "lucide-react";
@@ -279,11 +280,18 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
             size="icon"
             className="h-9 w-9 shrink-0"
             onClick={handleBackClick}
+            tooltip={t("back_to_jobs")}
+            tooltipContentProps={{ side: "right" }}
+            aria-label={t("back_to_jobs")}
           >
             <Icon name="ChevronLeft" className="h-4 w-4" />
           </Button>
           <div className="flex-1 min-w-0">
-            <h1 className="text-base font-semibold truncate">{title || t("create_job")}</h1>
+            <h1 className="text-base font-semibold min-w-0">
+              <TruncatedText as="span" className="text-base font-semibold" side="bottom">
+                {title || t("create_job")}
+              </TruncatedText>
+            </h1>
             <p className="text-[10px] text-muted-foreground">
               {t("step_progress", {
                 current: currentStep + 1,
@@ -356,7 +364,15 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
   return (
     <div>
       <div className="flex items-center gap-3 mb-6">
-        <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={handleBackClick}>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 shrink-0"
+          onClick={handleBackClick}
+          tooltip={t("back_to_jobs")}
+          tooltipContentProps={{ side: "right" }}
+          aria-label={t("back_to_jobs")}
+        >
           <Icon name="ChevronLeft" className="h-4 w-4" />
         </Button>
         <div className="flex-1">

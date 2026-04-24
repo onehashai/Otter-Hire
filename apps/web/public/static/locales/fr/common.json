@@ -500,5 +500,18 @@
   "current_org_badge": "Actuel",
   "loading_candidate": "Chargement du candidat…",
   "candidate_not_found": "Candidat introuvable",
-  "source_email": "E-mail"
+  "source_email": "E-mail",
+  "tooltip_more_actions": "Plus d'actions",
+  "tooltip_job_options": "Options du poste",
+  "tooltip_template_options": "Options du modèle",
+  "tooltip_automation_options": "Options d'automatisation",
+  "tooltip_user_options": "Options de l'utilisateur",
+  "tooltip_back_to_templates": "Retour aux modèles",
+  "tooltip_back_to_automations": "Retour aux automatisations",
+  "tooltip_close_panel": "Fermer le panneau",
+  "tooltip_remove_member": "Retirer le membre",
+  "tooltip_member_actions": "Actions du membre",
+  "tooltip_insert_emoji": "Insérer un emoji",
+  "tooltip_attach_file": "Joindre un fichier",
+  "tooltip_insert_template": "Insérer un modèle"
 }

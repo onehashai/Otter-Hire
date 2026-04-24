@@ -22,7 +22,6 @@ import {
   DialogFooter,
 } from "@onehash/ui/dialog";
 import {
-  Zap,
   MoreHorizontal,
   Copy,
   Trash2,
@@ -117,6 +116,10 @@ function splitLabelRows(label?: string): string[] {
     .split(/\s*(?:\n|→|,|;|\|)\s*/g)
     .map((part) => part.trim())
     .filter(Boolean);
+}
+
+function stopPropagation(event: React.SyntheticEvent) {
+  event.stopPropagation();
 }
 
 export interface AutomationsListProps {
@@ -325,29 +328,26 @@ export function AutomationsList({
                       {a.status}
                     </Badge>
                   </div>
-                  <div className="flex flex-wrap items-center gap-1.5">
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <button
                           type="button"
-                          className="inline-flex"
-                          onClick={(e) => e.stopPropagation()}
-                          onPointerDown={(e) => e.stopPropagation()}
-                          onTouchStart={(e) => e.stopPropagation()}
+                          className="inline-flex items-center gap-1.5 rounded-sm text-left transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                          onClick={stopPropagation}
+                          onPointerDown={stopPropagation}
+                          onTouchStart={stopPropagation}
                           aria-label="Show trigger details"
                         >
-                          <Badge
-                            variant="secondary"
-                            className="h-5 px-2 text-[10px] font-medium gap-1 bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200"
-                          >
-                            <AlertCircle className="h-3 w-3" />
+                          <span className="inline-flex items-center gap-1.5">
+                            <AlertCircle className="h-3.5 w-3.5 shrink-0" />
                             {splitLabelRows(a.triggerLabel).length > 1
                               ? `${splitLabelRows(a.triggerLabel).length} triggers applied`
                               : "Trigger applied"}
-                          </Badge>
+                          </span>
                         </button>
                       </TooltipTrigger>
-                      <TooltipContent side="top" className="max-w-xs p-2">
+                      <TooltipContent side="top" className="max-w-xs">
                         <div className="space-y-1">
                           {(splitLabelRows(a.triggerLabel).length
                             ? splitLabelRows(a.triggerLabel)
@@ -365,25 +365,22 @@ export function AutomationsList({
                       <TooltipTrigger asChild>
                         <button
                           type="button"
-                          className="inline-flex"
-                          onClick={(e) => e.stopPropagation()}
-                          onPointerDown={(e) => e.stopPropagation()}
-                          onTouchStart={(e) => e.stopPropagation()}
+                          className="inline-flex items-center gap-1.5 rounded-sm text-left transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                          onClick={stopPropagation}
+                          onPointerDown={stopPropagation}
+                          onTouchStart={stopPropagation}
                           aria-label="Show action details"
                         >
-                          <Badge
-                            variant="secondary"
-                            className="h-5 px-2 text-[10px] font-medium gap-1 bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200"
-                          >
-                            <CheckCircle2 className="h-3 w-3" />
+                          <span className="inline-flex items-center gap-1.5">
+                            <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
                             {(() => {
                               const actionCount = Math.max(splitLabelRows(a.actionLabel).length, 1);
                               return `${actionCount} action${actionCount > 1 ? "s" : ""} applied`;
                             })()}
-                          </Badge>
+                          </span>
                         </button>
                       </TooltipTrigger>
-                      <TooltipContent side="top" className="max-w-xs p-2">
+                      <TooltipContent side="top" className="max-w-xs">
                         <div className="space-y-1">
                           {(splitLabelRows(a.actionLabel).length
                             ? splitLabelRows(a.actionLabel)
@@ -401,17 +398,14 @@ export function AutomationsList({
                       <TooltipTrigger asChild>
                         <button
                           type="button"
-                          className="inline-flex"
-                          onClick={(e) => e.stopPropagation()}
-                          onPointerDown={(e) => e.stopPropagation()}
-                          onTouchStart={(e) => e.stopPropagation()}
+                          className="inline-flex items-center gap-1.5 rounded-sm text-left transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                          onClick={stopPropagation}
+                          onPointerDown={stopPropagation}
+                          onTouchStart={stopPropagation}
                           aria-label="Show jobs details"
                         >
-                          <Badge
-                            variant="secondary"
-                            className="h-5 px-2 text-[10px] font-medium gap-1 bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200"
-                          >
-                            <Briefcase className="h-3 w-3" />
+                          <span className="inline-flex items-center gap-1.5">
+                            <Briefcase className="h-3.5 w-3.5 shrink-0" />
                             {(() => {
                               const jobCount =
                                 a.scope === "all"
@@ -419,10 +413,10 @@ export function AutomationsList({
                                   : (automationJobNames[a.id]?.length ?? (a.scope ? 1 : 0));
                               return `Jobs: ${jobCount == null ? "All" : jobCount}`;
                             })()}
-                          </Badge>
+                          </span>
                         </button>
                       </TooltipTrigger>
-                      <TooltipContent side="top" className="max-w-xs p-2">
+                      <TooltipContent side="top" className="max-w-xs">
                         <div className="space-y-1">
                           {(a.scope === "all"
                             ? ["Applies to all jobs"]
@@ -447,7 +441,14 @@ export function AutomationsList({
                   />
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-7 w-7 p-0">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 p-0"
+                        tooltip={t("tooltip_automation_options")}
+                        tooltipContentProps={{ side: "top" }}
+                        aria-label={t("tooltip_automation_options")}
+                      >
                         <MoreHorizontal className="h-3.5 w-3.5" />
                       </Button>
                     </DropdownMenuTrigger>

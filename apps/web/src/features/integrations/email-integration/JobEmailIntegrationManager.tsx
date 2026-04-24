@@ -81,7 +81,7 @@ function getForwardingSteps(
       "Copy the inbound address shown above.",
       "Open Zoho forwarding settings, add the inbound address, and click Verify.",
       "Copy the verification code shown below after clicking Verify, then paste it into the Zoho verification popup.",
-      "Click Verify to finish setup. Your account will be configured and forwarding will start after Zoho confirmation or the first forwarded email.",
+      "Click Verify to finish setup. Your account will be configured and forwarding will start automatically.",
     ];
   }
   return [

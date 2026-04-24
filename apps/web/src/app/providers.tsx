@@ -221,7 +221,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <QueryClientProvider client={queryClient}>
       <AuthSessionContext.Provider value={authValue}>
         <ThemeProvider defaultTheme="light">
-          <TooltipProvider>
+          <TooltipProvider delayDuration={500} skipDelayDuration={300}>
             {children}
             <Toaster />
             <SonnerToaster />

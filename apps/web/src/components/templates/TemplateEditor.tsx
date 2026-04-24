@@ -19,6 +19,7 @@ import { RichTextEditor } from "@onehash/ui/editor";
 import { useToast } from "@/hooks/use-toast";
 import { TemplatePreviewModal } from "./components/TemplatePreviewModal";
 import { getTemplateById, createTemplate, updateTemplate } from "@/api/templates";
+import { useTranslation } from "react-i18next";
 
 const VARIABLES = [
   {
@@ -49,6 +50,7 @@ const VARIABLES = [
 ];
 
 export default function TemplateEditor() {
+  const { t } = useTranslation();
   const params = useParams();
   const templateId = typeof params?.templateId === "string" ? params.templateId : undefined;
   const router = useRouter();
@@ -138,6 +140,9 @@ export default function TemplateEditor() {
             size="icon"
             className="h-8 w-8"
             onClick={() => router.push("/templates")}
+            tooltip={t("tooltip_back_to_templates")}
+            tooltipContentProps={{ side: "right" }}
+            aria-label={t("tooltip_back_to_templates")}
           >
             <ArrowLeft className="h-4 w-4" />
           </Button>

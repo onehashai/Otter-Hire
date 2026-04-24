@@ -500,5 +500,18 @@
   "current_org_badge": "Actual",
   "loading_candidate": "Cargando candidato…",
   "candidate_not_found": "Candidato no encontrado",
-  "source_email": "Correo electrónico"
+  "source_email": "Correo electrónico",
+  "tooltip_more_actions": "Más acciones",
+  "tooltip_job_options": "Opciones del trabajo",
+  "tooltip_template_options": "Opciones de plantilla",
+  "tooltip_automation_options": "Opciones de automatización",
+  "tooltip_user_options": "Opciones del usuario",
+  "tooltip_back_to_templates": "Volver a plantillas",
+  "tooltip_back_to_automations": "Volver a automatizaciones",
+  "tooltip_close_panel": "Cerrar panel",
+  "tooltip_remove_member": "Eliminar miembro",
+  "tooltip_member_actions": "Acciones del miembro",
+  "tooltip_insert_emoji": "Insertar emoji",
+  "tooltip_attach_file": "Adjuntar archivo",
+  "tooltip_insert_template": "Insertar plantilla"
 }

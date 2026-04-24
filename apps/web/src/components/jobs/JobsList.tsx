@@ -97,6 +97,9 @@ function JobCard({ job, onJobArchived }: { job: JobListItemResponse; onJobArchiv
                   className="h-8 w-8 text-muted-foreground border-border"
                   onClick={(e) => e.stopPropagation()}
                   onPointerDown={(e) => e.stopPropagation()}
+                  tooltip={t("tooltip_job_options")}
+                  tooltipContentProps={{ side: "top" }}
+                  aria-label={t("tooltip_job_options")}
                 >
                   <Icon name="MoreHorizontal" className="h-4 w-4" />
                 </Button>

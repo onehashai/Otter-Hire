@@ -24,6 +24,7 @@ import { ExecutionLog, type ExecutionLogEntry } from "@/components/automations/t
 import { ExecutionDetailsDialog } from "@/components/automations/tabs/ExecutionDetailsDialog";
 import { getAutomationById, getAutomationExecutions } from "@/api/automations";
 import { formatTimestamp } from "@/lib/format-date";
+import { TruncatedText } from "@/components/common/TruncatedText";
 
 function formatExecutionEventLabel(value: string): string {
   return value
@@ -144,13 +145,18 @@ export default function AutomationDetailPage() {
             size="sm"
             className="h-8 w-8 p-0 shrink-0"
             onClick={() => router.push("/automations")}
+            tooltip={t("tooltip_back_to_automations")}
+            tooltipContentProps={{ side: "right" }}
+            aria-label={t("tooltip_back_to_automations")}
           >
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h1 className="text-base font-semibold truncate">
-                {automation?.name ?? t("automation_overview_title")}
+              <h1 className="text-base font-semibold min-w-0">
+                <TruncatedText as="span" className="text-base font-semibold" side="bottom">
+                  {automation?.name ?? t("automation_overview_title")}
+                </TruncatedText>
               </h1>
               <Badge
                 variant={isActive ? "default" : "secondary"}

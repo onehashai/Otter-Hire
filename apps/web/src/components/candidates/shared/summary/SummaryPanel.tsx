@@ -233,6 +233,7 @@ export function SummaryPanel({
     if (profileLinkFields && profileLinkFields.length > 0) return profileLinkFields;
     return [
       { key: "linkedin", label: "LinkedIn", required: false },
+      { key: "github", label: "GitHub", required: false },
       { key: "portfolio", label: "Portfolio", required: false },
     ];
   }, [profileLinkFields]);

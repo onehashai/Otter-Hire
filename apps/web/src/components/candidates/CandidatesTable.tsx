@@ -248,7 +248,7 @@ export function CandidatesTable({
       return (
         <TableCell key={column} className="py-2 align-middle min-w-0 max-w-[220px] text-center">
           <div className="min-w-0 text-center">
-            <TruncatedText as="p" className="text-sm font-medium">
+            <TruncatedText as="p" className="mx-auto text-center text-sm font-medium">
               {c.name}
             </TruncatedText>
           </div>
@@ -258,7 +258,9 @@ export function CandidatesTable({
     if (column === "email") {
       return (
         <TableCell key={column} className="py-2 align-middle min-w-0 max-w-[240px] text-center">
-          <TruncatedText className="text-xs text-muted-foreground">{c.email}</TruncatedText>
+          <TruncatedText className="mx-auto text-center text-xs text-muted-foreground">
+            {c.email}
+          </TruncatedText>
         </TableCell>
       );
     }

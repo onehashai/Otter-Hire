@@ -723,7 +723,14 @@ export default function CandidatesPage() {
             }}
           >
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="h-9 md:h-8 w-9 p-0">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9 md:h-8 w-9 p-0"
+                tooltip={t("tooltip_more_actions")}
+                tooltipContentProps={{ side: "top" }}
+                aria-label={t("tooltip_more_actions")}
+              >
                 <Icon name="MoreHorizontal" className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>

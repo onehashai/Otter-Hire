@@ -500,5 +500,18 @@
   "current_org_badge": "Atual",
   "loading_candidate": "Carregando candidato…",
   "candidate_not_found": "Candidato não encontrado",
-  "source_email": "E-mail"
+  "source_email": "E-mail",
+  "tooltip_more_actions": "Mais ações",
+  "tooltip_job_options": "Opções da vaga",
+  "tooltip_template_options": "Opções do modelo",
+  "tooltip_automation_options": "Opções de automação",
+  "tooltip_user_options": "Opções do usuário",
+  "tooltip_back_to_templates": "Voltar aos modelos",
+  "tooltip_back_to_automations": "Voltar às automações",
+  "tooltip_close_panel": "Fechar painel",
+  "tooltip_remove_member": "Remover membro",
+  "tooltip_member_actions": "Ações do membro",
+  "tooltip_insert_emoji": "Inserir emoji",
+  "tooltip_attach_file": "Anexar arquivo",
+  "tooltip_insert_template": "Inserir modelo"
 }

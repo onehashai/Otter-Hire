@@ -16,6 +16,7 @@ import { Icon } from "@onehash/ui/icon";
 import { cn } from "@/lib/utils";
 import { getInitialsFromName } from "@/lib/name-initials";
 import { type BackendRole, formatRole } from "@/components/settings/team/lib/permissonMatrix";
+import { useTranslation } from "react-i18next";
 
 export interface TeamMember {
   id: string;
@@ -102,17 +103,28 @@ export function TeamMembersList({
   onRemoveClick,
 }: TeamMembersProps) {
   const MemberActions = ({ member }: { member: TeamMember }) => {
+    const { t } = useTranslation();
     const roleCheck = canChangeRole(member, currentUserId, isOwner, isAdmin);
     const removeCheck = canRemove(member, currentUserId, isOwner, isAdmin);
     const isPending = member.status === "pending";
 
     return (
-      <TooltipProvider delayDuration={200}>
+      <TooltipProvider delayDuration={500}>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-8 w-8">
-              <Icon name="MoreHorizontal" className="h-4 w-4" />
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  aria-label={t("tooltip_member_actions")}
+                >
+                  <Icon name="MoreHorizontal" className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{t("tooltip_member_actions")}</TooltipContent>
+            </Tooltip>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">
             {roleCheck.allowed ? (

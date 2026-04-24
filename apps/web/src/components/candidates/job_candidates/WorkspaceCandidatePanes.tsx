@@ -12,6 +12,7 @@ import {
   EvaluationTab,
   DocumentsTab,
 } from "@/components/candidates/shared/tabs";
+import { useTranslation } from "react-i18next";
 import {
   addCandidateNote,
   deleteCandidateDocument,
@@ -84,6 +85,7 @@ export function WorkspaceCandidatePanes({
   onCandidateUpdated?: () => void | Promise<void>;
   onClose?: () => void;
 }) {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState("overview");
   const [candidate, setCandidate] = useState<CandidateDetailResponse | null>(null);
   const [overview, setOverview] = useState<CandidateOverviewResponse | null>(null);
@@ -234,7 +236,15 @@ export function WorkspaceCandidatePanes({
             <p className="text-2xl font-semibold truncate">{uiCandidate.name}</p>
             <p className="text-xs text-muted-foreground truncate">{uiCandidate.email}</p>
           </div>
-          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onClose}>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            onClick={onClose}
+            tooltip={t("tooltip_close_panel")}
+            tooltipContentProps={{ side: "left" }}
+            aria-label={t("tooltip_close_panel")}
+          >
             <Icon name="X" className="h-4 w-4" />
           </Button>
         </div>

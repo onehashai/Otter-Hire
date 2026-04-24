@@ -23,6 +23,7 @@ import {
 } from "@/lib/validation/contact";
 import { FileText, Loader2, UploadCloud, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { TruncatedText } from "@/components/common/TruncatedText";
 
 export type AddCandidateDialogProps = {
   open: boolean;
@@ -249,7 +250,7 @@ export function AddCandidateDialog({
             {resumeFile && (
               <div className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm">
                 <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
-                <span className="flex-1 truncate text-xs">{resumeFile.name}</span>
+                <TruncatedText className="flex-1 text-xs">{resumeFile.name}</TruncatedText>
                 <button
                   type="button"
                   onClick={() => setResumeFile(null)}

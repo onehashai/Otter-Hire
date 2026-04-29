@@ -54,6 +54,8 @@ export default function IntegrationPage() {
   }, []);
 
   const isLinkedInReady = Boolean(linkedinStatus?.connected && linkedinStatus?.setup_complete);
+  const isEmailPendingVerification =
+    emailStatus?.configured === true && emailStatus?.status === "pending";
 
   const fetchEmailStatus = async () => {
     if (!jobId) {
@@ -83,7 +85,11 @@ export default function IntegrationPage() {
               <div className="flex items-center gap-2">
                 <p className="text-sm font-medium">{t("email_integration")}</p>
                 <Badge variant={emailStatus?.status === "active" ? "default" : "secondary"}>
-                  {emailStatus?.status === "active" ? t("connected") : t("not_connected")}
+                  {emailStatus?.status === "active"
+                    ? t("connected")
+                    : isEmailPendingVerification
+                      ? "Pending Verification"
+                      : t("not_connected")}
                 </Badge>
               </div>
               <p className="text-xs text-muted-foreground">{t("email_integration_description")}</p>
@@ -106,7 +112,11 @@ export default function IntegrationPage() {
                 onClick={() => setEmailDialogOpen(true)}
                 disabled={isLoading || !jobId}
               >
-                {emailStatus?.configured ? t("manage") : t("connect")}
+                {isEmailPendingVerification
+                  ? "Pending Verification"
+                  : emailStatus?.configured
+                    ? t("manage")
+                    : t("connect")}
               </Button>
             </div>
           </div>

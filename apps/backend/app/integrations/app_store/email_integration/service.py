@@ -10,6 +10,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.integrations.app_store.email_integration import credential_store
+from app.integrations.app_store.email_integration.provider_logic import (
+    build_verification_state,
+    detect_provider,
+    hash_verification_code,
+)
 from app.models.integration import Integration
 from app.models.integration_credential import IntegrationCredential
 from app.schemas.integrations import (
@@ -18,7 +23,12 @@ from app.schemas.integrations import (
     IntegrationInstalledApp,
     IntegrationOwnerContext,
 )
-from app.schemas.organization import OrgInboxActionResponse, OrgInboxResponse, UpsertOrgInboxRequest
+from app.schemas.organization import (
+    OrgInboxActionResponse,
+    OrgInboxCodeVerifyRequest,
+    OrgInboxResponse,
+    UpsertOrgInboxRequest,
+)
 
 APP_ID = "email_integration"
 APP_SLUG = "email-integration"
@@ -89,11 +99,24 @@ def to_org_inbox_response(org_id: UUID, cred: IntegrationCredential) -> OrgInbox
         org_id=org_id,
         inbox_address=_cfg_str(cfg, "inbound_address", "") or "",
         provider=_cfg_str(cfg, "provider", "ses") or "ses",
+        provider_key=_cfg_str(cfg, "provider_key", _cfg_str(cfg, "provider", "")) or "",
+        provider_detection_source=_cfg_str(cfg, "provider_detection_source"),
+        provider_detection_confidence=_cfg_str(cfg, "provider_detection_confidence"),
+        mailbox_type=_cfg_str(cfg, "mailbox_type"),
+        expected_verification_mode=_cfg_str(cfg, "expected_verification_mode", "link") or "link",
+        active_verification_mode=_cfg_str(
+            cfg,
+            "active_verification_mode",
+            _cfg_str(cfg, "expected_verification_mode", "link"),
+        )
+        or "link",
         status=cred.status or "pending",
         verification_status=_cfg_str(cfg, "verification_status", "pending") or "pending",
         verification_provider=_cfg_str(cfg, "verification_provider"),
+        verification_confirmed_via=_cfg_str(cfg, "verification_confirmed_via"),
         verification_action_type=action_type or None,
         verification_action_url=verification_action_url,
+        verification_code_value=_cfg_str(cfg, "verification_code_value"),
         verification_detected_at=None,
         verification_error=credential_store.cache_get_verify_error(cred.id),
         verified_at=credential_store.parse_verified_at(cfg),
@@ -111,6 +134,8 @@ async def get_email_config(
     db: AsyncSession, owner: IntegrationOwnerContext
 ) -> IntegrationEmailConfigResponse:
     inbox = await get_org_inbox(db, owner)
+    if await credential_store.expire_pending_credential_if_needed(db, inbox):
+        return IntegrationEmailConfigResponse(inbox=None, configured=False, status="timed_out")
     if inbox is None:
         return IntegrationEmailConfigResponse(inbox=None, configured=False, status="not_configured")
     cfg = inbox.config or {}
@@ -129,6 +154,13 @@ async def upsert_email_config(
     body: UpsertOrgInboxRequest,
 ) -> OrgInboxResponse:
     normalized_address = _normalize_inbox_address(body.inbox_address)
+    detection = detect_provider(normalized_address)
+    provider_key = detection["provider_key"]
+    if not provider_key:
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported provider. Only Google, Microsoft, and Zoho mailboxes are supported.",
+        )
     email_integration = await db.execute(select(Integration).where(Integration.slug == "email"))
     integration = email_integration.scalar_one_or_none()
     if integration is None:
@@ -147,15 +179,21 @@ async def upsert_email_config(
     inbox = await get_org_inbox(db, owner)
     cfg = dict((inbox.config if inbox else {}) or {})
     current_address = _normalize_inbox_address(str(cfg.get("inbound_address") or ""))
-    address_unchanged = current_address == normalized_address
-    cfg["inbound_address"] = normalized_address
-    cfg["provider"] = body.provider.strip().lower() or (cfg.get("provider") or "ses")
-
+    current_provider = str(cfg.get("provider_key") or cfg.get("provider") or "").strip().lower()
+    address_unchanged = current_address == normalized_address and current_provider == provider_key
     if not address_unchanged:
-        cfg["verification_status"] = "pending"
-        cfg.pop("verified_at", None)
-        cfg.pop("verification_provider", None)
-        cfg.pop("verification_email_id", None)
+        cfg = build_verification_state(
+            normalized_address,
+            preserve_secret=str(cfg.get("secret_hash") or "") or None,
+        )
+    else:
+        cfg["provider_key"] = provider_key
+        cfg["provider"] = provider_key
+        cfg["mailbox_email"] = normalized_address
+        cfg["inbound_address"] = normalized_address
+        cfg["provider_detection_source"] = detection["detection_source"]
+        cfg["provider_detection_confidence"] = detection["detection_confidence"]
+        cfg["mailbox_type"] = detection["mailbox_type"]
 
     row = await credential_store.upsert_credential(
         db,
@@ -171,6 +209,8 @@ async def upsert_email_config(
 
 async def rotate_secret(db: AsyncSession, owner: IntegrationOwnerContext) -> OrgInboxActionResponse:
     inbox = await get_org_inbox(db, owner)
+    if await credential_store.expire_pending_credential_if_needed(db, inbox):
+        raise HTTPException(status_code=410, detail="Verification request timed out")
     if inbox is None:
         raise HTTPException(status_code=404, detail="Inbox configuration not found")
 
@@ -178,6 +218,15 @@ async def rotate_secret(db: AsyncSession, owner: IntegrationOwnerContext) -> Org
     cfg = dict(inbox.config or {})
     cfg["secret_hash"] = plain_secret
     cfg["verification_status"] = "pending"
+    cfg["verification_started_at"] = datetime.now(timezone.utc).isoformat()
+    cfg["active_verification_mode"] = str(
+        cfg.get("expected_verification_mode") or cfg.get("active_verification_mode") or "link"
+    )
+    cfg["verification_action_type"] = None
+    cfg["verification_confirmed_via"] = None
+    cfg["verification_code_hash"] = None
+    cfg["verification_code_expires_at"] = None
+    cfg["verification_code_value"] = None
     cfg.pop("verified_at", None)
     cfg.pop("verification_provider", None)
     cfg.pop("verification_email_id", None)
@@ -204,6 +253,8 @@ async def activate(db: AsyncSession, owner: IntegrationOwnerContext) -> OrgInbox
     if owner.role not in {"owner", "admin"}:
         raise HTTPException(status_code=403, detail="Insufficient permissions")
     inbox = await get_org_inbox(db, owner)
+    if await credential_store.expire_pending_credential_if_needed(db, inbox):
+        raise HTTPException(status_code=410, detail="Verification request timed out")
     if inbox is None:
         raise HTTPException(status_code=404, detail="Inbox configuration not found")
     cfg = dict(inbox.config or {})
@@ -223,13 +274,17 @@ async def verify_now(db: AsyncSession, owner: IntegrationOwnerContext) -> OrgInb
         raise HTTPException(status_code=403, detail="Insufficient permissions")
 
     inbox = await get_org_inbox(db, owner)
+    if await credential_store.expire_pending_credential_if_needed(db, inbox):
+        raise HTTPException(status_code=410, detail="Verification request timed out")
     if inbox is None:
         raise HTTPException(status_code=404, detail="Inbox configuration not found")
     cfg = dict(inbox.config or {})
     if str(cfg.get("verification_status") or "pending") != "action_required":
         raise HTTPException(status_code=409, detail="Verification action not available")
     payload = credential_store.cache_get_verify_action(inbox.id) or {}
-    action_type = str(payload.get("type") or "").strip().lower()
+    action_type = (
+        str(payload.get("type") or cfg.get("verification_action_type") or "").strip().lower()
+    )
 
     if action_type != "link":
         raise HTTPException(status_code=409, detail="Unsupported verification action")
@@ -257,6 +312,8 @@ async def verify_complete(
         raise HTTPException(status_code=403, detail="Insufficient permissions")
 
     inbox = await get_org_inbox(db, owner)
+    if await credential_store.expire_pending_credential_if_needed(db, inbox):
+        raise HTTPException(status_code=410, detail="Verification request timed out")
     if inbox is None:
         raise HTTPException(status_code=404, detail="Inbox configuration not found")
     cfg = dict(inbox.config or {})
@@ -264,10 +321,45 @@ async def verify_complete(
         raise HTTPException(status_code=409, detail="Verification action not available")
     cfg["verification_status"] = "verified"
     cfg["verified_at"] = datetime.now(timezone.utc).isoformat()
+    cfg["verification_confirmed_via"] = "link"
+    cfg["verification_code_value"] = None
     inbox.config = cfg
     inbox.status = "active"
     await db.commit()
 
+    return OrgInboxActionResponse(status="active", message="Inbox verified and active")
+
+
+async def verify_code(
+    db: AsyncSession,
+    owner: IntegrationOwnerContext,
+    body: OrgInboxCodeVerifyRequest,
+) -> OrgInboxActionResponse:
+    if owner.role not in {"owner", "admin"}:
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+    inbox = await get_org_inbox(db, owner)
+    if inbox is None:
+        raise HTTPException(status_code=404, detail="Inbox configuration not found")
+    cfg = dict(inbox.config or {})
+    if str(cfg.get("active_verification_mode") or "") != "code":
+        raise HTTPException(status_code=409, detail="Verification code is not required")
+    expected_hash = str(cfg.get("verification_code_hash") or "").strip()
+    if not expected_hash:
+        raise HTTPException(status_code=409, detail="Verification code not available")
+    expires_at = credential_store.parse_iso_datetime(cfg.get("verification_code_expires_at"))
+    if expires_at and expires_at < datetime.now(timezone.utc):
+        raise HTTPException(status_code=409, detail="Verification code expired")
+    if hash_verification_code(body.code.strip()) != expected_hash:
+        raise HTTPException(status_code=400, detail="Invalid verification code")
+    cfg["verification_status"] = "verified"
+    cfg["verified_at"] = datetime.now(timezone.utc).isoformat()
+    cfg["verification_confirmed_via"] = "code"
+    cfg["verification_code_hash"] = None
+    cfg["verification_code_expires_at"] = None
+    cfg["verification_code_value"] = None
+    inbox.config = cfg
+    inbox.status = "active"
+    await db.commit()
     return OrgInboxActionResponse(status="active", message="Inbox verified and active")
 
 

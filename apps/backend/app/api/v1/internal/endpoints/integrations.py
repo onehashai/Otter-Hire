@@ -17,6 +17,7 @@ from app.schemas.integrations import (
     OutboundConfigResponse,
     OutboundConfigUpsertRequest,
 )
+from app.schemas.organization import OrgInboxCodeVerifyRequest
 
 router = APIRouter(prefix="/integrations", tags=["integrations"])
 
@@ -112,6 +113,18 @@ async def verify_email_integration_complete(
     if integration is None or not hasattr(integration, "verify_complete"):
         raise HTTPException(status_code=404, detail="Integration not found")
     return await integration.verify_complete(db, _owner_ctx(current_user))
+
+
+@router.post("/email/verify-code", response_model=IntegrationEmailConfigActionResponse)
+async def verify_email_integration_code(
+    body: OrgInboxCodeVerifyRequest,
+    current_user: User = Depends(require_permission("org:inbox:manage")),
+    db: AsyncSession = Depends(get_db),
+):
+    integration = get_integration_by_slug("email-integration")
+    if integration is None or not hasattr(integration, "verify_code"):
+        raise HTTPException(status_code=404, detail="Integration not found")
+    return await integration.verify_code(db, _owner_ctx(current_user), body)
 
 
 @router.post("/email/disconnect")

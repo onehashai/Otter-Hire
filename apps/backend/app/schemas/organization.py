@@ -55,11 +55,19 @@ class OrgInboxResponse(BaseModel):
     org_id: UUID
     inbox_address: str
     provider: str
+    provider_key: str = ""
+    provider_detection_source: str | None = None
+    provider_detection_confidence: str | None = None
+    mailbox_type: str | None = None
+    expected_verification_mode: str = "link"
+    active_verification_mode: str = "link"
     status: str
     verification_status: str = "pending"
     verification_provider: str | None = None
+    verification_confirmed_via: str | None = None
     verification_action_type: str | None = None
     verification_action_url: str | None = None
+    verification_code_value: str | None = None
     verification_detected_at: datetime | None = None
     verification_error: str | None = None
     verified_at: datetime | None = None
@@ -68,7 +76,6 @@ class OrgInboxResponse(BaseModel):
 
 class UpsertOrgInboxRequest(BaseModel):
     inbox_address: EmailStr
-    provider: str = Field(default="ses", min_length=2, max_length=32)
 
     @field_validator("inbox_address")
     @classmethod
@@ -80,3 +87,7 @@ class OrgInboxActionResponse(BaseModel):
     status: str
     message: str
     action_url: str | None = None
+
+
+class OrgInboxCodeVerifyRequest(BaseModel):
+    code: str = Field(min_length=4, max_length=16)

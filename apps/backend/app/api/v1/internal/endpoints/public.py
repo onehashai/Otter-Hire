@@ -43,6 +43,10 @@ from app.core.config import settings
 from app.core.security import verify_access_token
 from app.db.session import get_db
 from app.integrations.app_store.email_integration import credential_store
+from app.integrations.app_store.email_integration.provider_logic import (
+    code_expiry_iso,
+    hash_verification_code,
+)
 from app.models.candidate import Candidate
 from app.models.candidate_jobs import CandidateJobs
 from app.models.conversation import Conversation
@@ -65,10 +69,12 @@ from app.schemas.public_jobs import (
     PublicJobsListResponse,
 )
 from app.services.automation import execute_automations_for_trigger
+from app.services.email import send_email
 from app.services.resume.heuristics import should_replace_name
 from app.services.resume.pipeline import run_resume_pipeline
 from app.services.resume_links import resolve_resume_from_body
 from app.services.storage import storage_service
+from app.templates import EmailContent
 from app.temporal.email.queue import enqueue_ses_raw_key
 from app.utils.uuid import uuid7
 
@@ -709,36 +715,73 @@ def _email_domain(value: str) -> str:
     return parts[1] if len(parts) == 2 else ""
 
 
-def _detect_verification_provider(from_email: str, subject: str, body_text: str) -> str | None:
+_VERIFICATION_PROVIDER_DOMAINS = {
+    "google": {"google.com", "accounts.google.com", "gmail.com", "googlemail.com"},
+    "microsoft": {"outlook.com", "office.com", "microsoft.com", "live.com", "hotmail.com"},
+    "zoho": {"zoho.com", "zohomail.com", "zeptomail.com", "transmail.net"},
+}
+_VERIFICATION_KEYWORDS = (
+    "forwarding",
+    "forward emails",
+    "forward email",
+    "forward mail",
+    "mail forwarding",
+    "forwarded to",
+    "verify forwarding",
+    "verify your forwarding",
+    "verify your forwarding address",
+    "verify this forwarding",
+    "confirm forwarding",
+    "confirm your forwarding",
+    "confirm forwarding request",
+    "confirmation code",
+    "verification code",
+    "verification link",
+    "one-time password",
+    "otp",
+)
+
+
+def _normalize_verification_provider(value: str | None) -> str | None:
+    provider = (value or "").strip().lower()
+    if provider in {"google", "gmail"}:
+        return "google"
+    if provider in {"microsoft", "outlook", "office365", "office"}:
+        return "microsoft"
+    if provider == "zoho":
+        return "zoho"
+    return None
+
+
+def _provider_from_sender_domain(domain: str) -> str | None:
+    for provider, domains in _VERIFICATION_PROVIDER_DOMAINS.items():
+        if domain in domains or any(domain.endswith(f".{item}") for item in domains):
+            return provider
+    return None
+
+
+def _contains_verification_keyword(source: str) -> bool:
+    return any(token in source for token in _VERIFICATION_KEYWORDS)
+
+
+def _detect_verification_provider(
+    from_email: str,
+    subject: str,
+    body_text: str,
+    expected_provider: str | None = None,
+) -> str | None:
     source = " ".join([subject.lower(), body_text.lower()])
     domain = _email_domain(from_email)
-    gmail_domains = {"google.com", "accounts.google.com", "gmail.com", "googlemail.com"}
-    outlook_domains = {"outlook.com", "office.com", "microsoft.com", "live.com"}
+    sender_provider = _provider_from_sender_domain(domain)
+    normalized_expected = _normalize_verification_provider(expected_provider)
 
-    if domain in gmail_domains or any(domain.endswith(f".{item}") for item in gmail_domains):
-        if any(
-            token in source
-            for token in [
-                "forwarding",
-                "gmail forwarding",
-                "confirm forwarding",
-                "forward mail",
-            ]
-        ):
-            return "gmail"
-
-    if domain in outlook_domains or any(domain.endswith(f".{item}") for item in outlook_domains):
-        if any(
-            token in source
-            for token in [
-                "forwarding",
-                "outlook forwarding",
-                "confirm forwarding",
-                "forward mail",
-            ]
-        ):
-            return "outlook"
-    return None
+    if sender_provider and _contains_verification_keyword(source):
+        return sender_provider
+    if normalized_expected and sender_provider == normalized_expected:
+        return normalized_expected
+    if normalized_expected and _contains_verification_keyword(source):
+        return normalized_expected
+    return sender_provider if sender_provider and "forward" in source else None
 
 
 def _is_allowed_verification_url(value: str) -> bool:
@@ -754,33 +797,172 @@ def _is_allowed_verification_url(value: str) -> bool:
         "office.com",
         "microsoft.com",
         "live.com",
+        "hotmail.com",
+        "zoho.com",
+        "zohomail.com",
+        "zeptomail.com",
+        "transmail.net",
     )
     return any(host == suffix or host.endswith(f".{suffix}") for suffix in allowed_suffixes)
 
 
 def _extract_verification_action(body_text: str) -> dict:
-    # Most providers include a confirmation link for forwarding verification.
     for candidate in re.findall(r"https://[^\s<>\"]+", body_text):
-        if _is_allowed_verification_url(candidate):
-            return {"type": "link", "url": candidate}
-    code_match = re.search(r"\b(\d{6,8})\b", body_text)
+        cleaned = candidate.rstrip(").,;!?")
+        if _is_allowed_verification_url(cleaned):
+            return {"type": "link", "url": cleaned}
+
+    # Prefer labeled provider confirmation tokens before numeric OTP fallback.
+    # Zoho forwarding confirmation emails use 32-char alphanumeric tokens, and
+    # some of them begin with digits (for example "81479abd..."). If numeric
+    # matching runs first, the token gets truncated to the leading digits.
+    token_patterns = (
+        r"(?:confirmation|authorization|authorisation)\s+code[^A-Za-z0-9]{0,40}([A-Fa-f0-9]{16,64})",
+        r"(?:confirmation|authorization|authorisation)\s+code[^A-Za-z0-9]{0,40}([A-Za-z0-9]{12,64})",
+    )
+    for pattern in token_patterns:
+        token_match = re.search(pattern, body_text, re.IGNORECASE)
+        if not token_match:
+            continue
+        token = token_match.group(1).strip()
+        if token:
+            return {"type": "code", "code": token}
+
+    code_patterns = (
+        r"(?:verification|confirmation|forwarding|security|access)\s+code[^0-9]{0,20}(\d{4,8})",
+        r"(?:authorization|authorisation)\s+code[^0-9]{0,20}(\d{4,8})",
+        r"(?:otp|one[- ]time password)[^0-9]{0,20}(\d{4,8})",
+        r"\b(\d{6,8})\b",
+    )
+    code_match = None
+    for pattern in code_patterns:
+        code_match = re.search(pattern, body_text, re.IGNORECASE)
+        if code_match:
+            break
     if code_match:
         return {"type": "code", "code": code_match.group(1)}
+
+    # Some providers, especially Zoho, render verification digits in separate HTML
+    # nodes/spans, which turns into "1 2 3 4 5 6" or "12 34 56" after HTML stripping.
+    split_code_patterns = (
+        r"(?:verification|confirmation|authorization|authorisation|forwarding|security|access)\s+code[^0-9]{0,40}((?:\d[\s\-:]*){4,12})",
+        r"(?:otp|one[- ]time password)[^0-9]{0,40}((?:\d[\s\-:]*){4,12})",
+    )
+    for pattern in split_code_patterns:
+        split_match = re.search(pattern, body_text, re.IGNORECASE)
+        if not split_match:
+            continue
+        digits = re.sub(r"\D", "", split_match.group(1))
+        if 4 <= len(digits) <= 8:
+            return {"type": "code", "code": digits}
     return {"type": "manual"}
 
 
-def _is_verification_email(from_email: str, subject: str, body_text: str) -> bool:
-    provider = _detect_verification_provider(from_email, subject, body_text)
+def _send_verification_code_email(to_email: str, code: str, inbox_address: str) -> None:
+    subject = f"{settings.platform_name}: forwarding verification code"
+    text = (
+        f"Use this code in {settings.platform_name} to complete forwarding setup for "
+        f"{inbox_address}.\n\nVerification code: {code}\n"
+    )
+    html_body = (
+        f"<p>Use this code in <strong>{html.escape(settings.platform_name)}</strong> to complete "
+        f"forwarding setup for <code>{html.escape(inbox_address)}</code>.</p>"
+        f"<p><strong>Verification code: {html.escape(code)}</strong></p>"
+    )
+    content = EmailContent(subject=subject, text=text, html=html_body)
+    asyncio.create_task(send_email(to_email, content))
+
+
+def _is_verification_email(
+    from_email: str,
+    subject: str,
+    body_text: str,
+    expected_provider: str | None = None,
+) -> bool:
+    provider = _detect_verification_provider(
+        from_email,
+        subject,
+        body_text,
+        expected_provider=expected_provider,
+    )
     if provider is None:
         return False
     source = " ".join([subject.lower(), body_text.lower()])
-    forwarding_markers = [
-        "forwarding",
-        "confirm forwarding",
-        "forward mail",
-        "forwarded to",
-    ]
-    return any(token in source for token in forwarding_markers)
+    action = _extract_verification_action(body_text)
+    if action.get("type") in {"link", "code"}:
+        return True
+    return _contains_verification_keyword(source)
+
+
+def _is_actionable_verification_email(
+    from_email: str,
+    subject: str,
+    body_text: str,
+    *,
+    expected_provider: str | None = None,
+    expected_mode: str | None = None,
+) -> bool:
+    action = _extract_verification_action(body_text)
+    if action.get("type") not in {"link", "code"}:
+        return _is_verification_email(
+            from_email,
+            subject,
+            body_text,
+            expected_provider=expected_provider,
+        )
+
+    normalized_provider = _normalize_verification_provider(expected_provider)
+    normalized_mode = (expected_mode or "").strip().lower()
+    detected_provider = _detect_verification_provider(
+        from_email,
+        subject,
+        body_text,
+        expected_provider=expected_provider,
+    )
+    if detected_provider is not None:
+        return True
+
+    # During a pending setup, trust actionable link/code emails that align with the
+    # configured provider mode even if the sender domain is provider-specific and not
+    # yet covered by our exact allowlist.
+    if normalized_provider and normalized_mode in {"link", "code"}:
+        if normalized_mode == action.get("type"):
+            return True
+        if normalized_provider == "zoho" and action.get("type") == "code":
+            return True
+        if normalized_provider in {"google", "microsoft"} and action.get("type") == "link":
+            return True
+    return False
+
+
+def _is_verification_confirmation_email(
+    from_email: str,
+    subject: str,
+    body_text: str,
+    expected_provider: str | None = None,
+) -> bool:
+    provider = _detect_verification_provider(
+        from_email,
+        subject,
+        body_text,
+        expected_provider=expected_provider,
+    )
+    if provider is None:
+        return False
+    source = " ".join([subject.lower(), body_text.lower()])
+    confirmation_markers = (
+        "forwarding verified",
+        "forwarding has been verified",
+        "forwarding enabled",
+        "verified successfully",
+        "verification successful",
+        "address verified",
+        "forwarding request approved",
+        "forwarding confirmed",
+        "confirmed successfully",
+        "has been confirmed",
+    )
+    return any(marker in source for marker in confirmation_markers)
 
 
 def _extract_request_token(request: Request, authorization: Optional[str]) -> Optional[str]:
@@ -2047,6 +2229,7 @@ async def ingest_inbound_email(
             html.unescape(re.sub(r"<[^>]+>", " ", payload.html_body or "")),
         ]
     ).strip()
+    automated_reason = _is_automated_email(payload)
 
     # Store attachments but DON'T parse yet (optimization: parse only after validation)
     stored_attachments: list[tuple[dict, bytes]] = []
@@ -2105,8 +2288,32 @@ async def ingest_inbound_email(
 
     inbound_from_email = (inbound_email.from_email or "").strip()
     inbound_subject = (inbound_email.subject or "").strip()
-    if _is_verification_email(inbound_from_email, inbound_subject, body_text):
-        provider = _detect_verification_provider(inbound_from_email, inbound_subject, body_text)
+    target_cfg = job_cfg if job_inbox is not None else org_cfg
+    target_inbox = job_inbox if job_inbox is not None else org_inbox
+    expected_provider = str(
+        target_cfg.get("provider_key")
+        or target_cfg.get("provider")
+        or target_cfg.get("verification_provider")
+        or ""
+    )
+    expected_mode = str(
+        target_cfg.get("active_verification_mode")
+        or target_cfg.get("expected_verification_mode")
+        or ""
+    )
+    if _is_actionable_verification_email(
+        inbound_from_email,
+        inbound_subject,
+        body_text,
+        expected_provider=expected_provider,
+        expected_mode=expected_mode,
+    ):
+        provider = _detect_verification_provider(
+            inbound_from_email,
+            inbound_subject,
+            body_text,
+            expected_provider=expected_provider,
+        ) or _normalize_verification_provider(expected_provider)
         action = _extract_verification_action(body_text)
         if provider is None or action.get("type") == "manual":
             logger.info(
@@ -2124,24 +2331,31 @@ async def ingest_inbound_email(
             inbound_email.email_kind = "verification"
             inbound_email.parse_status = "ignored"
             inbound_email.parse_error = "Verification email captured"
-            if job_inbox is not None:
-                job_cfg["verification_status"] = "action_required"
-                job_cfg["verification_provider"] = provider or "unknown"
-                job_cfg["verification_email_id"] = str(inbound_email.id)
-                job_inbox.status = "pending"
-                job_inbox.config = job_cfg
+            target_cfg["verification_status"] = "action_required"
+            target_cfg["verification_provider"] = provider or "unknown"
+            target_cfg["verification_email_id"] = str(inbound_email.id)
+            target_cfg["verification_action_type"] = str(action.get("type") or "")
+            target_cfg["active_verification_mode"] = str(action.get("type") or "")
+            target_cfg["verification_confirmed_via"] = None
+            if action.get("type") == "code":
+                code = str(action.get("code") or "").strip()
+                target_cfg["verification_code_hash"] = hash_verification_code(code)
+                target_cfg["verification_code_expires_at"] = code_expiry_iso()
+                target_cfg["verification_code_value"] = code
                 credential_store.cache_set_verify_action(
-                    job_inbox.id, {"type": action.get("type"), "url": action.get("url")}
+                    target_inbox.id,
+                    {"type": "code"},
                 )
             else:
-                org_cfg["verification_status"] = "action_required"
-                org_cfg["verification_provider"] = provider or "unknown"
-                org_cfg["verification_email_id"] = str(inbound_email.id)
-                org_inbox.status = "pending"
-                org_inbox.config = org_cfg
+                target_cfg["verification_code_hash"] = None
+                target_cfg["verification_code_expires_at"] = None
+                target_cfg["verification_code_value"] = None
                 credential_store.cache_set_verify_action(
-                    org_inbox.id, {"type": action.get("type"), "url": action.get("url")}
+                    target_inbox.id,
+                    {"type": action.get("type"), "url": action.get("url")},
                 )
+            target_inbox.status = "pending"
+            target_inbox.config = target_cfg
             logger.info(
                 "Verification email detected inbox=%s provider=%s action_type=%s",
                 inbox_address,
@@ -2156,6 +2370,63 @@ async def ingest_inbound_email(
                 "org_id": str(org_id),
             }
 
+    verification_mode = str(
+        target_cfg.get("active_verification_mode")
+        or target_cfg.get("expected_verification_mode")
+        or "link"
+    )
+    verification_status = str(target_cfg.get("verification_status") or "pending")
+    is_verification_confirmation = _is_verification_confirmation_email(
+        inbound_from_email,
+        inbound_subject,
+        body_text,
+        expected_provider=expected_provider,
+    )
+
+    if (
+        target_inbox is not None
+        and resolved_inbox_status != "active"
+        and verification_mode == "code"
+        and verification_status == "action_required"
+        and (is_verification_confirmation or automated_reason is None)
+    ):
+        target_cfg["verification_status"] = "verified"
+        target_cfg["verified_at"] = datetime.now(timezone.utc).isoformat()
+        target_cfg["verification_confirmed_via"] = (
+            "provider_confirmation_email"
+            if is_verification_confirmation
+            else "forwarded_email_detected"
+        )
+        target_cfg["verification_code_value"] = None
+        target_cfg["verification_code_hash"] = None
+        target_cfg["verification_code_expires_at"] = None
+        target_inbox.config = target_cfg
+        target_inbox.status = "active"
+        resolved_inbox_status = "active"
+        if is_verification_confirmation:
+            inbound_email.email_kind = "verification"
+            inbound_email.parse_status = "ignored"
+            inbound_email.parse_error = "Verification confirmed"
+            await db.commit()
+            return {
+                "status": "ok",
+                "message": "Verification confirmed",
+                "inbound_email_id": str(inbound_email.id),
+                "org_id": str(org_id),
+            }
+
+    if (
+        target_inbox is not None
+        and resolved_inbox_status != "active"
+        and verification_mode == "none"
+    ):
+        target_cfg["verification_status"] = "verified"
+        target_cfg["verified_at"] = datetime.now(timezone.utc).isoformat()
+        target_cfg["verification_confirmed_via"] = "forwarded_email_detected"
+        target_inbox.config = target_cfg
+        target_inbox.status = "active"
+        resolved_inbox_status = "active"
+
     if resolved_inbox_status != "active":
         inbound_email.parse_status = "ignored"
         inbound_email.parse_error = "Inbox is pending verification"
@@ -2168,7 +2439,6 @@ async def ingest_inbound_email(
         }
 
     # --- Spam / noise filter ---
-    automated_reason = _is_automated_email(payload)
     if automated_reason:
         inbound_email.parse_status = "ignored"
         inbound_email.parse_error = f"Automated email skipped: {automated_reason}"

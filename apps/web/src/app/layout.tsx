@@ -81,6 +81,7 @@ function isMarketingDomain(host: string): boolean {
 
   if (configuredRootHostname) {
     marketingHosts.add(configuredRootHostname);
+    marketingHosts.add(`www.${configuredRootHostname}`);
   }
 
   return marketingHosts.has(hostname);

@@ -452,7 +452,7 @@ export function EmailIntegrationManager({ onChanged }: EmailIntegrationManagerPr
                         Copy Code
                       </Button>
                       <span className="inline-flex items-center gap-1 text-xs text-green-600">
-                        Copy this code into the Zoho verification popup. Otter will activate
+                        Copy this code into the Zoho verification popup. Otter Hire will activate
                         automatically afterward.
                       </span>
                     </>

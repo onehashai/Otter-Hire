@@ -6,10 +6,7 @@ import { X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { LOGO_PNG_PATH } from "@/lib/constants";
 
-const navLinks = [
-  { label: "Features", section: "product" },
-  { label: "FAQs", section: "faq" },
-];
+const navLinks: { label: string; section: string }[] = [];
 
 function scrollToSection(id: string) {
   document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
@@ -84,7 +81,7 @@ export default function MarketingNav({ onLegalPage = false }: { onLegalPage?: bo
   }, []);
 
   const ctaHref = isLoggedIn ? getAppUrl("/jobs") : "/login";
-  const ctaLabel = isLoggedIn ? "Go to Dashboard" : "Get Otter free";
+  const ctaLabel = isLoggedIn ? "Go to Dashboard" : "Get Otter Hire";
 
   return (
     <header
@@ -112,7 +109,7 @@ export default function MarketingNav({ onLegalPage = false }: { onLegalPage?: bo
         >
           <Image
             src={LOGO_PNG_PATH}
-            alt="Otter"
+            alt="Otter Hire"
             width={124}
             height={34}
             className="h-11 w-auto sm:h-12"

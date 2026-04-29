@@ -33,8 +33,8 @@ type Candidate = {
 
 const SOURCES: Source[] = [
   { id: "portal", label: "Job Portal", Icon: Briefcase },
-  { id: "email", label: "Email Apply", Icon: Mail },
-  { id: "manual", label: "Manual Add", Icon: UserPlus },
+  { id: "email", label: "Email", Icon: Mail },
+  { id: "manual", label: "Manual", Icon: UserPlus },
   { id: "others", label: "Others", Icon: Globe },
 ];
 
@@ -415,7 +415,7 @@ function OtterHub({ phase, topScore }: { phase: Phase; topScore: number }) {
             {/* Logo centered directly — no card wrapper */}
             <motion.img
               src={LOGO_PNG_PATH}
-              alt="Otter"
+              alt="Otter Hire"
               className="h-12 w-auto object-contain"
               animate={{ scale: active ? [1, 1.08, 1] : 1 }}
               transition={{ duration: 1.4, repeat: active ? Infinity : 0, ease: "easeInOut" }}

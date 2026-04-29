@@ -70,7 +70,7 @@ export function AppSidebar({ collapsed, onToggle, onOpenCommandPalette }: AppSid
           <Link href="/" className="flex items-center">
             <Image
               src={LOGO_SVG_PATH}
-              alt="Otter"
+              alt="Otter Hire"
               width={90}
               height={20}
               className="object-contain dark:invert dark:contrast-200"

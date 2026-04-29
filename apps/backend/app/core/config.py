@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     is_production: bool = Field(default=False, validation_alias="IS_PRODUCTION")
 
     # Product branding (emails, UI copy, API metadata)
-    platform_name: str = Field(default="Otter", validation_alias="PLATFORM_NAME")
+    platform_name: str = Field(default="Otter Hire", validation_alias="PLATFORM_NAME")
     support_email: str = Field(default="support@otter.bz", validation_alias="SUPPORT_EMAIL")
 
     # SQLAdmin (local development only — ignored in production)

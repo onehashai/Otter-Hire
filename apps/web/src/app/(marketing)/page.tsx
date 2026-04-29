@@ -41,20 +41,20 @@ const MARQUEE_LOGOS = [...TRUST_LOGOS, ...TRUST_LOGOS];
 
 const faqs = [
   {
-    q: "Is Otter really free?",
-    a: "Yes, completely. Otter is open source — you can self-host it, inspect the code, and use every feature without a subscription or credit card. There are no paid tiers, no feature gates, and no usage limits imposed by us.",
+    q: "Is Otter Hire really free?",
+    a: "Yes, completely. Otter Hire is open source — you can self-host it, inspect the code, and use every feature without a subscription or credit card. There are no paid tiers, no feature gates, and no usage limits imposed by us.",
   },
   {
     q: "How does AI resume screening work?",
-    a: "When a resume is uploaded or received via inbound email, Otter parses it automatically — extracting skills, experience, education, and certifications. Each candidate is scored against the job requirements so your team sees the strongest applicants first, before anyone opens a single PDF.",
+    a: "When a resume is uploaded or received via inbound email, Otter Hire parses it automatically — extracting skills, experience, education, and certifications. Each candidate is scored against the job requirements so your team sees the strongest applicants first, before anyone opens a single PDF.",
   },
   {
     q: "Can I customize pipeline stages for each job?",
-    a: "Yes. Every job in Otter has its own independent pipeline. You can add, rename, reorder, or remove stages to match your exact hiring process — whether that's a 3-step screen or a 7-stage enterprise loop.",
+    a: "Yes. Every job in Otter Hire has its own independent pipeline. You can add, rename, reorder, or remove stages to match your exact hiring process — whether that's a 3-step screen or a 7-stage enterprise loop.",
   },
   {
     q: "What file formats does resume upload support?",
-    a: "Otter supports PDF and DOCX/DOC uploads. PDFs are previewed natively in-browser; DOCX files are converted to HTML for inline viewing. Both formats go through the same AI parsing pipeline.",
+    a: "Otter Hire supports PDF and DOCX/DOC uploads. PDFs are previewed natively in-browser; DOCX files are converted to HTML for inline viewing. Both formats go through the same AI parsing pipeline.",
   },
   {
     q: "How does workflow automation work?",
@@ -62,10 +62,10 @@ const faqs = [
   },
   {
     q: "Can multiple recruiters and hiring managers collaborate?",
-    a: "Yes. Otter is built for teams. You can invite members with role-based permissions — owner, admin, recruiter, hiring manager, interviewer, or employee. Each role sees the right context without cluttering their view with irrelevant controls.",
+    a: "Yes. Otter Hire is built for teams. You can invite members with role-based permissions — owner, admin, recruiter, hiring manager, interviewer, or employee. Each role sees the right context without cluttering their view with irrelevant controls.",
   },
   {
-    q: "Does Otter integrate with our existing email?",
+    q: "Does Otter Hire integrate with our existing email?",
     a: "Yes. You can connect your SMTP credentials for outbound email, and each job can have a dedicated inbound email address. Resumes sent to that address are automatically parsed and a candidate record is created — no manual upload needed.",
   },
   {
@@ -87,7 +87,7 @@ const productRows = [
     ctaLabel: "Manage Pipeline",
     ctaPath: "/jobs",
     img: "/marketing/product/pipeline.png",
-    imgAlt: "Otter jobs page",
+    imgAlt: "Otter Hire jobs page",
     flip: false,
   },
   {
@@ -102,7 +102,7 @@ const productRows = [
     ctaLabel: "Automate Hiring",
     ctaPath: "/automations",
     img: "/marketing/product/automations.png",
-    imgAlt: "Otter automations page",
+    imgAlt: "Otter Hire automations page",
     flip: true,
   },
   {
@@ -117,7 +117,7 @@ const productRows = [
     ctaLabel: "Build Templates",
     ctaPath: "/templates",
     img: "/marketing/product/templates.png",
-    imgAlt: "Otter templates page",
+    imgAlt: "Otter Hire templates page",
     flip: false,
   },
 ];
@@ -186,7 +186,7 @@ export default function MarketingPage() {
                 rel="noopener noreferrer"
                 className="marketing-button marketing-button-primary"
               >
-                Try Otter Free
+                Try Otter Hire
                 <ArrowRight className="h-4 w-4" />
               </a>
               <button

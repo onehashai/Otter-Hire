@@ -6,7 +6,13 @@ export default function MarketingFooter() {
   return (
     <footer className="marketing-footer-card mx-4 mb-6 sm:mx-6">
       <div className="flex flex-col items-center text-center">
-        <Image src={LOGO_PNG_PATH} alt="Otter" width={124} height={34} className="h-10 w-auto" />
+        <Image
+          src={LOGO_PNG_PATH}
+          alt="Otter Hire"
+          width={124}
+          height={34}
+          className="h-10 w-auto"
+        />
         <p className="mt-4 text-base text-slate-600">Open-source ATS for modern hiring teams.</p>
         <p className="text-sm text-slate-500">
           Recruit faster with AI screening, pipeline automation, and structured collaboration.
@@ -42,7 +48,9 @@ export default function MarketingFooter() {
           </div>
 
           {/* Copyright */}
-          <p className="text-center text-sm text-slate-500">© 2026 Otter. All rights reserved.</p>
+          <p className="text-center text-sm text-slate-500">
+            © 2026 Otter Hire. All rights reserved.
+          </p>
 
           {/* Legal links */}
           <div className="flex items-center justify-center gap-5 text-sm text-slate-500 sm:justify-end">

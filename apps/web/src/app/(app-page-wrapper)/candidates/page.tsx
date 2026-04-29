@@ -601,20 +601,25 @@ export default function CandidatesPage() {
   };
 
   const openJobs = jobs.filter((j) => j.status === "open");
-  const allAssigned =
-    openJobs.length === 0 ||
-    selectedIds.size === 0 ||
-    (() => {
-      const openJobIds = new Set(openJobs.map((j) => j.id));
-      const selectedCandidates = items.filter((c) => selectedIds.has(c.id));
-      return selectedCandidates.every((c) =>
-        [...openJobIds].every((jid) =>
-          c.assignments.some((a) => a.job_id === jid && a.assignment_status === "active"),
-        ),
-      );
-    })();
+
+  // For a single selected candidate: only show jobs they aren't already assigned to.
+  // For 2+ candidates: show all open jobs (each candidate has a different assignment state).
+  const assignableJobs = useMemo(() => {
+    if (selectedIds.size !== 1) return openJobs;
+    const selectedCandidate = items.find((c) => selectedIds.has(c.id));
+    if (!selectedCandidate) return openJobs;
+    const assignedJobIds = new Set(
+      selectedCandidate.assignments
+        .filter((a) => a.assignment_status === "active")
+        .map((a) => a.job_id),
+    );
+    return openJobs.filter((j) => !assignedJobIds.has(j.id));
+  }, [openJobs, selectedIds, items]);
+
+  const allAssigned = selectedIds.size === 0 || assignableJobs.length === 0;
+
   const openAssignDialog = () => {
-    setAssignJobId(openJobs[0]?.id ?? "");
+    setAssignJobId(assignableJobs[0]?.id ?? "");
     setAssignOpen(true);
   };
 
@@ -861,7 +866,7 @@ export default function CandidatesPage() {
                 label={t("jobs_title")}
                 value={assignJobId}
                 onValueChange={setAssignJobId}
-                options={openJobs.map((j) => ({ value: j.id, label: j.title }))}
+                options={assignableJobs.map((j) => ({ value: j.id, label: j.title }))}
               />
               <DialogFooter>
                 <Button

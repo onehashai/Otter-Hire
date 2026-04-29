@@ -50,6 +50,7 @@ from app.schemas.candidates import (
     CandidateFeedbackResponse,
     CandidateInterviewCreateRequest,
     CandidateInterviewResponse,
+    CandidateJobScoreResponse,
     CandidateListItemResponse,
     CandidateListResponse,
     CandidateNoteMentionResponse,
@@ -68,6 +69,8 @@ from app.services.media import ensure_resume_type, read_upload_with_size_check
 from app.services.resume.heuristics import extract_partial_email
 from app.services.resume.pipeline import run_resume_pipeline
 from app.services.storage import storage_service
+from app.temporal.resume_scoring.queue import enqueue_resume_score
+from app.temporal.resume_scoring.types import ResumeScoreInput
 from app.utils.uuid import uuid7
 
 router = APIRouter(prefix="/candidates", tags=["candidates"])
@@ -254,6 +257,92 @@ async def _upsert_candidate_job_assignment(
             existing.assigned_at = assigned_at
     await db.flush()
     return existing
+
+
+async def _mark_assignment_score_pending(
+    db: AsyncSession,
+    *,
+    org_id: UUID,
+    candidate_id: UUID,
+    job_id: UUID,
+) -> CandidateJobs | None:
+    result = await db.execute(
+        select(CandidateJobs).where(
+            CandidateJobs.org_id == org_id,
+            CandidateJobs.candidate_id == candidate_id,
+            CandidateJobs.job_id == job_id,
+        )
+    )
+    assignment = result.scalar_one_or_none()
+    if assignment is None:
+        return None
+    assignment.resume_score_status = "pending"
+    assignment.resume_score = None
+    assignment.resume_score_sections = None
+    assignment.resume_score_generation = int(assignment.resume_score_generation or 0) + 1
+    await db.flush()
+    return assignment
+
+
+async def _enqueue_assignment_score(
+    *,
+    org_id: UUID,
+    candidate_id: UUID,
+    job_id: UUID,
+    generation: int,
+) -> None:
+    try:
+        await enqueue_resume_score(
+            ResumeScoreInput(
+                org_id=str(org_id),
+                candidate_id=str(candidate_id),
+                job_id=str(job_id),
+                generation=generation,
+            )
+        )
+    except Exception:
+        logger.exception(
+            "Failed to enqueue resume scoring org_id=%s candidate_id=%s job_id=%s",
+            org_id,
+            candidate_id,
+            job_id,
+        )
+
+
+async def _enqueue_scores_for_candidate_assignments(
+    db: AsyncSession,
+    *,
+    org_id: UUID,
+    candidate_id: UUID,
+) -> None:
+    result = await db.execute(
+        select(CandidateJobs.job_id).where(
+            CandidateJobs.org_id == org_id,
+            CandidateJobs.candidate_id == candidate_id,
+            CandidateJobs.assignment_status != "withdrawn",
+        )
+    )
+    job_ids = [job_id for (job_id,) in result.all()]
+    if not job_ids:
+        return
+    pending_assignments: list[tuple[UUID, int]] = []
+    for job_id in job_ids:
+        assignment = await _mark_assignment_score_pending(
+            db,
+            org_id=org_id,
+            candidate_id=candidate_id,
+            job_id=job_id,
+        )
+        if assignment is not None:
+            pending_assignments.append((job_id, int(assignment.resume_score_generation or 0)))
+    await db.commit()
+    for job_id, generation in pending_assignments:
+        await _enqueue_assignment_score(
+            org_id=org_id,
+            candidate_id=candidate_id,
+            job_id=job_id,
+            generation=generation,
+        )
 
 
 def _assignment_status_from_stage_name(stage_name: str | None) -> str:
@@ -595,6 +684,13 @@ async def create_candidate(
     # Trigger automations for candidate_applied ONLY if job is assigned
     # Talent pool candidates (no job) should NOT trigger application emails
     if candidate.job_id is not None:
+        pending_assignment = await _mark_assignment_score_pending(
+            db,
+            org_id=current_user.org_id,
+            candidate_id=candidate.id,
+            job_id=candidate.job_id,
+        )
+        await db.commit()
         await execute_automations_for_trigger(
             db=db,
             trigger_key="candidate_applied",
@@ -606,6 +702,14 @@ async def create_candidate(
                 "stage_name": stage_name,
                 "assigned_id": str(created_assignment.assigned_id) if created_assignment else None,
             },
+        )
+        await _enqueue_assignment_score(
+            org_id=current_user.org_id,
+            candidate_id=candidate.id,
+            job_id=candidate.job_id,
+            generation=int(pending_assignment.resume_score_generation or 0)
+            if pending_assignment is not None
+            else 0,
         )
 
     return await get_candidate(candidate.id, db, current_user)
@@ -878,6 +982,13 @@ async def create_candidate_from_resume(
     await db.commit()
 
     if candidate.job_id is not None:
+        pending_assignment = await _mark_assignment_score_pending(
+            db,
+            org_id=current_user.org_id,
+            candidate_id=candidate.id,
+            job_id=candidate.job_id,
+        )
+        await db.commit()
         stage_name = None
         if candidate.stage_id:
             stage_result = await db.execute(
@@ -895,6 +1006,14 @@ async def create_candidate_from_resume(
                 "stage_name": stage_name,
                 "assigned_id": str(created_assignment.assigned_id) if created_assignment else None,
             },
+        )
+        await _enqueue_assignment_score(
+            org_id=current_user.org_id,
+            candidate_id=candidate.id,
+            job_id=candidate.job_id,
+            generation=int(pending_assignment.resume_score_generation or 0)
+            if pending_assignment is not None
+            else 0,
         )
 
     return await get_candidate(candidate.id, db, current_user)
@@ -1318,6 +1437,43 @@ async def get_candidate(
     )
 
 
+@router.get("/{candidate_id}/jobs/{job_id}/score", response_model=CandidateJobScoreResponse)
+async def get_candidate_job_score(
+    candidate_id: UUID,
+    job_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("candidates:read")),
+):
+    candidate_result = await db.execute(
+        select(Candidate.id).where(
+            Candidate.id == candidate_id,
+            Candidate.org_id == current_user.org_id,
+        )
+    )
+    if candidate_result.scalar_one_or_none() is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Candidate not found")
+
+    assignment_result = await db.execute(
+        select(CandidateJobs).where(
+            CandidateJobs.org_id == current_user.org_id,
+            CandidateJobs.candidate_id == candidate_id,
+            CandidateJobs.job_id == job_id,
+        )
+    )
+    assignment = assignment_result.scalar_one_or_none()
+    if assignment is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Candidate is not assigned to this job",
+        )
+
+    return CandidateJobScoreResponse(
+        total_score=assignment.resume_score,
+        status=assignment.resume_score_status,
+        sections=dict(assignment.resume_score_sections or {}),
+    )
+
+
 @router.get(
     "/{candidate_id}/application-responses",
     response_model=CandidateApplicationResponsesResponse,
@@ -1445,6 +1601,7 @@ async def update_candidate(
     changed_fields: list[str] = []
     job_changed = False
     job_was_assigned = False
+    score_assignment_generation: int | None = None
     assigned_job_assignment: CandidateJobs | None = None
 
     if body.name is not None:
@@ -1533,6 +1690,17 @@ async def update_candidate(
                 source=candidate.source,
                 assigned_at=datetime.now(timezone.utc),
             )
+            pending_assignment = await _mark_assignment_score_pending(
+                db,
+                org_id=current_user.org_id,
+                candidate_id=candidate.id,
+                job_id=body.job_id,
+            )
+            score_assignment_generation = (
+                int(pending_assignment.resume_score_generation or 0)
+                if pending_assignment is not None
+                else None
+            )
 
     if changed_fields:
         metadata: dict[str, Any] = {"changed_fields": changed_fields}
@@ -1554,8 +1722,7 @@ async def update_candidate(
         )
     await db.commit()
 
-    # Trigger candidate_job_assigned automation when talent pool candidate gets a job
-    if job_was_assigned:
+    if score_assignment_generation is not None and candidate.job_id is not None:
         # Fetch job and stage details for metadata
         job_result = await db.execute(select(Job).where(Job.id == candidate.job_id))
         job = job_result.scalar_one_or_none()
@@ -1567,30 +1734,37 @@ async def update_candidate(
             )
             stage_name = stage_result.scalar_one_or_none()
 
-        try:
-            await execute_automations_for_trigger(
-                db=db,
-                trigger_key="candidate_job_assigned",
-                org_id=current_user.org_id,
-                candidate_id=candidate.id,
-                job_id=candidate.job_id,
-                metadata={
-                    "job_title": job.title if job else None,
-                    "stage_name": stage_name,
-                    "source": candidate.source,
-                    "assigned_id": str(assigned_job_assignment.assigned_id)
-                    if assigned_job_assignment
-                    else None,
-                },
-            )
-            logger.info(
-                f"Triggered candidate_job_assigned automation: candidate_id={candidate.id}, job_id={candidate.job_id}"
-            )
-        except Exception as e:
-            logger.error(
-                f"Failed to trigger candidate_job_assigned automation: {e}",
-                exc_info=True,
-            )
+        if job_was_assigned:
+            try:
+                await execute_automations_for_trigger(
+                    db=db,
+                    trigger_key="candidate_job_assigned",
+                    org_id=current_user.org_id,
+                    candidate_id=candidate.id,
+                    job_id=candidate.job_id,
+                    metadata={
+                        "job_title": job.title if job else None,
+                        "stage_name": stage_name,
+                        "source": candidate.source,
+                        "assigned_id": str(assigned_job_assignment.assigned_id)
+                        if assigned_job_assignment
+                        else None,
+                    },
+                )
+                logger.info(
+                    f"Triggered candidate_job_assigned automation: candidate_id={candidate.id}, job_id={candidate.job_id}"
+                )
+            except Exception as e:
+                logger.error(
+                    f"Failed to trigger candidate_job_assigned automation: {e}",
+                    exc_info=True,
+                )
+        await _enqueue_assignment_score(
+            org_id=current_user.org_id,
+            candidate_id=candidate.id,
+            job_id=candidate.job_id,
+            generation=score_assignment_generation,
+        )
 
     return await get_candidate(candidate.id, db, current_user)
 
@@ -2011,6 +2185,7 @@ async def bulk_assign_candidates_to_job(
 
     # Track which candidates are “newly assigned” (Talent Pool -> Job) to trigger automation.
     newly_assigned: list[tuple[UUID, UUID | None]] = []
+    scoring_targets: list[UUID] = []
 
     for candidate in candidates:
         old_job_id = candidate.job_id
@@ -2033,6 +2208,7 @@ async def bulk_assign_candidates_to_job(
                 assigned_at=datetime.now(timezone.utc),
             )
             assigned_id = assignment.assigned_id
+            scoring_targets.append(candidate.id)
 
             if old_job_id is None and assigned_id is not None:
                 newly_assigned[-1] = (candidate.id, assigned_id)
@@ -2052,6 +2228,19 @@ async def bulk_assign_candidates_to_job(
 
     await db.commit()
 
+    # Trigger automations for candidates assigned from talent pool.
+    pending_generations: dict[UUID, int] = {}
+    if scoring_targets:
+        for candidate_id in scoring_targets:
+            assignment = await _mark_assignment_score_pending(
+                db,
+                org_id=current_user.org_id,
+                candidate_id=candidate_id,
+                job_id=body.job_id,
+            )
+            if assignment is not None:
+                pending_generations[candidate_id] = int(assignment.resume_score_generation or 0)
+        await db.commit()
     # Trigger automations for candidates assigned from talent pool.
     if newly_assigned:
         for candidate_id, assigned_id in newly_assigned:
@@ -2075,6 +2264,21 @@ async def bulk_assign_candidates_to_job(
                     e,
                     exc_info=True,
                 )
+            await _enqueue_assignment_score(
+                org_id=current_user.org_id,
+                candidate_id=candidate_id,
+                job_id=body.job_id,
+                generation=pending_generations.get(candidate_id, 0),
+            )
+    for candidate_id in scoring_targets:
+        if any(existing_id == candidate_id for existing_id, _ in newly_assigned):
+            continue
+        await _enqueue_assignment_score(
+            org_id=current_user.org_id,
+            candidate_id=candidate_id,
+            job_id=body.job_id,
+            generation=pending_generations.get(candidate_id, 0),
+        )
 
     return CandidateBulkUpdateResponse(updated_count=len(candidates))
 
@@ -2599,6 +2803,20 @@ async def upload_candidate_document(
     content = await read_upload_with_size_check(file)
     actual_mime = (file.content_type or "application/octet-stream").strip()
     safe_name = (file.filename or "document").strip()
+    normalized_doc_type = (
+        doc_type or "custom_field_attachment"
+    ).strip() or "custom_field_attachment"
+    normalized_field_key = (field_key or "attachment").strip() or "attachment"
+    if normalized_doc_type == "resume" or normalized_field_key == "resume":
+        try:
+            result = await asyncio.to_thread(run_resume_pipeline, safe_name, actual_mime, content)
+            candidate.parsed_resume = result.profile.model_dump(mode="json")
+        except Exception:
+            logger.exception(
+                "Failed to parse uploaded resume candidate_id=%s filename=%s",
+                candidate.id,
+                safe_name,
+            )
     doc_id = uuid7()
     object_key = (
         f"orgs/{current_user.org_id}/candidates/{candidate.id}/documents/{doc_id}_{safe_name}"
@@ -2611,9 +2829,9 @@ async def upload_candidate_document(
         org_id=current_user.org_id,
         candidate_id=candidate.id,
         job_id=candidate.job_id,
-        field_key=(field_key or "attachment").strip() or "attachment",
+        field_key=normalized_field_key,
         field_label_snapshot=(field_label or "").strip() or None,
-        doc_type=(doc_type or "custom_field_attachment").strip() or "custom_field_attachment",
+        doc_type=normalized_doc_type,
         name=safe_name,
         url=resolved_url,
         object_key=object_key,
@@ -2630,13 +2848,19 @@ async def upload_candidate_document(
         activity_type="document_added",
         metadata={
             "document_id": str(doc_id),
-            "field_key": (field_key or "attachment").strip() or "attachment",
-            "doc_type": (doc_type or "custom_field_attachment").strip()
-            or "custom_field_attachment",
+            "field_key": normalized_field_key,
+            "doc_type": normalized_doc_type,
         },
     )
     await db.commit()
     await db.refresh(document)
+
+    if normalized_doc_type == "resume" or normalized_field_key == "resume":
+        await _enqueue_scores_for_candidate_assignments(
+            db,
+            org_id=current_user.org_id,
+            candidate_id=candidate.id,
+        )
 
     return CandidateDocumentResponse(
         id=document.id,

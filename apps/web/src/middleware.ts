@@ -7,9 +7,71 @@ import { isCareersUuidSegment, parseLegacyCareersOrgSlug } from "@/lib/public-ca
 const AUTH_ROUTES = new Set(["/login", "/signup"]);
 const LIFECYCLE_ROUTES = new Set(["/verify", "/onboarding", "/forgot", "/reset"]);
 const PUBLIC_ROUTES = new Set(["/health", "/favicon.ico"]);
+const MARKETING_ROUTES = new Set(["/privacy-policy", "/terms"]);
 
 function getApiBaseUrl(): string {
   return (process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000").replace(/\/$/, "");
+}
+
+function parseJobStagePath(pathname: string): { jobId: string; stageId: string } | null {
+  const parts = pathname.split("/").filter(Boolean);
+  if (parts.length < 4) return null;
+  if (parts[0] !== "jobs" || parts[2] !== "stage") return null;
+  if (!parts[1] || !parts[3]) return null;
+  return { jobId: parts[1], stageId: parts[3] };
+}
+
+function getDefaultStageIdFromWorkspace(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object") return null;
+  const stages = (payload as { stages?: unknown }).stages;
+  if (!Array.isArray(stages) || stages.length === 0) return null;
+  const validStages = stages
+    .filter(
+      (stage): stage is { id: string; position?: number | null } =>
+        Boolean(stage) &&
+        typeof stage === "object" &&
+        typeof (stage as { id?: unknown }).id === "string",
+    )
+    .sort((left, right) => {
+      const leftPos =
+        typeof left.position === "number" && Number.isFinite(left.position) ? left.position : 0;
+      const rightPos =
+        typeof right.position === "number" && Number.isFinite(right.position) ? right.position : 0;
+      return leftPos - rightPos;
+    });
+  return validStages[0]?.id ?? null;
+}
+
+async function normalizeInvalidStageUrl(request: NextRequest): Promise<NextResponse | null> {
+  const parsed = parseJobStagePath(request.nextUrl.pathname);
+  if (!parsed) return null;
+
+  try {
+    const res = await fetch(`${getApiBaseUrl()}/v1/internal/jobs/${parsed.jobId}/workspace`, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        cookie: request.headers.get("cookie") || "",
+      },
+      cache: "no-store",
+    });
+
+    if (!res.ok) return null;
+
+    const payload = (await res.json()) as { stages?: Array<{ id: string }> };
+    const stages = Array.isArray(payload.stages) ? payload.stages : [];
+    const stageExists = stages.some((stage) => stage?.id === parsed.stageId);
+    if (stageExists) return null;
+
+    const defaultStageId = getDefaultStageIdFromWorkspace(payload);
+    const redirectUrl = new URL(
+      defaultStageId ? `/jobs/${parsed.jobId}/stage/${defaultStageId}` : `/jobs/${parsed.jobId}`,
+      request.url,
+    );
+    return NextResponse.redirect(redirectUrl);
+  } catch {
+    return null;
+  }
 }
 
 function getExpectedAppHost(): string | null {
@@ -22,6 +84,18 @@ function getExpectedAppHost(): string | null {
 
 function getJobsSubdomain(): string {
   return process.env.NEXT_PUBLIC_JOBS_SUBDOMAIN || "jobs";
+}
+
+function getRootHostAliases(): string[] {
+  const configuredRootHost = process.env.NEXT_PUBLIC_APP_ROOT_HOST || "";
+  const configuredRootHostname = configuredRootHost.split(":")[0].toLowerCase();
+  const aliases = new Set(["localhost", "127.0.0.1"]);
+
+  if (configuredRootHostname) {
+    aliases.add(configuredRootHostname);
+  }
+
+  return Array.from(aliases);
 }
 
 function getHostSubdomain(host: string): string | null {
@@ -72,11 +146,21 @@ function legacyCareersRedirect(request: NextRequest, pathname: string): NextResp
   return NextResponse.redirect(new URL(`/${legacy.orgId}/${jobSeg}`, request.url), 301);
 }
 
-function getAppSubdomainUrl(pathname: string, rootHost: string): string {
+function getAppSubdomainUrl(pathname: string, rootHost: string, search = ""): string {
   const appSubdomain = process.env.NEXT_PUBLIC_APP_SUBDOMAIN || "app";
   const protocol =
     rootHost.includes("localhost") || rootHost.includes("127.0.0.1") ? "http" : "https";
-  return `${protocol}://${appSubdomain}.${rootHost}${pathname}`;
+  return `${protocol}://${appSubdomain}.${rootHost}${pathname}${search}`;
+}
+
+/**
+ * Returns true when the incoming host is the root/marketing domain, i.e. it
+ * matches NEXT_PUBLIC_APP_ROOT_HOST or the bare localhost dev host
+ * (hostname comparison, port-agnostic).
+ */
+function isRootHost(host: string): boolean {
+  const currentHostname = host.split(":")[0].toLowerCase();
+  return getRootHostAliases().includes(currentHostname);
 }
 
 function appendSetCookieHeaders(target: NextResponse, sourceHeaders: Headers): void {
@@ -145,7 +229,50 @@ export async function middleware(request: NextRequest) {
     return NextResponse.rewrite(new URL("/not-found", request.url));
   }
 
-  // Redirect to app subdomain if configured
+  // Root / marketing domain — serve the marketing site and delegate app routes to
+  // the app subdomain.  This must come before the expectedHost redirect so that
+  // requests to the root domain are never blindly bounced to app.*.
+  if (isRootHost(currentHost)) {
+    const rootHost = process.env.NEXT_PUBLIC_APP_ROOT_HOST || "localhost:3000";
+    const search = request.nextUrl.search;
+
+    // Redirect bare localhost/127.0.0.1 to the configured root host when they differ.
+    const currentHostname = currentHost.split(":")[0].toLowerCase();
+    const configuredRootHostname = rootHost.split(":")[0].toLowerCase();
+    const isBareLocal = currentHostname === "localhost" || currentHostname === "127.0.0.1";
+    if (
+      isBareLocal &&
+      configuredRootHostname !== "localhost" &&
+      configuredRootHostname !== "127.0.0.1"
+    ) {
+      return NextResponse.redirect(`http://${rootHost}${pathname}${search}`);
+    }
+
+    // Public infra routes pass straight through on any domain.
+    if (PUBLIC_ROUTES.has(pathname)) {
+      return NextResponse.next();
+    }
+
+    // Auth / lifecycle / invite paths belong on the app subdomain.
+    if (AUTH_ROUTES.has(pathname) || LIFECYCLE_ROUTES.has(pathname) || isInvitePath(pathname)) {
+      return NextResponse.redirect(getAppSubdomainUrl(pathname, rootHost, search));
+    }
+
+    // Marketing homepage: always accessible regardless of auth state.
+    if (pathname === "/") {
+      return NextResponse.next();
+    }
+
+    // Marketing legal pages and internal API routes — always serve on root domain.
+    if (MARKETING_ROUTES.has(pathname) || pathname.startsWith("/api/")) {
+      return NextResponse.next();
+    }
+
+    // Every other path on the root domain is an app route — redirect to the app subdomain.
+    return NextResponse.redirect(getAppSubdomainUrl(pathname, rootHost, search));
+  }
+
+  // Enforce the app subdomain for all remaining hosts (unknown hosts included).
   const expectedHost = getExpectedAppHost();
   if (expectedHost && currentHost !== expectedHost) {
     const protocol =
@@ -163,10 +290,18 @@ export async function middleware(request: NextRequest) {
       if (isExpiredSessionRecovery) {
         return NextResponse.next();
       }
-      // Dashboard route is intentionally disabled for MVP; use root landing.
-      return NextResponse.redirect(new URL("/", request.url));
+      // Authenticated users coming from auth routes go to jobs.
+      return NextResponse.redirect(new URL("/jobs", request.url));
     }
     return NextResponse.next();
+  }
+
+  // On the app subdomain "/" is just a redirect gate — never show the marketing page here.
+  if (pathname === "/") {
+    if (hasAccessToken) {
+      return NextResponse.redirect(new URL("/jobs", request.url));
+    }
+    return NextResponse.redirect(new URL("/login", request.url));
   }
 
   if (LIFECYCLE_ROUTES.has(pathname)) {
@@ -207,6 +342,11 @@ export async function middleware(request: NextRequest) {
     }
 
     return buildLoginRedirect(request, false);
+  }
+
+  const stageNormalizationRedirect = await normalizeInvalidStageUrl(request);
+  if (stageNormalizationRedirect) {
+    return stageNormalizationRedirect;
   }
 
   return NextResponse.next();

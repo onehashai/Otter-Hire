@@ -36,6 +36,12 @@ export type CandidateAssignmentItemResponse = {
   updated_at: string;
 };
 
+export type CandidateJobScoreResponse = {
+  total_score: number | null;
+  status: "pending" | "ready" | "failed" | null;
+  sections: Record<string, unknown>;
+};
+
 export type CandidatesPaginatedResponse = {
   items: CandidateListItemResponse[];
   total: number;
@@ -189,6 +195,15 @@ export async function getCandidates(params?: {
 
 export async function getCandidateById(id: string): Promise<CandidateDetailResponse> {
   return apiFetch<CandidateDetailResponse>(`/candidates/${id}`, { method: "GET" });
+}
+
+export async function getCandidateJobScore(
+  candidateId: string,
+  jobId: string,
+): Promise<CandidateJobScoreResponse> {
+  return apiFetch<CandidateJobScoreResponse>(`/candidates/${candidateId}/jobs/${jobId}/score`, {
+    method: "GET",
+  });
 }
 
 export async function updateCandidate(

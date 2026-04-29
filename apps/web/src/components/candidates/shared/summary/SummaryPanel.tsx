@@ -27,6 +27,7 @@ import {
   Award,
   Briefcase,
   Building2,
+  ChevronDown,
   Dribbble,
   GraduationCap,
   Github,
@@ -207,6 +208,10 @@ export function SummaryPanel({
   const [savingLinks, setSavingLinks] = useState(false);
   const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [timelineOpen, setTimelineOpen] = useState(false);
+  const [insightSkillsOpen, setInsightSkillsOpen] = useState(false);
+  const [insightEducationOpen, setInsightEducationOpen] = useState(false);
+  const [insightWorkOpen, setInsightWorkOpen] = useState(false);
+  const [insightCertsOpen, setInsightCertsOpen] = useState(false);
 
   const [name, setName] = useState(candidate.name);
   const [email, setEmail] = useState(candidate.email);
@@ -589,134 +594,178 @@ export function SummaryPanel({
               Resume Insights
             </CardTitle>
           </CardHeader>
-          <CardContent className="p-4 pt-0 space-y-4">
+          <CardContent className="p-4 pt-0 space-y-1">
             {/* ── Skills ── */}
             {candidate.skills && candidate.skills.length > 0 && (
-              <div className="flex flex-col gap-1.5">
-                <Label className="text-[10px] text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-                  <Star className="h-3 w-3" />
-                  Skills
-                </Label>
-                <div className="flex flex-wrap gap-1">
-                  {candidate.skills.slice(0, 30).map((skill) => (
-                    <Badge
-                      key={skill}
-                      variant="secondary"
-                      className="text-[10px] px-1.5 py-0.5 h-auto"
-                    >
-                      {skill}
-                    </Badge>
-                  ))}
-                  {candidate.skills.length > 30 && (
-                    <Badge
-                      variant="outline"
-                      className="text-[10px] px-1.5 py-0.5 h-auto text-muted-foreground"
-                    >
-                      +{candidate.skills.length - 30} more
-                    </Badge>
-                  )}
-                </div>
+              <div className="border-b border-border last:border-0">
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-between py-2 text-left"
+                  onClick={() => setInsightSkillsOpen((v) => !v)}
+                >
+                  <span className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+                    <Star className="h-3 w-3" />
+                    Skills
+                  </span>
+                  <ChevronDown
+                    className={`h-3.5 w-3.5 text-muted-foreground transition-transform duration-200 ${insightSkillsOpen ? "rotate-180" : ""}`}
+                  />
+                </button>
+                {insightSkillsOpen && (
+                  <div className="pb-3 flex flex-wrap gap-1">
+                    {candidate.skills.slice(0, 30).map((skill) => (
+                      <Badge
+                        key={skill}
+                        variant="secondary"
+                        className="text-[10px] px-1.5 py-0.5 h-auto"
+                      >
+                        {skill}
+                      </Badge>
+                    ))}
+                    {candidate.skills.length > 30 && (
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] px-1.5 py-0.5 h-auto text-muted-foreground"
+                      >
+                        +{candidate.skills.length - 30} more
+                      </Badge>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
             {/* ── Education ── */}
             {candidate.allEducation && candidate.allEducation.length > 0 && (
-              <div className="flex flex-col gap-2">
-                <Label className="text-[10px] text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-                  <GraduationCap className="h-3 w-3" />
-                  Education
-                </Label>
-                <div className="flex flex-col gap-2.5">
-                  {candidate.allEducation.map((edu, i) => (
-                    <div key={i} className="flex flex-col gap-0.5 pl-1 border-l-2 border-muted">
-                      {(edu.degree || edu.field) && (
-                        <span className="text-xs font-medium leading-tight">
-                          {[edu.degree, edu.field].filter(Boolean).join(" in ")}
-                        </span>
-                      )}
-                      {edu.institution && (
-                        <span className="text-[11px] text-muted-foreground leading-tight">
-                          {edu.institution}
-                        </span>
-                      )}
-                      {(edu.startDate || edu.endDate) && (
-                        <span className="text-[10px] text-muted-foreground tabular-nums">
-                          {[edu.startDate, edu.endDate].filter(Boolean).join(" – ")}
-                        </span>
-                      )}
-                      {edu.gradeValue && (
-                        <span className="text-[10px] text-muted-foreground">
-                          {edu.gradeType === "gpa"
-                            ? `GPA: ${edu.gradeValue}${edu.gradeMax ? ` / ${edu.gradeMax}` : ""}`
-                            : edu.gradeType === "percentage"
-                              ? `${edu.gradeValue}${edu.gradeMax ? ` / ${edu.gradeMax}` : ""}%`
-                              : edu.gradeType === "marks"
-                                ? `Marks: ${edu.gradeValue}${edu.gradeMax ? ` / ${edu.gradeMax}` : ""}`
-                                : edu.gradeType === "grade"
-                                  ? `Grade: ${edu.gradeValue}`
-                                  : edu.gradeValue}
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                </div>
+              <div className="border-b border-border last:border-0">
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-between py-2 text-left"
+                  onClick={() => setInsightEducationOpen((v) => !v)}
+                >
+                  <span className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+                    <GraduationCap className="h-3 w-3" />
+                    Education
+                  </span>
+                  <ChevronDown
+                    className={`h-3.5 w-3.5 text-muted-foreground transition-transform duration-200 ${insightEducationOpen ? "rotate-180" : ""}`}
+                  />
+                </button>
+                {insightEducationOpen && (
+                  <div className="pb-3 flex flex-col gap-2.5">
+                    {candidate.allEducation.map((edu, i) => (
+                      <div key={i} className="flex flex-col gap-0.5 pl-1 border-l-2 border-muted">
+                        {(edu.degree || edu.field) && (
+                          <span className="text-xs font-medium leading-tight">
+                            {[edu.degree, edu.field].filter(Boolean).join(" in ")}
+                          </span>
+                        )}
+                        {edu.institution && (
+                          <span className="text-[11px] text-muted-foreground leading-tight">
+                            {edu.institution}
+                          </span>
+                        )}
+                        {(edu.startDate || edu.endDate) && (
+                          <span className="text-[10px] text-muted-foreground tabular-nums">
+                            {[edu.startDate, edu.endDate].filter(Boolean).join(" – ")}
+                          </span>
+                        )}
+                        {edu.gradeValue && (
+                          <span className="text-[10px] text-muted-foreground">
+                            {edu.gradeType === "gpa"
+                              ? `GPA: ${edu.gradeValue}${edu.gradeMax ? ` / ${edu.gradeMax}` : ""}`
+                              : edu.gradeType === "percentage"
+                                ? `${edu.gradeValue}${edu.gradeMax ? ` / ${edu.gradeMax}` : ""}%`
+                                : edu.gradeType === "marks"
+                                  ? `Marks: ${edu.gradeValue}${edu.gradeMax ? ` / ${edu.gradeMax}` : ""}`
+                                  : edu.gradeType === "grade"
+                                    ? `Grade: ${edu.gradeValue}`
+                                    : edu.gradeValue}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
             {/* ── Work Experience ── */}
             {candidate.workExperiences && candidate.workExperiences.length > 0 && (
-              <div className="flex flex-col gap-2">
-                <Label className="text-[10px] text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-                  <Briefcase className="h-3 w-3" />
-                  Work Experience
-                </Label>
-                <div className="flex flex-col gap-2.5">
-                  {candidate.workExperiences.map((exp, i) => (
-                    <div key={i} className="flex flex-col gap-0.5 pl-1 border-l-2 border-muted">
-                      {exp.title && (
-                        <span className="text-xs font-medium leading-tight">{exp.title}</span>
-                      )}
-                      {(exp.company || exp.location) && (
-                        <span className="text-[11px] text-muted-foreground leading-tight flex items-center gap-1">
-                          {exp.company && (
-                            <>
-                              <Building2 className="h-3 w-3 shrink-0" />
-                              {exp.company}
-                            </>
-                          )}
-                          {exp.location && <span className="text-[10px]">· {exp.location}</span>}
-                        </span>
-                      )}
-                      {(exp.startDate || exp.endDate) && (
-                        <span className="text-[10px] text-muted-foreground tabular-nums">
-                          {[exp.startDate, exp.endDate].filter(Boolean).join(" – ")}
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                </div>
+              <div className="border-b border-border last:border-0">
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-between py-2 text-left"
+                  onClick={() => setInsightWorkOpen((v) => !v)}
+                >
+                  <span className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+                    <Briefcase className="h-3 w-3" />
+                    Work Experience
+                  </span>
+                  <ChevronDown
+                    className={`h-3.5 w-3.5 text-muted-foreground transition-transform duration-200 ${insightWorkOpen ? "rotate-180" : ""}`}
+                  />
+                </button>
+                {insightWorkOpen && (
+                  <div className="pb-3 flex flex-col gap-2.5">
+                    {candidate.workExperiences.map((exp, i) => (
+                      <div key={i} className="flex flex-col gap-0.5 pl-1 border-l-2 border-muted">
+                        {exp.title && (
+                          <span className="text-xs font-medium leading-tight">{exp.title}</span>
+                        )}
+                        {(exp.company || exp.location) && (
+                          <span className="text-[11px] text-muted-foreground leading-tight flex items-center gap-1">
+                            {exp.company && (
+                              <>
+                                <Building2 className="h-3 w-3 shrink-0" />
+                                {exp.company}
+                              </>
+                            )}
+                            {exp.location && <span className="text-[10px]">· {exp.location}</span>}
+                          </span>
+                        )}
+                        {(exp.startDate || exp.endDate) && (
+                          <span className="text-[10px] text-muted-foreground tabular-nums">
+                            {[exp.startDate, exp.endDate].filter(Boolean).join(" – ")}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
             {/* ── Certifications ── */}
             {candidate.certifications && candidate.certifications.length > 0 && (
-              <div className="flex flex-col gap-2">
-                <Label className="text-[10px] text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-                  <Award className="h-3 w-3" />
-                  Certifications
-                </Label>
-                <div className="flex flex-col gap-1.5">
-                  {candidate.certifications.map((cert, i) => (
-                    <div key={i} className="flex flex-col gap-0.5 pl-1 border-l-2 border-muted">
-                      <span className="text-xs font-medium leading-tight">{cert.name}</span>
-                      {(cert.issuer || cert.date) && (
-                        <span className="text-[10px] text-muted-foreground">
-                          {[cert.issuer, cert.date].filter(Boolean).join(" · ")}
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                </div>
+              <div className="border-b border-border last:border-0">
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-between py-2 text-left"
+                  onClick={() => setInsightCertsOpen((v) => !v)}
+                >
+                  <span className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+                    <Award className="h-3 w-3" />
+                    Certifications
+                  </span>
+                  <ChevronDown
+                    className={`h-3.5 w-3.5 text-muted-foreground transition-transform duration-200 ${insightCertsOpen ? "rotate-180" : ""}`}
+                  />
+                </button>
+                {insightCertsOpen && (
+                  <div className="pb-3 flex flex-col gap-1.5">
+                    {candidate.certifications.map((cert, i) => (
+                      <div key={i} className="flex flex-col gap-0.5 pl-1 border-l-2 border-muted">
+                        <span className="text-xs font-medium leading-tight">{cert.name}</span>
+                        {(cert.issuer || cert.date) && (
+                          <span className="text-[10px] text-muted-foreground">
+                            {[cert.issuer, cert.date].filter(Boolean).join(" · ")}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </CardContent>

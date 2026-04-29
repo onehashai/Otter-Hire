@@ -64,10 +64,32 @@ function isJobsSubdomain(host: string): boolean {
   return hostSubdomain === jobsSubdomain;
 }
 
+/**
+ * Returns true for the root/marketing domain so the auth Providers wrapper is
+ * skipped — the marketing page has no protected routes and must not trigger
+ * the client-side auth check that would redirect guests to /login.
+ * Matches NEXT_PUBLIC_APP_ROOT_HOST plus bare localhost in development.
+ */
+function isMarketingDomain(host: string): boolean {
+  const hostname = host.split(":")[0]?.toLowerCase();
+  if (!hostname) return false;
+
+  const marketingHosts = new Set(["localhost", "127.0.0.1"]);
+  const configuredRootHostname = (process.env.NEXT_PUBLIC_APP_ROOT_HOST || "")
+    .split(":")[0]
+    .toLowerCase();
+
+  if (configuredRootHostname) {
+    marketingHosts.add(configuredRootHostname);
+  }
+
+  return marketingHosts.has(hostname);
+}
+
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const headersList = await headers();
   const host = headersList.get("host") || "";
-  const isPublicSite = isJobsSubdomain(host);
+  const isPublicSite = isJobsSubdomain(host) || isMarketingDomain(host);
 
   return (
     <html lang="en" suppressHydrationWarning>

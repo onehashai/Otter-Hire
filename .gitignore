@@ -45,3 +45,6 @@ apps/backend/storage/local/*
 
 prod.md
 blue-green.md
+
+# Graphify output (regenerate with: graphify update .)
+graphify-out/

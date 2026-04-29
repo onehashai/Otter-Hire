@@ -8,6 +8,7 @@ import logging
 from temporalio.worker import Worker
 
 from app.core.config import settings
+from app.services.esco_loader import load_esco_into_redis
 from app.temporal.client import get_temporal_client
 from app.temporal.email.activities import (
     download_and_extract_resume_activity,
@@ -25,6 +26,8 @@ from app.temporal.email.workflow import (
 )
 from app.temporal.resume_parsing.activities import parse_job_apply_resume_activity
 from app.temporal.resume_parsing.workflow import JobApplyResumeParseWorkflow
+from app.temporal.resume_scoring.activities import score_candidate_job_activity
+from app.temporal.resume_scoring.workflow import ResumeScoreWorkflow
 from app.temporal.sentry_interceptor import SentryInterceptor
 
 logger = logging.getLogger("ats_worker")
@@ -39,6 +42,10 @@ async def run_temporal_worker() -> None:
         )
         client = await get_temporal_client()
         logger.info("[WORKER] Connected to Temporal successfully")
+
+        # load ESCO taxonomy into Redis (no-op if already loaded)
+        await load_esco_into_redis()
+        logger.info("[WORKER] ESCO taxonomy ready")
 
         _sentry_interceptors = [SentryInterceptor()]
 
@@ -79,8 +86,17 @@ async def run_temporal_worker() -> None:
             max_concurrent_activities=10,
             max_concurrent_workflow_tasks=10,
         )
+        worker_resume_scoring = Worker(
+            client,
+            task_queue="resume-scoring",
+            workflows=[ResumeScoreWorkflow],
+            activities=[score_candidate_job_activity],
+            interceptors=_sentry_interceptors,
+            max_concurrent_activities=10,
+            max_concurrent_workflow_tasks=10,
+        )
         logger.info(
-            "[WORKER] Started task_queues=email-inbound,email-outbound,careers-resume-parse namespace=%s",
+            "[WORKER] Started task_queues=email-inbound,email-outbound,careers-resume-parse,resume-scoring namespace=%s",
             settings.temporal_namespace,
         )
         logger.info("[WORKER] Polling for tasks...")
@@ -90,12 +106,14 @@ async def run_temporal_worker() -> None:
                 await asyncio.sleep(60)
                 logger.info(
                     "[WORKER] Alive, polling email-inbound, email-outbound, careers-resume-parse"
+                    ", resume-scoring"
                 )
 
         await asyncio.gather(
             worker_inbound.run(),
             worker_outbound.run(),
             worker_careers_resume.run(),
+            worker_resume_scoring.run(),
             _keepalive(),
         )
     except Exception as e:

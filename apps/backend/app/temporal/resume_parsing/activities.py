@@ -10,6 +10,8 @@ from uuid import UUID
 from temporalio import activity
 
 from app.temporal.resume_parsing.types import JobApplyResumeParseInput
+from app.temporal.resume_scoring.queue import enqueue_resume_score
+from app.temporal.resume_scoring.types import ResumeScoreInput
 
 logger = logging.getLogger("ats_worker")
 
@@ -50,6 +52,7 @@ async def parse_job_apply_resume_activity(input_data: JobApplyResumeParseInput) 
 
     from app.db.session import AsyncSessionLocal
     from app.models.candidate import Candidate
+    from app.models.candidate_jobs import CandidateJobs
     from app.services.resume.canonical import ResumeProfile
     from app.services.resume.pipeline import run_resume_pipeline
     from app.services.storage import storage_service
@@ -92,7 +95,31 @@ async def parse_job_apply_resume_activity(input_data: JobApplyResumeParseInput) 
                 if not cand:
                     return {"status": "failed", "reason": "candidate_not_found"}
                 cand.parsed_resume = profile.model_dump(mode="json")
+                assignment_rows = await session.execute(
+                    select(CandidateJobs).where(
+                        CandidateJobs.org_id == org_id,
+                        CandidateJobs.candidate_id == candidate_id,
+                        CandidateJobs.assignment_status != "withdrawn",
+                    )
+                )
+                assignments = assignment_rows.scalars().all()
+                for assignment in assignments:
+                    assignment.resume_score = None
+                    assignment.resume_score_status = "pending"
+                    assignment.resume_score_sections = None
+                    assignment.resume_score_generation = (
+                        int(assignment.resume_score_generation or 0) + 1
+                    )
                 await session.commit()
+                for assignment in assignments:
+                    await enqueue_resume_score(
+                        ResumeScoreInput(
+                            org_id=input_data.org_id,
+                            candidate_id=input_data.candidate_id,
+                            job_id=str(assignment.job_id),
+                            generation=int(assignment.resume_score_generation or 0),
+                        )
+                    )
             return {"status": "ok", "parse_method": "cache", "candidate_id": str(candidate_id)}
         except Exception:
             logger.warning(
@@ -130,7 +157,29 @@ async def parse_job_apply_resume_activity(input_data: JobApplyResumeParseInput) 
             return {"status": "failed", "reason": "candidate_not_found"}
 
         cand.parsed_resume = result.profile.model_dump(mode="json")
+        assignment_rows = await session.execute(
+            select(CandidateJobs).where(
+                CandidateJobs.org_id == org_id,
+                CandidateJobs.candidate_id == candidate_id,
+                CandidateJobs.assignment_status != "withdrawn",
+            )
+        )
+        assignments = assignment_rows.scalars().all()
+        for assignment in assignments:
+            assignment.resume_score = None
+            assignment.resume_score_status = "pending"
+            assignment.resume_score_sections = None
+            assignment.resume_score_generation = int(assignment.resume_score_generation or 0) + 1
         await session.commit()
+    for assignment in assignments:
+        await enqueue_resume_score(
+            ResumeScoreInput(
+                org_id=input_data.org_id,
+                candidate_id=input_data.candidate_id,
+                job_id=str(assignment.job_id),
+                generation=int(assignment.resume_score_generation or 0),
+            )
+        )
 
     # Store in cache for future duplicate uploads (fire-and-forget)
     await _set_cached_profile_json(content_hash, result.profile.model_dump_json())

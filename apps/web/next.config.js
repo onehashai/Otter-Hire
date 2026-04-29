@@ -2,7 +2,13 @@ const path = require("path");
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  allowedDevOrigins: ["app.localhost.com", "jobs.localhost.com", "api.localhost.com"],
+  allowedDevOrigins: [
+    "localhost.com",
+    "localhost",
+    "app.localhost.com",
+    "jobs.localhost.com",
+    "api.localhost.com",
+  ],
   transpilePackages: ["@onehash/ui"],
   turbopack: {
     root: path.resolve(__dirname, "../.."),

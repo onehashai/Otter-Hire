@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -38,8 +39,11 @@ from app.schemas.jobs import (
     TeamMemberResponse,
 )
 from app.services.job_description_ai import run_job_description_ai
+from app.temporal.resume_scoring.queue import enqueue_resume_score
+from app.temporal.resume_scoring.types import ResumeScoreInput
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
+logger = logging.getLogger(__name__)
 
 DEFAULT_STAGES = [
     ("Applied", 0),
@@ -232,6 +236,32 @@ def _require_country_city_for_hybrid_onsite(
         )
 
 
+async def _mark_job_assignment_scores_pending(
+    db: AsyncSession,
+    *,
+    org_id: UUID,
+    job_id: UUID,
+) -> list[tuple[UUID, int]]:
+    result = await db.execute(
+        select(CandidateJobs).where(
+            CandidateJobs.org_id == org_id,
+            CandidateJobs.job_id == job_id,
+            CandidateJobs.assignment_status != "withdrawn",
+        )
+    )
+    assignments = result.scalars().all()
+    candidate_generations: list[tuple[UUID, int]] = []
+    for assignment in assignments:
+        assignment.resume_score = None
+        assignment.resume_score_status = "pending"
+        assignment.resume_score_sections = None
+        assignment.resume_score_generation = int(assignment.resume_score_generation or 0) + 1
+        candidate_generations.append(
+            (assignment.candidate_id, int(assignment.resume_score_generation or 0))
+        )
+    return candidate_generations
+
+
 async def _get_job_or_404(
     db: AsyncSession, job_id: UUID, org_id: UUID, *, load_relations: bool = True
 ) -> Job:
@@ -340,6 +370,14 @@ async def update_job(
     effective_country = update_data["country"] if "country" in update_data else job.country
     effective_city = update_data["city"] if "city" in update_data else job.city
     _require_country_city_for_hybrid_onsite(effective_wp, effective_country, effective_city)
+    score_relevant_fields = {
+        "title",
+        "category",
+        "employment_type",
+        "workplace_type",
+        "description",
+    }
+    score_inputs_changed = any(field in update_data for field in score_relevant_fields)
 
     for field, value in update_data.items():
         setattr(job, field, value)
@@ -438,10 +476,36 @@ async def update_job(
 
     job_id_val = job.id
     org_id_val = current_user.org_id
+    score_candidate_generations: list[tuple[UUID, int]] = []
+    if score_inputs_changed:
+        score_candidate_generations = await _mark_job_assignment_scores_pending(
+            db,
+            org_id=current_user.org_id,
+            job_id=job.id,
+        )
 
     await db.commit()
 
     db.expunge_all()
+
+    if score_candidate_generations:
+        for candidate_id, generation in score_candidate_generations:
+            try:
+                await enqueue_resume_score(
+                    ResumeScoreInput(
+                        org_id=str(org_id_val),
+                        candidate_id=str(candidate_id),
+                        job_id=str(job_id_val),
+                        generation=generation,
+                    )
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to enqueue resume scoring org_id=%s candidate_id=%s job_id=%s",
+                    org_id_val,
+                    candidate_id,
+                    job_id_val,
+                )
 
     return _build_detail_response(await _get_job_or_404(db, job_id_val, org_id_val))
 

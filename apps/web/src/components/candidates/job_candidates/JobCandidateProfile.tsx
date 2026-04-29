@@ -15,6 +15,7 @@ import {
   CandidateMessagesTab,
   ResumeTab,
   ApplicationResponsesTab,
+  ScoreTab,
 } from "@/components/candidates/shared/tabs";
 import { SummaryPanel } from "@/components/candidates/shared/summary/SummaryPanel";
 import { ActionButtons } from "@/components/candidates/job_candidates/ActionButtons";
@@ -31,6 +32,7 @@ import {
   getCandidateDocuments,
   getCandidateApplicationResponses,
   getCandidateOverview,
+  getCandidateJobScore,
   getOrgUsers,
   updateCandidate,
   uploadCandidateDocument,
@@ -41,6 +43,7 @@ import {
   type JobDetailResponse,
   type CandidateOverviewResponse,
   type CandidateApplicationResponsesResponse,
+  type CandidateJobScoreResponse,
   type OrgUserResponse,
 } from "@/api";
 import { toast } from "@onehash/ui/sonner";
@@ -147,6 +150,8 @@ export function JobCandidateProfile({
   const [documents, setDocuments] = useState<CandidateDocumentResponse[]>([]);
   const [applicationResponses, setApplicationResponses] =
     useState<CandidateApplicationResponsesResponse | null>(null);
+  const [scoreData, setScoreData] = useState<CandidateJobScoreResponse | null>(null);
+  const [scoreLoading, setScoreLoading] = useState(false);
   const [applicationResponsesLoading, setApplicationResponsesLoading] = useState(false);
   const [applicationResponsesError, setApplicationResponsesError] = useState<string | null>(null);
   const [jobs, setJobs] = useState<JobListItemResponse[]>([]);
@@ -222,10 +227,27 @@ export function JobCandidateProfile({
     return (candidate.assignments ?? []).find((a) => a.job_id === currentJobId) ?? null;
   }, [candidate, currentJobId]);
 
+  const loadScore = useCallback(async () => {
+    if (!id || !currentJobId) {
+      setScoreData(null);
+      return;
+    }
+    try {
+      setScoreLoading(true);
+      const data = await getCandidateJobScore(id, currentJobId);
+      setScoreData(data);
+    } catch {
+      setScoreData(null);
+    } finally {
+      setScoreLoading(false);
+    }
+  }, [id, currentJobId]);
+
   useEffect(() => {
     if (!currentJobId) {
       setJobStages([]);
       setJobDetail(null);
+      setScoreData(null);
       return;
     }
     let cancelled = false;
@@ -250,6 +272,28 @@ export function JobCandidateProfile({
       cancelled = true;
     };
   }, [currentJobId]);
+
+  useEffect(() => {
+    if (!id || !currentJobId) {
+      setScoreData(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        setScoreLoading(true);
+        const data = await getCandidateJobScore(id, currentJobId);
+        if (!cancelled) setScoreData(data);
+      } catch {
+        if (!cancelled) setScoreData(null);
+      } finally {
+        if (!cancelled) setScoreLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [id, currentJobId]);
 
   const uiCandidate = useMemo(() => {
     if (!candidate) return null;
@@ -297,6 +341,7 @@ export function JobCandidateProfile({
       setDocumentOpen(false);
       setDocFile(null);
       await loadAll(id);
+      await loadScore();
       toast.success("Document uploaded");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to upload document");
@@ -318,6 +363,7 @@ export function JobCandidateProfile({
         }
       }
       await loadAll(id);
+      await loadScore();
       toast.success("Resume updated");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to update resume");
@@ -334,6 +380,7 @@ export function JobCandidateProfile({
     try {
       await deleteCandidateDocument(id, currentResume.id);
       await loadAll(id);
+      await loadScore();
       toast.success("Resume removed");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to remove resume");
@@ -408,8 +455,8 @@ export function JobCandidateProfile({
     () =>
       new Set(
         hasAdditionalQuestions
-          ? ["overview", "messages", "documents", "application_responses"]
-          : ["overview", "messages", "documents"],
+          ? ["overview", "score", "messages", "documents", "application_responses"]
+          : ["overview", "score", "messages", "documents"],
       ),
     [hasAdditionalQuestions],
   );
@@ -437,8 +484,8 @@ export function JobCandidateProfile({
   }, [activeTab, applicationResponses?.has_additional_questions, setActiveTabWithUrl]);
 
   useEffect(() => {
-    const tab = searchParams.get("tab");
-    if (!tab || !allowedTabs.has(tab) || tab === activeTab) return;
+    const tab = searchParams.get("tab") || "overview";
+    if (!allowedTabs.has(tab) || tab === activeTab) return;
     setActiveTab(tab);
   }, [activeTab, allowedTabs, searchParams]);
   const profileLinkFields = useMemo(() => {
@@ -536,6 +583,7 @@ export function JobCandidateProfile({
             stages={jobStages}
             onCandidateUpdated={async () => {
               if (id) await loadAll(id);
+              await loadScore();
               if (onCandidateUpdated) await onCandidateUpdated();
             }}
             onStageMoved={onStageMoved}
@@ -551,6 +599,7 @@ export function JobCandidateProfile({
           >
             {[
               { value: "overview", label: t("overview") },
+              { value: "score", label: "Score" },
               { value: "messages", label: t("messages") },
               { value: "documents", label: t("documents") },
               ...(hasAdditionalQuestions
@@ -617,6 +666,9 @@ export function JobCandidateProfile({
                   jobId={jobRouteJobId ?? candidate?.job_id ?? null}
                   jobTitle={currentAssignment?.job_title ?? candidate?.job_title ?? null}
                 />
+              </TabsContent>
+              <TabsContent value="score" className="mt-0">
+                <ScoreTab scoreData={scoreData} loading={scoreLoading} />
               </TabsContent>
               <TabsContent value="documents" className="mt-0">
                 <DocumentsTab

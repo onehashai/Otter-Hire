@@ -47,6 +47,12 @@ class CandidateAssignmentItemResponse(BaseModel):
     updated_at: datetime
 
 
+class CandidateJobScoreResponse(BaseModel):
+    total_score: int | None = None
+    status: str | None = None
+    sections: dict[str, Any] = Field(default_factory=dict)
+
+
 class CandidateCreateRequest(BaseModel):
     job_id: Optional[UUID] = None
     name: str = Field(min_length=1, max_length=255)

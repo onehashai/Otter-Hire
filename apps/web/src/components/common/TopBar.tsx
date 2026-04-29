@@ -270,6 +270,16 @@ export function TopBar() {
             <Icon name="Settings" className="mr-2 h-4 w-4" />
             {t("settings_title")}
           </DropdownMenuItem>
+          <DropdownMenuItem
+            className="cursor-pointer"
+            onClick={() => {
+              const rootHost = process.env.NEXT_PUBLIC_APP_ROOT_HOST || "localhost:3000";
+              window.open(`http://${rootHost}`, "_blank");
+            }}
+          >
+            <Icon name="Globe" className="mr-2 h-4 w-4" />
+            Go to Website
+          </DropdownMenuItem>
           <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
             <Icon name="LogOut" className="mr-2 h-4 w-4" />
             {t("sign_out")}

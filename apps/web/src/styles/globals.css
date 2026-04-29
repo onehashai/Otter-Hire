@@ -147,3 +147,507 @@
     scrollbar-width: none;
   }
 }
+
+/* ─── Marketing brand tokens (available globally, used by marketing site) ── */
+/* These are additive — they don't override any ATS app token.               */
+
+:root {
+  /* Brand colours */
+  --brand-indigo: 239 84% 60%;
+  --brand-indigo-50: 226 100% 97%;
+  --brand-indigo-100: 226 100% 94%;
+  --brand-cyan: 189 94% 43%;
+  --brand-cyan-50: 183 100% 96%;
+  --brand-violet: 258 90% 66%;
+  --brand-violet-50: 251 91% 95%;
+  --brand-emerald: 152 76% 40%;
+  --brand-emerald-50: 152 81% 96%;
+  --brand-orange: 25 95% 53%;
+  --brand-orange-50: 33 100% 96%;
+  --brand-pink: 330 81% 60%;
+  --brand-pink-50: 327 73% 97%;
+  --brand-success: 142 71% 45%;
+
+  /* Slate scale */
+  --slate-50: 210 40% 98%;
+  --slate-100: 210 40% 96%;
+  --slate-200: 214 32% 91%;
+  --slate-300: 213 27% 84%;
+  --slate-400: 215 20% 65%;
+  --slate-500: 215 16% 47%;
+  --slate-600: 215 19% 35%;
+  --slate-700: 215 25% 27%;
+  --slate-800: 217 33% 17%;
+  --slate-900: 222 47% 11%;
+  --deep-navy: 240 24% 5%;
+
+  /* Gradients */
+  --gradient-hero: linear-gradient(135deg, hsl(239 84% 60%) 0%, hsl(189 94% 43%) 100%);
+  --gradient-cta: linear-gradient(135deg, hsl(245 58% 20%) 0%, hsl(199 89% 24%) 100%);
+  --gradient-underline: linear-gradient(90deg, hsl(239 84% 60%), hsl(189 94% 43%));
+
+  /* Shadows */
+  --shadow-card: 0 1px 3px hsl(222 47% 11% / 0.06), 0 4px 16px hsl(239 84% 60% / 0.08);
+  --shadow-hero: 0 25px 80px hsl(239 84% 60% / 0.18);
+  --shadow-lift: 0 12px 40px hsl(222 47% 11% / 0.08);
+  --marketing-sky: 211 68% 82%;
+  --marketing-sand: 36 42% 88%;
+  --marketing-panel: 0 0% 100% / 0.72;
+}
+
+.marketing-root {
+  --background: 0 0% 99%;
+  --foreground: 222 47% 11%;
+  --primary: 0 0% 7%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 220 33% 96%;
+  --secondary-foreground: 222 47% 11%;
+  --muted: 220 25% 96%;
+  --muted-foreground: 215 16% 47%;
+  --accent: 214 40% 96%;
+  --accent-foreground: 222 47% 11%;
+  --border: 214 28% 90%;
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+}
+
+.marketing-root h1,
+.marketing-root h2,
+.marketing-root h3,
+.marketing-root h4,
+.marketing-root h5,
+.marketing-root h6 {
+  letter-spacing: -0.04em;
+}
+
+.marketing-hero-section {
+  position: relative;
+  background:
+    radial-gradient(circle at left center, hsl(0 0% 100% / 0.9) 0, hsl(0 0% 100% / 0) 18%),
+    radial-gradient(circle at right center, hsl(0 0% 100% / 0.9) 0, hsl(0 0% 100% / 0) 18%),
+    linear-gradient(180deg, hsl(var(--marketing-sky)) 0%, hsl(var(--marketing-sand)) 100%);
+}
+
+.marketing-cloud {
+  position: absolute;
+  top: 16rem;
+  width: 14rem;
+  height: 8rem;
+  opacity: 0.9;
+  filter: blur(0.5px);
+  background:
+    radial-gradient(circle at 25% 55%, rgba(255, 255, 255, 0.95) 0 18%, transparent 20%),
+    radial-gradient(circle at 45% 40%, rgba(255, 255, 255, 0.9) 0 24%, transparent 26%),
+    radial-gradient(circle at 66% 58%, rgba(255, 255, 255, 0.92) 0 20%, transparent 22%);
+}
+
+.marketing-cloud-left {
+  left: -2rem;
+}
+
+.marketing-cloud-right {
+  right: -2rem;
+  transform: scaleX(-1);
+}
+
+.marketing-shell {
+  border: 1px solid rgba(15, 23, 42, 0.07);
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border-radius: 9999px;
+}
+
+/* Mobile: frosted pill at top; Desktop: fully transparent flush bar */
+.marketing-nav-top {
+  border-radius: 9999px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+}
+
+@media (min-width: 768px) {
+  .marketing-nav-top {
+    border-radius: 0;
+    border: 1px solid transparent;
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+.marketing-nav-link {
+  color: hsl(var(--slate-600));
+  font-size: 0.95rem;
+  line-height: 1.4;
+  transition: color 150ms ease;
+}
+
+.marketing-nav-link:hover {
+  color: hsl(var(--slate-900));
+}
+
+.marketing-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 3.25rem;
+  border-radius: 9999px;
+  padding: 0.85rem 1.5rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  transition:
+    transform 180ms ease,
+    background-color 180ms ease,
+    color 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.marketing-button:hover {
+  transform: translateY(-1px);
+}
+
+.marketing-button-primary {
+  background: #161312;
+  color: white;
+  box-shadow: 0 20px 40px rgba(22, 19, 18, 0.16);
+}
+
+.marketing-button-primary:hover {
+  background: #24201e;
+}
+
+.marketing-button-secondary {
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  background: rgba(255, 255, 255, 0.55);
+  color: hsl(var(--slate-800));
+}
+
+.marketing-button-secondary:hover {
+  background: rgba(255, 255, 255, 0.85);
+  border-color: rgba(15, 23, 42, 0.16);
+}
+
+.marketing-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: rgba(255, 255, 255, 0.52);
+  padding: 0.65rem 1rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: hsl(var(--slate-600));
+  backdrop-filter: blur(10px);
+}
+
+.marketing-display {
+  margin-top: 1.1rem;
+  font-size: clamp(2.85rem, 5.4vw, 4.9rem);
+  font-weight: 650;
+  line-height: 0.98;
+  color: #161312;
+  text-wrap: balance;
+}
+
+.marketing-subcopy {
+  margin-left: auto;
+  margin-right: auto;
+  margin-top: 1.1rem;
+  max-width: 38rem;
+  font-size: clamp(0.98rem, 1.45vw, 1.2rem);
+  line-height: 1.65;
+  color: hsl(var(--slate-600));
+  text-align: center;
+  text-wrap: pretty;
+}
+
+.marketing-dashboard-frame {
+  position: relative;
+  margin-inline: auto;
+  max-width: 52rem;
+  overflow: visible;
+  border-radius: 2rem 2rem 0 0;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 35px 80px rgba(15, 23, 42, 0.16);
+}
+
+.marketing-dashboard-grid {
+  display: grid;
+  min-height: 22rem;
+  overflow: hidden;
+  border-radius: inherit;
+  grid-template-columns: minmax(0, 0.78fr) minmax(0, 1.42fr) minmax(0, 1fr);
+}
+
+.marketing-sidebar {
+  background: linear-gradient(180deg, #fbfbfc 0%, #f4f6fb 100%);
+  padding: 1.25rem;
+}
+
+.marketing-sidebar-item {
+  margin-top: 0.45rem;
+  border-radius: 1rem;
+  padding: 0.8rem 0.9rem;
+  font-size: 0.92rem;
+  color: hsl(var(--slate-600));
+}
+
+.marketing-sidebar-item-active {
+  background: #161312;
+  color: white;
+}
+
+.marketing-job-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-radius: 1.1rem;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  background: rgba(255, 255, 255, 0.9);
+  padding: 1rem 1rem;
+}
+
+.marketing-job-row-highlight {
+  background: #f4f7ff;
+  border-color: rgba(109, 142, 251, 0.18);
+}
+
+.marketing-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background: #eef2ff;
+  padding: 0.4rem 0.8rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: hsl(var(--slate-700));
+}
+
+.marketing-score-ring {
+  display: grid;
+  place-items: center;
+  width: 3.4rem;
+  height: 3.4rem;
+  border-radius: 9999px;
+  background:
+    radial-gradient(circle at center, #fff 52%, transparent 54%),
+    conic-gradient(#161312 0 312deg, #dbe4ff 312deg 360deg);
+}
+
+.marketing-score-ring span {
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: hsl(var(--slate-900));
+}
+
+.marketing-dashboard-note {
+  position: absolute;
+  display: none;
+  align-items: center;
+  gap: 0.55rem;
+  border-radius: 9999px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: rgba(255, 255, 255, 0.94);
+  padding: 0.7rem 0.95rem;
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: hsl(var(--slate-700));
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.1);
+}
+
+.marketing-dashboard-note-top {
+  right: -1.5rem;
+  top: -1.2rem;
+}
+
+.marketing-dashboard-note-bottom {
+  bottom: -1.4rem;
+  left: -1.4rem;
+}
+
+.marketing-section-kicker {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: hsl(var(--slate-500));
+}
+
+.marketing-section-title {
+  margin-top: 0.9rem;
+  font-size: clamp(2.2rem, 4vw, 4rem);
+  line-height: 1;
+  font-weight: 650;
+  color: #161312;
+  text-wrap: balance;
+}
+
+.marketing-section-copy {
+  margin-top: 1.3rem;
+  font-size: 1.02rem;
+  line-height: 1.9;
+  color: hsl(var(--slate-600));
+}
+
+.marketing-check-row {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  border-radius: 1.2rem;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  background: #fcfcfe;
+  padding: 1rem 1.1rem;
+  color: hsl(var(--slate-700));
+}
+
+.marketing-check-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 9999px;
+  background: #161312;
+  color: white;
+}
+
+.marketing-stage-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-radius: 1rem;
+  padding: 0.85rem 1rem;
+  font-size: 0.95rem;
+  color: hsl(var(--slate-600));
+}
+
+.marketing-stage-row-active {
+  background: white;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+  color: hsl(var(--slate-900));
+}
+
+.marketing-feature-card {
+  border-radius: 2rem;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  background: white;
+  padding: 1.75rem;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.06);
+}
+
+.marketing-feature-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 9999px;
+  background: #161312;
+  color: white;
+}
+
+.marketing-stat-card {
+  border-radius: 1.8rem;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  background: #fcfcfe;
+  padding: 1.6rem;
+}
+
+.marketing-footer-card {
+  border-radius: 2.2rem;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: rgba(255, 255, 255, 0.5);
+  padding: 2rem;
+  backdrop-filter: blur(10px);
+}
+
+.text-gradient-brand {
+  background: var(--gradient-hero);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.animate-fade-up {
+  animation: marketing-fade-up 0.7s ease-out both;
+}
+
+.reveal {
+  opacity: 0;
+  transform: translateY(24px);
+  transition:
+    opacity 0.65s ease-out,
+    transform 0.65s ease-out;
+}
+
+.reveal.in {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@keyframes marketing-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (min-width: 640px) {
+  .marketing-dashboard-note {
+    display: inline-flex;
+  }
+}
+
+@media (max-width: 1024px) {
+  .marketing-dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .marketing-sidebar {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .marketing-display {
+    font-size: 2.6rem;
+    line-height: 0.98;
+  }
+
+  .marketing-dashboard-frame {
+    border-radius: 1.5rem 1.5rem 0 0;
+  }
+
+  .marketing-dashboard-note {
+    display: none;
+  }
+
+  .marketing-feature-card,
+  .marketing-footer-card,
+  .marketing-stat-card {
+    padding: 1.35rem;
+  }
+}
+
+@keyframes marquee-scroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}

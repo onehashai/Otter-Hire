@@ -18,6 +18,7 @@ from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.errors import make_error_payload
 from app.integrations.app_store.email_integration.ses_bridge import run_ses_raw_bridge_loop
+from app.services.esco_loader import load_esco_into_redis
 from app.middleware.errors import (
     generic_exception_handler,
     http_exception_handler,
@@ -84,6 +85,8 @@ async def startup_event():
             run_ses_raw_bridge_loop(app.state.ses_bridge_stop_event)
         )
         logger.info("SES raw bridge background task started")
+    # load ESCO taxonomy into Redis (no-op if already loaded)
+    asyncio.create_task(load_esco_into_redis())
 
 
 @app.on_event("shutdown")

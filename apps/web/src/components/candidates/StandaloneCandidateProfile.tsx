@@ -154,10 +154,15 @@ export function StandaloneCandidateProfile({
     );
   }, [uiCandidate]);
 
-  const assignableJobs = useMemo(
-    () => jobs.filter((j) => j.id !== candidate?.job_id && j.status === "open"),
-    [jobs, candidate?.job_id],
-  );
+  // Exclude every job the candidate is already actively assigned to.
+  const assignableJobs = useMemo(() => {
+    const assignedJobIds = new Set(
+      (candidate?.assignments ?? [])
+        .filter((a) => a.assignment_status === "active")
+        .map((a) => a.job_id),
+    );
+    return jobs.filter((j) => j.status === "open" && !assignedJobIds.has(j.id));
+  }, [jobs, candidate]);
 
   const handleAddNote = async (content: string, mentions: string[]) => {
     if (!id) return;
@@ -287,8 +292,8 @@ export function StandaloneCandidateProfile({
   };
 
   useEffect(() => {
-    const tab = searchParams.get("tab");
-    if (!tab || !allowedTabs.has(tab) || tab === activeTab) return;
+    const tab = searchParams.get("tab") || "overview";
+    if (!allowedTabs.has(tab) || tab === activeTab) return;
     setActiveTab(tab);
   }, [activeTab, allowedTabs, searchParams]);
 

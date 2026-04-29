@@ -8,7 +8,10 @@ import "../styles/globals.css";
 
 const baseMetadata: Metadata = {
   metadataBase: new URL("https://smartats.in"),
-  title: PLATFORM_NAME,
+  title: {
+    default: `${PLATFORM_NAME} - AI-Powered Modern ATS`,
+    template: `%s | ${PLATFORM_NAME}`,
+  },
   description: "AI-powered, open source modern ATS to recruit top talent faster and smarter.",
   icons: {
     icon: [

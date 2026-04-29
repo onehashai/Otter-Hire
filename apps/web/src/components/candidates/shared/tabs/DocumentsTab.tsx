@@ -6,6 +6,7 @@ import { Icon } from "@onehash/ui/icon";
 import { useTranslation } from "react-i18next";
 import { formatTimestamp } from "@/lib/format-date";
 import { getApiBase } from "@/api";
+import { TruncatedText } from "@/components/common/TruncatedText";
 interface Document {
   id?: string;
   name: string;
@@ -67,7 +68,9 @@ export function DocumentsTab({
                   <Icon name="ScrollText" className="h-4 w-4 text-muted-foreground" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium truncate">{formatDisplayFileName(doc.name)}</p>
+                  <TruncatedText as="p" className="text-xs font-medium">
+                    {formatDisplayFileName(doc.name)}
+                  </TruncatedText>
                   <p className="text-[10px] text-muted-foreground">
                     {doc.size} · {formatTimestamp(doc.date)}
                   </p>

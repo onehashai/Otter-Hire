@@ -502,5 +502,18 @@
   "importing": "Importing…",
   "current_org_badge": "Current",
   "loading_candidate": "Loading candidate…",
-  "candidate_not_found": "Candidate not found"
+  "candidate_not_found": "Candidate not found",
+  "tooltip_more_actions": "More actions",
+  "tooltip_job_options": "Job options",
+  "tooltip_template_options": "Template options",
+  "tooltip_automation_options": "Automation options",
+  "tooltip_user_options": "User options",
+  "tooltip_back_to_templates": "Back to templates",
+  "tooltip_back_to_automations": "Back to automations",
+  "tooltip_close_panel": "Close panel",
+  "tooltip_remove_member": "Remove member",
+  "tooltip_member_actions": "Member actions",
+  "tooltip_insert_emoji": "Insert emoji",
+  "tooltip_attach_file": "Attach file",
+  "tooltip_insert_template": "Insert template"
 }

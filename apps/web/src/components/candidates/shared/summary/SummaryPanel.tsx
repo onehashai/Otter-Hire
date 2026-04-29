@@ -22,6 +22,7 @@ import { formatPhoneForDisplay, parseStoredPhone } from "@/lib/phone";
 import { getInitialsFromName } from "@/lib/name-initials";
 import { useTranslation } from "react-i18next";
 import { isValidEmail, normalizeEmail, sanitizePhoneInput } from "@/lib/validation/contact";
+import { TruncatedText } from "@/components/common/TruncatedText";
 import {
   Award,
   Briefcase,
@@ -544,9 +545,9 @@ export function SummaryPanel({
                 >
                   <a href={resumeDoc.url} target="_blank" rel="noreferrer">
                     <Icon name="ScrollText" className="h-3.5 w-3.5" />
-                    <span className="truncate flex-1 text-left">
+                    <TruncatedText className="flex-1 text-left" side="right">
                       {formatDisplayFileName(resumeDoc.name)}
-                    </span>
+                    </TruncatedText>
                   </a>
                 </Button>
               ) : null}
@@ -562,7 +563,13 @@ export function SummaryPanel({
                   >
                     <a href={value} target="_blank" rel="noreferrer">
                       {icon}
-                      <span className="truncate flex-1 text-left">{value}</span>
+                      <TruncatedText
+                        className="flex-1 text-left"
+                        side="right"
+                        tooltipContent={value}
+                      >
+                        {value}
+                      </TruncatedText>
                     </a>
                   </Button>
                 );

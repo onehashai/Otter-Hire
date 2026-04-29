@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tooltip, TooltipContent, TooltipTrigger } from "@onehash/ui/tooltip";
 import { formatTimestamp } from "@/lib/format-date";
 import { type CandidateListItemResponse, type JobListItemResponse } from "@/api";
+import { TruncatedText } from "@/components/common/TruncatedText";
 
 export const CANDIDATE_COLUMN_DEFS = {
   name: { label: "Candidate", fixed: true, defaultVisible: true },
@@ -247,7 +248,9 @@ export function CandidatesTable({
       return (
         <TableCell key={column} className="py-2 align-middle min-w-0 max-w-[220px] text-center">
           <div className="min-w-0 text-center">
-            <p className="text-sm font-medium truncate">{c.name}</p>
+            <TruncatedText as="p" className="mx-auto text-center text-sm font-medium">
+              {c.name}
+            </TruncatedText>
           </div>
         </TableCell>
       );
@@ -255,7 +258,9 @@ export function CandidatesTable({
     if (column === "email") {
       return (
         <TableCell key={column} className="py-2 align-middle min-w-0 max-w-[240px] text-center">
-          <span className="text-xs text-muted-foreground truncate block">{c.email}</span>
+          <TruncatedText className="mx-auto text-center text-xs text-muted-foreground">
+            {c.email}
+          </TruncatedText>
         </TableCell>
       );
     }

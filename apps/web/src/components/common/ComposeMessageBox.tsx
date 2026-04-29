@@ -6,13 +6,14 @@ import { Button } from "@onehash/ui/button";
 import { InputField } from "@onehash/ui/input";
 import { Textarea } from "@onehash/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@onehash/ui/popover";
-import { Send, Paperclip, Smile, X } from "lucide-react";
+import { Send, Paperclip, Smile, X, LayoutTemplate } from "lucide-react";
 import EmojiPicker from "emoji-picker-react";
 import { toast } from "@onehash/ui/sonner";
 import { cn } from "@/lib/utils";
 import { getTemplates, type TemplateResponse } from "@/api/templates";
 import { uploadTempAttachment, type MessageAttachment } from "@/api/conversations";
 import { convert as htmlToText } from "html-to-text";
+import { useTranslation } from "react-i18next";
 
 // Convert HTML template body to readable plain text using html-to-text.
 export function htmlToPlainText(html: string): string {
@@ -57,6 +58,7 @@ export function ComposeMessageBox({
   organizationName,
   onSend,
 }: ComposeMessageBoxProps) {
+  const { t } = useTranslation();
   const [to, setTo] = useState(toEmail);
   const [cc, setCc] = useState("");
   const [bcc, setBcc] = useState("");
@@ -70,6 +72,7 @@ export function ComposeMessageBox({
   const [templatePickerIndex, setTemplatePickerIndex] = useState(0);
   const [pickerRect, setPickerRect] = useState<DOMRect | null>(null);
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
+  const [templateDropdownOpen, setTemplateDropdownOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const showTemplatePicker = body.endsWith("/");
@@ -321,7 +324,9 @@ export function ComposeMessageBox({
                   variant="ghost"
                   size="icon"
                   className="h-7 w-7"
-                  title="Insert emoji"
+                  tooltip={t("tooltip_insert_emoji")}
+                  tooltipContentProps={{ side: "top" }}
+                  aria-label={t("tooltip_insert_emoji")}
                 >
                   <Smile className="h-3.5 w-3.5" />
                 </Button>
@@ -359,11 +364,55 @@ export function ComposeMessageBox({
               variant="ghost"
               size="icon"
               className="h-7 w-7"
-              title="Attach file"
+              tooltip={t("tooltip_attach_file")}
+              tooltipContentProps={{ side: "top" }}
+              aria-label={t("tooltip_attach_file")}
               onClick={() => fileInputRef.current?.click()}
             >
               <Paperclip className="h-3.5 w-3.5" />
             </Button>
+            <Popover open={templateDropdownOpen} onOpenChange={setTemplateDropdownOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  tooltip={t("tooltip_insert_template")}
+                  tooltipContentProps={{ side: "top" }}
+                  aria-label={t("tooltip_insert_template")}
+                >
+                  <LayoutTemplate className="h-3.5 w-3.5" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="start" side="top" className="w-52 p-1">
+                <div className="max-h-[200px] overflow-y-auto">
+                  {templatesLoading ? (
+                    <div className="px-3 py-2 text-xs text-muted-foreground">
+                      Loading templates…
+                    </div>
+                  ) : templates.length === 0 ? (
+                    <div className="px-3 py-2 text-xs text-muted-foreground">
+                      No templates. Create them in Settings → Templates.
+                    </div>
+                  ) : (
+                    templates.map((t) => (
+                      <button
+                        key={t.id}
+                        type="button"
+                        className="w-full rounded px-3 py-2 text-left text-xs hover:bg-accent hover:text-accent-foreground outline-none"
+                        onClick={() => {
+                          insertTemplate(t);
+                          setTemplateDropdownOpen(false);
+                        }}
+                      >
+                        {t.name}
+                      </button>
+                    ))
+                  )}
+                </div>
+              </PopoverContent>
+            </Popover>
           </div>
           <div className="flex items-center gap-1.5">
             <Button variant="outline" size="sm" className="h-7 text-xs" disabled={!body.trim()}>

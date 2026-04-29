@@ -29,6 +29,7 @@ import {
   updateCandidateStatus,
   type JobHiringStageResponse,
 } from "@/api";
+import { useTranslation } from "react-i18next";
 
 export interface ActionButtonsProps {
   candidateName: string;
@@ -51,6 +52,7 @@ export function ActionButtons({
   onStageMoved,
   onSchedule,
 }: ActionButtonsProps) {
+  const { t } = useTranslation();
   const router = useRouter();
   const { toast } = useToast();
   const [movingToStageId, setMovingToStageId] = useState<string | null>(null);
@@ -213,7 +215,14 @@ export function ActionButtons({
         }}
       >
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="sm" className="h-8 w-8 p-0">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 w-8 p-0"
+            tooltip={t("tooltip_more_actions")}
+            tooltipContentProps={{ side: "top" }}
+            aria-label={t("tooltip_more_actions")}
+          >
             <Icon name="MoreHorizontal" className="h-3.5 w-3.5" />
           </Button>
         </DropdownMenuTrigger>

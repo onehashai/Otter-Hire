@@ -16,6 +16,7 @@ import {
 import { formatTimestamp } from "@/lib/format-date";
 import { toast } from "@onehash/ui/sonner";
 import { ComposeMessageBox } from "@/components/common/ComposeMessageBox";
+import { TruncatedText } from "@/components/common/TruncatedText";
 
 function defaultEmailSubject(jobTitle: string | null | undefined, candidateName: string): string {
   const j = jobTitle?.trim();
@@ -349,7 +350,9 @@ export function CandidateMessagesTab({
                                 className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/60 px-2 py-1 text-[11px] text-muted-foreground"
                               >
                                 <Paperclip className="h-3 w-3 shrink-0" aria-hidden />
-                                <span className="max-w-[180px] truncate">{att.filename}</span>
+                                <TruncatedText className="max-w-[180px]">
+                                  {att.filename}
+                                </TruncatedText>
                               </span>
                             ))}
                           </div>

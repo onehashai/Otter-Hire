@@ -49,6 +49,7 @@ import {
 } from "@/api/templates";
 import { ApiError, classifyError } from "@/api/client/client";
 import { TemplatePreviewModal } from "./components/TemplatePreviewModal";
+import { useTranslation } from "react-i18next";
 
 export interface Template {
   id: string;
@@ -81,6 +82,7 @@ export interface TemplatesListProps {
 
 export default function TemplatesList({ searchValue, onSearchChange }: TemplatesListProps) {
   const router = useRouter();
+  const { t: tr } = useTranslation();
   const { toast } = useToast();
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
@@ -378,7 +380,14 @@ export default function TemplatesList({ searchValue, onSearchChange }: Templates
                 >
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="outline" size="icon" className="h-8 w-8">
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8"
+                        tooltip={tr("tooltip_template_options")}
+                        tooltipContentProps={{ side: "top" }}
+                        aria-label={tr("tooltip_template_options")}
+                      >
                         <MoreHorizontal className="h-4 w-4" />
                       </Button>
                     </DropdownMenuTrigger>

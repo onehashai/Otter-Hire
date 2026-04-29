@@ -22,6 +22,8 @@ import { formatRole } from "@/components/settings/team/lib/permissonMatrix";
 import type { BackendRole } from "@/components/settings/team/lib/permissonMatrix";
 import { getAdminUserMemberships, type AdminUserMembershipRow } from "@/api/admin";
 import { AdminUserEditDialog } from "@/components/settings/admin/dialogs/AdminUserEditDialog";
+import { TruncatedText } from "@/components/common/TruncatedText";
+import { useTranslation } from "react-i18next";
 
 const orgRoleBadgeClass: Record<BackendRole, string> = {
   owner: "bg-foreground text-background",
@@ -66,6 +68,7 @@ function formatLastActive(iso: string | null | undefined, status: string): strin
 }
 
 export function UsersAdminTab() {
+  const { t } = useTranslation();
   const [rows, setRows] = useState<AdminUserMembershipRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -158,15 +161,19 @@ export function UsersAdminTab() {
                             {getInitialsFromName(row.name)}
                           </Avatar>
                           <div className="min-w-0">
-                            <p className="text-sm font-medium truncate">{row.name || row.email}</p>
-                            <p className="text-xs text-muted-foreground truncate">{row.email}</p>
+                            <TruncatedText as="p" className="text-sm font-medium">
+                              {row.name || row.email}
+                            </TruncatedText>
+                            <TruncatedText as="p" className="text-xs text-muted-foreground">
+                              {row.email}
+                            </TruncatedText>
                           </div>
                         </div>
                       </TableCell>
                       <TableCell className="py-3">
-                        <span className="text-sm text-foreground truncate block max-w-[200px]">
+                        <TruncatedText className="text-sm text-foreground max-w-[200px]">
                           {row.org_name}
-                        </span>
+                        </TruncatedText>
                       </TableCell>
                       <TableCell className="py-3">
                         <Badge
@@ -202,7 +209,14 @@ export function UsersAdminTab() {
                       <TableCell className="py-3">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              tooltip={t("tooltip_user_options")}
+                              tooltipContentProps={{ side: "left" }}
+                              aria-label={t("tooltip_user_options")}
+                            >
                               <Icon name="MoreHorizontal" className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>

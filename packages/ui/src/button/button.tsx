@@ -19,9 +19,12 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default: "bg-primary text-primary-foreground hover:bg-primary/90",
-        destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
-        outline: "border border-input bg-background hover:bg-accent hover:text-accent-foreground",
-        secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+        destructive:
+          "bg-destructive text-destructive-foreground hover:bg-destructive/90",
+        outline:
+          "border border-input bg-background hover:bg-accent hover:text-accent-foreground",
+        secondary:
+          "bg-secondary text-secondary-foreground hover:bg-secondary/80",
         ghost: "hover:bg-accent hover:text-accent-foreground",
         link: "text-primary underline-offset-4 hover:underline",
       },
@@ -39,12 +42,17 @@ const buttonVariants = cva(
   },
 );
 
-type TooltipContentProps = React.ComponentPropsWithoutRef<typeof TooltipContent>;
+type TooltipContentProps = React.ComponentPropsWithoutRef<
+  typeof TooltipContent
+>;
 type TooltipRootProps = React.ComponentPropsWithoutRef<typeof Tooltip>;
-type TooltipProviderProps = React.ComponentPropsWithoutRef<typeof TooltipProvider>;
+type TooltipProviderProps = React.ComponentPropsWithoutRef<
+  typeof TooltipProvider
+>;
 
 export interface ButtonProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
+  extends
+    React.ButtonHTMLAttributes<HTMLButtonElement>,
     VariantProps<typeof buttonVariants> {
   asChild?: boolean;
   /** Shows a spinner and disables the button; keeps label text unchanged. */
@@ -85,7 +93,11 @@ function Button({
     >
       {pending ? (
         <span className="inline-flex max-w-full items-center justify-center gap-2">
-          <Icon name="Loader" className="h-4 w-4 animate-spin shrink-0" aria-hidden />
+          <Icon
+            name="Loader"
+            className="h-4 w-4 animate-spin shrink-0"
+            aria-hidden
+          />
           {children}
         </span>
       ) : (
@@ -106,7 +118,11 @@ function Button({
     );
 
   return (
-    <TooltipProvider {...tooltipProviderProps}>
+    <TooltipProvider
+      delayDuration={500}
+      skipDelayDuration={300}
+      {...tooltipProviderProps}
+    >
       <Tooltip {...tooltipProps}>
         <TooltipTrigger asChild>{triggerChild}</TooltipTrigger>
         <TooltipContent {...tooltipContentProps}>{tooltip}</TooltipContent>

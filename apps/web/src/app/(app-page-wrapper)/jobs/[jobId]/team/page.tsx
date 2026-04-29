@@ -15,6 +15,7 @@ import { getOrgUsers, type OrgUserResponse } from "@/api";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { toast } from "@onehash/ui/sonner";
 import { getInitialsFromName } from "@/lib/name-initials";
+import { TruncatedText } from "@/components/common/TruncatedText";
 import { useTranslation } from "react-i18next";
 
 export default function HiringTeamPage() {
@@ -105,8 +106,12 @@ export default function HiringTeamPage() {
                 {user.name ? getInitialsFromName(user.name, "U") : "U"}
               </Avatar>
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium truncate">{user.name ?? user.email}</p>
-                <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+                <TruncatedText as="p" className="text-sm font-medium">
+                  {user.name ?? user.email}
+                </TruncatedText>
+                <TruncatedText as="p" className="text-xs text-muted-foreground">
+                  {user.email}
+                </TruncatedText>
               </div>
               <Plus className="h-4 w-4 text-muted-foreground shrink-0" />
             </button>
@@ -164,12 +169,17 @@ export default function HiringTeamPage() {
                 >
                   {getInitialsFromName(member.name)}
                 </Avatar>
-                <p className="flex-1 min-w-0 text-sm font-medium truncate">{member.name}</p>
+                <TruncatedText as="p" className="flex-1 min-w-0 text-sm font-medium">
+                  {member.name}
+                </TruncatedText>
                 <Button
                   variant="ghost"
                   size="icon"
                   className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
                   onClick={() => removeTeamMember(member.id)}
+                  tooltip={t("tooltip_remove_member")}
+                  tooltipContentProps={{ side: "left" }}
+                  aria-label={`Remove ${member.name}`}
                 >
                   <X className="h-3.5 w-3.5" />
                 </Button>

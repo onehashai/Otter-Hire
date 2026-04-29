@@ -89,7 +89,6 @@ export function JobWorkspaceSidebar({
   const backLink = (
     <Link
       href="/jobs"
-      title={jobTitleForBack || undefined}
       className={cn(
         "flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm transition-colors text-sidebar-foreground hover:bg-sidebar-accent min-w-0",
         collapsed && "justify-center px-0",
@@ -141,16 +140,12 @@ export function JobWorkspaceSidebar({
       <Separator />
 
       <nav className="flex-1 overflow-y-auto py-2 px-2 space-y-1">
-        {collapsed ? (
-          <Tooltip>
-            <TooltipTrigger asChild>{backLink}</TooltipTrigger>
-            <TooltipContent side="right" className="text-xs max-w-xs">
-              {backLabel}
-            </TooltipContent>
-          </Tooltip>
-        ) : (
-          backLink
-        )}
+        <Tooltip>
+          <TooltipTrigger asChild>{backLink}</TooltipTrigger>
+          <TooltipContent side="top" className="text-xs">
+            {t("back_to_jobs")}
+          </TooltipContent>
+        </Tooltip>
 
         {!collapsed && (
           <p

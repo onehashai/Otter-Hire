@@ -93,6 +93,7 @@ function getRootHostAliases(): string[] {
 
   if (configuredRootHostname) {
     aliases.add(configuredRootHostname);
+    aliases.add(`www.${configuredRootHostname}`);
   }
 
   return Array.from(aliases);
@@ -236,16 +237,26 @@ export async function middleware(request: NextRequest) {
     const rootHost = process.env.NEXT_PUBLIC_APP_ROOT_HOST || "localhost:3000";
     const search = request.nextUrl.search;
 
-    // Redirect bare localhost/127.0.0.1 to the configured root host when they differ.
     const currentHostname = currentHost.split(":")[0].toLowerCase();
     const configuredRootHostname = rootHost.split(":")[0].toLowerCase();
     const isBareLocal = currentHostname === "localhost" || currentHostname === "127.0.0.1";
+
+    // Redirect bare localhost/127.0.0.1 to the configured root host when they differ.
     if (
       isBareLocal &&
       configuredRootHostname !== "localhost" &&
       configuredRootHostname !== "127.0.0.1"
     ) {
       return NextResponse.redirect(`http://${rootHost}${pathname}${search}`);
+    }
+
+    // Redirect bare apex domain to www (production only — skip all localhost variants).
+    const isLocalDev =
+      configuredRootHostname === "localhost" ||
+      configuredRootHostname === "127.0.0.1" ||
+      configuredRootHostname.includes("localhost");
+    if (!isBareLocal && !isLocalDev && currentHostname === configuredRootHostname) {
+      return NextResponse.redirect(`https://www.${rootHost}${pathname}${search}`, 301);
     }
 
     // Public infra routes pass straight through on any domain.

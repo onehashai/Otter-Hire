@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { useSetPageMetadata } from "@/hooks/useSetPageMetadata";
 import { useAuthSession } from "@/app/providers";
 import { Icon, type IconName } from "@onehash/ui/icon";
 
@@ -31,11 +30,6 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
           { label: t("nav_admin"), path: "/settings/admin", icon: "ShieldCheck" as const },
         ]
       : baseTabRoutes;
-
-  useSetPageMetadata({
-    title: t("settings_title"),
-    subtitle: t("settings_subtitle"),
-  });
 
   return (
     <div className={isMobile ? "space-y-4" : "flex gap-6"}>

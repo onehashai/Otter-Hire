@@ -76,6 +76,8 @@ from app.services.resume_links import resolve_resume_from_body
 from app.services.storage import storage_service
 from app.templates import EmailContent
 from app.temporal.email.queue import enqueue_ses_raw_key
+from app.temporal.resume_scoring.queue import enqueue_resume_score
+from app.temporal.resume_scoring.types import ResumeScoreInput
 from app.utils.uuid import uuid7
 
 router = APIRouter()
@@ -127,6 +129,56 @@ async def _upsert_candidate_job_assignment(
             existing.assigned_at = assigned_at
     await db.flush()
     return existing
+
+
+async def _mark_assignment_score_pending(
+    db: AsyncSession,
+    *,
+    org_id: UUID,
+    candidate_id: UUID,
+    job_id: UUID,
+) -> CandidateJobs | None:
+    result = await db.execute(
+        select(CandidateJobs).where(
+            CandidateJobs.org_id == org_id,
+            CandidateJobs.candidate_id == candidate_id,
+            CandidateJobs.job_id == job_id,
+        )
+    )
+    assignment = result.scalar_one_or_none()
+    if assignment is None:
+        return None
+    assignment.resume_score = None
+    assignment.resume_score_status = "pending"
+    assignment.resume_score_sections = None
+    assignment.resume_score_generation = int(assignment.resume_score_generation or 0) + 1
+    await db.flush()
+    return assignment
+
+
+async def _enqueue_assignment_score(
+    *,
+    org_id: UUID,
+    candidate_id: UUID,
+    job_id: UUID,
+    generation: int,
+) -> None:
+    try:
+        await enqueue_resume_score(
+            ResumeScoreInput(
+                org_id=str(org_id),
+                candidate_id=str(candidate_id),
+                job_id=str(job_id),
+                generation=generation,
+            )
+        )
+    except Exception:
+        logger.exception(
+            "Failed to enqueue resume scoring org_id=%s candidate_id=%s job_id=%s",
+            org_id,
+            candidate_id,
+            job_id,
+        )
 
 
 def get_country_name(iso_code: str) -> str:
@@ -1526,6 +1578,8 @@ async def apply_public_job(
     await db.flush()
     application.candidate_id = candidate.id
     assigned_id: UUID | None = None
+    resume_object_key: str | None = None
+    resume_filename: str | None = None
     assignment = await _upsert_candidate_job_assignment(
         db,
         org_id=org_uuid,
@@ -1544,11 +1598,14 @@ async def apply_public_job(
             if not isinstance(file_ref, str) or not file_ref.strip():
                 continue
             file_url = file_ref.strip()
+            object_key = _to_candidate_document_object_key(file_url)
             label = field_key.replace("_", " ").title()
             doc_type = "custom_field_attachment"
             if field_key == "resume":
                 label = default_fields.get("resume", {}).get("label", "Resume")
                 doc_type = "resume"
+                resume_object_key = object_key
+                resume_filename = _guess_file_name(file_url, "resume.bin")
             elif field_key == "cover_letter":
                 label = default_fields.get("cover_letter", {}).get("label", "Cover Letter")
                 doc_type = "cover_letter"
@@ -1563,8 +1620,6 @@ async def apply_public_job(
                 )
             )
             latest_version = existing_version_result.scalar_one_or_none() or 0
-
-            object_key = _to_candidate_document_object_key(file_url)
 
             db.add(
                 CandidateDocument(
@@ -1582,6 +1637,33 @@ async def apply_public_job(
                     uploaded_by_user_id=None,
                     version=int(latest_version) + 1,
                 )
+            )
+
+    if resume_object_key:
+        try:
+            resume_bytes = await storage_service.read_bytes(resume_object_key)
+            resume_name = resume_filename or "resume.bin"
+            resume_mime = "application/pdf"
+            lower_name = resume_name.lower()
+            if lower_name.endswith(".docx"):
+                resume_mime = (
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                )
+            elif lower_name.endswith(".doc"):
+                resume_mime = "application/msword"
+            result = await asyncio.to_thread(
+                run_resume_pipeline,
+                resume_name,
+                resume_mime,
+                resume_bytes,
+                fallback_email=candidate.email or "",
+            )
+            candidate.parsed_resume = result.profile.model_dump(mode="json")
+        except Exception:
+            logger.exception(
+                "Public job application resume parse failed candidate_id=%s job_id=%s",
+                candidate.id,
+                job_uuid,
             )
 
     await db.commit()
@@ -1605,6 +1687,21 @@ async def apply_public_job(
             "stage_name": stage_name,
             "assigned_id": str(assigned_id) if assigned_id else None,
         },
+    )
+    pending_assignment = await _mark_assignment_score_pending(
+        db,
+        org_id=org_uuid,
+        candidate_id=candidate.id,
+        job_id=job_uuid,
+    )
+    await db.commit()
+    await _enqueue_assignment_score(
+        org_id=org_uuid,
+        candidate_id=candidate.id,
+        job_id=job_uuid,
+        generation=int(pending_assignment.resume_score_generation or 0)
+        if pending_assignment is not None
+        else 0,
     )
 
     return PublicJobApplyResponse(
@@ -2898,6 +2995,21 @@ async def ingest_inbound_email(
                         "source": "email_inbound_job",
                         "stage_name": None,
                     },
+                )
+                pending_assignment = await _mark_assignment_score_pending(
+                    db,
+                    org_id=org_id,
+                    candidate_id=parsed_candidate.id,
+                    job_id=target_job_id,
+                )
+                await db.commit()
+                await _enqueue_assignment_score(
+                    org_id=org_id,
+                    candidate_id=parsed_candidate.id,
+                    job_id=target_job_id,
+                    generation=int(pending_assignment.resume_score_generation or 0)
+                    if pending_assignment is not None
+                    else 0,
                 )
             else:
                 await execute_automations_for_trigger(

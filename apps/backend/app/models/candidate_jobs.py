@@ -4,10 +4,11 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    Integer,
     String,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -33,6 +34,10 @@ class CandidateJobs(Base):
     source = Column(String(100), nullable=True)
     applied_at = Column(DateTime(timezone=True), nullable=True)
     assigned_at = Column(DateTime(timezone=True), nullable=True)
+    resume_score_generation = Column(Integer, nullable=False, server_default="0")
+    resume_score = Column(Integer, nullable=True)
+    resume_score_status = Column(String(20), nullable=True)
+    resume_score_sections = Column(JSONB, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
@@ -42,6 +47,10 @@ class CandidateJobs(Base):
         CheckConstraint(
             "assignment_status IN ('active', 'rejected', 'hired', 'withdrawn')",
             name="ck_candidate_jobs_assignment_status",
+        ),
+        CheckConstraint(
+            "resume_score_status IS NULL OR resume_score_status IN ('pending', 'ready', 'failed')",
+            name="ck_candidate_jobs_resume_score_status",
         ),
         UniqueConstraint("candidate_id", "job_id", name="uq_candidate_jobs_candidate_job"),
         Index("ix_candidate_jobs_org_job", "org_id", "job_id"),

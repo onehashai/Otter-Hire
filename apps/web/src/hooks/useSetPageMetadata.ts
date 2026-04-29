@@ -2,7 +2,6 @@
 
 import { useEffect } from "react";
 import { usePageMetadata } from "@/contexts/PageMetadataContext";
-
 interface PageMetadataOptions {
   title: string;
   subtitle?: string;

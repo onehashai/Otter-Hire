@@ -65,7 +65,7 @@ export default function Onboarding() {
         <div className="flex items-center justify-center mb-0 leading-none">
           <Image
             src={LOGO_SVG_PATH}
-            alt="Otter"
+            alt="Otter Hire"
             width={140}
             height={42}
             className="object-contain block dark:invert dark:contrast-200"

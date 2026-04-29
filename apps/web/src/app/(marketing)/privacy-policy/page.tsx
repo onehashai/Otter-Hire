@@ -3,14 +3,14 @@ import MarketingNav from "@/components/marketing/MarketingNav";
 import MarketingFooter from "@/components/marketing/MarketingFooter";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy — Otter",
-  description: "How Otter collects, uses, and protects your personal data.",
+  title: "Privacy Policy — Otter Hire",
+  description: "How Otter Hire collects, uses, and protects your personal data.",
 };
 
 const sections = [
   {
     title: "Introduction",
-    content: `Welcome to Otter ("us", "we", or "our"). Otter operates otter.bz (hereinafter referred to as "Service").
+    content: `Welcome to Otter Hire ("us", "we", or "our"). Otter Hire operates otter.bz (hereinafter referred to as "Service").
 
 Our Privacy Policy governs your visit to otter.bz and explains how we collect, safeguard, and disclose information that results from your use of our Service.
 
@@ -20,7 +20,7 @@ Our Terms and Conditions ("Terms") govern all use of our Service and together wi
   },
   {
     title: "Definitions",
-    content: `Service means the otter.bz website operated by Otter.
+    content: `Service means the otter.bz website operated by Otter Hire.
 
 Personal Data means data about a living individual who can be identified from those data (or from those and other information either in our possession or likely to come into our possession).
 
@@ -72,7 +72,7 @@ Types of cookies we use:
   },
   {
     title: "Use of Data",
-    content: `Otter uses the collected data for the following purposes:
+    content: `Otter Hire uses the collected data for the following purposes:
 
 • To provide and maintain our Service
 • To notify you about changes to our Service
@@ -95,7 +95,7 @@ Usage Data is generally retained for a shorter period, except when this data is 
     title: "Transfer of Data",
     content: `Your information, including Personal Data, may be transferred to — and maintained on — computers located outside of your state, province, country, or other governmental jurisdiction where the data protection laws may differ from those of your jurisdiction.
 
-Your consent to this Privacy Policy followed by your submission of such information represents your agreement to that transfer. Otter will take all steps reasonably necessary to ensure that your data is treated securely and in accordance with this Privacy Policy, and no transfer of your Personal Data will take place to an organisation or country unless there are adequate controls in place.`,
+Your consent to this Privacy Policy followed by your submission of such information represents your agreement to that transfer. Otter Hire will take all steps reasonably necessary to ensure that your data is treated securely and in accordance with this Privacy Policy, and no transfer of your Personal Data will take place to an organisation or country unless there are adequate controls in place.`,
   },
   {
     title: "Disclosure of Data",
@@ -103,9 +103,9 @@ Your consent to this Privacy Policy followed by your submission of such informat
 
 • Disclosure for Law Enforcement: Under certain circumstances, we may be required to disclose your Personal Data if required to do so by law or in response to valid requests by public authorities.
 
-• Business Transaction: If Otter is involved in a merger, acquisition, or asset sale, your Personal Data may be transferred.
+• Business Transaction: If Otter Hire is involved in a merger, acquisition, or asset sale, your Personal Data may be transferred.
 
-• Other cases: To contractors, service providers, and other third parties we use to support our business; to fulfil the purpose for which you provide it; with your consent in any other cases; or if we believe disclosure is necessary to protect the rights, property, or safety of Otter, our users, or others.`,
+• Other cases: To contractors, service providers, and other third parties we use to support our business; to fulfil the purpose for which you provide it; with your consent in any other cases; or if we believe disclosure is necessary to protect the rights, property, or safety of Otter Hire, our users, or others.`,
   },
   {
     title: "Security of Data",
@@ -184,15 +184,14 @@ export default function PrivacyPolicyPage() {
         <h1 className="mt-3 text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl">
           Privacy Policy
         </h1>
-        <p className="mt-4 text-base text-slate-500">Effective date: January 1, 2026</p>
       </div>
 
       {/* Content */}
       <div className="mx-auto max-w-3xl px-4 py-16 sm:px-6 sm:py-20">
         <div className="mb-12 rounded-2xl border border-black/8 bg-slate-50 p-6 text-sm leading-7 text-slate-600">
           You are responsible for complying with the laws of the jurisdiction from which you are
-          accessing this site. The User&apos;s right to privacy is of paramount importance to Otter.
-          Any information provided by the User will not be shared with any third party unless
+          accessing this site. The User&apos;s right to privacy is of paramount importance to Otter
+          Hire. Any information provided by the User will not be shared with any third party unless
           identified as such elsewhere.
         </div>
 

@@ -120,7 +120,7 @@ export function JobWorkspaceSidebar({
           <Link href="/" className="flex items-center min-w-0">
             <Image
               src={LOGO_SVG_PATH}
-              alt="Otter"
+              alt="Otter Hire"
               width={90}
               height={20}
               className="object-contain dark:invert dark:contrast-200"

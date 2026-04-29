@@ -115,7 +115,7 @@ export default function ResetPassword() {
         <div className="flex items-center mb-10 justify-center">
           <Image
             src={LOGO_SVG_PATH}
-            alt="Otter"
+            alt="Otter Hire"
             width={140}
             height={42}
             className="object-contain dark:invert dark:contrast-200"

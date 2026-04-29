@@ -20,16 +20,16 @@ const baseMetadata: Metadata = {
   },
   manifest: "/site.webmanifest",
   openGraph: {
-    title: "Otter - AI-Powered Modern ATS",
+    title: "Otter Hire - AI-Powered Modern ATS",
     description: "AI-powered, open source modern ATS to recruit top talent faster and smarter.",
     url: "https://smartats.in",
-    siteName: "Otter",
+    siteName: "Otter Hire",
     images: [
       {
         url: "/social_media/og-image.png",
         width: 1200,
         height: 630,
-        alt: "Otter - AI-powered, open source modern ATS",
+        alt: "Otter Hire - AI-powered, open source modern ATS",
       },
     ],
     locale: "en_US",
@@ -37,7 +37,7 @@ const baseMetadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Otter - AI-Powered Modern ATS",
+    title: "Otter Hire - AI-Powered Modern ATS",
     description: "AI-powered, open source modern ATS to recruit top talent faster and smarter.",
     images: ["/social_media/og-image.png"],
   },

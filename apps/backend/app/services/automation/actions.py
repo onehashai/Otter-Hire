@@ -198,7 +198,7 @@ async def handle_send_email_action(
                     subject=rendered_subject,
                     body=rendered_body,
                     html_body=rendered_body,
-                    from_name="Otter",
+                    from_name="Otter Hire",
                     org_name=org_name,
                     reply_to=reply_to_address,
                     conversation_id=str(conversation.id),

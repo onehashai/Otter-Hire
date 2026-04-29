@@ -50,7 +50,7 @@ def _email_header_inner_html(name_esc: str, name: str, logo_url: str | None) -> 
 
 def base_email_template(inner_html: str) -> str:
     """Wrap inner body HTML in the standard product email layout."""
-    name = (settings.platform_name or "").strip() or "Otter"
+    name = (settings.platform_name or "").strip() or "Otter Hire"
     name_esc = html.escape(name, quote=False)
     logo_url = _resolve_transactional_email_logo_url()
     header_inner = _email_header_inner_html(name_esc, name, logo_url)

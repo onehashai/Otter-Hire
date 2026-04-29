@@ -1,6 +1,5 @@
 "use client";
 
-
 import { useAuthSession } from "@/app/providers";
 import { ProfileSettings } from "@/components/settings/profile/ProfileSettings";
 

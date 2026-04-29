@@ -31,7 +31,6 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
         ]
       : baseTabRoutes;
 
-
   return (
     <div className={isMobile ? "space-y-4" : "flex gap-6"}>
       {/* Tab nav - horizontal scroll on mobile, vertical sidebar on desktop */}

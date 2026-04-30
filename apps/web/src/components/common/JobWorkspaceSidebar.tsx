@@ -9,7 +9,7 @@ import { Button } from "@onehash/ui/button";
 import { Icon } from "@onehash/ui/icon";
 import { Separator } from "@onehash/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@onehash/ui/tooltip";
-import { LOGO_SVG_PATH, PLATFORM_NAME } from "@/lib/constants";
+import { LOGO_SVG_PATH } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "@/components/common/ThemeProvider";
@@ -112,7 +112,7 @@ export function JobWorkspaceSidebar({
     >
       <div
         className={cn(
-          "flex items-center h-12 pl-1",
+          "flex items-center h-12 px-2.5",
           collapsed ? "justify-center" : "justify-between",
         )}
       >
@@ -121,9 +121,9 @@ export function JobWorkspaceSidebar({
             <Image
               src={LOGO_SVG_PATH}
               alt="Otter Hire"
-              width={90}
-              height={20}
-              className="object-contain dark:invert dark:contrast-200"
+              width={2000}
+              height={491}
+              className="h-7 w-auto dark:invert dark:contrast-200"
             />
           </Link>
         )}

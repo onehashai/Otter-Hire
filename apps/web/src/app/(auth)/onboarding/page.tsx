@@ -62,7 +62,7 @@ export default function Onboarding() {
     <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12">
       <div className="w-full max-w-[480px]">
         {/* Logo */}
-        <div className="flex items-center justify-center mb-0 leading-none">
+        <div className="flex items-center justify-center mb-6">
           <Image
             src={LOGO_SVG_PATH}
             alt="Otter Hire"

@@ -222,6 +222,7 @@
 
 .marketing-hero-section {
   position: relative;
+  padding-bottom: 1rem;
   background:
     radial-gradient(circle at left center, hsl(0 0% 100% / 0.9) 0, hsl(0 0% 100% / 0) 18%),
     radial-gradient(circle at right center, hsl(0 0% 100% / 0.9) 0, hsl(0 0% 100% / 0) 18%),

@@ -95,13 +95,13 @@ export default function Login() {
           }}
         />
         <div className="relative z-10 w-full max-w-md px-12 text-left">
-          <div className="flex flex-col items-start gap-3">
+          <div className="flex flex-col items-start gap-6">
             <Image
               src={LOGO_SVG_PATH}
               alt={PLATFORM_NAME}
               width={480}
               height={262}
-              className="-ml-2 h-24 w-auto max-w-[min(100%,400px)] object-contain object-left self-start dark:invert dark:contrast-200"
+              className="h-10 w-auto self-start dark:invert dark:contrast-200"
               priority
             />
             <h1 className="text-3xl lg:text-4xl font-bold tracking-tight leading-tight">

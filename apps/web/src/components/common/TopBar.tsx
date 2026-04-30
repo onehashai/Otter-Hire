@@ -144,9 +144,9 @@ export function TopBar() {
           <Image
             src={LOGO_SVG_PATH}
             alt={PLATFORM_NAME}
-            width={90}
-            height={20}
-            className="object-contain dark:invert dark:contrast-200"
+            width={2000}
+            height={491}
+            className="h-7 w-auto dark:invert dark:contrast-200"
             priority
           />
         </Link>

@@ -2,28 +2,11 @@
 
 import Image from "next/image";
 import { ArrowRight, Check, ChevronDown, MousePointerClick } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import OtterFlowHero from "@/components/marketing/OtterFlowHero";
 import MarketingNav from "@/components/marketing/MarketingNav";
 import MarketingFooter from "@/components/marketing/MarketingFooter";
 import { useScrollReveal } from "@/hooks/useScrollReveal";
-
-function useAuthState() {
-  const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
-  useEffect(() => {
-    fetch(`/api/auth/check?_=${Date.now()}`, { cache: "no-store" })
-      .then((r) => r.json())
-      .then((d: { authenticated: boolean }) => setIsLoggedIn(d.authenticated))
-      .catch(() => setIsLoggedIn(false));
-  }, []);
-  return isLoggedIn;
-}
-
-function getAppUrl(path: string) {
-  const rootHost = process.env.NEXT_PUBLIC_APP_ROOT_HOST || "localhost:3000";
-  const appSubdomain = process.env.NEXT_PUBLIC_APP_SUBDOMAIN || "app";
-  return `http://${appSubdomain}.${rootHost}${path}`;
-}
 
 function scrollToSection(id: string) {
   document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
@@ -151,11 +134,9 @@ function FaqAccordion() {
 
 export default function MarketingPage() {
   useScrollReveal();
-  const isLoggedIn = useAuthState();
 
-  function handleProductCta(path: string) {
-    const url = isLoggedIn ? getAppUrl(path) : "/login";
-    window.open(url, "_blank", "noopener,noreferrer");
+  function handleProductCta(_path: string) {
+    window.open("/signup", "_blank", "noopener,noreferrer");
   }
 
   return (
@@ -282,14 +263,14 @@ export default function MarketingPage() {
 
                 {/* screenshot — dominant, slightly bleeds on large screens */}
                 <div
-                  className={`${row.flip ? "lg:order-1" : ""} rounded-2xl overflow-hidden border-2 border-slate-200/80 shadow-[0_32px_80px_rgba(15,23,42,0.12)]`}
+                  className={`${row.flip ? "lg:order-1" : ""} group rounded-2xl overflow-hidden border-2 border-slate-200/80 shadow-[0_32px_80px_rgba(15,23,42,0.14)]`}
                 >
                   <Image
                     src={row.img}
                     alt={row.imgAlt}
                     width={1440}
                     height={900}
-                    className="w-full h-auto block"
+                    className="w-full h-auto block scale-[1.08] group-hover:scale-[1.03] transition-transform duration-700 ease-out origin-top"
                     priority={i === 0}
                   />
                 </div>

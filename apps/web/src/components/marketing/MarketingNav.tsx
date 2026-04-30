@@ -4,7 +4,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { X } from "lucide-react";
 import { useEffect, useState } from "react";
-import { LOGO_PNG_PATH } from "@/lib/constants";
 
 const navLinks: { label: string; section: string }[] = [];
 
@@ -80,7 +79,7 @@ export default function MarketingNav({ onLegalPage = false }: { onLegalPage?: bo
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  const ctaHref = isLoggedIn ? getAppUrl("/jobs") : "/login";
+  const ctaHref = isLoggedIn ? getAppUrl("/jobs") : "/signup";
   const ctaLabel = isLoggedIn ? "Go to Dashboard" : "Get Otter Hire";
 
   return (
@@ -108,11 +107,11 @@ export default function MarketingNav({ onLegalPage = false }: { onLegalPage?: bo
           className="flex items-center"
         >
           <Image
-            src={LOGO_PNG_PATH}
+            src="/brand/logo.svg"
             alt="Otter Hire"
-            width={124}
-            height={34}
-            className="h-11 w-auto sm:h-12"
+            width={2000}
+            height={491}
+            className="h-7 w-auto sm:h-10"
             priority
           />
         </Link>
@@ -169,32 +168,34 @@ export default function MarketingNav({ onLegalPage = false }: { onLegalPage?: bo
               WebkitBackdropFilter: "blur(24px)",
             }}
           >
-            <div className="flex flex-col items-center py-4">
-              {!onLegalPage &&
-                navLinks.map((link) => (
-                  <button
-                    key={link.section}
-                    type="button"
+            {(onLegalPage || navLinks.length > 0) && (
+              <div className="flex flex-col items-center py-4">
+                {!onLegalPage &&
+                  navLinks.map((link) => (
+                    <button
+                      key={link.section}
+                      type="button"
+                      className="w-full px-6 py-4 text-center text-xl font-medium text-slate-800 transition-colors hover:bg-white/40"
+                      onClick={() => {
+                        scrollToSection(link.section);
+                        setOpen(false);
+                      }}
+                    >
+                      {link.label}
+                    </button>
+                  ))}
+                {onLegalPage && (
+                  <Link
+                    href="/"
                     className="w-full px-6 py-4 text-center text-xl font-medium text-slate-800 transition-colors hover:bg-white/40"
-                    onClick={() => {
-                      scrollToSection(link.section);
-                      setOpen(false);
-                    }}
+                    onClick={() => setOpen(false)}
                   >
-                    {link.label}
-                  </button>
-                ))}
-              {onLegalPage && (
-                <Link
-                  href="/"
-                  className="w-full px-6 py-4 text-center text-xl font-medium text-slate-800 transition-colors hover:bg-white/40"
-                  onClick={() => setOpen(false)}
-                >
-                  Home
-                </Link>
-              )}
-            </div>
-            <div className="border-t border-black/6 p-4">
+                    Home
+                  </Link>
+                )}
+              </div>
+            )}
+            <div className="p-4">
               {isLoggedIn !== null && (
                 <a
                   href={ctaHref}

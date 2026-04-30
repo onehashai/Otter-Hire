@@ -1,17 +1,16 @@
 import Image from "next/image";
 import Link from "next/link";
-import { LOGO_PNG_PATH } from "@/lib/constants";
 
 export default function MarketingFooter() {
   return (
     <footer className="marketing-footer-card mx-4 mb-6 sm:mx-6">
       <div className="flex flex-col items-center text-center">
         <Image
-          src={LOGO_PNG_PATH}
+          src="/brand/logo.svg"
           alt="Otter Hire"
-          width={124}
-          height={34}
-          className="h-10 w-auto"
+          width={2000}
+          height={491}
+          className="h-7 w-auto sm:h-10"
         />
         <p className="mt-4 text-base text-slate-600">Open-source ATS for modern hiring teams.</p>
         <p className="text-sm text-slate-500">

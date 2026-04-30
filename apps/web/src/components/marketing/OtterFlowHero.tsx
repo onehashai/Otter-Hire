@@ -13,7 +13,6 @@ import {
   Trophy,
   UserPlus,
 } from "lucide-react";
-import { LOGO_PNG_PATH } from "@/lib/constants";
 
 type Source = {
   id: string;
@@ -414,7 +413,7 @@ function OtterHub({ phase, topScore }: { phase: Phase; topScore: number }) {
 
             {/* Logo centered directly — no card wrapper */}
             <motion.img
-              src={LOGO_PNG_PATH}
+              src="/brand/hero.png"
               alt="Otter Hire"
               className="h-12 w-auto object-contain"
               animate={{ scale: active ? [1, 1.08, 1] : 1 }}

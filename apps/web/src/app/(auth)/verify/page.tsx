@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@onehash/ui/button";
 import { Icon } from "@onehash/ui/icon";
 import { useTranslation } from "react-i18next";
-import { LOGO_SVG_PATH, PLATFORM_NAME } from "@/lib/constants";
+import { LOGO_SVG_PATH } from "@/lib/constants";
 import { verifyEmail, resendVerification, logout } from "@/api/index";
 import { useAuthSession } from "@/app/providers";
 
@@ -159,7 +159,7 @@ function VerifyEmailContent() {
     <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12">
       <div className="w-full max-w-[420px] text-center">
         {/* Logo */}
-        <div className="flex items-center justify-center mb-0 leading-none">
+        <div className="flex items-center justify-center mb-6">
           <Image
             src={LOGO_SVG_PATH}
             alt="Otter Hire"

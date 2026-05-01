@@ -265,7 +265,7 @@ jobs:
               fi
               echo "Falling back: could not parse model JSON (text length: ${#text})." >&2
               jq -n --arg title "${fallback_title}" \
-                    --arg body "$(printf "## Summary\nAuto-generated PR (Claude output could not be parsed).\n\n## Changes\n- Changed files:\n%s\n\n- Diff summary:\n%s\n\n## Testing Notes\n- Review and run CI.\n" "$(printf "%s" "${file_list}" | sed -E 's/^/- /')" "$(printf "%s" "${diff_stat}" | sed -E 's/^/- /')")" \
+                    --arg body "$(printf "## Summary\nAuto-generated PR (OpenAI output could not be parsed).\n\n## Changes\n- Changed files:\n%s\n\n- Diff summary:\n%s\n\n## Testing Notes\n- Review and run CI.\n" "$(printf "%s" "${file_list}" | sed -E 's/^/- /')" "$(printf "%s" "${diff_stat}" | sed -E 's/^/- /')")" \
                     '{title:$title, body:$body}'
               return 0
             fi

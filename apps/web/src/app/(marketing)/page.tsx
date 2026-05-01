@@ -57,50 +57,50 @@ const faqs = [
   },
 ];
 
-const productRows = [
+const featureRows = [
   {
     kicker: "Hiring pipeline",
     title: "Every open role, fully organized",
-    copy: "",
-    checks: [
-      "Post jobs in minutes with AI-written descriptions",
-      "Drag-and-drop pipeline stages per role",
-      "Real-time applicant counts across every stage",
-    ],
+    copy: "Post jobs with AI-written descriptions, drag candidates through custom stages, and track real-time counts across every step of your pipeline.",
     ctaLabel: "Manage Pipeline",
-    ctaPath: "/jobs",
     img: "/marketing/product/pipeline.png",
-    imgAlt: "Otter Hire jobs page",
+    imgAlt: "Otter Hire hiring pipeline",
+    flip: false,
+  },
+  {
+    kicker: "AI resume screening",
+    title: "Know who's qualified before you open a single file",
+    copy: "Every resume parsed and scored automatically against the role. Skills, experience, and fit surfaced instantly — no manual sifting.",
+    ctaLabel: "Screen Resumes",
+    img: "/marketing/product/resume.png",
+    imgAlt: "Otter Hire AI resume screening",
+    flip: true,
+  },
+  {
+    kicker: "Candidate messaging",
+    title: "The full conversation, right in the profile",
+    copy: "Send and receive emails without leaving the candidate view. Complete thread history, always in context — no inbox switching.",
+    ctaLabel: "Message Candidates",
+    img: "/marketing/product/conversations.png",
+    imgAlt: "Otter Hire candidate messaging",
     flip: false,
   },
   {
     kicker: "Workflow automation",
     title: "Stop doing the same manual tasks twice",
-    copy: "",
-    checks: [
-      "Auto-send emails when a candidate moves stage",
-      "Assign reviewers without manual handoffs",
-      "Full execution log so nothing falls through",
-    ],
+    copy: "Set a trigger, attach actions, and let automations do the follow-up. Stage moves, email sends, reviewer assignments — all logged.",
     ctaLabel: "Automate Hiring",
-    ctaPath: "/automations",
     img: "/marketing/product/automations.png",
-    imgAlt: "Otter Hire automations page",
+    imgAlt: "Otter Hire workflow automations",
     flip: true,
   },
   {
     kicker: "Email templates",
-    title: "Every candidate message, on-brand and ready",
-    copy: "",
-    checks: [
-      "Rich-text editor with dynamic variables",
-      "Reuse across automations and manual sends",
-      "Consistent voice across every recruiter on the team",
-    ],
+    title: "Every message on-brand and ready to send",
+    copy: "Rich-text templates with dynamic variables. Write once, reuse across every automation and manual send — consistent voice across your whole team.",
     ctaLabel: "Build Templates",
-    ctaPath: "/templates",
     img: "/marketing/product/templates.png",
-    imgAlt: "Otter Hire templates page",
+    imgAlt: "Otter Hire email templates",
     flip: false,
   },
 ];
@@ -134,10 +134,6 @@ function FaqAccordion() {
 
 export default function MarketingPage() {
   useScrollReveal();
-
-  function handleProductCta(_path: string) {
-    window.open("/signup", "_blank", "noopener,noreferrer");
-  }
 
   return (
     <main
@@ -191,7 +187,6 @@ export default function MarketingPage() {
           Trusted by fast-growing teams
         </p>
         <div className="mx-auto max-w-4xl relative overflow-hidden">
-          {/* Fade edges */}
           <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-20 z-10 bg-gradient-to-r from-white to-transparent" />
           <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-20 z-10 bg-gradient-to-l from-white to-transparent" />
           <div
@@ -217,65 +212,128 @@ export default function MarketingPage() {
         </div>
       </section>
 
-      <section id="product" className="bg-white py-24 sm:py-32 overflow-hidden">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6">
-          {/* intro */}
-          <div className="mx-auto max-w-4xl text-center reveal mb-24">
+      {/* ── PRODUCT SECTION ── */}
+      <section id="product" className="overflow-hidden">
+        {/* Section header */}
+        <div className="bg-white pt-20 pb-4 sm:pt-24 sm:pb-6">
+          <div className="mx-auto max-w-3xl px-4 sm:px-6 text-center reveal">
             <p className="marketing-section-kicker">The product</p>
-            <h2 className="marketing-section-title">
-              Everything your hiring team needs, nothing it doesn&apos;t
+            <h2
+              className="marketing-section-title"
+              style={{ fontSize: "clamp(2rem, 3vw, 2.75rem)" }}
+            >
+              Everything your hiring team needs,
+              <br />
+              nothing it doesn&apos;t
             </h2>
           </div>
+        </div>
 
-          {/* alternating rows */}
-          <div className="flex flex-col gap-32">
-            {productRows.map((row, i) => (
+        {/* ── Alternating feature rows ── */}
+        {featureRows.map((row, i) => (
+          <div key={row.kicker} className={i % 2 === 0 ? "bg-white" : "bg-[#f7f8fc]"}>
+            <div className="mx-auto max-w-7xl px-4 sm:px-6 py-16 sm:py-24">
               <div
-                key={row.kicker}
-                className={`reveal grid items-center gap-10 lg:gap-16 ${row.flip ? "lg:grid-cols-[8fr_5fr]" : "lg:grid-cols-[5fr_8fr]"}`}
-                data-delay={i * 80}
+                className={`reveal grid items-center gap-10 lg:gap-14 ${row.flip ? "lg:grid-cols-[8fr_4fr]" : "lg:grid-cols-[4fr_8fr]"}`}
+                data-delay={i * 50}
               >
-                {/* text */}
+                {/* Text — always renders first in DOM for mobile stacking */}
                 <div className={row.flip ? "lg:order-2" : ""}>
                   <p className="marketing-section-kicker">{row.kicker}</p>
-                  <h3 className="mt-3 text-3xl font-semibold tracking-tight text-slate-900 sm:text-[2.4rem] sm:leading-tight">
+                  <h3 className="mt-3 text-[1.75rem] font-semibold tracking-tight text-slate-900 leading-snug sm:text-[2.1rem] sm:leading-tight">
                     {row.title}
                   </h3>
+                  <p className="mt-5 text-base leading-7 text-slate-500 max-w-md">{row.copy}</p>
+                  <a
+                    href="/signup"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-8 inline-flex items-center gap-2.5 rounded-full bg-black px-6 py-3 text-sm font-semibold text-white shadow-[0_4px_24px_rgba(0,0,0,0.22)] transition-all duration-200 hover:bg-zinc-800 hover:shadow-[0_6px_32px_rgba(0,0,0,0.32)] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98]"
+                  >
+                    <MousePointerClick className="h-4 w-4 text-white/70" />
+                    {row.ctaLabel}
+                  </a>
+                </div>
+
+                {/* Screenshot */}
+                <div className={`group ${row.flip ? "lg:order-1" : ""}`}>
+                  <div className="rounded-2xl overflow-hidden border border-slate-200/70 shadow-[0_20px_60px_rgba(15,23,42,0.10)] transition-shadow duration-500 group-hover:shadow-[0_28px_80px_rgba(15,23,42,0.15)]">
+                    <Image
+                      src={row.img}
+                      alt={row.imgAlt}
+                      width={1440}
+                      height={900}
+                      className="w-full h-auto block transition-transform duration-700 ease-out group-hover:scale-[1.015] origin-top"
+                      priority={i === 0}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+
+        {/* ── Dark callout: Team Collaboration ── */}
+        <div className="bg-white py-16 sm:py-24">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6">
+            <div className="reveal rounded-3xl bg-slate-900 overflow-hidden">
+              <div className="grid lg:grid-cols-[4fr_8fr]">
+                {/* Text panel */}
+                <div className="flex flex-col justify-center px-8 py-12 sm:px-12 sm:py-14 lg:py-16">
+                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400 mb-4">
+                    Team collaboration
+                  </p>
+                  <h3 className="text-[1.75rem] font-semibold tracking-tight text-white leading-snug sm:text-[2.1rem] sm:leading-tight">
+                    Built for your whole hiring team
+                  </h3>
+                  <p className="mt-5 text-base leading-7 text-slate-400 max-w-sm">
+                    Role-based access ensures everyone sees exactly what they need — and nothing
+                    they don&apos;t.
+                  </p>
                   <ul className="mt-7 space-y-3">
-                    {row.checks.map((check) => (
-                      <li key={check} className="marketing-check-row">
-                        <span className="marketing-check-icon">
-                          <Check className="h-4 w-4" />
+                    {[
+                      { role: "Owner", desc: "Full control over org and settings" },
+                      { role: "Recruiter", desc: "Manage jobs, candidates, and pipelines" },
+                      { role: "Hiring Manager", desc: "Review candidates on their roles" },
+                      { role: "Interviewer", desc: "View profiles and leave feedback" },
+                    ].map(({ role, desc }) => (
+                      <li key={role} className="flex items-center gap-3">
+                        <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/15">
+                          <Check className="h-3 w-3 text-emerald-400" />
                         </span>
-                        <span>{check}</span>
+                        <span className="text-sm text-slate-300">
+                          <span className="font-semibold text-white">{role}</span>
+                          {" — "}
+                          {desc}
+                        </span>
                       </li>
                     ))}
                   </ul>
-                  <button
-                    type="button"
-                    onClick={() => handleProductCta(row.ctaPath)}
-                    className="mt-8 inline-flex items-center gap-2.5 rounded-full bg-black px-6 py-3 text-sm font-semibold text-white shadow-[0_4px_24px_rgba(0,0,0,0.22)] transition-all duration-200 hover:bg-zinc-800 hover:shadow-[0_6px_32px_rgba(0,0,0,0.32)] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98]"
+                  <a
+                    href="/signup"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-9 self-start inline-flex items-center gap-2.5 rounded-full bg-white px-6 py-3 text-sm font-semibold text-slate-900 shadow-[0_4px_20px_rgba(0,0,0,0.25)] transition-all duration-200 hover:bg-slate-100 hover:-translate-y-0.5 active:translate-y-0"
                   >
-                    <MousePointerClick className="h-4 w-4 text-white/80" />
-                    {row.ctaLabel}
-                  </button>
+                    <MousePointerClick className="h-4 w-4 text-slate-500" />
+                    Invite your team
+                  </a>
                 </div>
 
-                {/* screenshot — dominant, slightly bleeds on large screens */}
-                <div
-                  className={`${row.flip ? "lg:order-1" : ""} group rounded-2xl overflow-hidden border-2 border-slate-200/80 shadow-[0_32px_80px_rgba(15,23,42,0.14)]`}
-                >
-                  <Image
-                    src={row.img}
-                    alt={row.imgAlt}
-                    width={1440}
-                    height={900}
-                    className="w-full h-auto block scale-[1.08] group-hover:scale-[1.03] transition-transform duration-700 ease-out origin-top"
-                    priority={i === 0}
-                  />
+                {/* Screenshot panel */}
+                <div className="flex items-center justify-center p-6 sm:p-8 lg:p-10">
+                  <div className="w-full rounded-xl overflow-hidden shadow-[0_20px_60px_rgba(0,0,0,0.4)]">
+                    <Image
+                      src="/marketing/product/team.png"
+                      alt="Otter Hire team management"
+                      width={1440}
+                      height={900}
+                      className="w-full h-auto block"
+                    />
+                  </div>
                 </div>
               </div>
-            ))}
+            </div>
           </div>
         </div>
       </section>

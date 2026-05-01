@@ -144,9 +144,9 @@ export function TopBar() {
           <Image
             src={LOGO_SVG_PATH}
             alt={PLATFORM_NAME}
-            width={90}
-            height={20}
-            className="object-contain dark:invert dark:contrast-200"
+            width={2000}
+            height={491}
+            className="h-7 w-auto dark:invert dark:contrast-200"
             priority
           />
         </Link>
@@ -187,24 +187,14 @@ export function TopBar() {
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="min-w-[14rem] w-56">
           <div className="flex items-center gap-2 px-2 py-1.5">
-            {user?.org_avatar_url ? (
-              <Avatar
-                className="h-6 w-6 shrink-0 border border-border"
-                src={user.org_avatar_url}
-                alt={orgDisplayName}
-                fallbackClassName="text-[10px] bg-muted text-muted-foreground"
-              >
-                {getPersonNameInitials(orgDisplayName, "O")}
-              </Avatar>
-            ) : (
-              <Image
-                src={LOGO_SVG_PATH}
-                alt=""
-                width={20}
-                height={20}
-                className="h-5 w-auto shrink-0 object-contain dark:invert dark:contrast-200"
-              />
-            )}
+            <Avatar
+              className="h-6 w-6 shrink-0 border border-border"
+              src={user?.org_avatar_url ?? undefined}
+              alt={orgDisplayName}
+              fallbackClassName="text-[10px] bg-muted text-muted-foreground"
+            >
+              {orgDisplayName.trim()[0]?.toUpperCase() ?? "O"}
+            </Avatar>
             <span
               className="min-w-0 flex-1 truncate text-sm text-foreground"
               title={orgDisplayName}

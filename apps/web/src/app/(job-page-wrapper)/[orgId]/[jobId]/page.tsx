@@ -310,7 +310,7 @@ function JobDetailContent({ job, orgIdParam }: { job: PublicJobDetail; orgIdPara
     locationLabel && { iconName: "MapPin", label: locationLabel },
     showWorkplacePill && { iconName: "Clock", label: job.workplace_type },
     { iconName: "Briefcase", label: employmentType },
-    salary && { iconName: "DollarSign", label: salary },
+    salary && { iconName: "Banknote", label: salary },
     job.category && { iconName: "Building2", label: job.category },
   ].filter(Boolean) as { iconName: IconName; label: string }[];
 

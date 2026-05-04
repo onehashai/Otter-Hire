@@ -23,7 +23,7 @@
 
 - **JWT**: Access + refresh token cookie auth; refresh JWT is hardcoded to 7 days, refresh cookie lifetime is config-driven (default 30 days)
 - **Google OAuth**: Authorization code flow (CSRF state cookie), auto-links existing accounts by email, creates org on first sign-in; also supports linking Google to an existing email account via `_oauth_link_mode` cookie + shared `/auth/google/callback` URI
-- **Forgot/reset password**: `POST /auth/forgot-password` (rate-limited, no enumeration) → email with signed token; `POST /auth/reset-password` → validates `password_reset_token_hash` + `password_reset_token_expires_at` on `users` table, updates password, invalidates all sessions
+- **Forgot/reset password**: `POST /auth/forgot-password` (rate-limited, no enumeration) → email with signed token; `POST /auth/reset-password` → validates `password_reset_token_hash` + `password_reset_token_expires_at` on `users` table, updates password, invalidates all sessions; token window configurable via `PASSWORD_RESET_TOKEN_EXPIRE_HOURS` (default 1h)
 - **Roles**: owner, admin, recruiter, hiring_manager, interviewer, employee (org-level)
 - **Middleware**: Request context middleware exists; auth enforcement is done through auth dependencies
 - **Dependencies**: `get_current_user`, permission checks (`require_permission`), plus role/job checks where used
@@ -83,9 +83,9 @@
 
 - **Environment-based**: `IS_PRODUCTION` flag
 - **Domain config**: `APP_DOMAIN`, `APP_SUBDOMAIN`, `JOBS_SUBDOMAIN`
-- **Feature flags**: `FEATURE_EMAIL_INTEGRATION_MODULE`, `FEATURE_LINKEDIN_DISTRIBUTION`
+- **Feature flags**: `FEATURE_EMAIL_INTEGRATION_MODULE`, `FEATURE_INTEGRATIONS_APP_STORE_UI`, `FEATURE_LINKEDIN_DISTRIBUTION`, `FEATURE_LINKEDIN_APPLICANT_INGESTION`, `FEATURE_LEGACY_ORG_INBOX_ROUTE_REDIRECT`
 - **Storage**: S3 bucket + region, local storage root
-- **Email**: Mailtrap, ZeptoMail, SES config
+- **Email**: ZeptoMail, SES config (transactional + conversational)
 - **Temporal**: Server URL, namespace
 
 ### Admin Panel (`app/admin`)

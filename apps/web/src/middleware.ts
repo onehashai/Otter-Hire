@@ -341,6 +341,16 @@ export async function middleware(request: NextRequest) {
       if (refreshRes.ok) {
         const response = NextResponse.next();
         appendSetCookieHeaders(response, refreshRes.headers);
+        // Signal to the client that middleware already refreshed the session.
+        // The client reads this flag and skips its own POST /auth/refresh attempt,
+        // preventing the double-refresh race that causes spurious "session expired".
+        response.cookies.set("_sr", "1", {
+          httpOnly: false,
+          sameSite: "lax",
+          secure: process.env.NODE_ENV === "production",
+          maxAge: 10, // 10 seconds — just long enough for client hydration
+          path: "/",
+        });
         return response;
       }
 

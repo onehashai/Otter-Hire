@@ -14,7 +14,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@onehash/ui/dialog";
-import { ArrowLeft, Pencil, Trash2, Mail, Tag } from "lucide-react";
+import { ArrowLeft, Pencil, Trash2, Mail } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { toast } from "@onehash/ui/sonner";
 import { useSetPageMetadata } from "@/hooks/useSetPageMetadata";
@@ -23,6 +23,7 @@ import { OverviewTab } from "@/components/automations/tabs/OverviewTab";
 import { ExecutionLog, type ExecutionLogEntry } from "@/components/automations/tabs/ExecutionLog";
 import { ExecutionDetailsDialog } from "@/components/automations/tabs/ExecutionDetailsDialog";
 import { getAutomationById, getAutomationExecutions } from "@/api/automations";
+import { getTemplates } from "@/api/templates";
 import { formatTimestamp } from "@/lib/format-date";
 import { TruncatedText } from "@/components/common/TruncatedText";
 
@@ -60,11 +61,14 @@ export default function AutomationDetailPage() {
     let cancelled = false;
     (async () => {
       try {
-        const [detail, executions] = await Promise.all([
+        const [detail, executions, templates] = await Promise.all([
           getAutomationById(automationId),
           getAutomationExecutions(automationId),
+          getTemplates(),
         ]);
         if (cancelled) return;
+
+        const templateNameById = Object.fromEntries(templates.map((t) => [t.id, t.name]));
 
         const overviewAutomation = {
           id: detail.id,
@@ -79,7 +83,9 @@ export default function AutomationDetailPage() {
             type: a.type,
             label: a.config.label ?? a.type,
             icon: Mail,
-            detail: a.config.template ? `Template: ${a.config.template}` : undefined,
+            detail: a.config.template
+              ? `Template: ${templateNameById[a.config.template] ?? a.config.template}`
+              : undefined,
           })),
           createdBy: detail.created_by_name ?? "",
           createdAt: formatTimestamp(detail.created_at, "en-GB", {

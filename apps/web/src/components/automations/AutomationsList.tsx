@@ -41,15 +41,15 @@ import {
   updateAutomation,
 } from "@/api/automations";
 import { getJobs } from "@/api";
+import { triggerOptions as builderTriggerOptions } from "@/components/automations/builder/types";
 
 export type AutomationStatus = "active" | "paused";
-export type TriggerType = "candidate";
 
 export interface Automation {
   id: string;
   name: string;
   status: AutomationStatus;
-  triggerType: TriggerType;
+  triggerKey: string;
   triggerLabel: string;
   actionLabel: string;
   scope?: string;
@@ -59,54 +59,10 @@ export interface Automation {
   executionCount: number;
 }
 
-export const mockAutomations: Automation[] = [
-  {
-    id: "1",
-    name: "Auto-reject unqualified",
-    status: "active",
-    triggerType: "candidate",
-    triggerLabel: "When candidate applies",
-    actionLabel: "Send rejection email → Add tag",
-    scope: "All jobs",
-    lastTriggered: "2h ago",
-    createdBy: "Jane Doe",
-    createdAt: "Jan 15, 2026",
-    executionCount: 142,
-  },
-  {
-    id: "2",
-    name: "Schedule screening call",
-    status: "active",
-    triggerType: "candidate",
-    triggerLabel: "Moved to Screening",
-    actionLabel: "Send calendar link",
-    scope: "All jobs",
-    lastTriggered: "5h ago",
-    createdBy: "John Smith",
-    createdAt: "Jan 20, 2026",
-    executionCount: 87,
-  },
-  {
-    id: "3",
-    name: "Notify hiring manager",
-    status: "paused",
-    triggerType: "candidate",
-    triggerLabel: "Interview completed",
-    actionLabel: "Send notification",
-    scope: "All jobs",
-    lastTriggered: "3d ago",
-    createdBy: "Jane Doe",
-    createdAt: "Feb 1, 2026",
-    executionCount: 34,
-  },
-];
-
 export const allStatuses: AutomationStatus[] = ["active", "paused"];
-export const allTriggerTypes: { value: TriggerType; label: string }[] = [
-  { value: "candidate", label: "Candidate" },
-];
-
-export const triggerTypeLabel = (t: TriggerType): string => "Candidate";
+export const allSpecificTriggers: { value: string; label: string }[] = builderTriggerOptions.map(
+  (t) => ({ value: t.id, label: t.label }),
+);
 
 const statusVariant = (s: AutomationStatus) => (s === "active" ? "default" : "secondary");
 
@@ -186,8 +142,8 @@ export function AutomationsList({
         name: `${source.name} (copy)`,
         status: "draft",
         scope: source.scope ?? "all",
-        trigger_type: source.triggerType,
-        trigger_key: source.triggerLabel,
+        trigger_type: "candidate",
+        trigger_key: source.triggerKey,
         trigger_config: { label: source.triggerLabel },
         condition_logic: "and",
         conditions: [],
@@ -205,7 +161,7 @@ export function AutomationsList({
           id: created.id,
           name: created.name,
           status: (created.status as AutomationStatus) === "paused" ? "paused" : "active",
-          triggerType: (created.trigger_type as TriggerType) ?? "candidate",
+          triggerKey: source.triggerKey,
           triggerLabel: String(created.trigger_config?.label || source.triggerLabel),
           actionLabel: source.actionLabel,
           scope: created.scope,

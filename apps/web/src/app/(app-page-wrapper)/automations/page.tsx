@@ -5,12 +5,11 @@ import { MainPagesLayout } from "@/components/common/MainPagesLayout";
 import {
   AutomationsList,
   allStatuses,
-  allTriggerTypes,
-  triggerTypeLabel,
+  allSpecificTriggers,
   type Automation,
   type AutomationStatus,
-  type TriggerType,
 } from "@/components/automations/AutomationsList";
+import { triggerOptions as builderTriggerOptions } from "@/components/automations/builder/types";
 import { CreateAutomationDialog } from "@/components/automations/CreateAutomationDialog";
 import { MultiSelect } from "@onehash/ui/select";
 import { useSetPageMetadata } from "@/hooks/useSetPageMetadata";
@@ -23,7 +22,11 @@ const statusOptions = allStatuses.map((s) => ({
   value: s,
   label: s.charAt(0).toUpperCase() + s.slice(1),
 }));
-const triggerOptions = allTriggerTypes.map((t) => ({ value: t.value, label: t.label }));
+const triggerFilterOptions = allSpecificTriggers;
+
+function mapTriggerKey(triggerLabel: string): string {
+  return builderTriggerOptions.find((t) => t.label === triggerLabel)?.id ?? "";
+}
 
 export default function AutomationsPage() {
   const { t } = useTranslation();
@@ -35,7 +38,7 @@ export default function AutomationsPage() {
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<AutomationStatus[]>([]);
-  const [triggerFilter, setTriggerFilter] = useState<TriggerType[]>([]);
+  const [triggerFilter, setTriggerFilter] = useState<string[]>([]);
   const [automations, setAutomations] = useState<Automation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<{ message: string; forbidden: boolean } | null>(null);
@@ -58,7 +61,7 @@ export default function AutomationsPage() {
         id: item.id,
         name: item.name,
         status: (item.status as AutomationStatus) ?? "active",
-        triggerType: (item.trigger_type as TriggerType) ?? "candidate",
+        triggerKey: mapTriggerKey(item.trigger_label),
         triggerLabel: item.trigger_label,
         actionLabel: item.action_label,
         scope: item.scope,
@@ -83,7 +86,7 @@ export default function AutomationsPage() {
           id: item.id,
           name: item.name,
           status: (item.status as AutomationStatus) ?? "active",
-          triggerType: (item.trigger_type as TriggerType) ?? "candidate",
+          triggerKey: mapTriggerKey(item.trigger_label),
           triggerLabel: item.trigger_label,
           actionLabel: item.action_label,
           scope: item.scope,
@@ -120,7 +123,7 @@ export default function AutomationsPage() {
       )
         return false;
       if (statusFilter.length && !statusFilter.includes(a.status)) return false;
-      if (triggerFilter.length && !triggerFilter.includes(a.triggerType)) return false;
+      if (triggerFilter.length && !triggerFilter.includes(a.triggerKey)) return false;
       return true;
     });
   }, [search, statusFilter, triggerFilter, automations]);
@@ -139,11 +142,11 @@ export default function AutomationsPage() {
         showSelectAllClear
       />
       <MultiSelect
-        label={t("trigger_type", "Trigger type")}
+        label={t("trigger", "Trigger")}
         value={triggerFilter}
-        onValueChange={(v) => setTriggerFilter(v as TriggerType[])}
-        options={triggerOptions}
-        placeholder="All trigger types"
+        onValueChange={(v) => setTriggerFilter(v)}
+        options={triggerFilterOptions}
+        placeholder="All triggers"
         triggerClassName="h-8 text-xs"
         showSelectAllClear
       />
@@ -157,12 +160,13 @@ export default function AutomationsPage() {
       clear: () => setStatusFilter((p) => p.filter((v) => v !== s)),
     }),
   );
-  triggerFilter.forEach((tr) =>
+  triggerFilter.forEach((key) => {
+    const label = triggerFilterOptions.find((o) => o.value === key)?.label ?? key;
     activeChips.push({
-      label: `Trigger: ${triggerTypeLabel(tr)}`,
-      clear: () => setTriggerFilter((p) => p.filter((v) => v !== tr)),
-    }),
-  );
+      label: `Trigger: ${label}`,
+      clear: () => setTriggerFilter((p) => p.filter((v) => v !== key)),
+    });
+  });
 
   const showEmptyState =
     !loading && !error && automations.length === 0 && !search && !hasActiveFilters;

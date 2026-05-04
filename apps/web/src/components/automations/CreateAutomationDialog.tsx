@@ -309,11 +309,13 @@ export function CreateAutomationDialog({
           ))}
         </div>
 
-        <SummaryStrip
-          currentTrigger={currentTrigger}
-          triggerStage={triggerStage}
-          actions={actions}
-        />
+        <div className="px-6">
+          <SummaryStrip
+            currentTrigger={currentTrigger}
+            triggerStage={triggerStage}
+            actions={actions}
+          />
+        </div>
 
         {validationError && (
           <div

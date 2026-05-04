@@ -381,6 +381,7 @@ function SvgCard({
         cy={y + h / 2}
         r={3}
         fill="#34d399"
+        initial={{ opacity: 0.25, scale: 1 }}
         animate={{ opacity: active ? 1 : 0.25, scale: active ? [1, 1.4, 1] : 1 }}
         transition={{ duration: 0.6, repeat: active ? Infinity : 0 }}
       />
@@ -451,6 +452,7 @@ function OtterHub({ phase, topScore }: { phase: Phase; topScore: number }) {
         stroke="rgba(15,23,42,0.18)"
         strokeWidth={1}
         strokeDasharray="4 6"
+        initial={{ strokeDashoffset: 0 }}
         animate={{ strokeDashoffset: active ? [0, -200] : 0 }}
         transition={{ duration: 6, repeat: active ? Infinity : 0, ease: "linear" }}
       />

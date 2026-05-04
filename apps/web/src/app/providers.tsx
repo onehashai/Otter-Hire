@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
+
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "@/components/common/ThemeProvider";
@@ -57,6 +58,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
   const searchParams = useSearchParams();
   const inflightRef = useRef<Promise<AuthSessionResponse | null> | null>(null);
   const authFailureRef = useRef<"none" | "anonymous" | "invalidated">("none");
+  // Keep a ref so refreshSession can read current pathname without being recreated on every nav
+  const pathnameRef = useRef(pathname);
+  pathnameRef.current = pathname;
   const isAuthRoute = AUTH_ROUTES.includes(pathname);
   const isLifecycleRoute = LIFECYCLE_ROUTES.includes(pathname);
   const onInvitePage = isInvitePath(pathname);
@@ -72,16 +76,27 @@ export function Providers({ children }: { children: React.ReactNode }) {
       if (!force && inflightRef.current) return inflightRef.current;
       if (force) inflightRef.current = null;
       const promise = (async () => {
+        const currentPathname = pathnameRef.current;
         try {
           let me = await getAuthSession();
           let sessionInvalidated = false;
 
           if (!me) {
-            const refreshResult = await refreshSessionDetailed();
-            if (refreshResult.ok === true) {
-              me = refreshResult.user;
-            } else {
-              sessionInvalidated = refreshResult.sessionInvalidated;
+            // Skip POST /auth/refresh if middleware already refreshed this request
+            // (indicated by the _sr cookie). The access_token cookie is already
+            // fresh — a second refresh would hit a rotated token and falsely
+            // trigger "session expired".
+            const middlewareJustRefreshed =
+              typeof document !== "undefined" &&
+              document.cookie.split(";").some((c) => c.trim().startsWith("_sr="));
+
+            if (!middlewareJustRefreshed) {
+              const refreshResult = await refreshSessionDetailed();
+              if (refreshResult.ok === true) {
+                me = refreshResult.user;
+              } else {
+                sessionInvalidated = refreshResult.sessionInvalidated;
+              }
             }
           }
 
@@ -90,11 +105,13 @@ export function Providers({ children }: { children: React.ReactNode }) {
             clearSession();
             authFailureRef.current = sessionInvalidated ? "invalidated" : "anonymous";
             if (
-              !AUTH_ROUTES.includes(pathname) &&
-              !LIFECYCLE_ROUTES.includes(pathname) &&
-              !isInvitePath(pathname)
+              !AUTH_ROUTES.includes(currentPathname) &&
+              !LIFECYCLE_ROUTES.includes(currentPathname) &&
+              !isInvitePath(currentPathname)
             ) {
-              router.replace(buildLoginHref(pathname, window.location.search, sessionInvalidated));
+              router.replace(
+                buildLoginHref(currentPathname, window.location.search, sessionInvalidated),
+              );
             }
             return null;
           }
@@ -112,11 +129,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
           clearSession();
           authFailureRef.current = "anonymous";
           if (
-            !AUTH_ROUTES.includes(pathname) &&
-            !LIFECYCLE_ROUTES.includes(pathname) &&
-            !isInvitePath(pathname)
+            !AUTH_ROUTES.includes(currentPathname) &&
+            !LIFECYCLE_ROUTES.includes(currentPathname) &&
+            !isInvitePath(currentPathname)
           ) {
-            router.replace(buildLoginHref(pathname, window.location.search, false));
+            router.replace(buildLoginHref(currentPathname, window.location.search, false));
           }
           return null;
         } finally {
@@ -128,7 +145,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
       inflightRef.current = promise;
       return promise;
     },
-    [pathname, router, clearSession],
+    // pathname removed — pathnameRef.current is read inside so no stale closure,
+    // and refreshSession is no longer recreated on every navigation.
+    [router, clearSession],
   );
 
   useEffect(() => {
@@ -217,12 +236,16 @@ export function Providers({ children }: { children: React.ReactNode }) {
     [user, loading, refreshSession, clearSession],
   );
 
+  // While auth is resolving on a protected route, render nothing to prevent
+  // the flash of login page or protected content before session is known.
+  const showLoadingGate = loading && !isAuthRoute && !isLifecycleRoute && !onInvitePage;
+
   return (
     <QueryClientProvider client={queryClient}>
       <AuthSessionContext.Provider value={authValue}>
         <ThemeProvider defaultTheme="light">
           <TooltipProvider delayDuration={500} skipDelayDuration={300}>
-            {children}
+            {showLoadingGate ? null : children}
             <Toaster />
             <SonnerToaster />
           </TooltipProvider>

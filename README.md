@@ -148,7 +148,7 @@ alembic history
 Upgrade to latest:
 
 ```bash
-alembic upgrade head
+alembic upgrade heads
 ```
 
 Upgrade by one step:
@@ -184,7 +184,7 @@ alembic revision -m "describe_change"
 Show SQL without applying:
 
 ```bash
-alembic upgrade head --sql
+alembic upgrade heads --sql
 ```
 
 ## Setup Frontend Commands
@@ -228,12 +228,26 @@ Use `apps/backend/.env.example` as template:
 ```env
 DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/ats_db
 IS_PRODUCTION=false
-CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+CORS_ORIGINS=http://app.localhost.com:3000,http://jobs.localhost.com:3000
+FRONTEND_BASE_URL=http://app.localhost.com:3000
+API_BASE_URL=http://api.localhost.com:8000
+COOKIE_DOMAIN=.localhost.com
+JWT_SECRET_KEY=change-me-in-production
+REDIS_URL=redis://localhost:6379/0
+TEMPORAL_SERVER_URL=localhost:7233
 ```
 
 ### Frontend (`apps/web/.env.local` local only)
 
+Use `apps/web/.env.example` as template:
+
 ```env
+NEXT_PUBLIC_PLATFORM_NAME=Otter Hire
+NEXT_PUBLIC_APP_SUBDOMAIN=app
+NEXT_PUBLIC_JOBS_SUBDOMAIN=jobs
+NEXT_PUBLIC_APP_ROOT_HOST=localhost.com:3000
+NEXT_PUBLIC_API_BASE_URL=http://api.localhost.com:8000
+NEXT_PUBLIC_SES_MAIL_DOMAIN=inbound.example.com
 ```
 
 Notes:
@@ -249,7 +263,6 @@ ATS/
 │   └── backend/
 ├── packages/
 │   └── ui/
-├── docs/
 ├── scripts/
 ├── docker-compose.yml
 └── README.md
@@ -257,9 +270,8 @@ ATS/
 
 ## Internal QA Assets (Non-Blocking)
 
-The repository includes internal QA/support assets under:
+The repository includes internal scripts under:
 
-- `docs/`
 - `scripts/`
 
 ## CI/CD
@@ -316,13 +328,11 @@ The workflows retain only the latest 3 GitHub Actions-managed image tags for:
 These are internal runbooks and smoke/guard scripts for regression safety during MVP stabilization.  
 They are **not release-gating by default** and are **not required for runtime**.
 
-Useful commands:
+Useful scripts:
 
 ```bash
-scripts/smoke_platform_baseline.sh
-scripts/smoke_integrations_frontend.sh
-scripts/smoke_integrations_cutover.sh
-scripts/verify_integrations_architecture.sh
+scripts/ecr_prune_managed_tags.sh
+scripts/ecs_register_and_update.sh
 ```
 
 ## Troubleshooting

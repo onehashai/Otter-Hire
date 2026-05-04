@@ -19,8 +19,10 @@
 ### Key Routes
 
 - `(auth)/*`: Login, signup, verify, onboarding, invite acceptance, forgot password, password reset
-- `(app-page-wrapper)/*`: Authenticated app (jobs, candidates, automations, templates, settings, reports, ai-assistant [coming soon])
+- `(app-page-wrapper)/*`: Authenticated app (jobs, candidates, automations, templates, settings, reports, ai-assistant)
 - `(job-page-wrapper)/[orgId]/[jobId]`: Public job detail page (careers site)
+- `(marketing)/*`: Marketing landing page, privacy policy, terms
+- `accept-invite/*`: Legacy/compat invite acceptance route
 
 ### API Layer (`src/api`)
 
@@ -81,6 +83,13 @@
 - Job categories
 - Security: Google account connect/disconnect, password set/change
 - Admin panel (platform-level, dev only)
+
+## Environment Variables (Build-time)
+
+- `NEXT_PUBLIC_API_BASE_URL`: Backend API base URL
+- `NEXT_PUBLIC_APP_SUBDOMAIN`, `NEXT_PUBLIC_JOBS_SUBDOMAIN`, `NEXT_PUBLIC_APP_ROOT_HOST`: Subdomain routing
+- `NEXT_PUBLIC_SES_MAIL_DOMAIN`: Inbound email domain shown in UI
+- `NEXT_PUBLIC_TEMPORAL_UI_URL`: Link to Temporal UI (injected at build in staging/prod)
 
 ## Components
 

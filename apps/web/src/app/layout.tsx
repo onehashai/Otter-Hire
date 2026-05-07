@@ -6,8 +6,11 @@ import { SonnerToaster } from "@onehash/ui/sonner";
 import { headers } from "next/headers";
 import "../styles/globals.css";
 
+const appRootHost = process.env.NEXT_PUBLIC_APP_ROOT_HOST || "smartats.in";
+const appBaseUrl = `https://${appRootHost.split(":")[0]}`;
+
 const baseMetadata: Metadata = {
-  metadataBase: new URL("https://smartats.in"),
+  metadataBase: new URL(appBaseUrl),
   title: {
     default: `${PLATFORM_NAME} - AI-Powered Modern ATS`,
     template: `%s | ${PLATFORM_NAME}`,
@@ -25,7 +28,7 @@ const baseMetadata: Metadata = {
   openGraph: {
     title: "Otter Hire - AI-Powered Modern ATS",
     description: "AI-powered, open source modern ATS to recruit top talent faster and smarter.",
-    url: "https://smartats.in",
+    url: appBaseUrl,
     siteName: "Otter Hire",
     images: [
       {

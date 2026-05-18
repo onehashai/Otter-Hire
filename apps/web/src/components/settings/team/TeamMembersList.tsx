@@ -111,9 +111,9 @@ export function TeamMembersList({
     return (
       <TooltipProvider delayDuration={500}>
         <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Tooltip>
-              <TooltipTrigger asChild>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <DropdownMenuTrigger asChild>
                 <Button
                   variant="ghost"
                   size="icon"
@@ -122,10 +122,10 @@ export function TeamMembersList({
                 >
                   <Icon name="MoreHorizontal" className="h-4 w-4" />
                 </Button>
-              </TooltipTrigger>
-              <TooltipContent>{t("tooltip_member_actions")}</TooltipContent>
-            </Tooltip>
-          </DropdownMenuTrigger>
+              </DropdownMenuTrigger>
+            </TooltipTrigger>
+            <TooltipContent>{t("tooltip_member_actions")}</TooltipContent>
+          </Tooltip>
           <DropdownMenuContent align="end" className="w-48">
             {roleCheck.allowed ? (
               <DropdownMenuItem onClick={() => onRoleChangeClick(member)}>

@@ -1,6 +1,7 @@
 import os
+from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -8,9 +9,11 @@ from app.core.config import settings
 from app.core.security import create_access_token
 from app.db.session import get_db
 from app.deps.auth import get_current_user, require_active_user
+from app.models.email import InboundEmail
 from app.models.org_membership import OrgMembership
 from app.models.organization import Organization
 from app.models.user import User
+from app.schemas.email_logs import EmailLogRow
 from app.schemas.organization import (
     CreateOrganizationRequest,
     OrganizationMembershipResponse,
@@ -279,3 +282,61 @@ async def create_organization(
         role=membership.role,
         status=membership.status,
     )
+
+
+@router.get("/email-logs", response_model=list[EmailLogRow])
+async def list_org_email_logs(
+    status_filter: str | None = Query(None, alias="status"),
+    sender: str | None = Query(None),
+    date_from: datetime | None = Query(None),
+    date_to: datetime | None = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    current_user: User = Depends(require_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if current_user.membership_role not in ("owner", "admin"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions"
+        )
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+    q = (
+        select(InboundEmail)
+        .where(
+            InboundEmail.org_id == current_user.org_id,
+            InboundEmail.received_at >= cutoff,
+        )
+        .order_by(InboundEmail.received_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    if status_filter:
+        q = q.where(InboundEmail.parse_status == status_filter)
+    if sender:
+        q = q.where(InboundEmail.from_email.ilike(f"%{sender}%"))
+    if date_from:
+        q = q.where(InboundEmail.received_at >= date_from)
+    if date_to:
+        q = q.where(InboundEmail.received_at <= date_to)
+
+    rows = (await db.execute(q)).scalars().all()
+    return [
+        EmailLogRow(
+            id=r.id,
+            received_at=r.received_at,
+            from_email=r.from_email,
+            from_name=r.from_name,
+            subject=r.subject,
+            parse_status=r.parse_status,
+            parse_error=r.parse_error,
+            has_resume_attachment=r.has_resume_attachment,
+            attachment_count=r.attachment_count,
+            attachment_primary_filename=r.attachment_primary_filename,
+            parsed_candidate_id=r.parsed_candidate_id,
+            parse_duration_ms=r.parse_duration_ms,
+            inbox_address=r.inbox_address,
+            created_at=r.created_at,
+        )
+        for r in rows
+    ]

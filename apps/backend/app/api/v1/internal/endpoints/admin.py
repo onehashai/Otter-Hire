@@ -1,11 +1,13 @@
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
 from app.deps.auth import require_active_user
+from app.models.email import InboundEmail
 from app.models.org_membership import OrgMembership
 from app.models.organization import Organization
 from app.models.user import User
@@ -15,6 +17,7 @@ from app.schemas.admin import (
     AdminUpdateMembershipRequest,
     AdminUserMembershipRow,
 )
+from app.schemas.email_logs import AdminEmailLogRow
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -172,4 +175,60 @@ async def list_all_organizations(
             created_at=org.created_at,
         )
         for org, cnt in rows
+    ]
+
+
+@router.get("/email-logs", response_model=list[AdminEmailLogRow])
+async def list_admin_email_logs(
+    org_id: UUID | None = Query(None),
+    status_filter: str | None = Query(None, alias="status"),
+    sender: str | None = Query(None),
+    date_from: datetime | None = Query(None),
+    date_to: datetime | None = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    _: User = Depends(require_platform_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+    q = (
+        select(InboundEmail, Organization.name.label("org_name"))
+        .join(Organization, Organization.id == InboundEmail.org_id)
+        .where(InboundEmail.received_at >= cutoff)
+        .order_by(InboundEmail.received_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    if org_id:
+        q = q.where(InboundEmail.org_id == org_id)
+    if status_filter:
+        q = q.where(InboundEmail.parse_status == status_filter)
+    if sender:
+        q = q.where(InboundEmail.from_email.ilike(f"%{sender}%"))
+    if date_from:
+        q = q.where(InboundEmail.received_at >= date_from)
+    if date_to:
+        q = q.where(InboundEmail.received_at <= date_to)
+
+    rows = (await db.execute(q)).all()
+    return [
+        AdminEmailLogRow(
+            id=r.InboundEmail.id,
+            received_at=r.InboundEmail.received_at,
+            from_email=r.InboundEmail.from_email,
+            from_name=r.InboundEmail.from_name,
+            subject=r.InboundEmail.subject,
+            parse_status=r.InboundEmail.parse_status,
+            parse_error=r.InboundEmail.parse_error,
+            has_resume_attachment=r.InboundEmail.has_resume_attachment,
+            attachment_count=r.InboundEmail.attachment_count,
+            attachment_primary_filename=r.InboundEmail.attachment_primary_filename,
+            parsed_candidate_id=r.InboundEmail.parsed_candidate_id,
+            parse_duration_ms=r.InboundEmail.parse_duration_ms,
+            inbox_address=r.InboundEmail.inbox_address,
+            created_at=r.InboundEmail.created_at,
+            org_id=r.InboundEmail.org_id,
+            org_name=r.org_name,
+        )
+        for r in rows
     ]

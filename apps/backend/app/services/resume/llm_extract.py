@@ -25,6 +25,11 @@ Rules:
 - Return JSON only (no markdown fences).
 - Use null for unknown fields.
 - Do not invent employers, degrees, or dates not supported by the text.
+- personal.full_name: The candidate's full name. Resume headers sometimes use letter-spacing
+  typography where each character is separated by spaces (e.g. "H A R S H M I S H R A" or
+  "H A R S H   M I S H R A"). Reconstruct the proper name by joining the letters and
+  identifying word boundaries — use the email address as a hint if available.
+  Always return a properly spaced name like "Harsh Mishra", never "HARSHMISHRA" or "H A R S H M I S H R A".
 - personal.email and personal.phone must appear in the resume text when set.
 - personal.address is city/region/country when clearly stated near the name or header.
 - work_experience: most recent first. Include ALL jobs/roles mentioned. Each entry must have:

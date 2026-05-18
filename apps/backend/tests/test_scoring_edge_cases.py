@@ -3,6 +3,7 @@
 Tests are pure-function only — no DB, no Redis, no LLM calls.
 All helpers under test are imported directly from resume_scoring.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -20,6 +21,7 @@ from app.services.resume_scoring import (
 # ---------------------------------------------------------------------------
 # Shared fixture builders
 # ---------------------------------------------------------------------------
+
 
 def _jd(
     *,
@@ -71,6 +73,7 @@ def _resume(
 # blend_scores
 # ---------------------------------------------------------------------------
 
+
 def test_blend_scores_drops_none_and_renormalizes() -> None:
     weights = (0.50, 0.35, 0.15)
     result = blend_scores({"skills": 80, "experience": None, "education": 100}, weights)
@@ -96,16 +99,20 @@ def test_blend_scores_all_present() -> None:
 # relevance_multiplier
 # ---------------------------------------------------------------------------
 
-@pytest.mark.parametrize("score,expected", [
-    (0,   0.3),
-    (19,  0.3),
-    (20,  0.6),
-    (39,  0.6),
-    (40,  0.85),
-    (59,  0.85),
-    (60,  1.0),
-    (100, 1.0),
-])
+
+@pytest.mark.parametrize(
+    "score,expected",
+    [
+        (0, 0.3),
+        (19, 0.3),
+        (20, 0.6),
+        (39, 0.6),
+        (40, 0.85),
+        (59, 0.85),
+        (60, 1.0),
+        (100, 1.0),
+    ],
+)
 def test_relevance_multiplier(score: int, expected: float) -> None:
     assert relevance_multiplier(score) == expected
 
@@ -113,6 +120,7 @@ def test_relevance_multiplier(score: int, expected: float) -> None:
 # ---------------------------------------------------------------------------
 # role_mismatch_penalty
 # ---------------------------------------------------------------------------
+
 
 def test_role_mismatch_penalty_applies() -> None:
     jd = _jd(skills_required=[], role_family="engineering")
@@ -142,11 +150,13 @@ def test_role_mismatch_penalty_no_penalty_when_empty_role_families() -> None:
 # compute_experience_score
 # ---------------------------------------------------------------------------
 
+
 def test_experience_none_required_returns_100() -> None:
     jd = _jd(skills_required=[], experience_years=None)
     resume = _resume(skills=[], total_years=5.0, relevant_years=5.0)
     # skills >= 50 path (pass skills_score=60 to skip LLM)
     import asyncio
+
     result = asyncio.get_event_loop().run_until_complete(
         compute_experience_score(jd, resume, skills_score=60)
     )
@@ -157,6 +167,7 @@ def test_experience_zero_required_returns_100() -> None:
     jd = _jd(skills_required=[], experience_years=0)
     resume = _resume(skills=[], total_years=0.0, relevant_years=0.0)
     import asyncio
+
     result = asyncio.get_event_loop().run_until_complete(
         compute_experience_score(jd, resume, skills_score=60)
     )
@@ -167,6 +178,7 @@ def test_experience_meets_requirement_returns_100() -> None:
     jd = _jd(skills_required=[], experience_years=3)
     resume = _resume(skills=[], total_years=4.0, relevant_years=4.0, role_families=["engineering"])
     import asyncio
+
     result = asyncio.get_event_loop().run_until_complete(
         compute_experience_score(jd, resume, skills_score=60)
     )
@@ -177,6 +189,7 @@ def test_experience_proportional_score() -> None:
     jd = _jd(skills_required=[], experience_years=5, role_family="engineering")
     resume = _resume(skills=[], total_years=2.0, relevant_years=2.0, role_families=["engineering"])
     import asyncio
+
     result = asyncio.get_event_loop().run_until_complete(
         compute_experience_score(jd, resume, skills_score=60)
     )
@@ -192,6 +205,7 @@ def test_experience_domain_mismatch_uses_relevant_years() -> None:
         role_families=["sales"],
     )
     import asyncio
+
     result = asyncio.get_event_loop().run_until_complete(
         compute_experience_score(jd, resume, skills_score=60)
     )
@@ -207,6 +221,7 @@ def test_experience_no_role_family_uses_total_years_floor() -> None:
         role_families=[],
     )
     import asyncio
+
     result = asyncio.get_event_loop().run_until_complete(
         compute_experience_score(jd, resume, skills_score=60)
     )
@@ -216,6 +231,7 @@ def test_experience_no_role_family_uses_total_years_floor() -> None:
 # ---------------------------------------------------------------------------
 # compute_education_score
 # ---------------------------------------------------------------------------
+
 
 def test_education_no_requirement_returns_none() -> None:
     jd = _jd(skills_required=[], education=[])
@@ -261,6 +277,7 @@ def test_education_field_bonus_on_partial_match() -> None:
 # (These test the pure helpers in combination, not the async pipeline)
 # ---------------------------------------------------------------------------
 
+
 def _compute_final(
     skills: int,
     exp: int | None,
@@ -269,13 +286,13 @@ def _compute_final(
     resume_role_families: list[str] | None = None,
 ) -> int:
     weights = {
-        "engineering":  (0.50, 0.35, 0.15),
+        "engineering": (0.50, 0.35, 0.15),
         "data_science": (0.45, 0.30, 0.25),
-        "management":   (0.25, 0.55, 0.20),
-        "research":     (0.35, 0.30, 0.35),
-        "sales":        (0.25, 0.55, 0.20),
-        "design":       (0.50, 0.35, 0.15),
-        "other":        (0.45, 0.35, 0.20),
+        "management": (0.25, 0.55, 0.20),
+        "research": (0.35, 0.30, 0.35),
+        "sales": (0.25, 0.55, 0.20),
+        "design": (0.50, 0.35, 0.15),
+        "other": (0.45, 0.35, 0.20),
     }
     jd = _jd(skills_required=["python"] * 10, role_family=role_family)
     resume = _resume(skills=[], role_families=resume_role_families or [role_family])
@@ -293,7 +310,9 @@ def test_chef_to_ai_engineer() -> None:
 
 def test_pm_to_ai_engineer_no_exp_req() -> None:
     # skills=5, exp=None (dropped), edu=100
-    score = _compute_final(5, None, 100, role_family="data_science", resume_role_families=["management"])
+    score = _compute_final(
+        5, None, 100, role_family="data_science", resume_role_families=["management"]
+    )
     assert 5 <= score <= 20, f"Expected 5-20, got {score}"
 
 

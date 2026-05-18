@@ -8,6 +8,7 @@ import { Checkbox } from "@onehash/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@onehash/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@onehash/ui/tooltip";
 import { formatTimestamp } from "@/lib/format-date";
+import { formatPhoneForDisplay } from "@/lib/phone";
 import { type CandidateListItemResponse, type JobListItemResponse } from "@/api";
 import { TruncatedText } from "@/components/common/TruncatedText";
 
@@ -82,6 +83,7 @@ type Props = {
   onToggleSelected?: (candidateId: string, nextSelected: boolean) => void;
   onToggleAllVisible?: (nextSelected: boolean) => void;
   onListChange?: () => void | Promise<void>;
+  onResolveDuplicate?: (candidate: CandidateListItemResponse) => void;
 };
 
 function formatSourceLabel(source: string | null | undefined, t: (key: string) => string): string {
@@ -102,6 +104,7 @@ export function CandidatesTable({
   columnOrder,
   onToggleSelected,
   onToggleAllVisible,
+  onResolveDuplicate,
 }: Props) {
   const router = useRouter();
   const { t } = useTranslation();
@@ -245,12 +248,22 @@ export function CandidatesTable({
     const activeStagesCount = activeAssignmentRows.length;
 
     if (column === "name") {
+      const displayName = (c.name ?? "")
+        .trim()
+        .toLowerCase()
+        .replace(/\b\w/g, (ch) => ch.toUpperCase());
       return (
-        <TableCell key={column} className="py-2 align-middle min-w-0 max-w-[220px] text-center">
-          <div className="min-w-0 text-center">
-            <TruncatedText as="p" className="mx-auto text-center text-sm font-medium">
-              {c.name}
-            </TruncatedText>
+        <TableCell key={column} className="py-2 align-middle min-w-0 max-w-[320px] text-center">
+          <div className="flex items-center justify-center gap-2 min-w-0">
+            <span className="text-sm font-medium truncate">{displayName || "—"}</span>
+            {c.is_pending_duplicate_review && (
+              <Badge
+                variant="outline"
+                className="bg-amber-500/10 text-amber-600 hover:bg-amber-500/20 border-amber-500/20 text-[10px] font-semibold tracking-wide rounded-full px-2 py-0.5 whitespace-nowrap shrink-0"
+              >
+                Potential Duplicate
+              </Badge>
+            )}
           </div>
         </TableCell>
       );
@@ -267,7 +280,9 @@ export function CandidatesTable({
     if (column === "phone") {
       return (
         <TableCell key={column} className="py-2 align-middle min-w-0 max-w-[160px] text-center">
-          <span className="text-xs text-muted-foreground truncate block">{c.phone ?? "—"}</span>
+          <span className="text-xs text-muted-foreground truncate block">
+            {c.phone ? formatPhoneForDisplay(c.phone) : "—"}
+          </span>
         </TableCell>
       );
     }
@@ -411,7 +426,17 @@ export function CandidatesTable({
               const href = `/candidates/${encodeURIComponent(c.id)}`;
               const isSelected = selectedIds ? selectedIds.has(c.id) : false;
               return (
-                <TableRow key={c.id} className="cursor-pointer" onClick={() => router.push(href)}>
+                <TableRow
+                  key={c.id}
+                  className="cursor-pointer"
+                  onClick={() => {
+                    if (c.is_pending_duplicate_review && onResolveDuplicate) {
+                      onResolveDuplicate(c);
+                    } else {
+                      router.push(href);
+                    }
+                  }}
+                >
                   {selectedIds && onToggleSelected ? (
                     <TableCell
                       className="py-2 align-middle text-center"

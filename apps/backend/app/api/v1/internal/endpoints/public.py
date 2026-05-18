@@ -2548,7 +2548,6 @@ async def ingest_inbound_email(
         }
 
     # Handle reply to existing conversation (no resume required for replies)
-    conversation_ids: tuple[str, str] | None = None
     if reply_to_conv_id is not None:
         conversation_result = await _route_inbound_to_conversation(
             db,
@@ -2560,7 +2559,6 @@ async def ingest_inbound_email(
         )
         if conversation_result is not None:
             conv_id, msg_id, _, _ = conversation_result
-            conversation_ids = (conv_id, msg_id)
             # Reply processed - commit and return
             inbound_email.parse_status = "processed"
             inbound_email.parse_error = None
@@ -2642,282 +2640,278 @@ async def ingest_inbound_email(
         inbound_email.attachment_primary_size_bytes = int(resume_attachment.get("size_bytes") or 0)
 
     # NOW parse resume (after all validation filters passed)
-    resume_attachment: dict | None = None
-    resume_text: str = ""
-    parse_error: str | None = None
-
-    for attachment_row, content in stored_attachments:
+    resume_attachments = [
+        (attachment_row, content)
+        for attachment_row, content in stored_attachments
         if _is_resume_attachment(
             str(attachment_row.get("filename") or ""),
             str(attachment_row.get("content_type") or ""),
-        ):
-            resume_attachment = attachment_row
-            try:
-                resume_text = _parse_resume_bytes(
-                    str(attachment_row.get("filename") or ""),
-                    str(attachment_row.get("content_type") or ""),
-                    content,
-                )
-            except Exception as exc:
-                parse_error = f"Resume parse failed: {exc}"
-            break
-
-    if parse_error:
-        inbound_email.parse_status = "failed"
-        inbound_email.parse_error = parse_error
-        await db.commit()
-        return {
-            "status": "ok",
-            "message": "Stored with parse failure",
-            "inbound_email_id": str(inbound_email.id),
-            "org_id": str(org_id),
-        }
-
-    extracted_email = _extract_email(resume_text)
-    extracted_phone = _extract_phone(resume_text)
-    extracted_name = _extract_name(resume_text, extracted_email) or "Unknown Candidate"
-    extracted_location = _extract_location(resume_text)
-    confidence = _resume_confidence_score(
-        resume_text,
-        extracted_name,
-        extracted_email,
-        extracted_phone,
-        extracted_location,
-    )
-    min_confidence = max(1, int(settings.inbound_resume_min_confidence))
-    if confidence < min_confidence:
-        inbound_email.parse_status = "ignored"
-        inbound_email.parse_error = (
-            f"Low resume confidence ({confidence}<{min_confidence}); candidate not created"
         )
-        await db.commit()
-        return {
-            "status": "ok",
-            "message": "Ignored: low resume confidence",
-            "inbound_email_id": str(inbound_email.id),
-            "org_id": str(org_id),
-        }
+    ]
 
-    # ── LLM pipeline: run full structured extraction on the resume bytes ──────
-    # We already have the raw bytes in memory (from stored_attachments) and the
-    # confidence check passed, so run the same pipeline used by manual uploads.
-    # This sets parsed_resume on the candidate and enriches name/email/phone/address.
-    inbound_parsed_resume_profile: dict | None = None
-    _inbound_profile_links: dict = {}
-    if resume_attachment is not None:
-        _resume_content: bytes | None = None
-        for attachment_row, content in stored_attachments:
-            if attachment_row is resume_attachment:
-                _resume_content = content
-                break
-        if _resume_content is not None:
-            try:
-                _llm_result = await asyncio.to_thread(
-                    run_resume_pipeline,
-                    str(resume_attachment.get("filename") or "resume.pdf"),
-                    str(resume_attachment.get("content_type") or "application/pdf"),
-                    _resume_content,
-                    fallback_email=inbound_email.from_email or "",
-                )
-                if _llm_result is not None:
-                    inbound_parsed_resume_profile = _llm_result.profile.model_dump(mode="json")
-                    _personal = _llm_result.profile.personal
-                    # Prefer LLM-extracted contact fields over simple heuristics
-                    llm_name = (_personal.full_name or "").strip() or None
-                    if should_replace_name(
-                        extracted_name,
-                        llm_name,
-                        fallback_email=extracted_email,
-                    ):
-                        extracted_name = llm_name or extracted_name
-                    llm_email = _extract_email((_personal.email or "").strip().lower())
-                    if llm_email:
-                        extracted_email = llm_email
-                    if _personal.phone and _personal.phone.strip():
-                        extracted_phone = _personal.phone.strip()
-                    if _personal.address and _personal.address.strip():
-                        extracted_location = _personal.address.strip()
-                    # Enrich profile_links from LLM
-                    for _key, _url in [
-                        ("linkedin", _personal.linkedin_url),
-                        ("github", _personal.github_url),
-                        ("portfolio", _personal.website_url),
-                    ]:
-                        if _url and str(_url).strip():
-                            _inbound_profile_links[_key] = str(_url).strip()
-                    logger.info(
-                        "inbound LLM resume parse succeeded candidate=%s skills=%d edu=%d exp=%d",
-                        extracted_name,
-                        len(_llm_result.profile.skills),
-                        len(_llm_result.profile.education),
-                        len(_llm_result.profile.work_experience),
-                    )
-            except Exception as _llm_exc:
-                logger.warning("inbound LLM resume parse failed (non-fatal): %s", _llm_exc)
-    if not extracted_email:
-        extracted_email = inbound_email.from_email
-    # ─────────────────────────────────────────────────────────────────────────
+    processed_candidates: list[dict] = []
+    parse_errors: list[str] = []
+    processed_emails = set()
 
-    candidate_query = None
-    if target_job_id is not None and extracted_email and extracted_name:
-        candidate_query = await db.execute(
-            select(Candidate).where(
-                Candidate.org_id == org_id,
-                func.lower(Candidate.email) == extracted_email.lower(),
-                func.lower(func.trim(Candidate.name)) == extracted_name.strip().lower(),
+    for resume_attachment, content in resume_attachments:
+        resume_filename = str(resume_attachment.get("filename") or "resume.pdf")
+        resume_content_type = str(resume_attachment.get("content_type") or "application/pdf")
+        try:
+            resume_text = _parse_resume_bytes(
+                resume_filename,
+                resume_content_type,
+                content,
             )
+        except Exception as exc:
+            parse_errors.append(f"Resume parse failed for {resume_filename}: {exc}")
+            continue
+
+        extracted_email = _extract_email(resume_text)
+        extracted_phone = _extract_phone(resume_text)
+        extracted_name = _extract_name(resume_text, extracted_email) or "Unknown Candidate"
+        extracted_location = _extract_location(resume_text)
+        confidence = _resume_confidence_score(
+            resume_text,
+            extracted_name,
+            extracted_email,
+            extracted_phone,
+            extracted_location,
         )
-    elif extracted_email:
-        candidate_query = await db.execute(
-            select(Candidate).where(
-                Candidate.org_id == org_id,
-                func.lower(Candidate.email) == extracted_email.lower(),
+        min_confidence = max(1, int(settings.inbound_resume_min_confidence))
+        if confidence < min_confidence:
+            parse_errors.append(
+                f"Low resume confidence ({confidence}<{min_confidence}) for {resume_filename}"
             )
-        )
-    elif extracted_phone:
-        normalized_phone = _normalize_phone(extracted_phone)
-        if normalized_phone:
+            continue
+
+        # LLM structured extraction pipeline
+        inbound_parsed_resume_profile = None
+        _inbound_profile_links = {}
+        try:
+            _llm_result = await asyncio.to_thread(
+                run_resume_pipeline,
+                resume_filename,
+                resume_content_type,
+                content,
+                fallback_email=inbound_email.from_email or "",
+            )
+            if _llm_result is not None:
+                inbound_parsed_resume_profile = _llm_result.profile.model_dump(mode="json")
+                _personal = _llm_result.profile.personal
+                llm_name = (_personal.full_name or "").strip() or None
+                if should_replace_name(
+                    extracted_name,
+                    llm_name,
+                    fallback_email=extracted_email,
+                ):
+                    extracted_name = llm_name or extracted_name
+                llm_email = _extract_email((_personal.email or "").strip().lower())
+                if llm_email:
+                    extracted_email = llm_email
+                if _personal.phone and _personal.phone.strip():
+                    extracted_phone = _personal.phone.strip()
+                if _personal.address and _personal.address.strip():
+                    extracted_location = _personal.address.strip()
+                for _key, _url in [
+                    ("linkedin", _personal.linkedin_url),
+                    ("github", _personal.github_url),
+                    ("portfolio", _personal.website_url),
+                ]:
+                    if _url and str(_url).strip():
+                        _inbound_profile_links[_key] = str(_url).strip()
+        except Exception as _llm_exc:
+            logger.warning(
+                "inbound LLM resume parse failed (non-fatal) for %s: %s",
+                resume_filename,
+                _llm_exc,
+            )
+
+        if not extracted_email:
+            extracted_email = inbound_email.from_email
+
+        # Deduplicate candidates with identical email processed in this single email
+        email_key = (extracted_email or "").strip().lower()
+        if email_key:
+            if email_key in processed_emails:
+                logger.info(
+                    "Skipping duplicate candidate email %s in the same inbound email",
+                    extracted_email,
+                )
+                continue
+            processed_emails.add(email_key)
+
+        candidate_query = None
+        if target_job_id is not None and extracted_email and extracted_name:
             candidate_query = await db.execute(
                 select(Candidate).where(
                     Candidate.org_id == org_id,
-                    Candidate.phone.is_not(None),
-                    func.regexp_replace(Candidate.phone, r"\\D", "", "g") == normalized_phone,
+                    func.lower(Candidate.email) == extracted_email.lower(),
+                    func.lower(func.trim(Candidate.name)) == extracted_name.strip().lower(),
                 )
             )
-    candidate = candidate_query.scalars().first() if candidate_query is not None else None
+        elif extracted_email:
+            candidate_query = await db.execute(
+                select(Candidate).where(
+                    Candidate.org_id == org_id,
+                    func.lower(Candidate.email) == extracted_email.lower(),
+                )
+            )
+        elif extracted_phone:
+            normalized_phone = _normalize_phone(extracted_phone)
+            if normalized_phone:
+                candidate_query = await db.execute(
+                    select(Candidate).where(
+                        Candidate.org_id == org_id,
+                        Candidate.phone.is_not(None),
+                        func.regexp_replace(Candidate.phone, r"\\D", "", "g") == normalized_phone,
+                    )
+                )
+        candidate = candidate_query.scalars().first() if candidate_query is not None else None
 
-    candidate_created = False
-    if candidate is None:
-        candidate = Candidate(
-            org_id=org_id,
-            job_id=target_job_id,
-            stage_id=None,
-            status="active",
-            name=extracted_name,
-            email=extracted_email or f"unknown+{inbound_email.id}@invalid.local",
-            phone=extracted_phone,
-            address=extracted_location,
-            profile_links=_inbound_profile_links if inbound_parsed_resume_profile else {},
-            parsed_resume=inbound_parsed_resume_profile,
-            source="Email",
-            tags=[],
-        )
-        db.add(candidate)
-        await db.flush()
-        candidate_created = True
-    else:
-        if extracted_name and (not candidate.name or candidate.name == "Unknown Candidate"):
-            candidate.name = extracted_name
-        if _should_replace_phone(candidate.phone, extracted_phone):
-            candidate.phone = extracted_phone
-        if _should_replace_location(candidate.address, extracted_location):
-            candidate.address = extracted_location
-        # Update parsed_resume on existing candidate if LLM succeeded
-        if inbound_parsed_resume_profile is not None:
-            candidate.parsed_resume = inbound_parsed_resume_profile
-            if _inbound_profile_links:
-                candidate.profile_links = _inbound_profile_links
+        candidate_created = False
+        if candidate is None:
+            candidate = Candidate(
+                org_id=org_id,
+                job_id=target_job_id,
+                stage_id=None,
+                status="active",
+                name=extracted_name,
+                email=extracted_email
+                or f"unknown+{inbound_email.id}+{len(processed_candidates)}@invalid.local",
+                phone=extracted_phone,
+                address=extracted_location,
+                profile_links=_inbound_profile_links if inbound_parsed_resume_profile else {},
+                parsed_resume=inbound_parsed_resume_profile,
+                source="Email",
+                tags=[],
+            )
+            db.add(candidate)
+            await db.flush()
+            candidate_created = True
+        else:
+            # We found a potential duplicate candidate.
+            # Instead of auto-updating in-place, we create a new profile flagged for duplicate review,
+            # linking it to the existing candidate.
+            existing_candidate = candidate
+            candidate = Candidate(
+                org_id=org_id,
+                job_id=target_job_id,
+                stage_id=None,
+                status="active",
+                name=extracted_name,
+                email=extracted_email
+                or f"unknown+{inbound_email.id}+{len(processed_candidates)}@invalid.local",
+                phone=extracted_phone,
+                address=extracted_location,
+                profile_links=_inbound_profile_links if inbound_parsed_resume_profile else {},
+                parsed_resume=inbound_parsed_resume_profile,
+                source="Email",
+                tags=[],
+                is_pending_duplicate_review=True,
+                possible_duplicate_of_id=existing_candidate.id,
+            )
+            db.add(candidate)
+            await db.flush()
+            candidate_created = True
 
-    latest_version_result = await db.execute(
-        select(func.max(CandidateDocument.version)).where(
-            CandidateDocument.org_id == org_id,
-            CandidateDocument.candidate_id == candidate.id,
-            CandidateDocument.field_key == "resume",
+        # Add CandidateDocument
+        latest_version_result = await db.execute(
+            select(func.max(CandidateDocument.version)).where(
+                CandidateDocument.org_id == org_id,
+                CandidateDocument.candidate_id == candidate.id,
+                CandidateDocument.field_key == "resume",
+            )
         )
-    )
-    latest_version = latest_version_result.scalar_one_or_none() or 0
-    existing_key_result = await db.execute(
-        select(CandidateDocument.object_key)
-        .where(
-            CandidateDocument.org_id == org_id,
-            CandidateDocument.candidate_id == candidate.id,
-            CandidateDocument.field_key == "resume",
+        latest_version = latest_version_result.scalar_one_or_none() or 0
+        existing_key_result = await db.execute(
+            select(CandidateDocument.object_key)
+            .where(
+                CandidateDocument.org_id == org_id,
+                CandidateDocument.candidate_id == candidate.id,
+                CandidateDocument.field_key == "resume",
+            )
+            .order_by(CandidateDocument.created_at.desc())
+            .limit(1)
         )
-        .order_by(CandidateDocument.created_at.desc())
-        .limit(1)
-    )
-    latest_resume_key = existing_key_result.scalar_one_or_none()
-    current_resume_key = str(resume_attachment.get("storage_key") or "")
-    if latest_resume_key != current_resume_key:
-        resume_url = await storage_service.resolve_url(current_resume_key)
-        db.add(
-            CandidateDocument(
+        latest_resume_key = existing_key_result.scalar_one_or_none()
+        current_resume_key = str(resume_attachment.get("storage_key") or "")
+        if latest_resume_key != current_resume_key:
+            resume_url = await storage_service.resolve_url(current_resume_key)
+            db.add(
+                CandidateDocument(
+                    org_id=org_id,
+                    candidate_id=candidate.id,
+                    job_id=target_job_id,
+                    field_key="resume",
+                    field_label_snapshot="Resume",
+                    doc_type="resume",
+                    name=resume_filename,
+                    url=resume_url,
+                    object_key=current_resume_key,
+                    mime_type=resume_content_type,
+                    size_bytes=int(resume_attachment.get("size_bytes") or 0),
+                    uploaded_by_user_id=None,
+                    version=int(latest_version) + 1,
+                )
+            )
+
+        if target_job_id is not None:
+            first_stage_result = await db.execute(
+                select(Stage)
+                .where(Stage.org_id == org_id, Stage.job_id == target_job_id)
+                .order_by(Stage.position.asc())
+                .limit(1)
+            )
+            first_stage = first_stage_result.scalar_one_or_none()
+            inbound_assignment_at = datetime.now(timezone.utc)
+            await _upsert_candidate_job_assignment(
+                db,
                 org_id=org_id,
                 candidate_id=candidate.id,
                 job_id=target_job_id,
-                field_key="resume",
-                field_label_snapshot="Resume",
-                doc_type="resume",
-                name=str(resume_attachment.get("filename") or "resume.bin"),
-                url=resume_url,
-                object_key=current_resume_key,
-                mime_type=str(resume_attachment.get("content_type") or "application/octet-stream"),
-                size_bytes=int(resume_attachment.get("size_bytes") or 0),
-                uploaded_by_user_id=None,
-                version=int(latest_version) + 1,
+                stage_id=first_stage.id if first_stage else None,
+                assignment_status="active",
+                source=candidate.source,
+                applied_at=inbound_assignment_at,
+                assigned_at=inbound_assignment_at,
             )
-        )
-    parsed_candidate = candidate
 
-    if target_job_id is not None:
-        first_stage_result = await db.execute(
-            select(Stage)
-            .where(Stage.org_id == org_id, Stage.job_id == target_job_id)
-            .order_by(Stage.position.asc())
-            .limit(1)
-        )
-        first_stage = first_stage_result.scalar_one_or_none()
-        inbound_assignment_at = datetime.now(timezone.utc)
-        await _upsert_candidate_job_assignment(
-            db,
-            org_id=org_id,
-            candidate_id=parsed_candidate.id,
-            job_id=target_job_id,
-            stage_id=first_stage.id if first_stage else None,
-            assignment_status="active",
-            source=parsed_candidate.source,
-            applied_at=inbound_assignment_at,
-            assigned_at=inbound_assignment_at,
-        )
-
-    # Create conversation ONLY for new candidates, append to existing for updates
-    if conversation_ids is None:
+        # Route inbound email to conversation for this candidate
+        cand_conversation_ids = None
         if candidate_created:
-            # New candidate → Create new conversation
             conversation_result = await _route_inbound_to_conversation(
                 db,
                 org_id,
                 inbox_address,
                 payload,
                 reply_to_conversation_id=None,
-                candidate_override=parsed_candidate,
+                candidate_override=candidate,
                 conversation_job_id=conversation_job_id,
             )
             if conversation_result is not None:
                 conv_id, msg_id, _, _ = conversation_result
-                conversation_ids = (conv_id, msg_id)
+                cand_conversation_ids = (conv_id, msg_id)
                 logger.info(
-                    "Inbound email created NEW conversation for NEW candidate "
-                    "conv_id=%s candidate_id=%s resume_email=%s",
+                    "Inbound email created NEW conversation for NEW candidate conv_id=%s candidate_id=%s resume_email=%s",
                     conv_id,
-                    parsed_candidate.id,
+                    candidate.id,
                     extracted_email,
                 )
         else:
-            # Existing candidate → Find existing conversation and append message
             existing_conv_result = await db.execute(
                 select(Conversation).where(
                     Conversation.org_id == org_id,
-                    Conversation.candidate_id == parsed_candidate.id,
+                    Conversation.candidate_id == candidate.id,
                 )
             )
             existing_conv = existing_conv_result.scalar_one_or_none()
 
             if existing_conv:
-                # Append message to existing conversation
                 from app.utils.uuid import uuid7
 
-                body_text = (payload.text_body or "").strip() or (payload.html_body or "").strip()
+                body_text_to_use = (payload.text_body or "").strip() or (
+                    payload.html_body or ""
+                ).strip()
                 now = datetime.now(tz=timezone.utc)
 
                 inbound_msg = Message(
@@ -2929,7 +2923,7 @@ async def ingest_inbound_email(
                     sender_user_id=None,
                     from_email=(payload.from_email or "").strip().lower(),
                     to_email=inbox_address,
-                    body=body_text or "(empty)",
+                    body=body_text_to_use or "(empty)",
                     html_body=payload.html_body or None,
                     status="received",
                     email_message_id=(payload.message_id or "").strip().strip("<>") or None,
@@ -2943,53 +2937,41 @@ async def ingest_inbound_email(
                     existing_conv.status = "open"
 
                 await db.flush()
-
-                conversation_ids = (str(existing_conv.id), str(inbound_msg.id))
-
+                cand_conversation_ids = (str(existing_conv.id), str(inbound_msg.id))
                 logger.info(
-                    "Inbound email APPENDED to existing conversation for existing candidate "
-                    "conv_id=%s candidate_id=%s resume_email=%s",
+                    "Inbound email APPENDED to existing conversation for existing candidate conv_id=%s candidate_id=%s resume_email=%s",
                     existing_conv.id,
-                    parsed_candidate.id,
+                    candidate.id,
                     extracted_email,
                 )
             else:
-                # No conversation row yet for this candidate
                 conversation_result = await _route_inbound_to_conversation(
                     db,
                     org_id,
                     inbox_address,
                     payload,
                     reply_to_conversation_id=None,
-                    candidate_override=parsed_candidate,
+                    candidate_override=candidate,
                     conversation_job_id=conversation_job_id,
                 )
                 if conversation_result is not None:
                     conv_id, msg_id, _, _ = conversation_result
-                    conversation_ids = (conv_id, msg_id)
+                    cand_conversation_ids = (conv_id, msg_id)
                     logger.info(
-                        "Inbound email created NEW conversation for existing candidate (no thread yet) "
-                        "conv_id=%s candidate_id=%s resume_email=%s",
+                        "Inbound email created NEW conversation for existing candidate (no thread yet) conv_id=%s candidate_id=%s resume_email=%s",
                         conv_id,
-                        parsed_candidate.id,
+                        candidate.id,
                         extracted_email,
                     )
 
-    inbound_email.parsed_candidate_id = parsed_candidate.id
-    inbound_email.parse_status = "processed"
-    inbound_email.parse_error = None
-    await db.commit()
-
-    # Trigger automations for email-based candidate creation
-    # Use candidate_email_received trigger for email inbound candidates
-    if candidate is not None:
+        # Trigger automations for candidate creation
         try:
             if target_job_id is not None:
                 await execute_automations_for_trigger(
                     db=db,
                     trigger_key="candidate_applied",
                     org_id=org_id,
-                    candidate_id=parsed_candidate.id,
+                    candidate_id=candidate.id,
                     job_id=target_job_id,
                     metadata={
                         "source": "email_inbound_job",
@@ -2999,13 +2981,13 @@ async def ingest_inbound_email(
                 pending_assignment = await _mark_assignment_score_pending(
                     db,
                     org_id=org_id,
-                    candidate_id=parsed_candidate.id,
+                    candidate_id=candidate.id,
                     job_id=target_job_id,
                 )
-                await db.commit()
+                await db.flush()
                 await _enqueue_assignment_score(
                     org_id=org_id,
-                    candidate_id=parsed_candidate.id,
+                    candidate_id=candidate.id,
                     job_id=target_job_id,
                     generation=int(pending_assignment.resume_score_generation or 0)
                     if pending_assignment is not None
@@ -3016,7 +2998,7 @@ async def ingest_inbound_email(
                     db=db,
                     trigger_key="candidate_email_received",
                     org_id=org_id,
-                    candidate_id=parsed_candidate.id,
+                    candidate_id=candidate.id,
                     job_id=None,
                     metadata={
                         "source": "email_inbound",
@@ -3024,21 +3006,46 @@ async def ingest_inbound_email(
                     },
                 )
         except Exception as e:
-            # Log but don't fail the inbound email processing
             logger.error(
-                f"Failed to trigger automation for email candidate {parsed_candidate.id}: {e}",
+                f"Failed to trigger automation for email candidate {candidate.id}: {e}",
                 exc_info=True,
             )
 
+        processed_candidates.append(
+            {
+                "candidate_id": str(candidate.id),
+                "conversation_ids": cand_conversation_ids,
+            }
+        )
+
+    if not processed_candidates:
+        inbound_email.parse_status = "failed"
+        inbound_email.parse_error = "; ".join(parse_errors) or "No resume processed successfully"
+        await db.commit()
+        return {
+            "status": "ok",
+            "message": "Stored with parse failure",
+            "inbound_email_id": str(inbound_email.id),
+            "org_id": str(org_id),
+        }
+
+    # At least one succeeded!
+    first_candidate = processed_candidates[0]
+    inbound_email.parsed_candidate_id = UUID(first_candidate["candidate_id"])
+    inbound_email.parse_status = "processed"
+    inbound_email.parse_error = None
+    await db.commit()
+
     response: dict = {
         "status": "ok",
-        "message": "Processed",
+        "message": f"Processed {len(processed_candidates)} candidate(s)",
         "inbound_email_id": str(inbound_email.id),
-        "candidate_id": str(parsed_candidate.id),
+        "candidate_id": first_candidate["candidate_id"],
+        "candidate_ids": [c["candidate_id"] for c in processed_candidates],
         "org_id": str(org_id),
     }
-    if conversation_ids:
-        conv_id, msg_id = conversation_ids
+    if first_candidate["conversation_ids"]:
+        conv_id, msg_id = first_candidate["conversation_ids"]
         response["conversation_id"] = conv_id
         response["message_id"] = msg_id
     return response

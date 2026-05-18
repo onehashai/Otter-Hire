@@ -22,19 +22,20 @@ import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = 'be217dffee0c'
-down_revision: Union[str, None] = 'unified_initial'
+revision: str = "be217dffee0c"
+down_revision: Union[str, None] = "unified_initial"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
 def _get_key() -> str:
     import os
+
     key = os.environ.get("ENCRYPTION_KEY")
     if not key:
         raise RuntimeError(
             "ENCRYPTION_KEY environment variable is not set. "
-            "Generate one with: python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\" "
+            'Generate one with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())" '
             "and add it to your .env file before running this migration."
         )
     return key

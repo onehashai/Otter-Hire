@@ -9,6 +9,7 @@ import {
   BarChart3,
   Zap,
   Bot,
+  ScrollText,
   Settings,
   Sun,
   Moon,
@@ -26,8 +27,9 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@onehash/ui/tooltip";
 import { LOGO_SVG_PATH } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
+import { useAuthSession } from "@/app/providers";
 
-const navItems = [
+const baseNavItems = [
   // TODO(mvp-nav): Re-enable Dashboard in sidebar after MVP launch.
   // { titleKey: "nav_dashboard", url: "/", icon: LayoutDashboard },
   { titleKey: "jobs_title", url: "/jobs", icon: Briefcase },
@@ -38,7 +40,6 @@ const navItems = [
   { titleKey: "reports_title", url: "/reports", icon: BarChart3 },
   { titleKey: "automations_title", url: "/automations", icon: Zap },
   { titleKey: "ai_assistant_title", url: "/ai-assistant", icon: Bot },
-  { titleKey: "settings_title", url: "/settings/profile", icon: Settings },
 ];
 
 interface AppSidebarProps {
@@ -51,6 +52,15 @@ export function AppSidebar({ collapsed, onToggle, onOpenCommandPalette }: AppSid
   const pathname = usePathname();
   const { theme, setTheme } = useTheme();
   const { t } = useTranslation();
+  const { user } = useAuthSession();
+
+  const canSeeLogs = user?.membership_role === "owner" || user?.membership_role === "admin";
+
+  const navItems = [
+    ...baseNavItems,
+    ...(canSeeLogs ? [{ titleKey: "nav_logs", url: "/logs", icon: ScrollText }] : []),
+    { titleKey: "settings_title", url: "/settings/profile", icon: Settings },
+  ];
 
   return (
     <aside

@@ -24,6 +24,8 @@ class CandidateListItemResponse(BaseModel):
     job_title: Optional[str] = None
     stage_id: Optional[UUID] = None
     stage_name: Optional[str] = None
+    is_pending_duplicate_review: bool = False
+    possible_duplicate_of_id: Optional[UUID] = None
     assignments: list["CandidateAssignmentItemResponse"] = []
     created_at: datetime
     updated_at: datetime

@@ -139,9 +139,7 @@ def init() -> None:
     from app.core.config import settings  # imported lazily to avoid circular imports
 
     if not settings.sentry_dsn:
-        logging.getLogger("ats_backend").info(
-            "[Sentry] SENTRY_DSN not set — SDK disabled"
-        )
+        logging.getLogger("ats_backend").info("[Sentry] SENTRY_DSN not set — SDK disabled")
         return
 
     sentry_sdk.init(

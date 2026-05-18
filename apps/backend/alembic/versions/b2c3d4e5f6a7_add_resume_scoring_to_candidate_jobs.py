@@ -33,7 +33,8 @@ def upgrade() -> None:
         sa.Column("resume_score_breakdown", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     )
     op.add_column(
-        "Candidate_jobs", sa.Column("resume_score_scored_at", sa.DateTime(timezone=True), nullable=True)
+        "Candidate_jobs",
+        sa.Column("resume_score_scored_at", sa.DateTime(timezone=True), nullable=True),
     )
     op.create_check_constraint(
         "ck_candidate_jobs_resume_score_status",

@@ -33,9 +33,85 @@ def _fallback_email_tokens(fallback_email: Optional[str]) -> set[str]:
     return {token for token in tokens if len(token) >= 2}
 
 
+def _is_spaced_letters(value: str) -> bool:
+    """Return True if value looks like 'H A R S H M I S H R A' —
+    i.e. every token is a single alpha character."""
+    tokens = [t for t in value.split(" ") if t]
+    return len(tokens) >= 4 and all(len(t) == 1 and t.isalpha() for t in tokens)
+
+
+def _reconstruct_name_from_spaced(value: str, fallback_email: Optional[str] = None) -> str:
+    """Collapse 'H A R S H M I S H R A' -> 'HARSH MISHRA'.
+
+    Strategy (in order):
+    1. Double-space boundary: 'H A R S H  M I S H R A' -> split on 2+ spaces.
+    2. Email local-part tokens as word boundaries:
+       email 'harsh.mishra@...' -> tokens ['harsh','mishra'] -> find in collapsed.
+    3. Greedy balanced split: try every split point, pick the one where both
+       halves are >= 3 chars and lengths are most balanced (covers 2-word names).
+    """
+    # Collapse all letters into one string first
+    letters = [t for t in value.split(" ") if t and t.isalpha()]
+    collapsed = "".join(letters)  # e.g. 'HARSHMISHRA'
+
+    # Strategy 1: double-space boundary in original
+    if re.search(r" {2,}", value):
+        words = re.split(r" {2,}", value)
+        result = " ".join("".join(c for c in w if c.isalpha()) for w in words if w.strip())
+        if result and " " in result:
+            return result
+
+    # Strategy 2: email local-part tokens as word boundaries
+    if fallback_email and "@" in fallback_email:
+        local = re.sub(r"\d+", "", fallback_email.split("@", 1)[0].lower())
+        parts = [p for p in re.split(r"[^a-z]+", local) if len(p) >= 2]
+        if len(parts) >= 2:
+            target = collapsed.lower()
+            pos = 0
+            boundaries = [0]
+            matched = True
+            for part in parts:
+                idx = target.find(part, pos)
+                if idx == -1:
+                    matched = False
+                    break
+                if idx > boundaries[-1]:
+                    boundaries.append(idx)
+                pos = idx + len(part)
+            if matched and len(boundaries) >= 2:
+                words = []
+                for i in range(len(boundaries)):
+                    start = boundaries[i]
+                    end = boundaries[i + 1] if i + 1 < len(boundaries) else len(collapsed)
+                    words.append(collapsed[start:end])
+                result = " ".join(w for w in words if w)
+                if " " in result:
+                    return result
+
+    # Strategy 3: greedy balanced split (for 2-word names with no other hints)
+    n = len(collapsed)
+    if n >= 6:
+        best_split = None
+        best_score = -1
+        for i in range(3, n - 2):
+            first, last = collapsed[:i], collapsed[i:]
+            if len(first) >= 3 and len(last) >= 3:
+                score = 10 - abs(len(first) - len(last))
+                if score > best_score:
+                    best_score = score
+                    best_split = f"{first} {last}"
+        if best_split:
+            return best_split
+
+    return collapsed
+
+
 def score_name_candidate(line: str, *, index: int = 0, fallback_email: Optional[str] = None) -> int:
     email_tokens = _fallback_email_tokens(fallback_email)
     value = re.sub(r"\s+", " ", (line or "")).strip()
+    # Reconstruct spaced-letter names before scoring so they score as proper names
+    if _is_spaced_letters(value):
+        value = _reconstruct_name_from_spaced(value, fallback_email)
     lowered = value.lower()
     if not value or len(value) > 60 or "@" in value:
         return -100
@@ -313,7 +389,10 @@ def extract_name(text: str, fallback_email: Optional[str]) -> Optional[str]:
         score = score_name_candidate(line, index=idx, fallback_email=fallback_email)
         if score > best_score:
             best_score = score
-            best_line = re.sub(r"\s+", " ", line).strip()
+            normalized = re.sub(r"\s+", " ", line).strip()
+            if _is_spaced_letters(normalized):
+                normalized = _reconstruct_name_from_spaced(normalized, fallback_email)
+            best_line = normalized
     if best_line and best_score > 0:
         return best_line
     if fallback_email and "@" in fallback_email:

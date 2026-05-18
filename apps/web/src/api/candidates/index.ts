@@ -15,6 +15,8 @@ export type CandidateListItemResponse = {
   job_title: string | null;
   stage_id: string | null;
   stage_name: string | null;
+  is_pending_duplicate_review?: boolean;
+  possible_duplicate_of_id?: string | null;
   assignments: CandidateAssignmentItemResponse[];
   created_at: string;
   updated_at: string;
@@ -510,4 +512,21 @@ export async function importCandidatesCsv(file: File): Promise<CandidateCsvImpor
   }
 
   return (await res.json()) as CandidateCsvImportResponse;
+}
+
+export async function resolveCandidateMerge(
+  candidateId: string,
+): Promise<{ status: string; message: string; target_candidate_id: string }> {
+  return apiFetch<{ status: string; message: string; target_candidate_id: string }>(
+    `/candidates/${candidateId}/resolve-merge`,
+    { method: "POST" },
+  );
+}
+
+export async function resolveCandidateKeep(
+  candidateId: string,
+): Promise<{ status: string; message: string }> {
+  return apiFetch<{ status: string; message: string }>(`/candidates/${candidateId}/resolve-keep`, {
+    method: "POST",
+  });
 }

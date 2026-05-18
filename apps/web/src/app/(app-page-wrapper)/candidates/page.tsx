@@ -30,6 +30,7 @@ import { Calendar } from "@onehash/ui/calendar";
 import { SelectField } from "@onehash/ui/select";
 import { format, subDays, startOfDay, endOfDay } from "date-fns";
 import { AddCandidateDialog } from "@/components/candidates/shared/dialogs/AddCandidateDialog";
+import { ResolveDuplicateDialog } from "@/components/candidates/shared/dialogs/ResolveDuplicateDialog";
 import {
   Dialog,
   DialogContent,
@@ -83,6 +84,8 @@ export default function CandidatesPage() {
   const [page, setPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [addOpen, setAddOpen] = useState(false);
+  const [resolveOpen, setResolveOpen] = useState(false);
+  const [resolveCandidate, setResolveCandidate] = useState<CandidateListItemResponse | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importLoading, setImportLoading] = useState(false);
@@ -801,6 +804,10 @@ export default function CandidatesPage() {
             onToggleSelected={toggleSelected}
             onToggleAllVisible={toggleAllVisible}
             onListChange={() => void refresh()}
+            onResolveDuplicate={(c) => {
+              setResolveCandidate(c);
+              setResolveOpen(true);
+            }}
           />
           <div className="flex items-center justify-between pt-4">
             <p className="text-xs text-muted-foreground">
@@ -829,28 +836,36 @@ export default function CandidatesPage() {
           </div>
 
           {selectedCount > 0 ? (
-            <div className="fixed bottom-[calc(3.5rem+1rem)] md:bottom-4 left-1/2 -translate-x-1/2 z-[60]">
-              <div className="rounded-lg border border-border bg-card shadow-md px-3 py-2 flex items-center gap-2">
-                <span className="text-xs text-muted-foreground whitespace-nowrap">
+            <div className="fixed bottom-[calc(3.5rem+1.5rem)] md:bottom-6 left-1/2 -translate-x-1/2 z-[60]">
+              <div className="rounded-xl border border-border bg-card/95 backdrop-blur-md shadow-lg pl-4 pr-2 py-1.5 flex items-center gap-3 animate-in fade-in-0 slide-in-from-bottom-4 duration-300">
+                <span className="text-xs text-muted-foreground font-medium whitespace-nowrap">
                   {selectedCount} {selectedCount === 1 ? "candidate" : "candidates"} selected
                 </span>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  className="h-8 text-xs"
-                  onClick={() => setDeleteOpen(true)}
-                >
-                  {selectedCount === 1
-                    ? t("delete_selected_candidate")
-                    : t("delete_selected_candidates")}
-                </Button>
+
+                {/* Primary Action: Assign Job */}
                 <Button
                   size="sm"
-                  className="h-8 text-xs"
+                  className="h-8 text-xs font-semibold bg-zinc-950 dark:bg-zinc-100 text-zinc-50 dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-zinc-200 shadow-sm flex items-center gap-1.5"
                   onClick={openAssignDialog}
                   disabled={allAssigned}
                 >
+                  <Icon name="Briefcase" className="h-3.5 w-3.5 shrink-0" />
                   {t("assign_job_title")}
+                </Button>
+
+                {/* Destructive Action: Red Trash Icon Button */}
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="h-8 w-8 p-0 shrink-0"
+                  onClick={() => setDeleteOpen(true)}
+                  title={
+                    selectedCount === 1
+                      ? t("delete_selected_candidate")
+                      : t("delete_selected_candidates")
+                  }
+                >
+                  <Icon name="Trash2" className="h-4 w-4 shrink-0" />
                 </Button>
               </div>
             </div>
@@ -982,6 +997,12 @@ export default function CandidatesPage() {
         </SheetContent>
       </Sheet>
       <AddCandidateDialog open={addOpen} onOpenChange={setAddOpen} onAdded={() => void refresh()} />
+      <ResolveDuplicateDialog
+        open={resolveOpen}
+        onOpenChange={setResolveOpen}
+        candidate={resolveCandidate}
+        onResolved={() => void refresh()}
+      />
     </MainPagesLayout>
   );
 }

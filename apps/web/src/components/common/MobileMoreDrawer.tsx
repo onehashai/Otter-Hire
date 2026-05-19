@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { BarChart3, Bot, Settings, Sun, Moon } from "lucide-react";
+import { BarChart3, Bot, Settings, Sun, Moon, ScrollText } from "lucide-react";
 // TODO(mvp-nav): Re-enable Interviews/Automations in mobile drawer after MVP launch.
 // import { Calendar, Zap } from "lucide-react";
 import { useTheme } from "@/components/common/ThemeProvider";
@@ -14,6 +14,7 @@ const moreItems = [
   // { titleKey: "nav_interviews", url: "/interviews", icon: Calendar },
   { titleKey: "reports_title", url: "/reports", icon: BarChart3 },
   { titleKey: "ai_assistant_title", url: "/ai-assistant", icon: Bot },
+  { titleKey: "nav_logs", url: "/logs", icon: ScrollText },
   { titleKey: "settings_title", url: "/settings/profile", icon: Settings },
 ];
 

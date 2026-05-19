@@ -148,9 +148,9 @@ export function ResolveDuplicateDialog({
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 my-2 flex-1 min-h-[480px]">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 my-2 flex-1 overflow-y-auto px-1">
             {/* Profile A (Original Profile) Viewer */}
-            <div className="rounded-xl border border-border/80 bg-muted/20 p-4 flex flex-col gap-3 shadow-sm relative overflow-hidden h-[500px]">
+            <div className="rounded-xl border border-border/80 bg-muted/20 p-4 flex flex-col gap-3 shadow-sm relative overflow-hidden h-[420px] md:h-[500px] shrink-0">
               <div className="absolute top-0 right-0 w-24 h-24 bg-primary/5 rounded-full blur-2xl pointer-events-none" />
               <div className="flex items-center justify-between shrink-0">
                 <div>
@@ -201,7 +201,7 @@ export function ResolveDuplicateDialog({
             </div>
 
             {/* Profile B (Incoming Profile) Viewer */}
-            <div className="rounded-xl border border-amber-500/30 bg-amber-500/[0.01] p-4 flex flex-col gap-3 shadow-sm relative overflow-hidden h-[500px]">
+            <div className="rounded-xl border border-amber-500/30 bg-amber-500/[0.01] p-4 flex flex-col gap-3 shadow-sm relative overflow-hidden h-[420px] md:h-[500px] shrink-0">
               <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/5 rounded-full blur-2xl pointer-events-none" />
               <div className="flex items-center justify-between shrink-0">
                 <div>
@@ -253,11 +253,12 @@ export function ResolveDuplicateDialog({
           </div>
         )}
 
-        <DialogFooter className="mt-4 gap-3 border-t border-border pt-4 shrink-0">
+        <DialogFooter className="mt-4 flex flex-col sm:flex-row gap-2 sm:gap-3 border-t border-border pt-4 shrink-0">
           <Button
             type="button"
             variant="outline"
             size="sm"
+            className="w-full sm:w-auto"
             onClick={() => onOpenChange(false)}
             disabled={submitting}
           >
@@ -268,7 +269,7 @@ export function ResolveDuplicateDialog({
             type="button"
             variant="outline"
             size="sm"
-            className="border-amber-500/30 hover:bg-amber-500/10 text-amber-700 dark:text-amber-400 font-semibold"
+            className="w-full sm:w-auto border-amber-500/30 hover:bg-amber-500/10 text-amber-700 dark:text-amber-400 font-semibold"
             onClick={() => void handleKeep()}
             disabled={loading || submitting}
             pending={submitting}
@@ -279,7 +280,7 @@ export function ResolveDuplicateDialog({
           <Button
             type="button"
             size="sm"
-            className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-sm"
+            className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-sm"
             onClick={() => void handleMerge()}
             disabled={loading || submitting || !existingCandidate}
             pending={submitting}

@@ -114,40 +114,42 @@ export function EmailLogsTable({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-row gap-2 items-center">
-        <div className="w-52 shrink-0">
-          <InputField
-            className="h-8 text-xs"
-            placeholder="Filter by sender…"
-            value={senderFilter}
-            onChange={(e) => onSenderChange(e.target.value)}
-          />
-        </div>
-        <Select
-          value={statusFilter || "all"}
-          onValueChange={(v) => onStatusChange(v === "all" ? "" : v)}
-        >
-          <SelectTrigger className="h-8 w-36 text-xs">
-            <SelectValue placeholder="All statuses" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All statuses</SelectItem>
-            <SelectItem value="processed">Parsed</SelectItem>
-            <SelectItem value="failed">Failed</SelectItem>
-            <SelectItem value="ignored">Ignored</SelectItem>
-          </SelectContent>
-        </Select>
-        {extraFilters}
-        {(statusFilter || senderFilter) && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-8 text-xs text-muted-foreground"
-            onClick={onClearFilters}
+      <div className="flex flex-col sm:flex-row gap-2 sm:items-center justify-between">
+        <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center flex-1">
+          <div className="w-full sm:w-52 shrink-0">
+            <InputField
+              className="h-8 text-xs"
+              placeholder="Filter by sender…"
+              value={senderFilter}
+              onChange={(e) => onSenderChange(e.target.value)}
+            />
+          </div>
+          <Select
+            value={statusFilter || "all"}
+            onValueChange={(v) => onStatusChange(v === "all" ? "" : v)}
           >
-            Clear
-          </Button>
-        )}
+            <SelectTrigger className="h-8 w-full sm:w-36 text-xs">
+              <SelectValue placeholder="All statuses" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All statuses</SelectItem>
+              <SelectItem value="processed">Parsed</SelectItem>
+              <SelectItem value="failed">Failed</SelectItem>
+              <SelectItem value="ignored">Ignored</SelectItem>
+            </SelectContent>
+          </Select>
+          {(statusFilter || senderFilter) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 text-xs text-muted-foreground w-full sm:w-auto"
+              onClick={onClearFilters}
+            >
+              Clear
+            </Button>
+          )}
+        </div>
+        <div className="flex sm:justify-end shrink-0 w-full sm:w-auto">{extraFilters}</div>
       </div>
 
       <Card>

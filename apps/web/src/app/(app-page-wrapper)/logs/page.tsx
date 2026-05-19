@@ -83,7 +83,7 @@ export default function LogsPage() {
           <Button
             size="sm"
             variant="outline"
-            className="h-8 text-xs gap-1.5 shrink-0 ml-auto"
+            className="h-8 text-xs gap-1.5 shrink-0 w-full sm:w-auto ml-auto"
             onClick={load}
           >
             <Icon name="RefreshCw" className="h-3.5 w-3.5" />

@@ -912,6 +912,25 @@ async def create_candidate_from_resume(
         first_stage = first_stage_result.scalar_one_or_none()
         resolved_stage_id = first_stage.id if first_stage else None
 
+    # Check if a candidate with the same email already exists
+    is_pending_review = False
+    possible_duplicate_of_id = None
+    if parsed_email:
+        existing_stmt = (
+            select(Candidate)
+            .where(
+                Candidate.org_id == current_user.org_id,
+                Candidate.email == parsed_email,
+                Candidate.is_pending_duplicate_review.is_(False),
+            )
+            .limit(1)
+        )
+        existing_res = await db.execute(existing_stmt)
+        existing_candidate = existing_res.scalar_one_or_none()
+        if existing_candidate:
+            is_pending_review = True
+            possible_duplicate_of_id = existing_candidate.id
+
     candidate = Candidate(
         org_id=current_user.org_id,
         job_id=parsed_job_id,
@@ -925,6 +944,8 @@ async def create_candidate_from_resume(
         parsed_resume=parsed_resume_profile,
         source="Manual",
         tags=[],
+        is_pending_duplicate_review=is_pending_review,
+        possible_duplicate_of_id=possible_duplicate_of_id,
     )
     db.add(candidate)
     await db.flush()
@@ -1230,6 +1251,8 @@ async def list_candidates_paginated(
                 job_title=job_title,
                 stage_id=c.stage_id,
                 stage_name=stage_name,
+                is_pending_duplicate_review=c.is_pending_duplicate_review,
+                possible_duplicate_of_id=c.possible_duplicate_of_id,
                 assignments=assignment_map.get(c.id, []),
                 created_at=c.created_at,
                 updated_at=c.updated_at,
@@ -2918,3 +2941,227 @@ async def delete_candidate_document(
         metadata={"document_id": str(document.id), "field_key": document.field_key},
     )
     await db.commit()
+
+
+@router.post("/{candidate_id}/resolve-merge", status_code=status.HTTP_200_OK)
+async def resolve_candidate_merge(
+    candidate_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("candidates:source")),
+):
+    # Fetch temporary duplicate review candidate
+    temp_result = await db.execute(
+        select(Candidate).where(
+            Candidate.id == candidate_id,
+            Candidate.org_id == current_user.org_id,
+            Candidate.is_pending_duplicate_review.is_(True),
+        )
+    )
+    temp_candidate = temp_result.scalar_one_or_none()
+    if temp_candidate is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Potential duplicate candidate not found or not in pending review",
+        )
+
+    # Fetch existing original candidate
+    existing_id = temp_candidate.possible_duplicate_of_id
+    if existing_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No original candidate linked to this potential duplicate",
+        )
+
+    existing_result = await db.execute(
+        select(Candidate).where(
+            Candidate.id == existing_id,
+            Candidate.org_id == current_user.org_id,
+        )
+    )
+    existing_candidate = existing_result.scalar_one_or_none()
+    if existing_candidate is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Original candidate profile no longer exists",
+        )
+
+    # 1. Update existing candidate contacts/profile details in-place if missing or updated
+    if temp_candidate.phone and (
+        not existing_candidate.phone or existing_candidate.phone == "Unknown"
+    ):
+        existing_candidate.phone = temp_candidate.phone
+    if temp_candidate.address and not existing_candidate.address:
+        existing_candidate.address = temp_candidate.address
+    if temp_candidate.parsed_resume:
+        existing_candidate.parsed_resume = temp_candidate.parsed_resume
+    if temp_candidate.profile_links:
+        existing_candidate.profile_links = temp_candidate.profile_links
+
+    # 2. Re-link CandidateDocuments
+    doc_result = await db.execute(
+        select(CandidateDocument).where(
+            CandidateDocument.org_id == current_user.org_id,
+            CandidateDocument.candidate_id == temp_candidate.id,
+            CandidateDocument.is_deleted.is_(False),
+        )
+    )
+    documents = doc_result.scalars().all()
+    for doc in documents:
+        latest_version_result = await db.execute(
+            select(func.max(CandidateDocument.version)).where(
+                CandidateDocument.org_id == current_user.org_id,
+                CandidateDocument.candidate_id == existing_candidate.id,
+                CandidateDocument.field_key == doc.field_key,
+            )
+        )
+        latest_version = latest_version_result.scalar_one_or_none() or 0
+        doc.candidate_id = existing_candidate.id
+        doc.version = int(latest_version) + 1
+
+    # 3. Merge Conversation and Messages
+    from app.models.conversation import Conversation
+    from app.models.message import Message
+
+    existing_conv_result = await db.execute(
+        select(Conversation).where(
+            Conversation.org_id == current_user.org_id,
+            Conversation.candidate_id == existing_candidate.id,
+        )
+    )
+    existing_conv = existing_conv_result.scalar_one_or_none()
+
+    temp_conv_result = await db.execute(
+        select(Conversation).where(
+            Conversation.org_id == current_user.org_id,
+            Conversation.candidate_id == temp_candidate.id,
+        )
+    )
+    temp_conv = temp_conv_result.scalar_one_or_none()
+
+    if temp_conv and existing_conv:
+        await db.execute(
+            update(Message)
+            .where(Message.conversation_id == temp_conv.id)
+            .values(conversation_id=existing_conv.id)
+        )
+        await db.execute(delete(Conversation).where(Conversation.id == temp_conv.id))
+    elif temp_conv:
+        temp_conv.candidate_id = existing_candidate.id
+
+    # 4. Merge CandidateJobs (Job Assignment)
+    if temp_candidate.job_id:
+        existing_assignment_result = await db.execute(
+            select(CandidateJobs).where(
+                CandidateJobs.org_id == current_user.org_id,
+                CandidateJobs.candidate_id == existing_candidate.id,
+                CandidateJobs.job_id == temp_candidate.job_id,
+            )
+        )
+        existing_assignment = existing_assignment_result.scalar_one_or_none()
+
+        temp_assignment_result = await db.execute(
+            select(CandidateJobs).where(
+                CandidateJobs.org_id == current_user.org_id,
+                CandidateJobs.candidate_id == temp_candidate.id,
+                CandidateJobs.job_id == temp_candidate.job_id,
+            )
+        )
+        temp_assignment = temp_assignment_result.scalar_one_or_none()
+
+        if temp_assignment:
+            if existing_assignment:
+                await db.execute(
+                    delete(CandidateJobs).where(
+                        CandidateJobs.assigned_id == temp_assignment.assigned_id
+                    )
+                )
+            else:
+                temp_assignment.candidate_id = existing_candidate.id
+
+    # 4.5 Re-link all related candidate activities, notes, interviews and automations to existing candidate
+    from app.models.activity import Activity
+    from app.models.automation import AutomationExecution
+    from app.models.interview import Interview
+    from app.models.note import Note
+
+    await db.execute(
+        update(Activity)
+        .where(Activity.candidate_id == temp_candidate.id)
+        .values(candidate_id=existing_candidate.id)
+    )
+    await db.execute(
+        update(Note)
+        .where(Note.candidate_id == temp_candidate.id)
+        .values(candidate_id=existing_candidate.id)
+    )
+    await db.execute(
+        update(Interview)
+        .where(Interview.candidate_id == temp_candidate.id)
+        .values(candidate_id=existing_candidate.id)
+    )
+    await db.execute(
+        update(AutomationExecution)
+        .where(AutomationExecution.candidate_id == temp_candidate.id)
+        .values(candidate_id=existing_candidate.id)
+    )
+
+    # 5. Clean delete temp duplicate candidate
+    await db.execute(delete(Candidate).where(Candidate.id == temp_candidate.id))
+
+    # 6. Log merge activity
+    await _log_activity(
+        db,
+        org_id=current_user.org_id,
+        candidate_id=existing_candidate.id,
+        created_by_user_id=current_user.id,
+        activity_type="candidate_merged",
+        metadata={
+            "merged_candidate_id": str(temp_candidate.id),
+            "merged_candidate_name": temp_candidate.name,
+        },
+    )
+
+    await db.commit()
+    return {
+        "status": "ok",
+        "message": "Candidates merged successfully",
+        "target_candidate_id": str(existing_candidate.id),
+    }
+
+
+@router.post("/{candidate_id}/resolve-keep", status_code=status.HTTP_200_OK)
+async def resolve_candidate_keep(
+    candidate_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("candidates:source")),
+):
+    temp_result = await db.execute(
+        select(Candidate).where(
+            Candidate.id == candidate_id,
+            Candidate.org_id == current_user.org_id,
+            Candidate.is_pending_duplicate_review.is_(True),
+        )
+    )
+    temp_candidate = temp_result.scalar_one_or_none()
+    if temp_candidate is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Potential duplicate candidate not found or not in pending review",
+        )
+
+    # Convert this to a regular candidate by clearing flags
+    temp_candidate.is_pending_duplicate_review = False
+    temp_candidate.possible_duplicate_of_id = None
+
+    # Log keeping activity
+    await _log_activity(
+        db,
+        org_id=current_user.org_id,
+        candidate_id=temp_candidate.id,
+        created_by_user_id=current_user.id,
+        activity_type="candidate_duplicate_kept",
+        metadata={},
+    )
+
+    await db.commit()
+    return {"status": "ok", "message": "Candidate kept as a standalone profile"}

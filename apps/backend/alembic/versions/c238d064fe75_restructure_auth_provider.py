@@ -25,8 +25,8 @@ from sqlalchemy.dialects import postgresql
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = 'c238d064fe75'
-down_revision: Union[str, None] = 'be217dffee0c'
+revision: str = "c238d064fe75"
+down_revision: Union[str, None] = "be217dffee0c"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -54,7 +54,9 @@ def upgrade() -> None:
 
     # 4. Migrate auth_provider values: local -> email, both -> email,google
     bind.execute(sa.text("UPDATE users SET auth_provider = 'email' WHERE auth_provider = 'local'"))
-    bind.execute(sa.text("UPDATE users SET auth_provider = 'email,google' WHERE auth_provider = 'both'"))
+    bind.execute(
+        sa.text("UPDATE users SET auth_provider = 'email,google' WHERE auth_provider = 'both'")
+    )
 
     # 5. Add new auth_provider CHECK constraint
     op.create_check_constraint(
@@ -109,8 +111,12 @@ def downgrade() -> None:
 
     # Revert auth_provider values
     bind.execute(sa.text("UPDATE users SET auth_provider = 'local' WHERE auth_provider = 'email'"))
-    bind.execute(sa.text("UPDATE users SET auth_provider = 'both' WHERE auth_provider = 'email,google'"))
-    bind.execute(sa.text("UPDATE users SET auth_provider = 'both' WHERE auth_provider = 'google,email'"))
+    bind.execute(
+        sa.text("UPDATE users SET auth_provider = 'both' WHERE auth_provider = 'email,google'")
+    )
+    bind.execute(
+        sa.text("UPDATE users SET auth_provider = 'both' WHERE auth_provider = 'google,email'")
+    )
 
     # Drop new CHECK constraint, add old one back
     op.drop_constraint("ck_users_auth_provider", "users", type_="check")

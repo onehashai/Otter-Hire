@@ -37,7 +37,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_constraint(
-        "ck_organizations_jobs_page_language", "organizations", type_="check"
-    )
+    op.drop_constraint("ck_organizations_jobs_page_language", "organizations", type_="check")
     op.drop_column("organizations", "jobs_page_language")

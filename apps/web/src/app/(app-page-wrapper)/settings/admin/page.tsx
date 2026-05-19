@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@onehash/ui/tabs";
 import { useAuthSession } from "@/app/providers";
 import { UsersAdminTab } from "@/components/settings/admin/tabs/UsersTab";
 import { OrganizationsAdminTab } from "@/components/settings/admin/tabs/OrganizationsTab";
+import { AdminLogsTab } from "@/components/settings/admin/tabs/AdminLogsTab";
 
 export default function AdminSettingsPage() {
   const { user, loading } = useAuthSession();
@@ -50,12 +51,21 @@ export default function AdminSettingsPage() {
           >
             Organizations
           </TabsTrigger>
+          <TabsTrigger
+            value="logs"
+            className="rounded-none border-0 border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none px-0 pb-2 text-sm font-medium"
+          >
+            Logs
+          </TabsTrigger>
         </TabsList>
         <TabsContent value="users" className="mt-6 focus-visible:outline-none">
           <UsersAdminTab />
         </TabsContent>
         <TabsContent value="organizations" className="mt-6 focus-visible:outline-none">
           <OrganizationsAdminTab />
+        </TabsContent>
+        <TabsContent value="logs" className="mt-6 focus-visible:outline-none">
+          <AdminLogsTab />
         </TabsContent>
       </Tabs>
     </div>

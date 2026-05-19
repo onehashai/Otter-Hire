@@ -47,6 +47,7 @@ class InboundEmail(Base):
         server_default="ignored",
     )
     parse_error = Column(Text, nullable=True)
+    parse_duration_ms = Column(BigInteger, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     __table_args__ = (

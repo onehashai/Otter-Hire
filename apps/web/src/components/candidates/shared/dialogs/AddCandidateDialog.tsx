@@ -31,6 +31,7 @@ export type AddCandidateDialogProps = {
   jobId?: string | null;
   jobTitle?: string | null;
   stageId?: string | null;
+  stageName?: string | null;
   onAdded?: () => void | Promise<void>;
 };
 
@@ -42,6 +43,7 @@ export function AddCandidateDialog({
   jobId,
   jobTitle,
   stageId,
+  stageName,
   onAdded,
 }: AddCandidateDialogProps) {
   const { t } = useTranslation();
@@ -156,7 +158,9 @@ export function AddCandidateDialog({
           <DialogTitle>{t("add_candidate")}</DialogTitle>
           <DialogDescription>
             {jobId && jobTitle
-              ? t("add_candidate_dialog_job_description", { jobTitle })
+              ? stageName
+                ? t("add_candidate_dialog_job_stage_description", { jobTitle, stageName })
+                : t("add_candidate_dialog_job_description", { jobTitle })
               : t("add_candidate_dialog_pool_description")}
           </DialogDescription>
         </DialogHeader>

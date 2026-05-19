@@ -126,6 +126,7 @@ export function JobCandidateProfile({
   candidateId: id,
   jobRouteJobId,
   isStageThreePane = false,
+  isInsideDrawer = false,
   onCandidateUpdated,
   onStageMoved,
 }: {
@@ -134,6 +135,8 @@ export function JobCandidateProfile({
   jobRouteJobId?: string;
   /** True when rendered inside the stage workspace 3-pane right panel. */
   isStageThreePane?: boolean;
+  /** True when rendered inside a right slide-out Sheet drawer. */
+  isInsideDrawer?: boolean;
   /** Optional callback for parent containers (e.g., stage workspace list refresh). */
   onCandidateUpdated?: () => void | Promise<void>;
   /** Optional callback fired after moving candidate to a new stage. */
@@ -552,7 +555,7 @@ export function JobCandidateProfile({
         <div
           className={cn(
             "flex items-center justify-between gap-2",
-            isStageThreePane && isMobile && "px-3",
+            isInsideDrawer && isMobile && "pr-8",
           )}
         >
           {isStageThreePane ? (
@@ -594,7 +597,6 @@ export function JobCandidateProfile({
           <TabsList
             className={cn(
               "h-9 w-full justify-start bg-transparent border-b rounded-none p-0 gap-0",
-              isStageThreePane && isMobile && "px-3",
             )}
           >
             {[
@@ -620,7 +622,6 @@ export function JobCandidateProfile({
             className={cn(
               "mt-4 min-w-0 overflow-x-hidden",
               isMobile ? "space-y-4" : "grid grid-cols-[1fr_320px] gap-4",
-              isStageThreePane && isMobile && "px-0",
             )}
           >
             <div className="min-w-0 overflow-x-hidden">

@@ -104,10 +104,15 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
 
   // Intercept back button click
   const handleBackClick = () => {
+    const fallbackPath = `/jobs/${encodeURIComponent(id)}`;
     if (hasUnsavedChanges) {
-      showUnsavedWarning("/jobs");
+      showUnsavedWarning(fallbackPath);
     } else {
-      router.push("/jobs");
+      if (typeof window !== "undefined" && window.history.length > 1) {
+        router.back();
+      } else {
+        router.push(fallbackPath);
+      }
     }
   };
 

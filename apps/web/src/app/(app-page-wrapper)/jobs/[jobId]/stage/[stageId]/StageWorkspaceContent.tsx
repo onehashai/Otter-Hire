@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@onehash/ui/button";
 import { Badge } from "@onehash/ui/badge";
@@ -17,6 +17,11 @@ import { ChevronLeft } from "lucide-react";
 import { formatTimestamp } from "@/lib/format-date";
 import { JobCandidateProfile } from "@/components/candidates/job_candidates/JobCandidateProfile";
 import { useTranslation } from "react-i18next";
+import { JobWorkspaceKanbanBoard } from "@/components/candidates/job_candidates/JobWorkspaceKanbanBoard";
+import { JobWorkspaceViewToggle } from "@/components/candidates/job_candidates/JobWorkspaceViewToggle";
+import { updateCandidateStage } from "@/api";
+import { JobEditDrawer } from "@/components/jobs/JobEditDrawer";
+import { toast } from "@onehash/ui/sonner";
 
 const MOBILE_BREAKPOINT_PX = 768;
 
@@ -29,11 +34,38 @@ export default function StageWorkspaceContent() {
   const isMobile = useIsMobile();
   const { workspace, loading, error, reload } = useJobWorkspaceStage();
   const { t } = useTranslation();
+  const searchParams = useSearchParams();
 
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
+  const [selectedStageForAdd, setSelectedStageForAdd] = useState<string | null>(null);
   const [mobileStageIndex, setMobileStageIndex] = useState(0);
   const [movingToStageId, setMovingToStageId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<"list" | "kanban">("list");
+  const [editDrawerOpen, setEditDrawerOpen] = useState(false);
+
+  const handleOpenAddCandidate = (stageId: string | null) => {
+    setSelectedStageForAdd(stageId);
+    setAddOpen(true);
+  };
+
+  const handleViewModeChange = (mode: "list" | "kanban") => {
+    setViewMode(mode);
+    const p = new URLSearchParams(window.location.search);
+    p.set("view", mode);
+    router.replace(`${window.location.pathname}?${p.toString()}`, { scroll: false });
+  };
+
+  const viewModeParam = searchParams.get("view");
+
+  // Synchronize the view mode state directly with the URL view query parameter, defaulting to "list"
+  useEffect(() => {
+    if (viewModeParam === "kanban") {
+      setViewMode("kanban");
+    } else {
+      setViewMode("list");
+    }
+  }, [viewModeParam]);
 
   const mobileStripRef = useRef<HTMLDivElement>(null);
   const mobileStagesPanelRef = useRef<HTMLDivElement>(null);
@@ -56,8 +88,10 @@ export default function StageWorkspaceContent() {
     if (!workspace || !defaultStageId || !stageIdParam) return;
     const exists = sortedStages.some((s) => s.id === stageIdParam);
     if (!exists) {
+      const current = new URLSearchParams(window.location.search);
+      const view = current.get("view") || "list";
       router.replace(
-        `/jobs/${encodeURIComponent(jobId)}/stage/${encodeURIComponent(defaultStageId)}`,
+        `/jobs/${encodeURIComponent(jobId)}/stage/${encodeURIComponent(defaultStageId)}?view=${view}`,
         { scroll: false },
       );
     }
@@ -82,8 +116,10 @@ export default function StageWorkspaceContent() {
     if (!candidateIdParam || !stageForList || movingToStageId) return;
     const stillInCurrentStage = candidatesInStage.some((c) => c.id === candidateIdParam);
     if (!stillInCurrentStage) {
+      const current = new URLSearchParams(window.location.search);
+      const view = current.get("view") || "list";
       router.replace(
-        `/jobs/${encodeURIComponent(jobId)}/stage/${encodeURIComponent(stageForList.id)}`,
+        `/jobs/${encodeURIComponent(jobId)}/stage/${encodeURIComponent(stageForList.id)}?view=${view}`,
         { scroll: false },
       );
     }
@@ -97,16 +133,19 @@ export default function StageWorkspaceContent() {
   }, [movingToStageId, stageIdParam]);
 
   useEffect(() => {
+    if (viewMode === "kanban") return;
     if (typeof window !== "undefined" && window.innerWidth < MOBILE_BREAKPOINT_PX) return;
     if (!stageForList || candidateIdParam) return;
     if (candidatesInStage.length === 0) return;
     const firstCandidate = candidatesInStage[0];
     if (!firstCandidate) return;
+    const current = new URLSearchParams(window.location.search);
+    const view = current.get("view") || "list";
     router.replace(
-      `/jobs/${encodeURIComponent(jobId)}/stage/${encodeURIComponent(stageForList.id)}/candidates/${encodeURIComponent(firstCandidate.id)}`,
+      `/jobs/${encodeURIComponent(jobId)}/stage/${encodeURIComponent(stageForList.id)}/candidates/${encodeURIComponent(firstCandidate.id)}?view=${view}`,
       { scroll: false },
     );
-  }, [stageForList, candidateIdParam, candidatesInStage, jobId, router]);
+  }, [stageForList, candidateIdParam, candidatesInStage, jobId, router, viewMode]);
 
   const filteredCandidates = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -120,9 +159,14 @@ export default function StageWorkspaceContent() {
     const s = sortedStages[index];
     if (!s) return;
     setMobileStageIndex(index);
-    router.replace(`/jobs/${encodeURIComponent(jobId)}/stage/${encodeURIComponent(s.id)}`, {
-      scroll: false,
-    });
+    const current = new URLSearchParams(window.location.search);
+    const view = current.get("view") || "list";
+    router.replace(
+      `/jobs/${encodeURIComponent(jobId)}/stage/${encodeURIComponent(s.id)}?view=${view}`,
+      {
+        scroll: false,
+      },
+    );
   };
 
   const candidateCountByStage = (stageId: string) =>
@@ -166,15 +210,22 @@ export default function StageWorkspaceContent() {
     <>
       <div className="p-3 border-b border-border flex items-start justify-between gap-2 shrink-0">
         <div className="min-w-0">
-          <h2 className="text-sm font-semibold">{stageForList?.name ?? t("stage")}</h2>
+          <h2 className="text-sm font-semibold truncate">{stageForList?.name ?? t("stage")}</h2>
           <p className="text-xs text-muted-foreground">
             {candidatesInStage.length}{" "}
             {candidatesInStage.length === 1 ? t("candidate") : t("candidates")}
           </p>
         </div>
-        <Button size="sm" className="h-7 px-2.5 text-[11px]" onClick={() => setAddOpen(true)}>
-          + {t("candidate")}
-        </Button>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <Button
+            size="sm"
+            className="h-7 px-2"
+            onClick={() => handleOpenAddCandidate(stageForList?.id ?? null)}
+            aria-label={t("add_candidate", "Add Candidate")}
+          >
+            <Icon name="Plus" className="h-3.5 w-3.5" />
+          </Button>
+        </div>
       </div>
       <div className="p-3 border-b border-border shrink-0">
         <InputField
@@ -196,13 +247,15 @@ export default function StageWorkspaceContent() {
               <button
                 key={c.id}
                 type="button"
-                onClick={() =>
-                  stageForList &&
+                onClick={() => {
+                  if (!stageForList) return;
+                  const current = new URLSearchParams(window.location.search);
+                  const view = current.get("view") || "list";
                   router.push(
-                    `/jobs/${encodeURIComponent(jobId)}/stage/${encodeURIComponent(stageForList.id)}/candidates/${encodeURIComponent(c.id)}`,
+                    `/jobs/${encodeURIComponent(jobId)}/stage/${encodeURIComponent(stageForList.id)}/candidates/${encodeURIComponent(c.id)}?view=${view}`,
                     { scroll: false },
-                  )
-                }
+                  );
+                }}
                 className={cn(
                   "w-full text-left rounded-md border border-transparent px-2.5 py-2 hover:bg-muted/60 min-h-[44px]",
                   selected && "bg-muted border-border",
@@ -222,7 +275,7 @@ export default function StageWorkspaceContent() {
     </>
   );
 
-  if (isMobile) {
+  if (isMobile && viewMode !== "kanban") {
     return (
       <>
         <div
@@ -251,6 +304,9 @@ export default function StageWorkspaceContent() {
                 {t("back_to_jobs")}
               </Link>
               <h2 className="text-sm font-semibold truncate px-0.5">{workspace.title}</h2>
+              <div className="pt-1">
+                <JobWorkspaceViewToggle mode={viewMode} onChange={handleViewModeChange} />
+              </div>
             </div>
 
             <p className="text-[10px] font-semibold text-muted-foreground tracking-wide px-3 pt-3 pb-1">
@@ -315,7 +371,7 @@ export default function StageWorkspaceContent() {
             )}
           >
             {candidateIdParam ? (
-              <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 py-2 px-0">
+              <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 py-3 px-4">
                 <JobCandidateProfile
                   candidateId={candidateIdParam}
                   jobRouteJobId={jobId}
@@ -325,8 +381,10 @@ export default function StageWorkspaceContent() {
                   }}
                   onStageMoved={async (destinationStageId) => {
                     setMovingToStageId(destinationStageId);
+                    const current = new URLSearchParams(window.location.search);
+                    const view = current.get("view") || "list";
                     router.replace(
-                      `/jobs/${encodeURIComponent(jobId)}/stage/${encodeURIComponent(destinationStageId)}/candidates/${encodeURIComponent(candidateIdParam)}`,
+                      `/jobs/${encodeURIComponent(jobId)}/stage/${encodeURIComponent(destinationStageId)}/candidates/${encodeURIComponent(candidateIdParam)}?view=${view}`,
                       { scroll: false },
                     );
                     await reload();
@@ -355,6 +413,88 @@ export default function StageWorkspaceContent() {
     );
   }
 
+  const handleKanbanStageMoved = async (candidateId: string, destinationStageId: string) => {
+    try {
+      await updateCandidateStage(candidateId, destinationStageId, jobId);
+      toast.success(t("candidate_stage_updated", "Candidate stage updated successfully"));
+      await reload();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to update candidate stage");
+    }
+  };
+
+  if (viewMode === "kanban") {
+    return (
+      <div className="h-[calc(100dvh-3rem)] sm:h-[calc(100vh-3rem)] min-h-0 sm:min-h-[640px] flex flex-col border-t border-border bg-background">
+        {/* Kanban Board Header */}
+        <div className="px-4 sm:px-6 py-4 border-b border-border/80 flex items-center justify-between shrink-0 bg-background/50 backdrop-blur-md">
+          {isMobile ? (
+            <>
+              <div className="flex items-center gap-3">
+                <JobWorkspaceViewToggle mode={viewMode} onChange={handleViewModeChange} />
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 text-xs gap-1.5 text-muted-foreground hover:text-foreground"
+                asChild
+              >
+                <Link href={`/jobs/${encodeURIComponent(jobId)}/info`}>
+                  <Icon name="PenLine" className="h-3.5 w-3.5" />
+                  {t("edit_job", "Edit Job")}
+                </Link>
+              </Button>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center gap-3 min-w-0">
+                <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider truncate max-w-[120px] xs:max-w-[180px] sm:max-w-none">
+                  {workspace.title}
+                </h2>
+              </div>
+              <div>
+                <Badge
+                  variant="secondary"
+                  className="text-xs bg-primary/5 text-primary border-primary/10"
+                >
+                  {workspace.candidates.length}{" "}
+                  {workspace.candidates.length === 1 ? t("candidate") : t("candidates")}
+                </Badge>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Kanban Board Component */}
+        <JobWorkspaceKanbanBoard
+          workspace={workspace}
+          onStageMoved={handleKanbanStageMoved}
+          onCandidateUpdated={async () => {
+            await reload();
+          }}
+          onAddCandidateClick={handleOpenAddCandidate}
+        />
+
+        <AddCandidateDialog
+          open={addOpen}
+          onOpenChange={(open) => {
+            setAddOpen(open);
+            if (!open) {
+              setSelectedStageForAdd(null);
+            }
+          }}
+          jobId={jobId}
+          jobTitle={workspace.title}
+          stageId={selectedStageForAdd}
+          stageName={workspace.stages.find((s) => s.id === selectedStageForAdd)?.name}
+          onAdded={async () => {
+            await reload();
+          }}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="h-[calc(100vh-3rem)] min-h-[640px] flex border-t border-border">
       <section className="w-[300px] border-r border-border flex flex-col">
@@ -372,8 +512,10 @@ export default function StageWorkspaceContent() {
             }}
             onStageMoved={async (destinationStageId) => {
               setMovingToStageId(destinationStageId);
+              const current = new URLSearchParams(window.location.search);
+              const view = current.get("view") || "list";
               router.replace(
-                `/jobs/${encodeURIComponent(jobId)}/stage/${encodeURIComponent(destinationStageId)}/candidates/${encodeURIComponent(candidateIdParam)}`,
+                `/jobs/${encodeURIComponent(jobId)}/stage/${encodeURIComponent(destinationStageId)}/candidates/${encodeURIComponent(candidateIdParam)}?view=${view}`,
                 { scroll: false },
               );
               await reload();
@@ -388,11 +530,25 @@ export default function StageWorkspaceContent() {
 
       <AddCandidateDialog
         open={addOpen}
-        onOpenChange={setAddOpen}
+        onOpenChange={(open) => {
+          setAddOpen(open);
+          if (!open) {
+            setSelectedStageForAdd(null);
+          }
+        }}
         jobId={jobId}
         jobTitle={workspace.title}
-        stageId={stageForList?.id ?? null}
+        stageId={selectedStageForAdd}
+        stageName={workspace.stages.find((s) => s.id === selectedStageForAdd)?.name}
         onAdded={async () => {
+          await reload();
+        }}
+      />
+
+      <JobEditDrawer
+        open={editDrawerOpen}
+        onClose={() => setEditDrawerOpen(false)}
+        onSaved={async () => {
           await reload();
         }}
       />

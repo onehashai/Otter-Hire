@@ -474,9 +474,19 @@ def _parse_resume_date(value: str | None) -> tuple[int, int] | None:
     if text in {"present", "current", "now"}:
         now = datetime.now(timezone.utc)
         return now.year, now.month
+
+    # ISO-style dates: "2021-06", "2021-06-15", "2021/06", "2021/06/15"
+    iso_match = re.match(r"^(\d{4})[/-](\d{1,2})(?:[/-]\d{1,2})?$", text)
+    if iso_match:
+        year = int(iso_match.group(1))
+        month = int(iso_match.group(2))
+        if 1 <= month <= 12:
+            return year, month
+
     match = re.match(r"^(\d{4})(?:\s+(\d{1,2}))?$", text)
     if match:
         return int(match.group(1)), int(match.group(2) or "1")
+
     month_match = re.match(
         r"^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*\s+(\d{4})$", text
     )
@@ -496,6 +506,15 @@ def _parse_resume_date(value: str | None) -> tuple[int, int] | None:
             "dec": 12,
         }
         return int(month_match.group(2)), months[month_match.group(1)[:3]]
+
+    # Reversed form some parsers emit: "06 2021"
+    reversed_match = re.match(r"^(\d{1,2})\s+(\d{4})$", text)
+    if reversed_match:
+        month = int(reversed_match.group(1))
+        year = int(reversed_match.group(2))
+        if 1 <= month <= 12:
+            return year, month
+
     return None
 
 

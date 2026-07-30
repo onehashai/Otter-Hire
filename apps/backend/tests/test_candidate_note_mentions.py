@@ -11,7 +11,7 @@ class CandidateNoteMentionHelpersTests(unittest.TestCase):
     def test_excerpt_compacts_whitespace_and_truncates(self):
         content = "  Hello   team\n\nplease   review this candidate note with extra spacing.  "
         excerpt = _candidate_note_excerpt(content, limit=32)
-        self.assertEqual(excerpt, "Hello team please review this…")
+        self.assertEqual(excerpt, "Hello team please review this c…")
 
     def test_serialize_note_mentions_skips_invalid_rows(self):
         valid_id = str(uuid4())

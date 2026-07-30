@@ -11,6 +11,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.automation import Automation, AutomationExecution
+from app.models.candidate import Candidate
+from app.models.job import Job
 from app.models.organization import Organization
 from app.models.user import User
 from app.services.automation.logger import log_execution, update_automation_stats
@@ -36,7 +38,6 @@ async def test_user(db: AsyncSession, test_org: Organization) -> User:
     user = User(
         id=uuid7(),
         org_id=test_org.id,
-        created_by_user_id=test_user.id,
         name="Test User",
         email="test@example.com",
         hashed_password="dummy",
@@ -70,22 +71,57 @@ async def test_automation(db: AsyncSession, test_org: Organization, test_user: U
     await db.refresh(automation)
     return automation
 
+@pytest.fixture
+async def test_candidate(db: AsyncSession, test_org: Organization) -> Candidate:
+    """Create test candidate."""
+    from app.models.candidate import Candidate
+    candidate = Candidate(
+        id=uuid7(),
+        org_id=test_org.id,
+        name="John Doe",
+        email="john@example.com",
+        status="active",
+    )
+    db.add(candidate)
+    await db.commit()
+    await db.refresh(candidate)
+    return candidate
+
+@pytest.fixture
+async def test_job(db: AsyncSession, test_org: Organization) -> Job:
+    """Create test job."""
+    from app.models.job import Job
+    job = Job(
+        id=uuid7(),
+        org_id=test_org.id,
+        title="Software Engineer",
+        status="open",
+    )
+    db.add(job)
+    await db.commit()
+    await db.refresh(job)
+    return job
+
+
+
 
 @pytest.mark.asyncio
 async def test_log_execution_success(
     db: AsyncSession,
     test_automation: Automation,
+    test_candidate: Candidate,
 ):
     """Test logging successful execution."""
-    candidate_id = uuid7()
+    candidate_id = test_candidate.id
 
     await log_execution(
         db=db,
         automation_id=test_automation.id,
+        org_id=test_automation.org_id,
         trigger_event="candidate_applied",
         candidate_id=candidate_id,
         job_id=None,
-        status="success",
+        success=True,
         message="Email sent successfully",
     )
 
@@ -106,17 +142,19 @@ async def test_log_execution_success(
 async def test_log_execution_failure(
     db: AsyncSession,
     test_automation: Automation,
+    test_candidate: Candidate,
 ):
     """Test logging failed execution."""
-    candidate_id = uuid7()
+    candidate_id = test_candidate.id
 
     await log_execution(
         db=db,
         automation_id=test_automation.id,
+        org_id=test_automation.org_id,
         trigger_event="candidate_rejected",
         candidate_id=candidate_id,
         job_id=None,
-        status="failed",
+        success=False,
         message="Template not found",
     )
 
@@ -133,18 +171,21 @@ async def test_log_execution_failure(
 async def test_log_execution_with_job_id(
     db: AsyncSession,
     test_automation: Automation,
+    test_candidate: Candidate,
+    test_job: Job,
 ):
     """Test logging execution with job context."""
-    candidate_id = uuid7()
-    job_id = uuid7()
+    candidate_id = test_candidate.id
+    job_id = test_job.id
 
     await log_execution(
         db=db,
         automation_id=test_automation.id,
+        org_id=test_automation.org_id,
         trigger_event="candidate_moved",
         candidate_id=candidate_id,
         job_id=job_id,
-        status="success",
+        success=True,
         message="Stage changed",
     )
 
@@ -201,18 +242,27 @@ async def test_update_automation_stats_multiple_times(
 async def test_log_multiple_executions(
     db: AsyncSession,
     test_automation: Automation,
+    test_candidate: Candidate,
 ):
     """Test logging multiple executions."""
-    candidate_ids = [uuid7() for _ in range(3)]
+    # We need 3 real candidates to satisfy foreign key constraints
+    from app.models.candidate import Candidate
+    candidate_ids = []
+    for i in range(3):
+        c = Candidate(id=uuid7(), org_id=test_automation.org_id, name=f"C{i}", email=f"c{i}@example.com", status="active")
+        db.add(c)
+        candidate_ids.append(c.id)
+    await db.commit()
 
     for candidate_id in candidate_ids:
         await log_execution(
             db=db,
             automation_id=test_automation.id,
+            org_id=test_automation.org_id,
             trigger_event="candidate_applied",
             candidate_id=candidate_id,
             job_id=None,
-            status="success",
+            success=True,
             message="Email sent",
         )
 
@@ -230,18 +280,20 @@ async def test_log_multiple_executions(
 async def test_log_execution_different_statuses(
     db: AsyncSession,
     test_automation: Automation,
+    test_candidate: Candidate,
 ):
     """Test logging executions with different statuses."""
-    candidate_id = uuid7()
+    candidate_id = test_candidate.id
 
     # Log success
     await log_execution(
         db=db,
         automation_id=test_automation.id,
+        org_id=test_automation.org_id,
         trigger_event="candidate_applied",
         candidate_id=candidate_id,
         job_id=None,
-        status="success",
+        success=True,
         message="Success",
     )
 
@@ -249,10 +301,11 @@ async def test_log_execution_different_statuses(
     await log_execution(
         db=db,
         automation_id=test_automation.id,
+        org_id=test_automation.org_id,
         trigger_event="candidate_applied",
         candidate_id=candidate_id,
         job_id=None,
-        status="failed",
+        success=False,
         message="Failed",
     )
 

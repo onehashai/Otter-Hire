@@ -67,6 +67,8 @@ async def test_job(db: AsyncSession, test_org: Organization, test_user: User) ->
 @pytest.fixture
 async def test_candidate(db: AsyncSession, test_org: Organization, test_job: Job) -> Candidate:
     """Create test candidate with active status."""
+    from app.models.candidate_jobs import CandidateJobs
+
     candidate = Candidate(
         id=uuid7(),
         org_id=test_org.id,
@@ -76,32 +78,38 @@ async def test_candidate(db: AsyncSession, test_org: Organization, test_job: Job
         status="active",
     )
     db.add(candidate)
+    await db.flush()
+
+    # Create assignment record
+    assignment = CandidateJobs(
+        assigned_id=uuid7(),
+        org_id=test_org.id,
+        candidate_id=candidate.id,
+        job_id=test_job.id,
+        assignment_status="active",
+    )
+    db.add(assignment)
     await db.commit()
+    
     await db.refresh(candidate)
     return candidate
 
 
 @pytest.mark.asyncio
-@patch("app.api.v1.endpoints.candidates.execute_automations_for_trigger")
+@patch("app.api.v1.internal.endpoints.candidates.execute_automations_for_trigger")
 async def test_update_candidate_status_to_rejected(
     mock_execute_automations: AsyncMock,
     db: AsyncSession,
     test_candidate: Candidate,
+    test_user: User,
 ):
     """Test updating candidate status to rejected."""
-    from app.api.v1.endpoints.candidates import update_candidate_status
+    from app.api.v1.internal.endpoints.candidates import update_candidate_status
     from app.models.user import User
     from app.schemas.candidates import CandidateStatusUpdateRequest
 
     # Mock current user
-    mock_user = User(
-        id=uuid7(),
-        org_id=test_candidate.org_id,
-        name="Admin",
-        email="admin@example.com",
-        status="active",
-        role="user",
-    )
+    mock_user = test_user
 
     # Create request
     request = CandidateStatusUpdateRequest(status="rejected")
@@ -136,29 +144,29 @@ async def test_update_candidate_status_to_rejected(
 
 
 @pytest.mark.asyncio
-@patch("app.api.v1.endpoints.candidates.execute_automations_for_trigger")
+@patch("app.api.v1.internal.endpoints.candidates.execute_automations_for_trigger")
 async def test_update_candidate_status_idempotency(
     mock_execute_automations: AsyncMock,
     db: AsyncSession,
     test_candidate: Candidate,
+    test_user: User,
 ):
     """Test idempotency - updating to same status should skip."""
-    from app.api.v1.endpoints.candidates import update_candidate_status
+    from app.api.v1.internal.endpoints.candidates import update_candidate_status
     from app.models.user import User
     from app.schemas.candidates import CandidateStatusUpdateRequest
 
-    # Set candidate to rejected
+    from app.models.candidate_jobs import CandidateJobs
+    # Set candidate and assignment to rejected
     test_candidate.status = "rejected"
+    assignment_res = await db.execute(
+        select(CandidateJobs).where(CandidateJobs.candidate_id == test_candidate.id)
+    )
+    assignment = assignment_res.scalar_one()
+    assignment.assignment_status = "rejected"
     await db.commit()
 
-    mock_user = User(
-        id=uuid7(),
-        org_id=test_candidate.org_id,
-        name="Admin",
-        email="admin@example.com",
-        status="active",
-        role="user",
-    )
+    mock_user = test_user
 
     # Try to reject again
     request = CandidateStatusUpdateRequest(status="rejected")
@@ -188,25 +196,19 @@ async def test_update_candidate_status_idempotency(
 
 
 @pytest.mark.asyncio
-@patch("app.api.v1.endpoints.candidates.execute_automations_for_trigger")
+@patch("app.api.v1.internal.endpoints.candidates.execute_automations_for_trigger")
 async def test_update_candidate_status_to_hired(
     mock_execute_automations: AsyncMock,
     db: AsyncSession,
     test_candidate: Candidate,
+    test_user: User,
 ):
     """Test updating candidate status to hired."""
-    from app.api.v1.endpoints.candidates import update_candidate_status
+    from app.api.v1.internal.endpoints.candidates import update_candidate_status
     from app.models.user import User
     from app.schemas.candidates import CandidateStatusUpdateRequest
 
-    mock_user = User(
-        id=uuid7(),
-        org_id=test_candidate.org_id,
-        name="Admin",
-        email="admin@example.com",
-        status="active",
-        role="user",
-    )
+    mock_user = test_user
 
     request = CandidateStatusUpdateRequest(status="hired")
 
@@ -226,29 +228,29 @@ async def test_update_candidate_status_to_hired(
 
 
 @pytest.mark.asyncio
-@patch("app.api.v1.endpoints.candidates.execute_automations_for_trigger")
+@patch("app.api.v1.internal.endpoints.candidates.execute_automations_for_trigger")
 async def test_update_candidate_status_to_active(
     mock_execute_automations: AsyncMock,
     db: AsyncSession,
     test_candidate: Candidate,
+    test_user: User,
 ):
     """Test updating candidate status to active (no automation)."""
-    from app.api.v1.endpoints.candidates import update_candidate_status
+    from app.api.v1.internal.endpoints.candidates import update_candidate_status
     from app.models.user import User
     from app.schemas.candidates import CandidateStatusUpdateRequest
 
-    # Set to rejected first
+    from app.models.candidate_jobs import CandidateJobs
+    # Set candidate and assignment to rejected first
     test_candidate.status = "rejected"
+    assignment_res = await db.execute(
+        select(CandidateJobs).where(CandidateJobs.candidate_id == test_candidate.id)
+    )
+    assignment = assignment_res.scalar_one()
+    assignment.assignment_status = "rejected"
     await db.commit()
 
-    mock_user = User(
-        id=uuid7(),
-        org_id=test_candidate.org_id,
-        name="Admin",
-        email="admin@example.com",
-        status="active",
-        role="user",
-    )
+    mock_user = test_user
 
     # Change back to active
     request = CandidateStatusUpdateRequest(status="active")
@@ -267,23 +269,16 @@ async def test_update_candidate_status_to_active(
 
 
 @pytest.mark.asyncio
-async def test_update_candidate_status_not_found(db: AsyncSession):
+async def test_update_candidate_status_not_found(db: AsyncSession, test_user: User):
     """Test updating non-existent candidate."""
     from fastapi import HTTPException
 
-    from app.api.v1.endpoints.candidates import update_candidate_status
+    from app.api.v1.internal.endpoints.candidates import update_candidate_status
     from app.models.user import User
     from app.schemas.candidates import CandidateStatusUpdateRequest
 
     fake_candidate_id = uuid7()
-    mock_user = User(
-        id=uuid7(),
-        org_id=uuid7(),
-        name="Admin",
-        email="admin@example.com",
-        status="active",
-        role="user",
-    )
+    mock_user = test_user
 
     request = CandidateStatusUpdateRequest(status="rejected")
 
@@ -300,28 +295,22 @@ async def test_update_candidate_status_not_found(db: AsyncSession):
 
 
 @pytest.mark.asyncio
-@patch("app.api.v1.endpoints.candidates.execute_automations_for_trigger")
+@patch("app.api.v1.internal.endpoints.candidates.execute_automations_for_trigger")
 async def test_update_candidate_status_activity_metadata(
     mock_execute_automations: AsyncMock,
     db: AsyncSession,
     test_candidate: Candidate,
+    test_user: User,
 ):
     """Test activity log includes old and new status."""
-    from app.api.v1.endpoints.candidates import update_candidate_status
+    from app.api.v1.internal.endpoints.candidates import update_candidate_status
     from app.models.user import User
     from app.schemas.candidates import CandidateStatusUpdateRequest
 
     # Initial status is "active"
     assert test_candidate.status == "active"
 
-    mock_user = User(
-        id=uuid7(),
-        org_id=test_candidate.org_id,
-        name="Admin",
-        email="admin@example.com",
-        status="active",
-        role="user",
-    )
+    mock_user = test_user
 
     request = CandidateStatusUpdateRequest(status="rejected")
 
@@ -346,25 +335,19 @@ async def test_update_candidate_status_activity_metadata(
 
 
 @pytest.mark.asyncio
-@patch("app.api.v1.endpoints.candidates.execute_automations_for_trigger")
+@patch("app.api.v1.internal.endpoints.candidates.execute_automations_for_trigger")
 async def test_update_candidate_status_multiple_times(
     mock_execute_automations: AsyncMock,
     db: AsyncSession,
     test_candidate: Candidate,
+    test_user: User,
 ):
     """Test multiple status updates trigger automations correctly."""
-    from app.api.v1.endpoints.candidates import update_candidate_status
+    from app.api.v1.internal.endpoints.candidates import update_candidate_status
     from app.models.user import User
     from app.schemas.candidates import CandidateStatusUpdateRequest
 
-    mock_user = User(
-        id=uuid7(),
-        org_id=test_candidate.org_id,
-        name="Admin",
-        email="admin@example.com",
-        status="active",
-        role="user",
-    )
+    mock_user = test_user
 
     # First update: active -> rejected
     request1 = CandidateStatusUpdateRequest(status="rejected")

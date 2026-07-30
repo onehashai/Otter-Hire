@@ -52,6 +52,8 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: ats_db
+    ports:
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -140,8 +142,10 @@ services:
       NEXT_PUBLIC_JOBS_SUBDOMAIN: jobs
       NEXT_PUBLIC_APP_ROOT_HOST: localhost.com:3000
       NEXT_PUBLIC_SES_MAIL_DOMAIN: applications.smartats.in
-      NEXT_PUBLIC_API_BASE_URL: http://api.localhost.com:8000
+      NEXT_PUBLIC_API_BASE_URL: http://app.localhost.com:3000
       NEXT_PUBLIC_TEMPORAL_UI_URL: http://temporal.localhost.com:8081
+      # Internal server-side URL — uses Docker network directly (fast, no host-gateway)
+      NEXT_INTERNAL_API_BASE_URL: http://backend:8000
     extra_hosts:
       - "api.localhost.com:host-gateway"
     ports:

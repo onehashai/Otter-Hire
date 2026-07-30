@@ -71,6 +71,11 @@ async def db(engine) -> AsyncSession:
     )
 
     async with async_session() as session:
+        # Clean up database tables in reverse order of dependency
+        for table in reversed(Base.metadata.sorted_tables):
+            await session.execute(table.delete())
+        await session.commit()
+
         yield session
         await session.rollback()
 

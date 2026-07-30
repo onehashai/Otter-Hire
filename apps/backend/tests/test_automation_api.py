@@ -39,7 +39,6 @@ async def test_user(db: AsyncSession, test_org: Organization) -> User:
     user = User(
         id=uuid7(),
         org_id=test_org.id,
-        created_by_user_id=test_user.id,
         name="Test User",
         email="test@example.com",
         hashed_password="dummy",
@@ -58,7 +57,7 @@ async def test_job(db: AsyncSession, test_org: Organization, test_user: User) ->
     job = Job(
         id=uuid7(),
         org_id=test_org.id,
-        created_by_user_id=test_user.id,
+        
         title="Software Engineer",
         status="open",
     )
@@ -74,7 +73,7 @@ async def test_template(db: AsyncSession, test_org: Organization, test_user: Use
     template = Template(
         id=uuid7(),
         org_id=test_org.id,
-        created_by_user_id=test_user.id,
+        
         name="Welcome Email",
         subject="Welcome {{candidate_name}}!",
         body="Hello {{candidate_name}}, welcome to {{company_name}}.",
@@ -119,9 +118,9 @@ async def test_automation(
 
 
 @pytest.mark.asyncio
-@patch("app.services.automation.actions.send_email")
+@patch("app.temporal.email.queue.enqueue_outbound_email")
 async def test_complete_automation_flow(
-    mock_send_email: AsyncMock,
+    mock_enqueue_email: AsyncMock,
     db: AsyncSession,
     test_org: Organization,
     test_user: User,
@@ -129,13 +128,13 @@ async def test_complete_automation_flow(
     test_automation: Automation,
 ):
     """Test complete automation flow from trigger to execution."""
-    mock_send_email.return_value = None
+    mock_enqueue_email.return_value = {"workflow_id": "test-wf", "started": True}
 
     # Create test candidate
     test_candidate = Candidate(
         id=uuid7(),
         org_id=test_org.id,
-        created_by_user_id=test_user.id,
+        
         job_id=test_job.id,
         name="Test Automation Candidate",
         email="test@example.com",
@@ -150,7 +149,7 @@ async def test_complete_automation_flow(
         db=db,
         trigger_key="candidate_applied",
         org_id=test_org.id,
-        created_by_user_id=test_user.id,
+        
         candidate_id=test_candidate.id,
         job_id=test_job.id,
         metadata={"source": "test"},
@@ -179,20 +178,20 @@ async def test_complete_automation_flow(
     assert test_automation.last_run_at is not None
 
     # Verify email was sent
-    mock_send_email.assert_called_once()
+    mock_enqueue_email.assert_called_once()
 
 
 @pytest.mark.asyncio
-@patch("app.services.automation.actions.send_email")
+@patch("app.temporal.email.queue.enqueue_outbound_email")
 async def test_automation_with_multiple_candidates(
-    mock_send_email: AsyncMock,
+    mock_enqueue_email: AsyncMock,
     db: AsyncSession,
     test_org: Organization,
     test_job: Job,
     test_automation: Automation,
 ):
     """Test automation triggers for multiple candidates."""
-    mock_send_email.return_value = None
+    mock_enqueue_email.return_value = {"workflow_id": "test-wf", "started": True}
 
     # Create multiple candidates
     candidates = []
@@ -200,7 +199,7 @@ async def test_automation_with_multiple_candidates(
         candidate = Candidate(
             id=uuid7(),
             org_id=test_org.id,
-            created_by_user_id=test_user.id,
+            
             job_id=test_job.id,
             name=f"Candidate {i+1}",
             email=f"candidate{i+1}@example.com",
@@ -217,7 +216,7 @@ async def test_automation_with_multiple_candidates(
             db=db,
             trigger_key="candidate_applied",
             org_id=test_org.id,
-            created_by_user_id=test_user.id,
+            
             candidate_id=candidate.id,
             job_id=test_job.id,
             metadata={"source": "test"},
@@ -237,7 +236,7 @@ async def test_automation_with_multiple_candidates(
     assert test_automation.execution_count == 3
 
     # Verify emails sent
-    assert mock_send_email.call_count == 3
+    assert mock_enqueue_email.call_count == 3
 
 
 @pytest.mark.asyncio
@@ -276,7 +275,7 @@ async def test_automation_with_missing_template(
     candidate = Candidate(
         id=uuid7(),
         org_id=test_org.id,
-        created_by_user_id=test_user.id,
+        
         job_id=test_job.id,
         name="Test Candidate",
         email="test@example.com",
@@ -290,7 +289,7 @@ async def test_automation_with_missing_template(
         db=db,
         trigger_key="candidate_applied",
         org_id=test_org.id,
-        created_by_user_id=test_user.id,
+        
         candidate_id=candidate.id,
         job_id=test_job.id,
         metadata={},

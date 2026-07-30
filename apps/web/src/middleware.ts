@@ -10,7 +10,13 @@ const PUBLIC_ROUTES = new Set(["/health", "/favicon.ico"]);
 const MARKETING_ROUTES = new Set(["/privacy-policy", "/terms"]);
 
 function getApiBaseUrl(): string {
-  return (process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000").replace(/\/$/, "");
+  // Prefer internal Docker network URL (server-side only) to avoid
+  // Docker Desktop Mac's broken 127.0.0.1 port forwarding.
+  return (
+    process.env.NEXT_INTERNAL_API_BASE_URL ||
+    process.env.NEXT_PUBLIC_API_BASE_URL ||
+    "http://localhost:8000"
+  ).replace(/\/$/, "");
 }
 
 function parseJobStagePath(pathname: string): { jobId: string; stageId: string } | null {

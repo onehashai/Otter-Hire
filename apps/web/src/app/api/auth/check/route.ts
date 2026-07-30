@@ -9,7 +9,12 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const apiBase = (process.env.NEXT_PUBLIC_API_BASE_URL || "").replace(/\/$/, "");
+    // Use internal Docker network URL if available (avoids slow host-gateway on Mac)
+    const apiBase = (
+      process.env.NEXT_INTERNAL_API_BASE_URL ||
+      process.env.NEXT_PUBLIC_API_BASE_URL ||
+      ""
+    ).replace(/\/$/, "");
     const res = await fetch(`${apiBase}/v1/internal/me`, {
       headers: {
         cookie: request.headers.get("cookie") || "",

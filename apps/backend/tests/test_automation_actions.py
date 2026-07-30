@@ -102,9 +102,9 @@ async def test_template(db: AsyncSession, test_org: Organization, test_user: Use
 
 
 @pytest.mark.asyncio
-@patch("app.services.automation.actions.send_email")
+@patch("app.temporal.email.queue.enqueue_outbound_email")
 async def test_handle_send_email_action_success(
-    mock_send_email: AsyncMock,
+    mock_enqueue_email: AsyncMock,
     db: AsyncSession,
     test_org: Organization,
     test_candidate: Candidate,
@@ -112,7 +112,7 @@ async def test_handle_send_email_action_success(
     test_template: Template,
 ):
     """Test successful email sending action."""
-    mock_send_email.return_value = None
+    mock_enqueue_email.return_value = {"workflow_id": "test-wf", "started": True}
 
     action_config = {"template": str(test_template.id)}
 
@@ -127,13 +127,14 @@ async def test_handle_send_email_action_success(
 
     assert success is True
     assert "jane.doe@example.com" in message
-    mock_send_email.assert_called_once()
+    mock_enqueue_email.assert_called_once()
 
     # Verify email content
-    call_args = mock_send_email.call_args
-    assert call_args.kwargs["to_email"] == "jane.doe@example.com"
-    assert "Jane Doe" in call_args.kwargs["content"].subject
-    assert "Test Company" in call_args.kwargs["content"].text
+    call_args = mock_enqueue_email.call_args
+    input_obj = call_args.args[0]
+    assert input_obj.to_email == "jane.doe@example.com"
+    assert "Jane Doe" in input_obj.subject
+    assert "Jane Doe" in input_obj.body
 
 
 @pytest.mark.asyncio
@@ -239,16 +240,16 @@ async def test_handle_send_email_action_no_candidate_email(
 
 
 @pytest.mark.asyncio
-@patch("app.services.automation.actions.send_email")
+@patch("app.temporal.email.queue.enqueue_outbound_email")
 async def test_handle_send_email_action_send_fails(
-    mock_send_email: AsyncMock,
+    mock_enqueue_email: AsyncMock,
     db: AsyncSession,
     test_org: Organization,
     test_candidate: Candidate,
     test_template: Template,
 ):
     """Test email action when send_email raises exception."""
-    mock_send_email.side_effect = Exception("SMTP connection failed")
+    mock_enqueue_email.side_effect = Exception("SMTP connection failed")
 
     action_config = {"template": str(test_template.id)}
 
@@ -262,20 +263,20 @@ async def test_handle_send_email_action_send_fails(
     )
 
     assert success is False
-    assert "Failed to send email" in message
+    assert "Failed to enqueue email" in message
 
 
 @pytest.mark.asyncio
-@patch("app.services.automation.actions.send_email")
+@patch("app.temporal.email.queue.enqueue_outbound_email")
 async def test_execute_action_send_email(
-    mock_send_email: AsyncMock,
+    mock_enqueue_email: AsyncMock,
     db: AsyncSession,
     test_org: Organization,
     test_candidate: Candidate,
     test_template: Template,
 ):
     """Test execute_action routing to send_email handler."""
-    mock_send_email.return_value = None
+    mock_enqueue_email.return_value = {"workflow_id": "test-wf", "started": True}
 
     action = {
         "type": "send_email",
@@ -292,7 +293,7 @@ async def test_execute_action_send_email(
     )
 
     assert success is True
-    mock_send_email.assert_called_once()
+    mock_enqueue_email.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -321,15 +322,15 @@ async def test_execute_action_unknown_type(
 
 
 @pytest.mark.asyncio
-@patch("app.services.automation.actions.send_email")
+@patch("app.temporal.email.queue.enqueue_outbound_email")
 async def test_execute_action_missing_config(
-    mock_send_email: AsyncMock,
+    mock_enqueue_email: AsyncMock,
     db: AsyncSession,
     test_org: Organization,
     test_candidate: Candidate,
 ):
     """Test execute_action with missing config."""
-    mock_send_email.return_value = None
+    mock_enqueue_email.return_value = {"workflow_id": "test-wf", "started": True}
 
     action = {
         "type": "send_email",
@@ -350,16 +351,16 @@ async def test_execute_action_missing_config(
 
 
 @pytest.mark.asyncio
-@patch("app.services.automation.actions.send_email")
+@patch("app.temporal.email.queue.enqueue_outbound_email")
 async def test_handle_send_email_with_metadata(
-    mock_send_email: AsyncMock,
+    mock_enqueue_email: AsyncMock,
     db: AsyncSession,
     test_org: Organization,
     test_candidate: Candidate,
     test_template: Template,
 ):
     """Test email action with metadata for context."""
-    mock_send_email.return_value = None
+    mock_enqueue_email.return_value = {"workflow_id": "test-wf", "started": True}
 
     # Template with stage_name variable
     test_template.body = "You moved to {{stage_name}} stage."
@@ -380,5 +381,6 @@ async def test_handle_send_email_with_metadata(
     assert success is True
 
     # Verify metadata was used in rendering
-    call_args = mock_send_email.call_args
-    assert "Interview stage" in call_args.kwargs["content"].text
+    call_args = mock_enqueue_email.call_args
+    input_obj = call_args.args[0]
+    assert "Interview stage" in input_obj.body

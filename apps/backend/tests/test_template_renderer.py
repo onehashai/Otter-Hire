@@ -36,7 +36,7 @@ async def test_job(db: AsyncSession, test_org: Organization) -> Job:
         org_id=test_org.id,
         title="Senior Software Engineer",
         city="San Francisco",
-        country="USA",
+        country="US",
         status="open",
     )
     db.add(job)
@@ -162,7 +162,7 @@ async def test_build_template_context_complete(
     assert context["candidate_email"] == "john.doe@example.com"
     assert context["candidate_phone"] == "+1234567890"
     assert context["job_title"] == "Senior Software Engineer"
-    assert context["job_location"] == "San Francisco, USA"
+    assert context["job_location"] == "San Francisco, US"
     assert context["company_name"] == "Acme Corp"
     assert context["org_name"] == "Acme Corp"
     assert context["stage_name"] == "Interview"

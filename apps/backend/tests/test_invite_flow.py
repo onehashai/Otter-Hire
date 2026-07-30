@@ -16,7 +16,7 @@ from app.utils.uuid import uuid7
 
 
 def _request() -> Request:
-    return Request({"type": "http", "headers": []})
+    return Request({"type": "http", "headers": [], "path": "/auth/invite"})
 
 
 @pytest.fixture

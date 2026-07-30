@@ -37,7 +37,6 @@ async def test_user(db: AsyncSession, test_org: Organization) -> User:
     user = User(
         id=uuid7(),
         org_id=test_org.id,
-        created_by_user_id=test_user.id,
         name="Test User",
         email="test@example.com",
         hashed_password="dummy",
@@ -56,7 +55,7 @@ async def test_job(db: AsyncSession, test_org: Organization, test_user: User) ->
     job = Job(
         id=uuid7(),
         org_id=test_org.id,
-        created_by_user_id=test_user.id,
+        
         title="Software Engineer",
         status="open",
     )
@@ -72,7 +71,7 @@ async def test_candidate(db: AsyncSession, test_org: Organization, test_job: Job
     candidate = Candidate(
         id=uuid7(),
         org_id=test_org.id,
-        created_by_user_id=test_user.id,
+        
         job_id=test_job.id,
         name="John Doe",
         email="john@example.com",
@@ -90,7 +89,7 @@ async def test_template(db: AsyncSession, test_org: Organization, test_user: Use
     template = Template(
         id=uuid7(),
         org_id=test_org.id,
-        created_by_user_id=test_user.id,
+        
         name="Welcome Email",
         subject="Welcome {{candidate_name}}!",
         body="Hello {{candidate_name}}, welcome to {{company_name}}. Job: {{job_title}}",
@@ -137,7 +136,7 @@ async def test_automation_candidate_applied_trigger(
         db=db,
         trigger_key="candidate_applied",
         org_id=test_org.id,
-        created_by_user_id=test_user.id,
+        
         candidate_id=test_candidate.id,
         job_id=test_job.id,
         metadata={"source": "job_portal"},
@@ -189,7 +188,7 @@ async def test_automation_scope_filtering_all_jobs(
         db=db,
         trigger_key="candidate_applied",
         org_id=test_org.id,
-        created_by_user_id=test_user.id,
+        
         candidate_id=test_candidate.id,
         job_id=test_job.id,
     )
@@ -215,7 +214,7 @@ async def test_automation_scope_filtering_specific_job(
     other_job = Job(
         id=uuid7(),
         org_id=test_org.id,
-        created_by_user_id=test_user.id,
+        
         title="Other Job",
         status="open",
     )
@@ -244,7 +243,7 @@ async def test_automation_scope_filtering_specific_job(
         db=db,
         trigger_key="candidate_applied",
         org_id=test_org.id,
-        created_by_user_id=test_user.id,
+        
         candidate_id=test_candidate.id,
         job_id=test_job.id,
     )
@@ -259,7 +258,7 @@ async def test_automation_scope_filtering_specific_job(
     other_candidate = Candidate(
         id=uuid7(),
         org_id=test_org.id,
-        created_by_user_id=test_user.id,
+        
         job_id=other_job.id,
         name="Jane Doe",
         email="jane@example.com",
@@ -272,7 +271,7 @@ async def test_automation_scope_filtering_specific_job(
         db=db,
         trigger_key="candidate_applied",
         org_id=test_org.id,
-        created_by_user_id=test_user.id,
+        
         candidate_id=other_candidate.id,
         job_id=other_job.id,
     )
@@ -316,7 +315,7 @@ async def test_automation_candidate_moved_stage_filtering(
         db=db,
         trigger_key="candidate_moved",
         org_id=test_org.id,
-        created_by_user_id=test_user.id,
+        
         candidate_id=test_candidate.id,
         job_id=test_job.id,
         metadata={"stage_name": "Interview"},
@@ -333,7 +332,7 @@ async def test_automation_candidate_moved_stage_filtering(
         db=db,
         trigger_key="candidate_moved",
         org_id=test_org.id,
-        created_by_user_id=test_user.id,
+        
         candidate_id=test_candidate.id,
         job_id=test_job.id,
         metadata={"stage_name": "Screening"},
@@ -376,7 +375,7 @@ async def test_automation_draft_status_not_executed(
         db=db,
         trigger_key="candidate_applied",
         org_id=test_org.id,
-        created_by_user_id=test_user.id,
+        
         candidate_id=test_candidate.id,
         job_id=test_job.id,
     )
@@ -430,7 +429,7 @@ async def test_automation_multiple_automations_execute(
         db=db,
         trigger_key="candidate_applied",
         org_id=test_org.id,
-        created_by_user_id=test_user.id,
+        
         candidate_id=test_candidate.id,
         job_id=test_job.id,
     )
@@ -477,7 +476,7 @@ async def test_automation_missing_template_logs_failure(
         db=db,
         trigger_key="candidate_applied",
         org_id=test_org.id,
-        created_by_user_id=test_user.id,
+        
         candidate_id=test_candidate.id,
         job_id=test_job.id,
     )

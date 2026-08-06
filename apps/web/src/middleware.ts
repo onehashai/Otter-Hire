@@ -261,9 +261,10 @@ export async function middleware(request: NextRequest) {
       configuredRootHostname === "localhost" ||
       configuredRootHostname === "127.0.0.1" ||
       configuredRootHostname.includes("localhost");
-    if (!isBareLocal && !isLocalDev && currentHostname === configuredRootHostname) {
-      return NextResponse.redirect(`https://www.${rootHost}${pathname}${search}`, 301);
-    }
+    // Disabled www redirect to prevent SSL certificate validation errors on bare domain
+    // if (!isBareLocal && !isLocalDev && currentHostname === configuredRootHostname) {
+    //   return NextResponse.redirect(`https://www.${rootHost}${pathname}${search}`, 301);
+    // }
 
     // Public infra routes pass straight through on any domain.
     if (PUBLIC_ROUTES.has(pathname)) {

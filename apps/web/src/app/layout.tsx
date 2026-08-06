@@ -77,20 +77,7 @@ function isJobsSubdomain(host: string): boolean {
  * Matches NEXT_PUBLIC_APP_ROOT_HOST plus bare localhost in development.
  */
 function isMarketingDomain(host: string): boolean {
-  const hostname = host.split(":")[0]?.toLowerCase();
-  if (!hostname) return false;
-
-  const marketingHosts = new Set(["localhost", "127.0.0.1"]);
-  const configuredRootHostname = (process.env.NEXT_PUBLIC_APP_ROOT_HOST || "")
-    .split(":")[0]
-    .toLowerCase();
-
-  if (configuredRootHostname) {
-    marketingHosts.add(configuredRootHostname);
-    marketingHosts.add(`www.${configuredRootHostname}`);
-  }
-
-  return marketingHosts.has(hostname);
+  return false;
 }
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {

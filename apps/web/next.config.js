@@ -3,11 +3,11 @@ const path = require("path");
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   allowedDevOrigins: [
-    "localhost.com",
+    "smartats.in",
     "localhost",
-    "app.localhost.com",
-    "jobs.localhost.com",
-    "api.localhost.com",
+    "app.smartats.in",
+    "jobs.smartats.in",
+    "api.smartats.in",
   ],
   transpilePackages: ["@onehash/ui"],
   turbopack: {

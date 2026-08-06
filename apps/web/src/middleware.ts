@@ -160,16 +160,6 @@ function isRootHost(host: string): boolean {
   return false; // Treat the bare domain as the main application host instead of marketing domain
 }
 
-/**
- * Returns true when the incoming host is the root/marketing domain, i.e. it
- * matches NEXT_PUBLIC_APP_ROOT_HOST or the bare localhost dev host
- * (hostname comparison, port-agnostic).
- */
-function isRootHost(host: string): boolean {
-  const currentHostname = host.split(":")[0].toLowerCase();
-  return getRootHostAliases().includes(currentHostname);
-}
-
 function appendSetCookieHeaders(target: NextResponse, sourceHeaders: Headers): void {
   const maybeHeaders = sourceHeaders as Headers & {
     getSetCookie?: () => string[];

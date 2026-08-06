@@ -81,8 +81,11 @@ async function normalizeInvalidStageUrl(request: NextRequest): Promise<NextRespo
 }
 
 function getExpectedAppHost(): string | null {
+  const subdomain = process.env.NEXT_PUBLIC_APP_SUBDOMAIN;
   const rootHost = process.env.NEXT_PUBLIC_APP_ROOT_HOST;
-  return rootHost || null;
+
+  if (!subdomain || !rootHost) return null;
+  return `${subdomain}.${rootHost}`;
 }
 
 function getJobsSubdomain(): string {
@@ -151,13 +154,20 @@ function legacyCareersRedirect(request: NextRequest, pathname: string): NextResp
 }
 
 function getAppSubdomainUrl(pathname: string, rootHost: string, search = ""): string {
+  const appSubdomain = process.env.NEXT_PUBLIC_APP_SUBDOMAIN || "app";
   const protocol =
     rootHost.includes("localhost") || rootHost.includes("127.0.0.1") ? "http" : "https";
-  return `${protocol}://${rootHost}${pathname}${search}`;
+  return `${protocol}://${appSubdomain}.${rootHost}${pathname}${search}`;
 }
 
+/**
+ * Returns true when the incoming host is the root/marketing domain, i.e. it
+ * matches NEXT_PUBLIC_APP_ROOT_HOST or the bare localhost dev host
+ * (hostname comparison, port-agnostic).
+ */
 function isRootHost(host: string): boolean {
-  return false; // Treat the bare domain as the main application host instead of marketing domain
+  const currentHostname = host.split(":")[0].toLowerCase();
+  return getRootHostAliases().includes(currentHostname);
 }
 
 function appendSetCookieHeaders(target: NextResponse, sourceHeaders: Headers): void {
@@ -251,10 +261,9 @@ export async function middleware(request: NextRequest) {
       configuredRootHostname === "localhost" ||
       configuredRootHostname === "127.0.0.1" ||
       configuredRootHostname.includes("localhost");
-    // Disabled www redirect to prevent SSL certificate validation errors on bare domain
-    // if (!isBareLocal && !isLocalDev && currentHostname === configuredRootHostname) {
-    //   return NextResponse.redirect(`https://www.${rootHost}${pathname}${search}`, 301);
-    // }
+    if (!isBareLocal && !isLocalDev && currentHostname === configuredRootHostname) {
+      return NextResponse.redirect(`https://www.${rootHost}${pathname}${search}`, 301);
+    }
 
     // Public infra routes pass straight through on any domain.
     if (PUBLIC_ROUTES.has(pathname)) {

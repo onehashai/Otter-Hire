@@ -20,22 +20,36 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Add columns to candidates table safely
-    op.add_column(
-        "candidates",
-        sa.Column(
-            "is_pending_duplicate_review", sa.Boolean(), server_default="false", nullable=False
-        ),
-    )
-    op.add_column("candidates", sa.Column("possible_duplicate_of_id", sa.UUID(), nullable=True))
-    op.create_foreign_key(
-        "fk_candidates_possible_duplicate_of",
-        "candidates",
-        "candidates",
-        ["possible_duplicate_of_id"],
-        ["id"],
-        ondelete="SET NULL",
-    )
+    bind = op.get_bind()
+    has_rev = bind.execute(
+        sa.text("SELECT 1 FROM information_schema.columns WHERE table_name='candidates' AND column_name='is_pending_duplicate_review'")
+    ).scalar()
+    if not has_rev:
+        op.add_column(
+            "candidates",
+            sa.Column(
+                "is_pending_duplicate_review", sa.Boolean(), server_default="false", nullable=False
+            ),
+        )
+    
+    has_dup = bind.execute(
+        sa.text("SELECT 1 FROM information_schema.columns WHERE table_name='candidates' AND column_name='possible_duplicate_of_id'")
+    ).scalar()
+    if not has_dup:
+        op.add_column("candidates", sa.Column("possible_duplicate_of_id", sa.UUID(), nullable=True))
+    
+    has_fk = bind.execute(
+        sa.text("SELECT 1 FROM information_schema.table_constraints WHERE table_name='candidates' AND constraint_name='fk_candidates_possible_duplicate_of'")
+    ).scalar()
+    if not has_fk:
+        op.create_foreign_key(
+            "fk_candidates_possible_duplicate_of",
+            "candidates",
+            "candidates",
+            ["possible_duplicate_of_id"],
+            ["id"],
+            ondelete="SET NULL",
+        )
 
 
 def downgrade() -> None:

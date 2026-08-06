@@ -144,6 +144,7 @@ class Settings(BaseSettings):
     aws_s3_attachments_env: str = Field(
         default="staging", validation_alias="AWS_S3_ATTACHMENTS_ENV"
     )
+    s3_enabled_override: bool = Field(default=True, validation_alias="S3_ENABLED")
     inbound_webhook_secret: str | None = Field(
         default=None, validation_alias="INBOUND_WEBHOOK_SECRET"
     )
@@ -278,7 +279,8 @@ class Settings(BaseSettings):
     @property
     def s3_enabled(self) -> bool:
         return bool(
-            (self.aws_s3_bucket or "").strip()
+            self.s3_enabled_override
+            and (self.aws_s3_bucket or "").strip()
             and (self.aws_s3_region or "").strip()
             and (self.aws_access_key_id or "").strip()
             and (self.aws_secret_access_key or "").strip()

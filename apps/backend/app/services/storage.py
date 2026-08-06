@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from app.core.config import settings
+
+logger = logging.getLogger("ats_backend")
 
 
 class StorageService:
@@ -23,6 +26,10 @@ class StorageService:
             raise ValueError("S3 config missing: AWS_S3_BUCKET / AWS_S3_REGION")
         self.bucket = settings.aws_s3_bucket
         self.s3_prefix = settings.s3_root_prefix
+        logger.info("AWS Region: %s", settings.aws_s3_region)
+        logger.info("AWS Access Key Prefix: %s", (settings.aws_access_key_id or "")[:8])
+        logger.info("Bucket: %s", self.bucket)
+        logger.info("Prefix: %s", self.s3_prefix)
         self.s3_client = boto3.client(
             "s3",
             region_name=settings.aws_s3_region,

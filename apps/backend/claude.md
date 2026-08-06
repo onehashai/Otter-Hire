@@ -54,7 +54,7 @@
 ### Temporal Workflows (`app/temporal`)
 
 - **Resume parsing**: Workflow code exists but primary path is synchronous (`run_resume_pipeline()` called directly on candidate create and inbound email)
-- **Email processing**: Triggered on inbound email (SES → SNS → webhook), creates candidate + application
+- **Email processing**: Triggered on inbound email (SES → SNS → webhook), creates candidate + application 
 - **Worker**: Separate process (`python -m app.temporal`) polls Temporal server
 
 ### Inbound Email Flow

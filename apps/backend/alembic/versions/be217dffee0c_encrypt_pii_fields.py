@@ -53,29 +53,34 @@ def upgrade() -> None:
     op.add_column("users", sa.Column("google_id_hash", sa.String(64), nullable=True))
 
     # 2. Drop old unique constraint and index on plaintext google_id
-    op.drop_constraint("uq_users_google_id", "users", type_="unique")
-    op.drop_index("ix_users_google_id", table_name="users")
+    op.execute("ALTER TABLE users DROP CONSTRAINT IF EXISTS uq_users_google_id")
+    op.execute("DROP INDEX IF EXISTS ix_users_google_id")
 
     # 3. Data migration: encrypt google_id and populate google_id_hash
-    rows = bind.execute(
-        sa.text("SELECT id, google_id FROM users WHERE google_id IS NOT NULL")
-    ).fetchall()
+    has_google_id = bind.execute(
+        sa.text("SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='google_id'")
+    ).scalar()
 
-    for row in rows:
-        user_id = row[0]
-        plaintext_gid = row[1]
+    if has_google_id:
+        rows = bind.execute(
+            sa.text("SELECT id, google_id FROM users WHERE google_id IS NOT NULL")
+        ).fetchall()
 
-        # Skip rows already encrypted in a previous partial run (Fernet tokens start with "gAAAAA")
-        if plaintext_gid.startswith("gAAAAA"):
-            continue
+        for row in rows:
+            user_id = row[0]
+            plaintext_gid = row[1]
 
-        encrypted = encrypt_value(plaintext_gid, key)
-        gid_hash = hmac_hash(plaintext_gid, key)
+            # Skip rows already encrypted in a previous partial run (Fernet tokens start with "gAAAAA")
+            if plaintext_gid.startswith("gAAAAA"):
+                continue
 
-        bind.execute(
-            sa.text("UPDATE users SET google_id = :enc, google_id_hash = :h WHERE id = :id"),
-            {"enc": encrypted, "h": gid_hash, "id": str(user_id)},
-        )
+            encrypted = encrypt_value(plaintext_gid, key)
+            gid_hash = hmac_hash(plaintext_gid, key)
+
+            bind.execute(
+                sa.text("UPDATE users SET google_id = :enc, google_id_hash = :h WHERE id = :id"),
+                {"enc": encrypted, "h": gid_hash, "id": str(user_id)},
+            )
 
     # 4. Add new unique constraint and index on the hash column
     op.create_unique_constraint("uq_users_google_id_hash", "users", ["google_id_hash"])

@@ -34,8 +34,12 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     bind = op.get_bind()
 
-    # 1. Add oauth_credentials JSONB column
-    op.add_column("users", sa.Column("oauth_credentials", postgresql.JSONB(), nullable=True))
+    # 1. Add oauth_credentials JSONB column if not exists
+    has_oauth_creds = bind.execute(
+        sa.text("SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='oauth_credentials'")
+    ).scalar()
+    if not has_oauth_creds:
+        op.add_column("users", sa.Column("oauth_credentials", postgresql.JSONB(), nullable=True))
 
     # 2. Migrate existing google_id_hash into oauth_credentials JSONB
     bind.execute(
@@ -70,10 +74,10 @@ def upgrade() -> None:
     op.drop_index("ix_users_google_id_hash", table_name="users")
 
     # 7. Drop google_id_hash column
-    op.drop_column("users", "google_id_hash")
+    op.execute("ALTER TABLE users DROP COLUMN IF EXISTS google_id_hash")
 
     # 8. Drop google_id column
-    op.drop_column("users", "google_id")
+    op.execute("ALTER TABLE users DROP COLUMN IF EXISTS google_id")
 
     # 9. Create partial functional unique index on google_id_hash inside oauth_credentials
     bind.execute(

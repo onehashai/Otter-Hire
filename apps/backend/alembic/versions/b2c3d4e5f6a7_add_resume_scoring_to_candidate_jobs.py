@@ -20,27 +20,57 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "Candidate_jobs",
-        sa.Column("resume_score_generation", sa.Integer(), nullable=False, server_default="0"),
-    )
-    op.add_column("Candidate_jobs", sa.Column("resume_score", sa.Integer(), nullable=True))
-    op.add_column(
-        "Candidate_jobs", sa.Column("resume_score_status", sa.String(length=20), nullable=True)
-    )
-    op.add_column(
-        "Candidate_jobs",
-        sa.Column("resume_score_breakdown", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
-    )
-    op.add_column(
-        "Candidate_jobs",
-        sa.Column("resume_score_scored_at", sa.DateTime(timezone=True), nullable=True),
-    )
-    op.create_check_constraint(
-        "ck_candidate_jobs_resume_score_status",
-        "Candidate_jobs",
-        "resume_score_status IS NULL OR resume_score_status IN ('pending', 'ready', 'failed')",
-    )
+    bind = op.get_bind()
+    has_gen = bind.execute(
+        sa.text("SELECT 1 FROM information_schema.columns WHERE table_name='Candidate_jobs' AND column_name='resume_score_generation'")
+    ).scalar()
+    if not has_gen:
+        op.add_column(
+            "Candidate_jobs",
+            sa.Column("resume_score_generation", sa.Integer(), nullable=False, server_default="0"),
+        )
+    
+    has_score = bind.execute(
+        sa.text("SELECT 1 FROM information_schema.columns WHERE table_name='Candidate_jobs' AND column_name='resume_score'")
+    ).scalar()
+    if not has_score:
+        op.add_column("Candidate_jobs", sa.Column("resume_score", sa.Integer(), nullable=True))
+    
+    has_status = bind.execute(
+        sa.text("SELECT 1 FROM information_schema.columns WHERE table_name='Candidate_jobs' AND column_name='resume_score_status'")
+    ).scalar()
+    if not has_status:
+        op.add_column(
+            "Candidate_jobs", sa.Column("resume_score_status", sa.String(length=20), nullable=True)
+        )
+    
+    has_breakdown = bind.execute(
+        sa.text("SELECT 1 FROM information_schema.columns WHERE table_name='Candidate_jobs' AND column_name='resume_score_breakdown'")
+    ).scalar()
+    if not has_breakdown:
+        op.add_column(
+            "Candidate_jobs",
+            sa.Column("resume_score_breakdown", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        )
+    
+    has_scored_at = bind.execute(
+        sa.text("SELECT 1 FROM information_schema.columns WHERE table_name='Candidate_jobs' AND column_name='resume_score_scored_at'")
+    ).scalar()
+    if not has_scored_at:
+        op.add_column(
+            "Candidate_jobs",
+            sa.Column("resume_score_scored_at", sa.DateTime(timezone=True), nullable=True),
+        )
+
+    has_ck = bind.execute(
+        sa.text("SELECT 1 FROM information_schema.table_constraints WHERE table_name='Candidate_jobs' AND constraint_name='ck_candidate_jobs_resume_score_status'")
+    ).scalar()
+    if not has_ck:
+        op.create_check_constraint(
+            "ck_candidate_jobs_resume_score_status",
+            "Candidate_jobs",
+            "resume_score_status IS NULL OR resume_score_status IN ('pending', 'ready', 'failed')",
+        )
 
 
 def downgrade() -> None:

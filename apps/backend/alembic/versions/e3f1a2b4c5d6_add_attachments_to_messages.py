@@ -21,10 +21,15 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "messages",
-        sa.Column("attachments", JSONB, nullable=False, server_default="[]"),
-    )
+    bind = op.get_bind()
+    has_col = bind.execute(
+        sa.text("SELECT 1 FROM information_schema.columns WHERE table_name='messages' AND column_name='attachments'")
+    ).scalar()
+    if not has_col:
+        op.add_column(
+            "messages",
+            sa.Column("attachments", JSONB, nullable=False, server_default="[]"),
+        )
 
 
 def downgrade() -> None:

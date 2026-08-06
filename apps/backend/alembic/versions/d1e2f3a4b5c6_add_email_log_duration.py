@@ -16,10 +16,15 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "inbound_emails",
-        sa.Column("parse_duration_ms", sa.BigInteger(), nullable=True),
-    )
+    bind = op.get_bind()
+    has_col = bind.execute(
+        sa.text("SELECT 1 FROM information_schema.columns WHERE table_name='inbound_emails' AND column_name='parse_duration_ms'")
+    ).scalar()
+    if not has_col:
+        op.add_column(
+            "inbound_emails",
+            sa.Column("parse_duration_ms", sa.BigInteger(), nullable=True),
+        )
 
 
 def downgrade() -> None:

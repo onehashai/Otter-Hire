@@ -88,6 +88,7 @@ function JobDetailContent({ job, orgIdParam }: { job: PublicJobDetail; orgIdPara
     files: {} as Record<string, ApplyFile | undefined>,
   });
   const [applySubmitting, setApplySubmitting] = useState(false);
+  const [applySubmitted, setApplySubmitted] = useState(false);
   const [applyErrors, setApplyErrors] = useState<Record<string, string>>({});
 
   const openApplyDialog = () => setApplyDialogOpen(true);
@@ -289,8 +290,12 @@ function JobDetailContent({ job, orgIdParam }: { job: PublicJobDetail; orgIdPara
           files: Object.keys(payloadFiles).length ? payloadFiles : undefined,
         });
         setApplySubmitting(false);
-        closeApplyDialog();
+        setApplySubmitted(true);
         toast.success(t("application_submitted"));
+        setTimeout(() => {
+          closeApplyDialog();
+          setApplySubmitted(false);
+        }, 1500);
       } catch (err) {
         setApplySubmitting(false);
         toast.error(err instanceof Error ? err.message : t("failed_to_submit_application"));
@@ -776,11 +781,16 @@ function JobDetailContent({ job, orgIdParam }: { job: PublicJobDetail; orgIdPara
                 size="sm"
                 disabled={
                   applySubmitting ||
+                  applySubmitted ||
                   applyValidation.hasUploadingFiles ||
                   Object.keys(applyValidation.errors).length > 0
                 }
               >
-                {applySubmitting ? t("submitting") : t("submit_application")}
+                {applySubmitted
+                  ? "Submitted!"
+                  : applySubmitting
+                    ? t("submitting")
+                    : t("submit_application")}
               </Button>
             </DialogFooter>
           </form>

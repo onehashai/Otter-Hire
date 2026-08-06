@@ -545,6 +545,10 @@ async def run_ses_raw_bridge_loop(stop_event: asyncio.Event) -> None:
         logger.warning("SES bridge disabled because bucket is missing")
         return
 
+    logger.info("AWS Region: %s", settings.aws_s3_region)
+    logger.info("AWS Access Key Prefix: %s", (settings.aws_access_key_id or "")[:8])
+    logger.info("Bucket: %s", bucket)
+    logger.info("Prefix: %s", prefix)
     s3_client = boto3.client(
         "s3",
         region_name=settings.aws_s3_region,

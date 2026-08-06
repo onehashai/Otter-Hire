@@ -19,12 +19,17 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "Candidate_jobs",
-        sa.Column("resume_score_sections", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
-    )
-    op.drop_column("Candidate_jobs", "resume_score_scored_at")
-    op.drop_column("Candidate_jobs", "resume_score_breakdown")
+    bind = op.get_bind()
+    has_sec = bind.execute(
+        sa.text("SELECT 1 FROM information_schema.columns WHERE table_name='Candidate_jobs' AND column_name='resume_score_sections'")
+    ).scalar()
+    if not has_sec:
+        op.add_column(
+            "Candidate_jobs",
+            sa.Column("resume_score_sections", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        )
+    op.execute('ALTER TABLE "Candidate_jobs" DROP COLUMN IF EXISTS resume_score_scored_at')
+    op.execute('ALTER TABLE "Candidate_jobs" DROP COLUMN IF EXISTS resume_score_breakdown')
 
 
 def downgrade() -> None:

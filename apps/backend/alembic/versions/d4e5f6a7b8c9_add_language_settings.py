@@ -20,15 +20,20 @@ SUPPORTED_LANGUAGES = ("en", "es", "fr", "de", "pt", "browser")
 
 
 def upgrade() -> None:
-    op.add_column(
-        "organizations",
-        sa.Column(
-            "jobs_page_language",
-            sa.String(length=16),
-            nullable=False,
-            server_default="en",
-        ),
-    )
+    bind = op.get_bind()
+    has_col = bind.execute(
+        sa.text("SELECT 1 FROM information_schema.columns WHERE table_name='organizations' AND column_name='jobs_page_language'")
+    ).scalar()
+    if not has_col:
+        op.add_column(
+            "organizations",
+            sa.Column(
+                "jobs_page_language",
+                sa.String(length=16),
+                nullable=False,
+                server_default="en",
+            ),
+        )
     op.create_check_constraint(
         "ck_organizations_jobs_page_language",
         "organizations",

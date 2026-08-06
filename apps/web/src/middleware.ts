@@ -81,11 +81,8 @@ async function normalizeInvalidStageUrl(request: NextRequest): Promise<NextRespo
 }
 
 function getExpectedAppHost(): string | null {
-  const subdomain = process.env.NEXT_PUBLIC_APP_SUBDOMAIN;
   const rootHost = process.env.NEXT_PUBLIC_APP_ROOT_HOST;
-
-  if (!subdomain || !rootHost) return null;
-  return `${subdomain}.${rootHost}`;
+  return rootHost || null;
 }
 
 function getJobsSubdomain(): string {
@@ -154,10 +151,13 @@ function legacyCareersRedirect(request: NextRequest, pathname: string): NextResp
 }
 
 function getAppSubdomainUrl(pathname: string, rootHost: string, search = ""): string {
-  const appSubdomain = process.env.NEXT_PUBLIC_APP_SUBDOMAIN || "app";
   const protocol =
     rootHost.includes("localhost") || rootHost.includes("127.0.0.1") ? "http" : "https";
-  return `${protocol}://${appSubdomain}.${rootHost}${pathname}${search}`;
+  return `${protocol}://${rootHost}${pathname}${search}`;
+}
+
+function isRootHost(host: string): boolean {
+  return false; // Treat the bare domain as the main application host instead of marketing domain
 }
 
 /**

@@ -136,7 +136,7 @@ services:
   web:
     build:
       context: .
-      dockerfile: apps/web/Dockerfile
+      dockerfile: apps/web/Dockerfile.prod
       args:
         NEXT_PUBLIC_PLATFORM_NAME: Otter Hire
         NEXT_PUBLIC_APP_SUBDOMAIN: app

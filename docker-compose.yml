@@ -143,7 +143,7 @@ services:
         NEXT_PUBLIC_JOBS_SUBDOMAIN: jobs
         NEXT_PUBLIC_APP_ROOT_HOST: ${NEXT_PUBLIC_APP_ROOT_HOST:-smartats.in}
         NEXT_PUBLIC_SES_MAIL_DOMAIN: applications.smartats.in
-        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-/v1}
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-https://smartats.in}
         NEXT_PUBLIC_TEMPORAL_UI_URL: ${NEXT_PUBLIC_TEMPORAL_UI_URL:-http://temporal.localhost.com:8081}
     container_name: ats-web
     environment:
@@ -152,7 +152,7 @@ services:
       NEXT_PUBLIC_JOBS_SUBDOMAIN: jobs
       NEXT_PUBLIC_APP_ROOT_HOST: ${NEXT_PUBLIC_APP_ROOT_HOST:-smartats.in}
       NEXT_PUBLIC_SES_MAIL_DOMAIN: applications.smartats.in
-      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-/v1}
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-https://smartats.in}
       NEXT_PUBLIC_TEMPORAL_UI_URL: ${NEXT_PUBLIC_TEMPORAL_UI_URL:-http://temporal.localhost.com:8081}
       # Internal server-side URL — uses Docker network directly (fast, no host-gateway)
       NEXT_INTERNAL_API_BASE_URL: http://backend:8000

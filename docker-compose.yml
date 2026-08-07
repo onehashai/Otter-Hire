@@ -72,11 +72,11 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/ats_db
       PLATFORM_NAME: Otter Hire
-      CORS_ORIGINS: http://localhost.com:3000,http://app.localhost.com:3000,http://jobs.localhost.com:3000
-      APP_DOMAIN: localhost.com
+      CORS_ORIGINS: http://localhost.com:3000,http://app.localhost.com:3000,http://jobs.localhost.com:3000,http://smartats.in:3000,https://smartats.in,http://app.smartats.in:3000,https://app.smartats.in,http://jobs.smartats.in:3000,https://jobs.smartats.in
+      APP_DOMAIN: ${APP_DOMAIN:-smartats.in}
       APP_SUBDOMAIN: app
       JOBS_SUBDOMAIN: jobs
-      COOKIE_DOMAIN: .localhost.com
+      COOKIE_DOMAIN: ${COOKIE_DOMAIN:-.smartats.in}
       TEMPORAL_SERVER_URL: temporal:7233
       REDIS_URL: redis://redis:6379/0
     ports:
@@ -107,8 +107,8 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/ats_db
       PLATFORM_NAME: Otter Hire
-      CORS_ORIGINS: http://localhost.com:3000,http://app.localhost.com:3000,http://jobs.localhost.com:3000
-      APP_DOMAIN: localhost.com
+      CORS_ORIGINS: http://localhost.com:3000,http://app.localhost.com:3000,http://jobs.localhost.com:3000,http://smartats.in:3000,https://smartats.in,http://app.smartats.in:3000,https://app.smartats.in,http://jobs.smartats.in:3000,https://jobs.smartats.in
+      APP_DOMAIN: ${APP_DOMAIN:-smartats.in}
       APP_SUBDOMAIN: app
       JOBS_SUBDOMAIN: jobs
       COOKIE_DOMAIN: ""

@@ -4,7 +4,9 @@ const _API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:800
   /\/$/,
   "",
 );
-const _REFRESH_URL = `${_API_BASE}/v1/internal/auth/refresh`;
+const _REFRESH_URL = _API_BASE.endsWith("/v1")
+  ? `${_API_BASE}/internal/auth/refresh`
+  : `${_API_BASE}/v1/internal/auth/refresh`;
 
 export type SharedRefreshResult =
   | { ok: true; rawUser: Record<string, unknown> }

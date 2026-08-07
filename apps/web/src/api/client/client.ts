@@ -1,15 +1,19 @@
 import { sharedRefresh } from "@/lib/shared-refresh";
 import { buildLoginHref } from "@/lib/login-redirect";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000").replace(/\/$/, "");
 
 /** Full internal API base — all frontend calls use /v1/internal/* (JWT/session auth) */
-export const API_BASE_URL = `${API_BASE.replace(/\/$/, "")}/v1/internal`;
+export const API_BASE_URL = API_BASE.endsWith("/v1")
+  ? `${API_BASE}/internal`
+  : `${API_BASE}/v1/internal`;
 
 /** Full WebSocket base URL for client-side WebSocket connections. */
 export function getWebSocketBaseUrl(): string {
   const base = API_BASE.replace(/^http/i, "ws");
-  return `${base}/v1/internal/inbound/events/ws`;
+  return base.endsWith("/v1")
+    ? `${base}/internal/inbound/events/ws`
+    : `${base}/v1/internal/inbound/events/ws`;
 }
 
 /** Normalize API or file URLs */

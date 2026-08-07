@@ -15,7 +15,10 @@ export async function GET(request: NextRequest) {
       process.env.NEXT_PUBLIC_API_BASE_URL ||
       ""
     ).replace(/\/$/, "");
-    const res = await fetch(`${apiBase}/v1/internal/me`, {
+    const fetchUrl = apiBase.endsWith("/v1")
+      ? `${apiBase}/internal/me`
+      : `${apiBase}/v1/internal/me`;
+    const res = await fetch(fetchUrl, {
       headers: {
         cookie: request.headers.get("cookie") || "",
         Accept: "application/json",

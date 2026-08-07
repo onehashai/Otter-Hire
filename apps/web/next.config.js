@@ -4,6 +4,7 @@ const path = require("path");
 const nextConfig = {
   allowedDevOrigins: [
     "smartats.in",
+    "www.smartats.in",
     "localhost",
     "app.smartats.in",
     "jobs.smartats.in",

@@ -28,7 +28,7 @@ async def match_candidate_to_active_job(
         result = await db.execute(
             select(Job).where(
                 Job.org_id == org_id,
-                Job.status == "published"
+                Job.status == "open"
             )
         )
         active_jobs = result.scalars().all()

@@ -31,3 +31,4 @@ sqladmin==0.23.0
 mail-parser-reply==1.36
 itsdangerous==2.2.0
 sentry-sdk[fastapi]
+openai>=1.0.0

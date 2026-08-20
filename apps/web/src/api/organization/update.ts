@@ -6,6 +6,7 @@ export type OrganizationResponse = {
   website: string | null;
   avatar_url?: string | null;
   jobs_page_language: string;
+  catch_all_email?: string | null;
 };
 
 export async function updateOrganization(data: {

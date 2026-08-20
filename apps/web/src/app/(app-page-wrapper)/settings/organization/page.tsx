@@ -43,6 +43,7 @@ export default function OrganizationSettings() {
   const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
   const [jobsPageLanguage, setJobsPageLanguage] = useState("en");
   const [savingLanguage, setSavingLanguage] = useState(false);
+  const [catchAllEmail, setCatchAllEmail] = useState<string | null>(null);
 
   useEffect(() => {
     if (searchParams.get("tab") === "careers") {
@@ -70,6 +71,7 @@ export default function OrganizationSettings() {
           setAvatarUrl(resp.avatar_url ?? null);
           setOriginalAvatarUrl(resp.avatar_url ?? null);
           setJobsPageLanguage(resp.jobs_page_language ?? "en");
+          setCatchAllEmail(resp.catch_all_email ?? null);
         }
       } catch {
         // keep page usable
@@ -269,6 +271,14 @@ export default function OrganizationSettings() {
             placeholder="Enter company's website"
             className="text-sm h-10 md:h-9"
           />
+          {catchAllEmail && (
+            <InputField
+              label="Organization Catch-All Inbox"
+              value={catchAllEmail}
+              readOnly
+              className="text-sm h-10 md:h-9 bg-gray-50 text-gray-500 cursor-not-allowed"
+            />
+          )}
           <Separator />
           <Button
             size="sm"

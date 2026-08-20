@@ -27,14 +27,26 @@ export function normalizeApiUrl(url: string | null | undefined): string | null {
 
   // File URLs (served from backend)
   if (path.startsWith("/v1/internal/files/") || path.startsWith("/files/")) {
-    return `${API_BASE.replace(/\/$/, "")}${path}`;
+    let cleanPath = path;
+    if (API_BASE.endsWith("/v1") && path.startsWith("/v1/")) {
+      cleanPath = path.substring(3); // strip '/v1'
+    }
+    return `${API_BASE.replace(/\/$/, "")}${cleanPath}`;
   }
 
   if (path.startsWith("/v1/internal/")) {
-    return `${API_BASE.replace(/\/$/, "")}${path}`;
+    let cleanPath = path;
+    if (API_BASE.endsWith("/v1") && path.startsWith("/v1/")) {
+      cleanPath = path.substring(3); // strip '/v1'
+    }
+    return `${API_BASE.replace(/\/$/, "")}${cleanPath}`;
   }
 
-  return `${API_BASE_URL}${path}`;
+  let cleanPath = path;
+  if (API_BASE_URL.endsWith("/v1/internal") && path.startsWith("/v1/internal/")) {
+    cleanPath = path.substring(12); // strip '/v1/internal'
+  }
+  return `${API_BASE_URL.replace(/\/$/, "")}${cleanPath}`;
 }
 
 /** Base API URL (without /v1/internal) */

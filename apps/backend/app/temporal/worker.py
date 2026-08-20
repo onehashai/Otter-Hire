@@ -65,6 +65,19 @@ async def run_temporal_worker() -> None:
             max_concurrent_activities=20,
             max_concurrent_workflow_tasks=5,
         )
+        # Import the inbound-email-parse workflow & activity
+        from app.temporal.inbound_email.workflow import InboundEmailParseWorkflow
+        from app.temporal.inbound_email.activities import parse_inbound_email_activity
+
+        worker_inbound_parse = Worker(
+            client,
+            task_queue="inbound-email-parse",
+            workflows=[InboundEmailParseWorkflow],
+            activities=[parse_inbound_email_activity],
+            interceptors=_sentry_interceptors,
+            max_concurrent_activities=20,
+            max_concurrent_workflow_tasks=5,
+        )
         worker_outbound = Worker(
             client,
             task_queue="email-outbound",
@@ -96,7 +109,7 @@ async def run_temporal_worker() -> None:
             max_concurrent_workflow_tasks=10,
         )
         logger.info(
-            "[WORKER] Started task_queues=email-inbound,email-outbound,careers-resume-parse,resume-scoring namespace=%s",
+            "[WORKER] Started task_queues=email-inbound,inbound-email-parse,email-outbound,careers-resume-parse,resume-scoring namespace=%s",
             settings.temporal_namespace,
         )
         logger.info("[WORKER] Polling for tasks...")
@@ -105,12 +118,13 @@ async def run_temporal_worker() -> None:
             while True:
                 await asyncio.sleep(60)
                 logger.info(
-                    "[WORKER] Alive, polling email-inbound, email-outbound, careers-resume-parse"
+                    "[WORKER] Alive, polling email-inbound, inbound-email-parse, email-outbound, careers-resume-parse"
                     ", resume-scoring"
                 )
 
         await asyncio.gather(
             worker_inbound.run(),
+            worker_inbound_parse.run(),
             worker_outbound.run(),
             worker_careers_resume.run(),
             worker_resume_scoring.run(),

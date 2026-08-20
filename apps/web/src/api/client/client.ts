@@ -30,6 +30,10 @@ export function normalizeApiUrl(url: string | null | undefined): string | null {
     return `${API_BASE.replace(/\/$/, "")}${path}`;
   }
 
+  if (path.startsWith("/v1/internal/")) {
+    return `${API_BASE.replace(/\/$/, "")}${path}`;
+  }
+
   return `${API_BASE_URL}${path}`;
 }
 

@@ -32,6 +32,7 @@ class OrganizationResponse(BaseModel):
     website: str | None
     avatar_url: str | None = None
     jobs_page_language: str = "en"
+    catch_all_email: str | None = None
 
 
 class OrganizationMembershipResponse(BaseModel):

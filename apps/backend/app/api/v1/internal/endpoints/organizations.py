@@ -36,8 +36,8 @@ def _set_access_cookie(response: Response, token: str) -> None:
         "key": "access_token",
         "value": token,
         "httponly": True,
-        "samesite": "lax",
-        "secure": settings.is_production,
+        "samesite": "none",
+        "secure": True,
     }
     if settings.cookie_domain:
         cookie_params["domain"] = settings.cookie_domain
@@ -79,12 +79,16 @@ async def update_my_organization_language(
     organization.jobs_page_language = body.jobs_page_language
     await db.commit()
     await db.refresh(organization)
+    org_hex = organization.id.hex
+    domain = settings.SES_MAIL_DOMAIN or "smartats.in"
+    catch_all_email = f"org-{org_hex}@{domain}"
     return OrganizationResponse(
         id=organization.id,
         name=organization.name,
         website=organization.website,
         avatar_url=organization.avatar_url,
         jobs_page_language=organization.jobs_page_language,
+        catch_all_email=catch_all_email,
     )
 
 
@@ -95,12 +99,16 @@ async def get_my_organization(
 ):
     result = await db.execute(select(Organization).where(Organization.id == current_user.org_id))
     organization = result.scalar_one()
+    org_hex = organization.id.hex
+    domain = settings.SES_MAIL_DOMAIN or "smartats.in"
+    catch_all_email = f"org-{org_hex}@{domain}"
     return OrganizationResponse(
         id=organization.id,
         name=organization.name,
         website=organization.website,
         avatar_url=organization.avatar_url,
         jobs_page_language=organization.jobs_page_language or "en",
+        catch_all_email=catch_all_email,
     )
 
 
@@ -140,12 +148,16 @@ async def upload_my_organization_avatar(
     await db.commit()
     await db.refresh(organization)
 
+    org_hex = organization.id.hex
+    domain = settings.SES_MAIL_DOMAIN or "smartats.in"
+    catch_all_email = f"org-{org_hex}@{domain}"
     return OrganizationResponse(
         id=organization.id,
         name=organization.name,
         website=organization.website,
         avatar_url=organization.avatar_url,
         jobs_page_language=organization.jobs_page_language or "en",
+        catch_all_email=catch_all_email,
     )
 
 

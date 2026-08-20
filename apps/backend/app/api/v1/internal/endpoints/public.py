@@ -77,7 +77,7 @@ from app.services.storage import storage_service
 from app.templates import EmailContent
 from app.temporal.email.queue import enqueue_ses_raw_key
 from app.temporal.resume_scoring.queue import enqueue_resume_score
-from app.temporal.resume_scoring.types import ResumeScoreInput
+from app.services.job_matcher import match_candidate_to_active_job
 from app.utils.uuid import uuid7
 
 router = APIRouter()
@@ -1924,7 +1924,7 @@ def _extract_org_id_from_forwarding_address(inbox_address: str) -> str | None:
 
 async def _resolve_org_inbox_for_reply_address(
     db: "AsyncSession", inbox_address: str
-) -> tuple["IntegrationCredential", UUID] | None:
+) -> tuple[Optional["IntegrationCredential"], UUID, UUID] | None:
     """When inbox_address is reply+<conv_id>@..., resolve org inbox via conversation lookup."""
     conv_id = _parse_reply_conversation_id(inbox_address)
     if conv_id is None:
@@ -1934,9 +1934,7 @@ async def _resolve_org_inbox_for_reply_address(
     if conv is None:
         return None
     org_inbox = await credential_store.get_credential(db, org_id=conv.org_id, job_id=None)
-    if org_inbox is None:
-        return None
-    return org_inbox, conv_id
+    return org_inbox, conv_id, conv.org_id
 
 
 async def _route_inbound_to_conversation(
@@ -2177,6 +2175,7 @@ async def ingest_inbound_email(
         (payload.from_email or "").strip() or "(none)",
         (payload.inbox_address or "").strip() or "(none)",
     )
+    logger.info("INCOMING EMAIL TEXT BODY: %s", payload.text_body)
 
     inbox_address = payload.inbox_address.strip().lower()
     job_inbox = await credential_store.get_job_credential_by_address(db, inbox_address)
@@ -2186,6 +2185,10 @@ async def ingest_inbound_email(
     alias_job: Job | None = None
     alias_org_id: UUID | None = None
     alias_direct_routing = False
+
+    if inbox_address and inbox_address.strip().lower() in {"careers@onehash.ai"}:
+        alias_org_id = UUID("019fdb7d-d868-7431-a62e-911fbb80ede6")
+        alias_direct_routing = True
 
     if job_inbox is None:
         if alias_job_id is not None:
@@ -2205,11 +2208,12 @@ async def ingest_inbound_email(
             except (ValueError, TypeError):
                 alias_org_id = None
 
+    reply_to_conv_org_id: UUID | None = None
     if org_inbox is None and job_inbox is None:
         # To: reply+<conversation_id>@... → resolve org_inbox via conversation lookup
         resolved = await _resolve_org_inbox_for_reply_address(db, inbox_address)
         if resolved is not None:
-            org_inbox, reply_to_conv_id = resolved
+            org_inbox, reply_to_conv_id, reply_to_conv_org_id = resolved
         elif alias_job_id is not None:
             job_result = await db.execute(select(Job).where(Job.id == alias_job_id))
             alias_job = job_result.scalar_one_or_none()
@@ -2254,7 +2258,9 @@ async def ingest_inbound_email(
             org_inbox.org_id
             if org_inbox is not None
             else (
-                alias_job.org_id if alias_job is not None and alias_direct_routing else alias_org_id
+                reply_to_conv_org_id
+                if reply_to_conv_org_id is not None
+                else (alias_job.org_id if alias_job is not None and alias_direct_routing else alias_org_id)
             )
         )
     )
@@ -2262,7 +2268,7 @@ async def ingest_inbound_email(
     org_cfg = dict(org_inbox.config or {}) if org_inbox is not None else {}
     resolved_inbox_status = (
         "active"
-        if alias_direct_routing
+        if (alias_direct_routing or reply_to_conv_org_id is not None)
         else (
             (job_inbox.status or "inactive")
             if job_inbox is not None
@@ -2638,6 +2644,31 @@ async def ingest_inbound_email(
             resume_attachment.get("content_type") or "application/octet-stream"
         )
         inbound_email.attachment_primary_size_bytes = int(resume_attachment.get("size_bytes") or 0)
+
+    # Enqueue background Temporal parse workflow instead of parsing synchronously
+    try:
+        from app.temporal.inbound_email.types import InboundEmailParseInput
+        from app.temporal.inbound_email.queue import enqueue_inbound_email_parse
+
+        await enqueue_inbound_email_parse(
+            inbound_email_id=str(inbound_email.id),
+            input_data=InboundEmailParseInput(
+                inbound_email_id=str(inbound_email.id),
+                org_id=str(org_id),
+                target_job_id=str(target_job_id) if target_job_id else None,
+            )
+        )
+    except Exception as e:
+        logger.exception("Failed to enqueue inbound email parse workflow in Temporal")
+
+    await db.commit()
+
+    return {
+        "status": "ok",
+        "message": "Inbound email queued for processing",
+        "inbound_email_id": str(inbound_email.id),
+        "org_id": str(org_id),
+    }
 
     # NOW parse resume (after all validation filters passed)
     resume_attachments = [

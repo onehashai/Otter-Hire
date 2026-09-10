@@ -4,6 +4,7 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.logging import logger
 from app.services.email._factory import get_platform_provider
 from app.templates import EmailContent
@@ -29,7 +30,7 @@ async def send_email(
     (it was only needed for Mailtrap's console-print fallback which is now removed).
     """
     # --- Org-level SES routing (unchanged from original) ---
-    if org_id is not None and db is not None:
+    if settings.is_production and org_id is not None and db is not None:
         from app.integrations.app_store.email_integration.outbound_service import (
             get_verified_outbound_for_org,
         )

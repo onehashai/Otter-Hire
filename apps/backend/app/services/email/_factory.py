@@ -3,6 +3,7 @@ from __future__ import annotations
 from functools import lru_cache
 
 from app.services.email._base import EmailProvider
+from app.services.email._providers.local_smtp import LocalSmtpProvider
 from app.services.email._providers.ses import SesProvider
 from app.services.email._providers.zeptomail import ZeptoMailProvider
 
@@ -20,6 +21,10 @@ def get_platform_provider() -> EmailProvider:
     Exactly one provider is active at a time.
     Result is cached after first call; clear with get_platform_provider.cache_clear() in tests.
     """
+    local = LocalSmtpProvider()
+    if local.is_configured():
+        return local
+
     zepto = ZeptoMailProvider()
     if zepto.is_configured():
         return zepto

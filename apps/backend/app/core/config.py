@@ -135,11 +135,15 @@ class Settings(BaseSettings):
     )
     aws_s3_bucket: str | None = Field(default=None, validation_alias="AWS_S3_BUCKET")
     aws_s3_region: str | None = Field(default=None, validation_alias="AWS_S3_REGION")
+    aws_ses_region: str | None = Field(default=None, validation_alias="AWS_SES_REGION")
+    s3_endpoint_url: str | None = Field(default=None, validation_alias="S3_ENDPOINT_URL")
     s3_root_prefix_raw: str = Field(default="", validation_alias="S3_ROOT_PREFIX")
     aws_access_key_id: str | None = Field(default=None, validation_alias="AWS_ACCESS_KEY_ID")
     aws_secret_access_key: str | None = Field(
         default=None, validation_alias="AWS_SECRET_ACCESS_KEY"
     )
+    aws_ses_access_key: str | None = Field(default=None, validation_alias="AWS_SES_ACCESS_KEY")
+    aws_ses_secret_key: str | None = Field(default=None, validation_alias="AWS_SES_SECRET_KEY")
     # Deprecated for new flow; prefix is now derived automatically from IS_PRODUCTION.
     aws_s3_attachments_env: str = Field(
         default="staging", validation_alias="AWS_S3_ATTACHMENTS_ENV"
@@ -237,6 +241,23 @@ class Settings(BaseSettings):
     sentry_profiles_sample_rate: float = Field(
         default=0.0, validation_alias="SENTRY_PROFILES_SAMPLE_RATE"
     )
+    local_smtp_host: str = Field(default="localhost", validation_alias="LOCAL_SMTP_HOST")
+    local_smtp_port: int = Field(default=1025, validation_alias="LOCAL_SMTP_PORT")
+    local_smtp_from: str = Field(default="no-reply@localhost", validation_alias="LOCAL_SMTP_FROM")
+    local_mailpit_url: str = Field(default="http://localhost:8025", validation_alias="LOCAL_MAILPIT_URL")
+    local_mailpit_poll_seconds: int = Field(default=2, validation_alias="LOCAL_MAILPIT_POLL_SECONDS")
+    local_mailpit_enabled: bool = Field(default=True, validation_alias="LOCAL_MAILPIT_ENABLED")
+    ats_auto_import_enabled: bool = Field(default=False, validation_alias="ATS_AUTO_IMPORT_ENABLED")
+    ats_migration_checkpoint_dir: str = Field(
+        default="storage/migrations/checkpoints", validation_alias="ATS_MIGRATION_CHECKPOINT_DIR"
+    )
+    ats_migration_schedule_minutes: int = Field(
+        default=15, validation_alias="ATS_MIGRATION_SCHEDULE_MINUTES"
+    )
+    ses_local_mock: bool = Field(default=True, validation_alias="SES_LOCAL_MOCK")
+    mcp_server_enabled: bool = Field(default=False, validation_alias="MCP_SERVER_ENABLED")
+    mcp_server_host: str = Field(default="127.0.0.1", validation_alias="MCP_SERVER_HOST")
+    mcp_server_port: int = Field(default=8765, validation_alias="MCP_SERVER_PORT")
 
     @model_validator(mode="after")
     def _validate_jwt_secret_key(self) -> "Settings":

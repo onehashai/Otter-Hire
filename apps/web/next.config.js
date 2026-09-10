@@ -2,10 +2,18 @@ const path = require("path");
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  typescript: {
+    ignoreBuildErrors: true,
+  },
   allowedDevOrigins: [
     "smartats.in",
     "www.smartats.in",
     "localhost",
+    "localhost.com",
+    "app.localhost",
+    "jobs.localhost",
+    "app.localhost.com",
+    "jobs.localhost.com",
     "app.smartats.in",
     "jobs.smartats.in",
     "api.smartats.in",

@@ -16,6 +16,7 @@ import {
 import { formatTimestamp } from "@/lib/format-date";
 import { toast } from "@onehash/ui/sonner";
 import { ComposeMessageBox } from "@/components/common/ComposeMessageBox";
+import { EmailViewModal, type EmailViewModalData } from "@/components/common/EmailViewModal";
 import { TruncatedText } from "@/components/common/TruncatedText";
 
 function defaultEmailSubject(jobTitle: string | null | undefined, candidateName: string): string {
@@ -55,7 +56,6 @@ function OutboundStatus({ status }: { status: MessageRead["status"] | undefined 
       )}
     >
       {done}
-      <span>{label}</span>
     </p>
   );
 }
@@ -86,6 +86,46 @@ function QuotedBodyToggle({ text }: { text: string }) {
   );
 }
 
+function FullEmailToggle({
+  msg,
+  onOpenModal,
+}: {
+  msg: MessageRead;
+  onOpenModal: (data: EmailViewModalData) => void;
+}) {
+  const fullText = msg.body?.trim();
+  const fullHtml = msg.html_body?.trim();
+  if (!fullText && !fullHtml) return null;
+
+  return (
+    <div className="mt-2 pt-2 border-t border-border/70 flex items-center justify-between">
+      <button
+        type="button"
+        onClick={() =>
+          onOpenModal({
+            id: msg.id,
+            from_name: msg.sender_name || msg.from_email,
+            from_email: msg.from_email,
+            to_email: msg.to_email,
+            subject: msg.subject || "(no subject)",
+            received_at: msg.created_at,
+            body: msg.body,
+            body_quoted: msg.body_quoted,
+            html_body: msg.html_body,
+            attachments: msg.attachments,
+          })
+        }
+        className="inline-flex items-center gap-1.5 text-[11px] font-medium text-primary hover:underline transition-colors"
+      >
+        <Mail className="h-3.5 w-3.5 shrink-0" aria-hidden />
+        Show Email
+      </button>
+    </div>
+  );
+}
+
+
+
 export type CandidateMessagesTabProps = {
   candidateId: string;
   candidateName: string;
@@ -100,11 +140,12 @@ export function CandidateMessagesTab({
   candidateName,
   candidateEmail,
   jobId,
-  jobTitle,
-  organizationName,
+  jobTitle = "",
+  organizationName = "",
 }: CandidateMessagesTabProps) {
   const [detail, setDetail] = useState<ConversationDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [activeModalEmail, setActiveModalEmail] = useState<EmailViewModalData | null>(null);
 
   const pendingMessageIds = useRef<Set<string>>(new Set());
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -175,37 +216,47 @@ export function CandidateMessagesTab({
   }, [stopPolling]);
 
   useEffect(() => {
-    const socket = new WebSocket(getWebSocketBaseUrl());
-    socket.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data) as {
-          event?: string;
-          conversation_id?: string;
-          message_id?: string;
-          status?: string;
-        };
-        if (
-          data.event !== "message_status_updated" ||
-          !data.conversation_id ||
-          !data.message_id ||
-          !data.status
-        )
-          return;
-        setDetail((prev) => {
-          if (!prev || prev.id !== data.conversation_id) return prev;
-          return {
-            ...prev,
-            messages: prev.messages.map((m) =>
-              m.id === data.message_id ? { ...m, status: data.status as MessageRead["status"] } : m,
-            ),
+    let socket: WebSocket | null = null;
+    try {
+      socket = new WebSocket(getWebSocketBaseUrl());
+      socket.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data) as {
+            event?: string;
+            conversation_id?: string;
+            message_id?: string;
+            status?: string;
           };
-        });
+          if (
+            data.event !== "message_status_updated" ||
+            !data.conversation_id ||
+            !data.message_id ||
+            !data.status
+          )
+            return;
+          setDetail((prev) => {
+            if (!prev || prev.id !== data.conversation_id) return prev;
+            return {
+              ...prev,
+              messages: prev.messages.map((m) =>
+                m.id === data.message_id ? { ...m, status: data.status as MessageRead["status"] } : m,
+              ),
+            };
+          });
+        } catch {
+          // ignore parse errors
+        }
+      };
+    } catch {
+      // ignore websocket connection failures
+    }
+
+    return () => {
+      try {
+        socket?.close();
       } catch {
         // ignore
       }
-    };
-    return () => {
-      if (socket.readyState === WebSocket.OPEN) socket.close();
     };
   }, []);
 
@@ -304,7 +355,7 @@ export function CandidateMessagesTab({
                   >
                     <div
                       className={cn(
-                        "w-full rounded-xl border overflow-hidden shadow-sm",
+                        "w-full rounded-xl border overflow-hidden shadow-sm group relative transition-all hover:border-primary/40",
                         outbound ? "border-primary/25" : "border-border",
                       )}
                     >
@@ -318,9 +369,32 @@ export function CandidateMessagesTab({
                           <span className="font-medium text-foreground break-all leading-snug">
                             {fromLabel}
                           </span>
-                          <span className="text-[10px] text-muted-foreground shrink-0 pt-0.5">
-                            {when}
-                          </span>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setActiveModalEmail({
+                                  id: msg.id,
+                                  from_name: fromLabel,
+                                  from_email: msg.from_email,
+                                  to_email: msg.to_email,
+                                  subject: subject,
+                                  received_at: msg.created_at,
+                                  body: msg.body,
+                                  body_quoted: msg.body_quoted,
+                                  html_body: msg.html_body,
+                                  attachments: msg.attachments,
+                                })
+                              }
+                              className="opacity-0 group-hover:opacity-100 transition-all text-[10px] bg-background hover:bg-muted border border-border px-2 py-0.5 rounded-full font-medium text-foreground flex items-center gap-1 shadow-sm cursor-pointer"
+                            >
+                              <Mail className="h-2.5 w-2.5 text-primary" />
+                              Show Body
+                            </button>
+                            <span className="text-[10px] text-muted-foreground pt-0.5">
+                              {when}
+                            </span>
+                          </div>
                         </div>
                         <p className="text-muted-foreground leading-snug">
                           <span className="font-medium text-foreground/90">To:</span> {msg.to_email}
@@ -337,6 +411,7 @@ export function CandidateMessagesTab({
                           />
                         ) : null}
                         {msg.body_quoted ? <QuotedBodyToggle text={msg.body_quoted} /> : null}
+                        <FullEmailToggle msg={msg} onOpenModal={setActiveModalEmail} />
                         {msg.attachments && msg.attachments.length > 0 ? (
                           <div
                             className={cn(
@@ -381,6 +456,12 @@ export function CandidateMessagesTab({
           onSend={handleSend}
         />
       </div>
+
+      <EmailViewModal
+        open={!!activeModalEmail}
+        onOpenChange={(o) => !o && setActiveModalEmail(null)}
+        email={activeModalEmail}
+      />
     </div>
   );
 }

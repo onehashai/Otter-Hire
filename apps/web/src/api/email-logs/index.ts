@@ -46,6 +46,10 @@ export function getOrgEmailLogs(filters: EmailLogFilters = {}): Promise<EmailLog
   );
 }
 
+export function getOrgEmailLogBody(logId: string): Promise<{ text_body: string; html_body: string }> {
+  return apiGet<{ text_body: string; html_body: string }>(`/organizations/email-logs/${logId}/body`);
+}
+
 export function getAdminEmailLogs(
   orgId?: string,
   filters: EmailLogFilters = {},
@@ -54,3 +58,8 @@ export function getAdminEmailLogs(
     `/admin/email-logs${toQS({ org_id: orgId, ...(filters as Record<string, string | number | undefined>) })}`,
   );
 }
+
+export function getAdminEmailLogBody(logId: string): Promise<{ text_body: string; html_body: string }> {
+  return apiGet<{ text_body: string; html_body: string }>(`/admin/email-logs/${logId}/body`);
+}
+

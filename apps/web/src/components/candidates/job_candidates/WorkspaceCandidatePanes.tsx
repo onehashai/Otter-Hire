@@ -189,7 +189,7 @@ export function WorkspaceCandidatePanes({
         id: d.id,
         name: d.name,
         type: d.doc_type,
-        date: new Date(d.created_at).toLocaleDateString(),
+        date: d.created_at,
         size: d.size_label ?? "—",
         url: d.url,
       })),

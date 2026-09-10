@@ -60,6 +60,18 @@ We may use your Personal Data to contact you with product updates or other infor
         content: `We may also collect information that your browser sends whenever you visit our Service or when you access the Service through any device ("Usage Data"). This may include your computer's Internet Protocol address (IP address), browser type, browser version, the pages of our Service that you visit, the time and date of your visit, the time spent on those pages, unique device identifiers, and other diagnostic data.`,
       },
       {
+        subtitle: "Google API User Data & OAuth Disclosures",
+        content: `Otter Hire's use and transfer to any other app of information received from Google APIs will adhere to the Google API Services User Data Policy, including the Limited Use requirements.
+
+We request access to basic profile information (email address, full name, profile picture) solely for account authentication, user identification, and security verification. We do not sell your Google user data to third parties, nor do we use it for advertising or marketing purposes.`,
+      },
+      {
+        subtitle: "Applicant Data Processing (ATS Functionality)",
+        content: `As an Applicant Tracking System, Otter Hire processes job candidate data (including resumes, email correspondence, cover letters, and application responses) solely on behalf of our customer organizations (Employers). 
+
+Employer organizations act as the Data Controllers of applicant data, and Otter Hire acts as the Data Processor. Candidate data is processed exclusively to evaluate applications, facilitate hiring workflows, and communicate with candidates.`,
+      },
+      {
         subtitle: "Tracking & Cookies Data",
         content: `We use cookies and similar tracking technologies to track activity on our Service. Cookies are files with a small amount of data which may include an anonymous unique identifier. You can instruct your browser to refuse all cookies or to indicate when a cookie is being sent. However, if you do not accept cookies, you may not be able to use some portions of our Service.
 

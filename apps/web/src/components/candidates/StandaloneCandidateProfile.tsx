@@ -44,6 +44,7 @@ import {
   type OrgUserResponse,
 } from "@/api";
 import { toast } from "@onehash/ui/sonner";
+import { normalizeApiUrl } from "@/api/client/client";
 import { mapCandidateBase } from "@/lib/resume-insights";
 
 export function StandaloneCandidateProfile({
@@ -281,21 +282,23 @@ export function StandaloneCandidateProfile({
   const setActiveTabWithUrl = (tab: string) => {
     if (!allowedTabs.has(tab)) return;
     setActiveTab(tab);
-    const params = new URLSearchParams(searchParams.toString());
-    if (tab === "overview") {
-      params.delete("tab");
-    } else {
-      params.set("tab", tab);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      if (tab === "overview") {
+        url.searchParams.delete("tab");
+      } else {
+        url.searchParams.set("tab", tab);
+      }
+      window.history.replaceState(null, "", url.toString());
     }
-    const query = params.toString();
-    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
   };
 
   useEffect(() => {
     const tab = searchParams.get("tab") || "overview";
-    if (!allowedTabs.has(tab) || tab === activeTab) return;
-    setActiveTab(tab);
-  }, [activeTab, allowedTabs, searchParams]);
+    if (allowedTabs.has(tab)) {
+      setActiveTab(tab);
+    }
+  }, [allowedTabs, searchParams]);
 
   if (loading) {
     return <p className="text-sm text-muted-foreground">{t("loading_candidate")}</p>;
@@ -369,9 +372,7 @@ export function StandaloneCandidateProfile({
                 resumeUrl={resumeDoc?.url ?? null}
                 previewUrl={
                   id && resumeDoc?.id
-                    ? `${getApiBase()}/v1/internal/candidates/${encodeURIComponent(id)}/documents/${encodeURIComponent(
-                        resumeDoc.id,
-                      )}/preview`
+                    ? normalizeApiUrl(`/v1/internal/candidates/${encodeURIComponent(id)}/documents/${encodeURIComponent(resumeDoc.id)}/preview`)
                     : null
                 }
                 resumeName={resumeDoc?.name ?? null}
@@ -387,9 +388,9 @@ export function StandaloneCandidateProfile({
             </TabsContent>
             <TabsContent value="messages" className="mt-0">
               <CandidateMessagesTab
-                candidateId={candidate!.id}
+                candidateId={candidate?.id ?? id ?? ""}
                 candidateName={uiCandidate.name}
-                candidateEmail={candidate!.email}
+                candidateEmail={candidate?.email ?? ""}
                 jobId={candidate?.job_id ?? null}
                 jobTitle={candidate?.job_title ?? null}
               />

@@ -394,6 +394,7 @@ export function JobEmailIntegrationManager({ jobId, onChanged }: JobEmailIntegra
         )}
       </div>
 
+      {/*
       {hasInboxConfig ? (
         <>
           <Separator />
@@ -544,6 +545,7 @@ export function JobEmailIntegrationManager({ jobId, onChanged }: JobEmailIntegra
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      */}
     </div>
   );
 }

@@ -22,6 +22,7 @@ import {
   // Zap,
   Bot,
   Settings,
+  Database,
   Plus,
   UserPlus,
   CalendarPlus,
@@ -38,6 +39,7 @@ const pages = [
   // TODO(mvp-nav): Re-enable Automations in command palette after MVP launch.
   // { titleKey: "automations_title", url: "/automations", icon: Zap },
   { titleKey: "ai_assistant_title", url: "/ai-assistant", icon: Bot },
+  { titleKey: "data_migration_title", url: "/data-migration", icon: Database },
   { titleKey: "settings_title", url: "/settings/profile", icon: Settings },
 ];
 

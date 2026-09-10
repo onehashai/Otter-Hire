@@ -172,6 +172,7 @@
   "schedule": "Programar",
   "interviewer": "Entrevistador",
   "settings_title": "Configuración",
+  "data_migration_title": "Migración de datos",
   "settings_subtitle": "Gestiona tu cuenta y preferencias.",
   "edit_candidates_title": "Editar candidatos",
   "edit_candidates_subtitle": "Edita y gestiona candidatos y vacantes en un solo lugar",

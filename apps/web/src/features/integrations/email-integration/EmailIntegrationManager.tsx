@@ -399,6 +399,10 @@ export function EmailIntegrationManager({ onChanged }: EmailIntegrationManagerPr
         )}
       </div>
 
+      {/*
+      ========================================================================
+      FORWARDING SETUP STEPS & VERIFICATION SYSTEM (COMMENTED OUT AS REQUESTED)
+      ========================================================================
       {hasInboxConfig ? (
         <>
           <Separator />
@@ -549,6 +553,7 @@ export function EmailIntegrationManager({ onChanged }: EmailIntegrationManagerPr
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      */}
     </div>
   );
 }

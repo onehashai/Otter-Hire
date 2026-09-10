@@ -157,10 +157,15 @@ export function AddCandidateDialog({
         <DialogHeader>
           <DialogTitle>{t("add_candidate")}</DialogTitle>
           <DialogDescription>
-            {jobId && jobTitle
-              ? stageName
-                ? t("add_candidate_dialog_job_stage_description", { jobTitle, stageName })
-                : t("add_candidate_dialog_job_description", { jobTitle })
+            {jobId && (jobTitle ?? "").trim()
+              ? (stageName ?? "").trim()
+                ? t("add_candidate_dialog_job_stage_description", {
+                    jobTitle: (jobTitle ?? "").trim(),
+                    stageName: (stageName ?? "").trim(),
+                  })
+                : t("add_candidate_dialog_job_description", {
+                    jobTitle: (jobTitle ?? "").trim(),
+                  })
               : t("add_candidate_dialog_pool_description")}
           </DialogDescription>
         </DialogHeader>

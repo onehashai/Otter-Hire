@@ -84,12 +84,10 @@ export default function IntegrationPage() {
             <div className="space-y-1">
               <div className="flex items-center gap-2">
                 <p className="text-sm font-medium">{t("email_integration")}</p>
-                <Badge variant={emailStatus?.status === "active" ? "default" : "secondary"}>
-                  {emailStatus?.status === "active"
+                <Badge variant={emailStatus?.status === "active" || isEmailPendingVerification ? "default" : "secondary"}>
+                  {emailStatus?.status === "active" || isEmailPendingVerification
                     ? t("connected")
-                    : isEmailPendingVerification
-                      ? "Pending Verification"
-                      : t("not_connected")}
+                    : t("not_connected")}
                 </Badge>
               </div>
               <p className="text-xs text-muted-foreground">{t("email_integration_description")}</p>
@@ -112,9 +110,7 @@ export default function IntegrationPage() {
                 onClick={() => setEmailDialogOpen(true)}
                 disabled={isLoading || !jobId}
               >
-                {isEmailPendingVerification
-                  ? "Pending Verification"
-                  : emailStatus?.configured
+                {emailStatus?.configured || isEmailPendingVerification
                     ? t("manage")
                     : t("connect")}
               </Button>

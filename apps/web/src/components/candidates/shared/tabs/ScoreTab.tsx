@@ -111,6 +111,8 @@ export function ScoreTab({ scoreData, loading = false }: ScoreTabProps) {
 
   const totalScore = scoreData.total_score ?? 0;
   const explanation = sections.explanation;
+  const highlights = Array.isArray(explanation?.highlights) ? explanation.highlights : [];
+  const gaps = Array.isArray(explanation?.gaps) ? explanation.gaps : [];
 
   return (
     <div className="space-y-6 p-1">
@@ -135,10 +137,10 @@ export function ScoreTab({ scoreData, loading = false }: ScoreTabProps) {
       {/* Explanation card */}
       {explanation && (
         <div className="rounded-xl border bg-card p-4 space-y-3">
-          <p className="text-sm font-medium">{explanation.summary}</p>
-          {explanation.highlights.length > 0 && (
+          {explanation.summary ? <p className="text-sm font-medium">{explanation.summary}</p> : null}
+          {highlights.length > 0 && (
             <div className="space-y-1">
-              {explanation.highlights.map((h, i) => (
+              {highlights.map((h, i) => (
                 <div key={i} className="flex items-start gap-2 text-xs text-muted-foreground">
                   <span className="mt-0.5 shrink-0">✓</span>
                   <span>{h}</span>
@@ -146,9 +148,9 @@ export function ScoreTab({ scoreData, loading = false }: ScoreTabProps) {
               ))}
             </div>
           )}
-          {explanation.gaps.length > 0 && (
+          {gaps.length > 0 && (
             <div className="space-y-1">
-              {explanation.gaps.map((g, i) => (
+              {gaps.map((g, i) => (
                 <div key={i} className="flex items-start gap-2 text-xs text-muted-foreground">
                   <span className="mt-0.5 shrink-0 text-destructive">✗</span>
                   <span>{g}</span>

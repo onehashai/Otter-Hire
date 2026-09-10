@@ -11,6 +11,7 @@ import {
   Bot,
   ScrollText,
   Settings,
+  Database,
   Sun,
   Moon,
   ChevronsLeft,
@@ -59,6 +60,7 @@ export function AppSidebar({ collapsed, onToggle, onOpenCommandPalette }: AppSid
   const navItems = [
     ...baseNavItems,
     ...(canSeeLogs ? [{ titleKey: "nav_logs", url: "/logs", icon: ScrollText }] : []),
+    { titleKey: "data_migration_title", url: "/data-migration", icon: Database },
     { titleKey: "settings_title", url: "/settings/profile", icon: Settings },
   ];
 

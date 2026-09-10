@@ -22,6 +22,7 @@ class Stage(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid7)
     org_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
     job_id = Column(UUID(as_uuid=True), ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False)
+    external_stage_id = Column(String(255), nullable=True, index=True)
     name = Column(String(100), nullable=False)
     position = Column(Integer, nullable=False)
     is_required = Column(Boolean, nullable=False, server_default="false")

@@ -10,10 +10,14 @@ export const API_BASE_URL = API_BASE.endsWith("/v1")
 
 /** Full WebSocket base URL for client-side WebSocket connections. */
 export function getWebSocketBaseUrl(): string {
-  const base = API_BASE.replace(/^http/i, "ws");
-  return base.endsWith("/v1")
-    ? `${base}/internal/inbound/events/ws`
-    : `${base}/v1/internal/inbound/events/ws`;
+  let base = API_BASE;
+  if (typeof window !== "undefined" && window.location.protocol === "https:") {
+    base = base.replace(/^http:/i, "https:");
+  }
+  const wsBase = base.replace(/^https:/i, "wss:").replace(/^http:/i, "ws:");
+  return wsBase.endsWith("/v1")
+    ? `${wsBase}/internal/inbound/events/ws`
+    : `${wsBase}/v1/internal/inbound/events/ws`;
 }
 
 /** Normalize API or file URLs */

@@ -15,6 +15,7 @@ import { TruncatedText } from "@/components/common/TruncatedText";
 export const CANDIDATE_COLUMN_DEFS = {
   name: { label: "Candidate", fixed: true, defaultVisible: true },
   email: { label: "Email", fixed: true, defaultVisible: true },
+  score: { label: "Score", fixed: false, defaultVisible: true },
   phone: { label: "Phone", fixed: false, defaultVisible: true },
   assigned_jobs: { label: "Assigned Jobs", fixed: false, defaultVisible: true },
   created_at: { label: "Created", fixed: false, defaultVisible: true },
@@ -152,6 +153,16 @@ export function CandidatesTable({
         </TableHead>
       );
     }
+    if (column === "score") {
+      return (
+        <TableHead
+          key={column}
+          className="text-xs font-medium h-9 min-w-[80px] text-center"
+        >
+          Score
+        </TableHead>
+      );
+    }
     if (column === "phone") {
       return (
         <TableHead
@@ -274,6 +285,73 @@ export function CandidatesTable({
           <TruncatedText className="mx-auto text-center text-xs text-muted-foreground">
             {c.email}
           </TruncatedText>
+        </TableCell>
+      );
+    }
+    if (column === "score") {
+      const activeScores = (c.assignments ?? [])
+        .filter((a) => a.assignment_status === "active")
+        .map((a) => ({
+          jobTitle: a.job_title ?? "Untitled job",
+          score: a.resume_score,
+          status: a.resume_score_status,
+        }));
+
+      if (activeScores.length === 0) {
+        return (
+          <TableCell key={column} className="py-2 align-middle text-center">
+            <span className="text-xs text-muted-foreground">—</span>
+          </TableCell>
+        );
+      }
+
+      const getBadgeClass = (score: number | null | undefined, status: string | null | undefined) => {
+        if (status === "pending") {
+          return "bg-neutral-500/10 text-neutral-500 border-neutral-500/20";
+        }
+        if (score === null || score === undefined) return "bg-neutral-500/10 text-neutral-500 border-neutral-500/20";
+        if (score >= 80) return "bg-emerald-500/10 text-emerald-600 border-emerald-500/20";
+        if (score >= 50) return "bg-amber-500/10 text-amber-600 border-amber-500/20";
+        return "bg-red-500/10 text-red-600 border-red-500/20";
+      };
+
+      const renderScoreValue = (score: number | null | undefined, status: string | null | undefined) => {
+        if (status === "pending") return "Pending";
+        if (score === null || score === undefined) return "—";
+        return score.toString();
+      };
+
+      if (activeScores.length === 1) {
+        const item = activeScores[0];
+        return (
+          <TableCell key={column} className="py-2 align-middle text-center">
+            <Badge variant="outline" className={`text-xs font-semibold whitespace-nowrap mx-auto ${getBadgeClass(item.score, item.status)}`}>
+              {renderScoreValue(item.score, item.status)}
+            </Badge>
+          </TableCell>
+        );
+      }
+
+      // Multiple scores
+      const primaryItem = activeScores[0];
+      return (
+        <TableCell key={column} className="py-2 align-middle text-center">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Badge variant="outline" className={`text-xs font-semibold cursor-pointer whitespace-nowrap mx-auto ${getBadgeClass(primaryItem.score, primaryItem.status)}`}>
+                {renderScoreValue(primaryItem.score, primaryItem.status)}*
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-[320px] text-xs">
+              <div className="space-y-1">
+                {activeScores.map((s, idx) => (
+                  <p key={idx} className="text-xs leading-4">
+                    {s.jobTitle}: <span className="font-semibold">{renderScoreValue(s.score, s.status)}</span>
+                  </p>
+                ))}
+              </div>
+            </TooltipContent>
+          </Tooltip>
         </TableCell>
       );
     }

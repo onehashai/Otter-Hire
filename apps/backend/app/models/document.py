@@ -17,6 +17,7 @@ class CandidateDocument(Base):
     candidate_id = Column(
         UUID(as_uuid=True), ForeignKey("candidates.id", ondelete="CASCADE"), nullable=False
     )
+    external_document_id = Column(String(255), nullable=True, index=True)
     job_id = Column(UUID(as_uuid=True), ForeignKey("jobs.id", ondelete="CASCADE"), nullable=True)
     field_key = Column(String(120), nullable=False)
     field_label_snapshot = Column(String(255), nullable=True)

@@ -1,0 +1,27 @@
+{
+  "id": "greenhouse",
+  "name": "Greenhouse",
+  "enabled": true,
+  "auth": {"type": "basic", "header_name": "Authorization", "secret_ref": "GREENHOUSE_API_KEY"},
+  "base_url": "http://localhost:8991",
+  "endpoints": {
+    "jobs": {"path": "/v1/jobs", "method": "GET", "response_root_key": "jobs"},
+    "stages": {"path": "/v1/jobs/{external_job_id}/stages", "method": "GET", "response_root_key": "stages"},
+    "candidates": {"path": "/v1/candidates", "method": "GET", "response_root_key": "candidates"},
+    "applications": {"path": "/v1/applications", "method": "GET", "response_root_key": "applications"},
+    "interviews": {"path": "/v1/interviews", "method": "GET", "response_root_key": "interviews"},
+    "notes": {"path": "/v1/candidates/{external_candidate_id}/notes", "method": "GET", "response_root_key": "notes"},
+    "resumes": {"path": "/v1/candidates/{external_candidate_id}/attachments", "method": "GET", "response_root_key": "attachments"}
+  },
+  "pagination": {"style": "page", "page_param": "page", "page_size_param": "per_page", "page_size": 100},
+  "rate_limits": {"requests_per_second": 2, "max_retries": 5, "backoff_seconds": 1},
+  "mappings": {
+    "job": {"external_job_id": "id", "title": "name", "description": "notes"},
+    "stage": {"external_stage_id": "id", "external_job_id": "job_id", "name": "name", "position": "priority"},
+    "candidate": {"external_candidate_id": "id", "first_name": "first_name", "last_name": "last_name", "email": "email_addresses.0.value", "phone": "phone_numbers.0.value", "skills": "custom_fields.skills", "resume_text": "resume_text"},
+    "application": {"external_application_id": "id", "external_candidate_id": "candidate_id", "external_job_id": "job_id", "external_stage_id": "stage_id", "status": "status"},
+    "interview": {"external_interview_id": "id", "external_candidate_id": "candidate_id", "external_job_id": "job_id", "scheduled_at": "scheduled_at", "interviewer_name": "interviewer.name"},
+    "note": {"external_note_id": "id", "external_candidate_id": "candidate_id", "content": "body", "author_name": "author.name"},
+    "resume": {"external_document_id": "id", "external_candidate_id": "candidate_id", "source_url": "url", "filename": "filename", "mime_type": "content_type"}
+  }
+}

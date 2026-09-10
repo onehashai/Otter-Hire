@@ -18,7 +18,7 @@ export function AdminLogsTab() {
   useEffect(() => {
     getAdminOrganizations()
       .then((data) => setOrgs(data.map((o) => ({ id: String(o.id), name: o.name }))))
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   const load = useCallback(async () => {
@@ -45,7 +45,7 @@ export function AdminLogsTab() {
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="text-lg font-semibold text-foreground mb-1">Email Parsing Logs</h2>
+        <h2 className="text-lg font-semibold text-foreground mb-1">Email Logs</h2>
         <p className="text-xs text-muted-foreground">
           View inbound email parsing activity across all organizations. Logs retained for 30 days.
         </p>

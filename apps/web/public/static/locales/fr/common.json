@@ -172,6 +172,7 @@
   "schedule": "Planifier",
   "interviewer": "Intervieweur",
   "settings_title": "Paramètres",
+  "data_migration_title": "Migration des données",
   "settings_subtitle": "Gérez votre compte et vos préférences.",
   "edit_candidates_title": "Modifier les candidats",
   "edit_candidates_subtitle": "Modifiez et gérez les candidats et les postes en un seul endroit",

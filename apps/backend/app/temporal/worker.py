@@ -24,6 +24,14 @@ from app.temporal.email.workflow import (
     InboundEmailWorkflow,
     OutboundEmailWorkflow,
 )
+from app.temporal.migration.activities import (
+    commit_batch_activity,
+    fetch_candidates,
+    send_import_complete_email_activity,
+    transfer_resume_attachment,
+    validate_and_map_batch,
+)
+from app.temporal.migration.workflows import AtsSyncWorkflow, CommitBatchWorkflow
 from app.temporal.resume_parsing.activities import parse_job_apply_resume_activity
 from app.temporal.resume_parsing.workflow import JobApplyResumeParseWorkflow
 from app.temporal.resume_scoring.activities import score_candidate_job_activity
@@ -66,8 +74,8 @@ async def run_temporal_worker() -> None:
             max_concurrent_workflow_tasks=5,
         )
         # Import the inbound-email-parse workflow & activity
-        from app.temporal.inbound_email.workflow import InboundEmailParseWorkflow
         from app.temporal.inbound_email.activities import parse_inbound_email_activity
+        from app.temporal.inbound_email.workflow import InboundEmailParseWorkflow
 
         worker_inbound_parse = Worker(
             client,
@@ -108,19 +116,35 @@ async def run_temporal_worker() -> None:
             max_concurrent_activities=10,
             max_concurrent_workflow_tasks=10,
         )
-        logger.info(
-            "[WORKER] Started task_queues=email-inbound,inbound-email-parse,email-outbound,careers-resume-parse,resume-scoring namespace=%s",
-            settings.temporal_namespace,
-        )
+        migration_workers = []
+        if settings.ats_auto_import_enabled:
+            migration_workers.append(
+                Worker(
+                    client,
+                    task_queue="ats-migration",
+                    workflows=[AtsSyncWorkflow, CommitBatchWorkflow],
+                    activities=[
+                        fetch_candidates,
+                        validate_and_map_batch,
+                        commit_batch_activity,
+                        send_import_complete_email_activity,
+                        transfer_resume_attachment,
+                    ],
+                    interceptors=_sentry_interceptors,
+                    max_concurrent_activities=5,
+                    max_concurrent_workflow_tasks=5,
+                )
+            )
+        queues = "email-inbound,inbound-email-parse,email-outbound,careers-resume-parse,resume-scoring"
+        if settings.ats_auto_import_enabled:
+            queues += ",ats-migration"
+        logger.info("[WORKER] Started task_queues=%s namespace=%s", queues, settings.temporal_namespace)
         logger.info("[WORKER] Polling for tasks...")
 
         async def _keepalive() -> None:
             while True:
                 await asyncio.sleep(60)
-                logger.info(
-                    "[WORKER] Alive, polling email-inbound, inbound-email-parse, email-outbound, careers-resume-parse"
-                    ", resume-scoring"
-                )
+                logger.info("[WORKER] Alive, polling %s", queues)
 
         await asyncio.gather(
             worker_inbound.run(),
@@ -128,6 +152,7 @@ async def run_temporal_worker() -> None:
             worker_outbound.run(),
             worker_careers_resume.run(),
             worker_resume_scoring.run(),
+            *(worker.run() for worker in migration_workers),
             _keepalive(),
         )
     except Exception as e:

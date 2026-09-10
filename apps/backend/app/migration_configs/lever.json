@@ -1,0 +1,11 @@
+{
+  "id": "lever",
+  "name": "Lever",
+  "enabled": true,
+  "auth": {"type": "api_key", "header_name": "X-Lever-API-Key"},
+  "base_url": "http://localhost:8993",
+  "endpoints": {"jobs": {"path": "/v1/jobs", "method": "GET", "response_root_key": "data"}, "stages": {"path": "/v1/stages", "method": "GET", "response_root_key": "data"}, "candidates": {"path": "/v1/candidates", "method": "GET", "response_root_key": "data"}, "applications": {"path": "/v1/applications", "method": "GET", "response_root_key": "data"}, "resumes": {"path": "/v1/resumes", "method": "GET", "response_root_key": "data"}, "interviews": {"path": "/v1/interviews", "method": "GET", "response_root_key": "data"}, "notes": {"path": "/v1/notes", "method": "GET", "response_root_key": "data"}},
+  "pagination": {"style": "offset", "page_param": "offset", "page_size_param": "limit", "page_size": 100},
+  "rate_limits": {"requests_per_second": 2, "max_retries": 5, "backoff_seconds": 1},
+  "mappings": {"job": {"external_job_id": "id", "title": "name", "description": "description"}, "stage": {"external_stage_id": "id", "external_job_id": "job_id", "name": "name", "position": "position"}, "candidate": {"external_candidate_id": "id", "first_name": "name", "email": "email", "phone": "phone", "skills": "skills", "resume_text": "resume_text"}, "application": {"external_application_id": "id", "external_candidate_id": "candidate_id", "external_job_id": "job_id", "external_stage_id": "stage_id", "status": "status"}, "resume": {"external_document_id": "id", "external_candidate_id": "candidate_id", "source_url": "url", "filename": "filename", "mime_type": "content_type"}, "interview": {"external_interview_id": "id", "external_candidate_id": "candidate_id", "external_job_id": "job_id", "scheduled_at": "scheduled_at", "interviewer_name": "interviewer_name"}, "note": {"external_note_id": "id", "external_candidate_id": "candidate_id", "content": "content", "author_name": "author_name"}}
+}

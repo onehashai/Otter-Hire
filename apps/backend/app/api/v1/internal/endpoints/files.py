@@ -62,16 +62,11 @@ def _object_key_from_stored_file_url(url: str) -> str | None:
 async def _stream_stored_object(normalized_key: str) -> Response | FileResponse:
     if settings.s3_enabled and storage_service.use_s3 and storage_service.s3_client:
         try:
-            s3_response = storage_service.s3_client.get_object(
-                Bucket=storage_service.bucket,
-                Key=storage_service._s3_key(normalized_key),
-            )
+            content = await storage_service.read_bytes(normalized_key)
+            mime = "application/pdf" if normalized_key.lower().endswith(".pdf") else ("application/vnd.openxmlformats-officedocument.wordprocessingml.document" if normalized_key.lower().endswith(".docx") else "application/octet-stream")
+            return Response(content=content, media_type=mime)
         except Exception:
             raise HTTPException(status_code=404, detail="File not found")
-
-        content_type = s3_response.get("ContentType") or "application/octet-stream"
-        content = s3_response["Body"].read()
-        return Response(content=content, media_type=content_type)
 
     root = Path(settings.local_storage_root).resolve()
     full_path = (root / normalized_key).resolve()

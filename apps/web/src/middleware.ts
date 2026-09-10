@@ -94,7 +94,7 @@ function getJobsSubdomain(): string {
 function getRootHostAliases(): string[] {
   const configuredRootHost = process.env.NEXT_PUBLIC_APP_ROOT_HOST || "";
   const configuredRootHostname = configuredRootHost.split(":")[0].toLowerCase();
-  const aliases = new Set(["localhost", "127.0.0.1"]);
+  const aliases = new Set(["localhost", "127.0.0.1", "localhost:3000", "127.0.0.1:3000"]);
 
   if (configuredRootHostname) {
     aliases.add(configuredRootHostname);
@@ -169,6 +169,11 @@ function isRootHost(host: string): boolean {
   return getRootHostAliases().includes(currentHostname);
 }
 
+function isLocalDevHost(host: string): boolean {
+  const hostname = host.split(":")[0].toLowerCase();
+  return hostname === "localhost" || hostname === "127.0.0.1";
+}
+
 function appendSetCookieHeaders(target: NextResponse, sourceHeaders: Headers): void {
   const maybeHeaders = sourceHeaders as Headers & {
     getSetCookie?: () => string[];
@@ -201,6 +206,23 @@ function buildLoginRedirect(request: NextRequest, sessionExpired: boolean): Next
     loginUrl.searchParams.set("session_expired", "true");
   }
   return NextResponse.redirect(loginUrl);
+}
+
+function parseJwt(token: string): { is_verified?: boolean } | null {
+  try {
+    const base64Url = token.split(".")[1];
+    if (!base64Url) return null;
+    const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split("")
+        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+        .join(""),
+    );
+    return JSON.parse(jsonPayload);
+  } catch {
+    return null;
+  }
 }
 
 async function refreshUnauthorizedMeansSessionExpired(res: Response): Promise<boolean> {
@@ -238,7 +260,7 @@ export async function middleware(request: NextRequest) {
   // Root / marketing domain — serve the marketing site and delegate app routes to
   // the app subdomain.  This must come before the expectedHost redirect so that
   // requests to the root domain are never blindly bounced to app.*.
-  if (isRootHost(currentHost)) {
+  if (isRootHost(currentHost) && !isLocalDevHost(currentHost)) {
     const rootHost = process.env.NEXT_PUBLIC_APP_ROOT_HOST || "localhost:3000";
     const search = request.nextUrl.search;
 
@@ -270,8 +292,9 @@ export async function middleware(request: NextRequest) {
       return NextResponse.next();
     }
 
-    // Auth / lifecycle / invite paths belong on the app subdomain.
+    // Auth / lifecycle / invite paths belong on the app subdomain (except on local dev).
     if (AUTH_ROUTES.has(pathname) || LIFECYCLE_ROUTES.has(pathname) || isInvitePath(pathname)) {
+      if (isLocalDev) return NextResponse.next();
       return NextResponse.redirect(getAppSubdomainUrl(pathname, rootHost, search));
     }
 
@@ -285,13 +308,14 @@ export async function middleware(request: NextRequest) {
       return NextResponse.next();
     }
 
-    // Every other path on the root domain is an app route — redirect to the app subdomain.
+    // Every other path on the root domain is an app route — redirect to the app subdomain (except local dev).
+    if (isLocalDev) return NextResponse.next();
     return NextResponse.redirect(getAppSubdomainUrl(pathname, rootHost, search));
   }
 
   // Enforce the app subdomain for all remaining hosts (unknown hosts included).
   const expectedHost = getExpectedAppHost();
-  if (expectedHost && currentHost !== expectedHost) {
+  if (expectedHost && currentHost !== expectedHost && !isLocalDevHost(currentHost)) {
     const protocol =
       currentHost.includes("localhost") || currentHost.includes("127.0.0.1") ? "http" : "https";
     const redirectUrl = `${protocol}://${expectedHost}${pathname}${request.nextUrl.search}`;
@@ -319,6 +343,12 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(new URL("/jobs", request.url));
     }
     return NextResponse.redirect(new URL("/login", request.url));
+  }
+
+  // Authentication API calls must reach FastAPI without the page-level route guard
+  // converting an unauthenticated JSON response into a login-page redirect.
+  if (pathname.startsWith("/v1/internal/auth/")) {
+    return NextResponse.next();
   }
 
   if (LIFECYCLE_ROUTES.has(pathname)) {
@@ -374,6 +404,15 @@ export async function middleware(request: NextRequest) {
   const stageNormalizationRedirect = await normalizeInvalidStageUrl(request);
   if (stageNormalizationRedirect) {
     return stageNormalizationRedirect;
+  }
+
+  // Parse JWT and redirect unverified users to /verify
+  const tokenVal = request.cookies.get("access_token")?.value;
+  if (tokenVal) {
+    const claims = parseJwt(tokenVal);
+    if (claims && claims.is_verified === false) {
+      return NextResponse.redirect(new URL("/verify", request.url));
+    }
   }
 
   return NextResponse.next();

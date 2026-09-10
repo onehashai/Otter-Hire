@@ -384,6 +384,8 @@ async def _load_candidate_assignments(
                 assigned_at=assignment.assigned_at,
                 created_at=assignment.created_at,
                 updated_at=assignment.updated_at,
+                resume_score=assignment.resume_score,
+                resume_score_status=assignment.resume_score_status,
             )
         )
     return grouped
@@ -1485,9 +1487,10 @@ async def get_candidate_job_score(
     )
     assignment = assignment_result.scalar_one_or_none()
     if assignment is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Candidate is not assigned to this job",
+        return CandidateJobScoreResponse(
+            total_score=None,
+            status="none",
+            sections={},
         )
 
     return CandidateJobScoreResponse(

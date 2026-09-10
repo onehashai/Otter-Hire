@@ -1,5 +1,7 @@
+import base64
 import os
 from datetime import datetime, timedelta, timezone
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
 from sqlalchemy import select
@@ -352,3 +354,246 @@ async def list_org_email_logs(
         )
         for r in rows
     ]
+
+
+@router.get("/email-logs/{email_id}/body")
+async def get_org_email_log_body(
+    email_id: UUID,
+    current_user: User = Depends(require_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if current_user.membership_role not in ("owner", "admin"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions"
+        )
+
+    inbound_email = (
+        await db.execute(
+            select(InboundEmail).where(
+                InboundEmail.id == email_id,
+                InboundEmail.org_id == current_user.org_id,
+            )
+        )
+    ).scalar_one_or_none()
+
+    if not inbound_email:
+        raise HTTPException(status_code=404, detail="Email log not found")
+
+    if not inbound_email.raw_storage_key:
+        return {"text_body": "No raw email stored.", "html_body": ""}
+
+    try:
+        from app.integrations.app_store.email_integration.ses_bridge import (
+            _extract_text_and_attachments,
+        )
+
+        try:
+            raw_email = await storage_service.read_bytes(inbound_email.raw_storage_key)
+        except Exception:
+            # Try alternate key variations (e.g. without leading prefix or with stag prefix)
+            alt_key = inbound_email.raw_storage_key
+            raw_email = None
+            if "/" in alt_key:
+                unprefixed = alt_key.split("/", 1)[1]
+                for try_key in [unprefixed, f"otter-hire-stag/{unprefixed}", f"otter-hire-prod/{unprefixed}"]:
+                    try:
+                        raw_email = await storage_service.read_bytes(try_key)
+                        if raw_email:
+                            break
+                    except Exception:
+                        continue
+            if not raw_email:
+                raise
+
+        extracted = _extract_text_and_attachments(raw_email)
+        raw_atts = extracted.get("attachments") or []
+        parsed_atts = []
+        for idx, a in enumerate(raw_atts):
+            if not isinstance(a, dict):
+                continue
+            b64 = a.get("content_base64")
+            raw_bytes = base64.b64decode(b64) if b64 else (a.get("content") or b"")
+            parsed_atts.append(
+                {
+                    "index": idx,
+                    "filename": a.get("filename") or "attachment.bin",
+                    "content_type": a.get("content_type") or "application/octet-stream",
+                    "size_bytes": len(raw_bytes),
+                    "download_url": f"/v1/internal/organizations/email-logs/{email_id}/attachments/{idx}",
+                }
+            )
+        if inbound_email.parsed_candidate_id:
+            try:
+                from app.models.document import CandidateDocument
+                c_docs = (
+                    await db.execute(
+                        select(CandidateDocument).where(
+                            CandidateDocument.candidate_id == inbound_email.parsed_candidate_id,
+                            CandidateDocument.is_deleted.is_(False),
+                        )
+                    )
+                ).scalars().all()
+                for cd in c_docs:
+                    if not any(a.get("filename") == cd.name for a in parsed_atts):
+                        parsed_atts.append(
+                            {
+                                "index": len(parsed_atts),
+                                "filename": cd.name,
+                                "content_type": cd.mime_type or "application/pdf",
+                                "size_bytes": cd.size_bytes,
+                                "download_url": cd.url,
+                            }
+                        )
+            except Exception:
+                pass
+
+        return {
+            "text_body": extracted.get("text_body") or "",
+            "html_body": extracted.get("html_body") or "",
+            "attachments": parsed_atts,
+        }
+    except Exception:
+        # Fallback to stored database Message if raw S3 payload is unavailable
+        try:
+            from sqlalchemy import func
+
+            from app.models.conversation import Conversation
+            from app.models.document import CandidateDocument
+            from app.models.message import Message
+
+            db_msg = None
+            clean_msg_id = (inbound_email.message_id or "").strip().strip("<>")
+            if clean_msg_id:
+                db_msg = (
+                    await db.execute(
+                        select(Message).where(
+                            func.replace(func.replace(Message.email_message_id, "<", ""), ">", "")
+                            == clean_msg_id
+                        )
+                    )
+                ).scalars().first()
+
+            if not db_msg and inbound_email.parsed_candidate_id:
+                db_msg = (
+                    await db.execute(
+                        select(Message)
+                        .join(Conversation, Message.conversation_id == Conversation.id)
+                        .where(Conversation.candidate_id == inbound_email.parsed_candidate_id)
+                        .order_by(Message.created_at.asc())
+                        .limit(1)
+                    )
+                ).scalars().first()
+
+            fallback_atts = []
+            if inbound_email.parsed_candidate_id:
+                c_docs = (
+                    await db.execute(
+                        select(CandidateDocument).where(
+                            CandidateDocument.candidate_id == inbound_email.parsed_candidate_id,
+                            CandidateDocument.is_deleted.is_(False),
+                        )
+                    )
+                ).scalars().all()
+                for cd in c_docs:
+                    fallback_atts.append(
+                        {
+                            "index": len(fallback_atts),
+                            "filename": cd.name,
+                            "content_type": cd.mime_type or "application/pdf",
+                            "size_bytes": cd.size_bytes,
+                            "download_url": cd.url,
+                        }
+                    )
+
+            if db_msg:
+                return {
+                    "text_body": db_msg.body or "",
+                    "html_body": db_msg.html_body or "",
+                    "attachments": fallback_atts or db_msg.attachments or [],
+                }
+            elif fallback_atts:
+                return {
+                    "text_body": "(Raw email payload not available for this entry)",
+                    "html_body": "",
+                    "attachments": fallback_atts,
+                }
+        except Exception:
+            pass
+
+        return {
+            "text_body": "(Raw email payload not available for this entry)",
+            "html_body": "",
+            "attachments": [],
+        }
+
+
+@router.get("/email-logs/{email_id}/attachments/{index}")
+async def download_org_email_log_attachment(
+    email_id: UUID,
+    index: int,
+    current_user: User = Depends(require_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if current_user.membership_role not in ("owner", "admin"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions"
+        )
+
+    inbound_email = (
+        await db.execute(
+            select(InboundEmail).where(
+                InboundEmail.id == email_id,
+                InboundEmail.org_id == current_user.org_id,
+            )
+        )
+    ).scalar_one_or_none()
+
+    if not inbound_email or not inbound_email.raw_storage_key:
+        raise HTTPException(status_code=404, detail="Attachment not found")
+
+    try:
+        from app.integrations.app_store.email_integration.ses_bridge import (
+            _extract_text_and_attachments,
+        )
+
+        try:
+            raw_email = await storage_service.read_bytes(inbound_email.raw_storage_key)
+        except Exception:
+            alt_key = inbound_email.raw_storage_key
+            raw_email = None
+            if "/" in alt_key:
+                unprefixed = alt_key.split("/", 1)[1]
+                for try_key in [unprefixed, f"otter-hire-stag/{unprefixed}", f"otter-hire-prod/{unprefixed}"]:
+                    try:
+                        raw_email = await storage_service.read_bytes(try_key)
+                        if raw_email:
+                            break
+                    except Exception:
+                        continue
+            if not raw_email:
+                raise
+
+        extracted = _extract_text_and_attachments(raw_email)
+        atts = extracted.get("attachments") or []
+
+        if index < 0 or index >= len(atts):
+            raise HTTPException(status_code=404, detail="Attachment index out of range")
+
+        att = atts[index]
+        filename = att.get("filename") or "attachment.bin"
+        b64 = att.get("content_base64")
+        content = base64.b64decode(b64) if b64 else (att.get("content") or b"")
+        content_type = att.get("content_type") or "application/octet-stream"
+
+        return Response(
+            content=content,
+            media_type=content_type,
+            headers={"Content-Disposition": f'inline; filename="{filename}"'},
+        )
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"Could not load attachment: {e}")
+
+
+
+
+

@@ -19,6 +19,7 @@ from app.core.config import settings
 from app.core.errors import make_error_payload
 from app.integrations.app_store.email_integration.ses_bridge import run_ses_raw_bridge_loop
 from app.services.esco_loader import load_esco_into_redis
+from app.services.local_mailpit_bridge import run_local_mailpit_bridge
 from app.middleware.errors import (
     generic_exception_handler,
     http_exception_handler,
@@ -80,6 +81,12 @@ async def rate_limit_handler(request: Request, exc: SlowRateLimitExceeded):
 async def startup_event():
     app.state.ses_bridge_stop_event = asyncio.Event()
     app.state.ses_bridge_task = None
+    app.state.local_mailpit_stop_event = asyncio.Event()
+    app.state.local_mailpit_task = None
+    if not settings.is_production and settings.local_mailpit_enabled:
+        app.state.local_mailpit_task = asyncio.create_task(
+            run_local_mailpit_bridge(app.state.local_mailpit_stop_event)
+        )
     if settings.ses_raw_bridge_enabled:
         app.state.ses_bridge_task = asyncio.create_task(
             run_ses_raw_bridge_loop(app.state.ses_bridge_stop_event)
@@ -95,6 +102,12 @@ async def shutdown_event():
     task = getattr(app.state, "ses_bridge_task", None)
     if stop_event is not None:
         stop_event.set()
+    local_mailpit_stop = getattr(app.state, "local_mailpit_stop_event", None)
+    local_mailpit_task = getattr(app.state, "local_mailpit_task", None)
+    if local_mailpit_stop is not None:
+        local_mailpit_stop.set()
+    if local_mailpit_task is not None:
+        await local_mailpit_task
     if task is not None:
         await task
 

@@ -14,6 +14,8 @@ class JobApplication(Base):
         UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False
     )
     job_id = Column(UUID(as_uuid=True), ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False)
+    stage_id = Column(UUID(as_uuid=True), ForeignKey("stages.id", ondelete="SET NULL"), nullable=True)
+    external_application_id = Column(String(255), nullable=True, index=True)
     candidate_id = Column(
         UUID(as_uuid=True), ForeignKey("candidates.id", ondelete="SET NULL"), nullable=True
     )
@@ -25,6 +27,7 @@ class JobApplication(Base):
     schema_snapshot = Column(JSONB, nullable=False, server_default="{}")
     schema_version = Column(Integer, nullable=False, server_default="1")
     status = Column(String, nullable=False, server_default="submitted")
+    applied_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

@@ -155,55 +155,29 @@ export default function IntegrationsSettingsPage() {
                           {canConfigureIntegrations ? (
                             <>
                               <TooltipTrigger asChild>
-                                {app.status === "pending" ? (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="h-8 gap-1.5 px-3"
-                                    onClick={() => setManageDialogOpen(true)}
-                                  >
-                                    <Clock3 className="h-3.5 w-3.5" />
-                                    Pending Verification
-                                  </Button>
-                                ) : (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="h-8 w-8 p-0"
-                                    onClick={() => setManageDialogOpen(true)}
-                                  >
-                                    <Settings className="h-4 w-4" />
-                                  </Button>
-                                )}
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-8 w-8 p-0"
+                                  onClick={() => setManageDialogOpen(true)}
+                                >
+                                  <Settings className="h-4 w-4" />
+                                </Button>
                               </TooltipTrigger>
-                              <TooltipContent>
-                                {app.status === "pending" ? "Pending Verification" : "Manage"}
-                              </TooltipContent>
+                              <TooltipContent>Manage</TooltipContent>
                             </>
                           ) : (
                             <>
                               <TooltipTrigger asChild>
                                 <span className="inline-flex">
-                                  {app.status === "pending" ? (
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      className="h-8 gap-1.5 px-3"
-                                      disabled
-                                    >
-                                      <Clock3 className="h-3.5 w-3.5" />
-                                      Pending Verification
-                                    </Button>
-                                  ) : (
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      className="h-8 w-8 p-0"
-                                      disabled
-                                    >
-                                      <Settings className="h-4 w-4" />
-                                    </Button>
-                                  )}
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-8 w-8 p-0"
+                                    disabled
+                                  >
+                                    <Settings className="h-4 w-4" />
+                                  </Button>
                                 </span>
                               </TooltipTrigger>
                               <TooltipContent>

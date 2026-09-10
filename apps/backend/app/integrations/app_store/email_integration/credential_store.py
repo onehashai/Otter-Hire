@@ -115,11 +115,15 @@ async def get_org_credential_by_address(
     if integration_id is None:
         return None
     normalized = (inbound_address or "").strip().lower()
+    from sqlalchemy import or_
     result = await db.execute(
         select(IntegrationCredential).where(
             IntegrationCredential.integration_id == integration_id,
             IntegrationCredential.job_id.is_(None),
-            IntegrationCredential.config["inbound_address"].astext == normalized,
+            or_(
+                IntegrationCredential.config["inbound_address"].astext == normalized,
+                IntegrationCredential.config["mailbox_email"].astext == normalized,
+            ),
         )
     )
     return result.scalar_one_or_none()
@@ -132,11 +136,15 @@ async def get_job_credential_by_address(
     if integration_id is None:
         return None
     normalized = (inbound_address or "").strip().lower()
+    from sqlalchemy import or_
     result = await db.execute(
         select(IntegrationCredential).where(
             IntegrationCredential.integration_id == integration_id,
             IntegrationCredential.job_id.is_not(None),
-            IntegrationCredential.config["inbound_address"].astext == normalized,
+            or_(
+                IntegrationCredential.config["inbound_address"].astext == normalized,
+                IntegrationCredential.config["mailbox_email"].astext == normalized,
+            ),
         )
     )
     return result.scalar_one_or_none()

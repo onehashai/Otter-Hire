@@ -80,12 +80,17 @@ function isMarketingDomain(host: string): boolean {
   const hostname = host.split(":")[0]?.toLowerCase();
   if (!hostname) return false;
 
-  const marketingHosts = new Set(["localhost", "127.0.0.1"]);
+  // In local dev, allow localhost to render full app Providers shell so login & dashboard work directly
+  if (hostname === "localhost" || hostname === "127.0.0.1") {
+    return false;
+  }
+
+  const marketingHosts = new Set<string>();
   const configuredRootHostname = (process.env.NEXT_PUBLIC_APP_ROOT_HOST || "")
     .split(":")[0]
     .toLowerCase();
 
-  if (configuredRootHostname) {
+  if (configuredRootHostname && configuredRootHostname !== "localhost" && configuredRootHostname !== "127.0.0.1") {
     marketingHosts.add(configuredRootHostname);
     marketingHosts.add(`www.${configuredRootHostname}`);
   }

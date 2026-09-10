@@ -45,6 +45,13 @@ services:
     ports:
       - "6379:6379"
 
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: ats-mailpit
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
   postgres:
     image: postgres:16-alpine
     container_name: ats-postgres

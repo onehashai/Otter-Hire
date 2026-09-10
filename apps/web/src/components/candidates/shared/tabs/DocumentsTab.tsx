@@ -5,7 +5,7 @@ import { Button } from "@onehash/ui/button";
 import { Icon } from "@onehash/ui/icon";
 import { useTranslation } from "react-i18next";
 import { formatTimestamp } from "@/lib/format-date";
-import { getApiBase } from "@/api";
+import { normalizeApiUrl } from "@/api/client/client";
 import { TruncatedText } from "@/components/common/TruncatedText";
 interface Document {
   id?: string;
@@ -33,9 +33,9 @@ function formatDisplayFileName(rawName: string): string {
 
 function getPreviewUrl(doc: Document, candidateId?: string): string | undefined {
   if (candidateId && doc.id) {
-    return `${getApiBase()}/v1/internal/candidates/${encodeURIComponent(candidateId)}/documents/${encodeURIComponent(doc.id)}/preview`;
+    return normalizeApiUrl(`/v1/internal/candidates/${encodeURIComponent(candidateId)}/documents/${encodeURIComponent(doc.id)}/preview`) ?? undefined;
   }
-  return doc.url;
+  return normalizeApiUrl(doc.url) ?? undefined;
 }
 
 export function DocumentsTab({

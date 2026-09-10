@@ -17,22 +17,23 @@ from app.models.integration_credential import IntegrationCredential
 
 
 def _aws_region_for_ses() -> str:
-    """Return the AWS region used for SES outbound.
-
-    Falls back to the S3 region which is already required for inbound SES.
-    """
+    """Return the AWS region used for SES outbound."""
+    if settings.aws_ses_region:
+        return settings.aws_ses_region.strip()
     region = (settings.aws_s3_region or "").strip()
-    if not region:
-        raise RuntimeError("AWS_S3_REGION (or AWS_SES_REGION) must be configured for SES outbound")
+    if not region or region == "auto":
+        return "ap-south-1"
     return region
 
 
 def _ses_client():
+    access_key = settings.aws_ses_access_key or settings.aws_access_key_id
+    secret_key = settings.aws_ses_secret_key or settings.aws_secret_access_key
     return boto3.client(
         "sesv2",
         region_name=_aws_region_for_ses(),
-        aws_access_key_id=settings.aws_access_key_id,
-        aws_secret_access_key=settings.aws_secret_access_key,
+        aws_access_key_id=access_key,
+        aws_secret_access_key=secret_key,
     )
 
 

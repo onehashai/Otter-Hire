@@ -64,15 +64,19 @@ class SesProvider(EmailProvider):
     ) -> ConversationSendResult:
         from app.services.ses_outbound import send_email_via_ses
 
+        # Use verified domain transactional email for AWS SES identity authorization
+        actual_from = "noreply@applications.otter.bz"
+        reply_to_addr = from_email
+
         ses_id: str = await asyncio.to_thread(
             send_email_via_ses,
-            from_email=from_email,
+            from_email=actual_from,
             from_name=from_name,
             to_email=to_email,
             subject=subject,
             text_body=text_body,
             html_body=html_body,
-            reply_to=None,
+            reply_to=reply_to_addr,
             in_reply_to=in_reply_to,
             references=references,
             message_id_tag=message_id_tag,

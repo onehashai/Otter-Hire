@@ -67,13 +67,38 @@ export type PublicApplyFileUploadResponse = {
   url: string;
 };
 
+function getPublicApiBase(): string {
+  if (typeof window !== "undefined") {
+    const protocol = window.location.protocol;
+    const host = window.location.host;
+    if (host.includes("otter.bz")) {
+      return `${protocol}//app.otter.bz/v1/internal`;
+    }
+    if (host.includes("smartats.in")) {
+      return `${protocol}//app.smartats.in/v1/internal`;
+    }
+    return `${protocol}//${host}/v1/internal`;
+  }
+  return API_BASE_URL;
+}
+
 export async function getPublicJobs(orgId: string): Promise<PublicJobsListResponse> {
-  const data = await apiGet<PublicJobsListResponse>(`/orgs/${orgId}/jobs`);
+  const baseUrl = getPublicApiBase();
+  const res = await fetch(`${baseUrl}/orgs/${orgId}/jobs`);
+  if (!res.ok) {
+    throw new Error(`Failed to load jobs (${res.status})`);
+  }
+  const data = (await res.json()) as PublicJobsListResponse;
   return { ...data, org_avatar_url: normalizeApiUrl(data.org_avatar_url) };
 }
 
 export async function getPublicJobDetail(orgId: string, jobId: string): Promise<PublicJobDetail> {
-  const data = await apiGet<PublicJobDetail>(`/orgs/${orgId}/jobs/${jobId}`);
+  const baseUrl = getPublicApiBase();
+  const res = await fetch(`${baseUrl}/orgs/${orgId}/jobs/${jobId}`);
+  if (!res.ok) {
+    throw new Error(`Job not found (${res.status})`);
+  }
+  const data = (await res.json()) as PublicJobDetail;
   return { ...data, org_avatar_url: normalizeApiUrl(data.org_avatar_url) };
 }
 

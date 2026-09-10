@@ -59,14 +59,21 @@ function formatAnswerValue(value: string | number | boolean | string[] | null): 
   return text ? { kind: "text", text } : { kind: "empty" };
 }
 
-function formatSubmittedAt(value: string): string {
-  return new Date(value).toLocaleString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+function formatSubmittedAt(value: string | null | undefined): string {
+  if (!value) return "";
+  try {
+    const d = new Date(value);
+    if (isNaN(d.getTime())) return "";
+    return d.toLocaleString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return "";
+  }
 }
 
 export function ApplicationResponsesTab({

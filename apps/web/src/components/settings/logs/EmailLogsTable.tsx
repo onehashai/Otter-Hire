@@ -9,7 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@onehash/ui/table";
 import { Icon } from "@onehash/ui/icon";
 import { cn } from "@/lib/utils";
-import type { EmailLogRow } from "@/api/email-logs";
+import { getOrgEmailLogBody, getAdminEmailLogBody, type EmailLogRow } from "@/api/email-logs";
+import { EmailViewModal, type EmailViewModalData } from "@/components/common/EmailViewModal";
 
 const STATUS_CFG: Record<string, { label: string; cls: string }> = {
   processed: {
@@ -36,9 +37,49 @@ function formatTs(iso: string) {
   return new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 }
 
-function ExpandedDetail({ row }: { row: EmailLogRow & { org_name?: string } }) {
+function ExpandedDetail({
+  row,
+  isAdmin,
+}: {
+  row: EmailLogRow & { org_name?: string };
+  isAdmin?: boolean;
+}) {
+  const [showBody, setShowBody] = useState(false);
+  const [loadingBody, setLoadingBody] = useState(false);
+  const [bodyData, setBodyData] = useState<{ text_body: string; html_body: string } | null>(null);
+  const [bodyError, setBodyError] = useState<string | null>(null);
+
+  const handleToggleBody = async () => {
+    if (showBody) {
+      setShowBody(false);
+      return;
+    }
+    setShowBody(true);
+    if (!bodyData && !loadingBody) {
+      setLoadingBody(true);
+      setBodyError(null);
+      try {
+        const data = isAdmin
+          ? await getAdminEmailLogBody(row.id)
+          : await getOrgEmailLogBody(row.id);
+        setBodyData(data);
+      } catch (err) {
+        setBodyError(err instanceof Error ? err.message : "Failed to load email body");
+      } finally {
+        setLoadingBody(false);
+      }
+    }
+  };
+
+  React.useEffect(() => {
+    if (!bodyData && !loadingBody) {
+      handleToggleBody();
+    }
+  }, []);
+
+
   return (
-    <div className="px-4 py-3 bg-muted/30 border-t text-xs space-y-2">
+    <div className="px-4 py-3 bg-muted/30 border-t text-xs space-y-3">
       <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-1.5">
         <div>
           <span className="text-muted-foreground">Inbox: </span>
@@ -78,9 +119,53 @@ function ExpandedDetail({ row }: { row: EmailLogRow & { org_name?: string } }) {
           {row.parse_error}
         </div>
       )}
+
+      <div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-7 text-xs"
+          onClick={handleToggleBody}
+        >
+          <Icon name={showBody ? "ChevronUp" : "Mail"} className="mr-1.5 h-3.5 w-3.5" />
+          {showBody ? "Hide Email Body" : "View Whole Email Body"}
+        </Button>
+
+        {showBody && (
+          <div className="mt-2 p-3 rounded border bg-background text-foreground space-y-2">
+            {loadingBody ? (
+              <div className="flex items-center gap-2 text-muted-foreground py-2">
+                <div className="animate-spin rounded-full h-3.5 w-3.5 border-b-2 border-current" />
+                Loading email content...
+              </div>
+            ) : bodyError ? (
+              <div className="text-destructive font-mono py-1">{bodyError}</div>
+            ) : bodyData ? (
+              <div className="space-y-2">
+                {bodyData.text_body ? (
+                  <pre className="whitespace-pre-wrap font-sans text-xs break-words leading-relaxed p-2 rounded bg-muted/40 max-h-96 overflow-y-auto select-text">
+                    {bodyData.text_body}
+                  </pre>
+                ) : bodyData.html_body ? (
+                  <iframe
+                    title="Email Content"
+                    srcDoc={bodyData.html_body}
+                    sandbox="allow-same-origin"
+                    className="w-full h-64 border rounded bg-white"
+                  />
+                ) : (
+                  <div className="text-muted-foreground italic py-1">No email content available.</div>
+                )}
+              </div>
+            ) : null}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
+
 
 export interface EmailLogsTableProps {
   rows: (EmailLogRow & { org_name?: string })[];
@@ -93,6 +178,7 @@ export interface EmailLogsTableProps {
   onClearFilters: () => void;
   onRetry: () => void;
   showOrgColumn?: boolean;
+  isAdmin?: boolean;
   extraFilters?: React.ReactNode;
 }
 
@@ -107,10 +193,51 @@ export function EmailLogsTable({
   onClearFilters,
   onRetry,
   showOrgColumn,
+  isAdmin,
   extraFilters,
 }: EmailLogsTableProps) {
   const [expanded, setExpanded] = useState<string | null>(null);
-  const colSpan = showOrgColumn ? 6 : 5;
+  const [modalEmail, setModalEmail] = useState<EmailViewModalData | null>(null);
+  const [loadingModalId, setLoadingModalId] = useState<string | null>(null);
+
+  const colSpan = showOrgColumn ? 7 : 6;
+  const isUserAdmin = isAdmin ?? showOrgColumn;
+
+  const handleOpenModal = async (row: EmailLogRow & { org_name?: string }, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setLoadingModalId(row.id);
+    try {
+      const data = isUserAdmin
+        ? await getAdminEmailLogBody(row.id)
+        : await getOrgEmailLogBody(row.id);
+
+      setModalEmail({
+        id: row.id,
+        from_name: row.from_name || row.from_email,
+        from_email: row.from_email,
+        to_email: row.to_email || "Inbox",
+        subject: row.subject || "(no subject)",
+        received_at: row.received_at,
+        body: data.text_body,
+        html_body: data.html_body,
+        attachments: (data as any).attachments || [],
+      });
+    } catch (err) {
+      setModalEmail({
+        id: row.id,
+        from_name: row.from_name || row.from_email,
+        from_email: row.from_email,
+        to_email: row.to_email || "Inbox",
+        subject: row.subject || "(no subject)",
+        received_at: row.received_at,
+        body: "Could not load email body.",
+      });
+    } finally {
+      setLoadingModalId(null);
+    }
+  };
+
+
 
   return (
     <div className="space-y-4">
@@ -178,6 +305,7 @@ export function EmailLogsTable({
                 <TableRow className="hover:bg-transparent">
                   <TableHead className="text-xs font-medium h-10">Received</TableHead>
                   <TableHead className="text-xs font-medium h-10">From</TableHead>
+                  <TableHead className="text-xs font-medium h-10">Email Content</TableHead>
                   <TableHead className="text-xs font-medium h-10">Subject</TableHead>
                   {showOrgColumn && <TableHead className="text-xs font-medium h-10">Org</TableHead>}
                   <TableHead className="text-xs font-medium h-10">Status</TableHead>
@@ -200,6 +328,19 @@ export function EmailLogsTable({
                           <div className="text-muted-foreground truncate">{row.from_name}</div>
                         )}
                       </TableCell>
+                      <TableCell className="py-2.5 text-xs">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-6 text-[11px] px-2.5 font-medium border-muted-foreground/30 hover:border-foreground transition-all gap-1"
+                          onClick={(e) => handleOpenModal(row, e)}
+                          disabled={loadingModalId === row.id}
+                        >
+                          <Icon name="Mail" className="h-3 w-3 text-primary shrink-0" />
+                          {loadingModalId === row.id ? "Loading…" : "Expand Full Email"}
+                        </Button>
+                      </TableCell>
                       <TableCell className="py-2.5 text-xs max-w-[240px] truncate text-muted-foreground">
                         {row.subject ?? "—"}
                       </TableCell>
@@ -221,7 +362,7 @@ export function EmailLogsTable({
                     {expanded === row.id && (
                       <TableRow key={`${row.id}-exp`} className="hover:bg-transparent">
                         <TableCell colSpan={colSpan} className="p-0">
-                          <ExpandedDetail row={row} />
+                          <ExpandedDetail row={row} isAdmin={isUserAdmin} />
                         </TableCell>
                       </TableRow>
                     )}
@@ -232,6 +373,12 @@ export function EmailLogsTable({
           )}
         </CardContent>
       </Card>
+
+      <EmailViewModal
+        open={!!modalEmail}
+        onOpenChange={(o) => !o && setModalEmail(null)}
+        email={modalEmail}
+      />
     </div>
   );
 }

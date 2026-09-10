@@ -1,4 +1,13 @@
 from app.models.activity import Activity
+from app.models.api_key import ApiKey
+from app.models.ats_mcp_registry import AtsMcpRegistry
+from app.models.ats_migration import (
+    AtsIntegration,
+    GenericAtsConfig,
+    ImportAuditLog,
+    ImportBatch,
+    ImportBatchRow,
+)
 from app.models.automation import Automation, AutomationExecution
 from app.models.candidate import Candidate
 from app.models.candidate_jobs import CandidateJobs
@@ -13,6 +22,7 @@ from app.models.job import Job
 from app.models.job_application import JobApplication
 from app.models.job_category import JobCategory
 from app.models.job_team_member import JobTeamMember
+from app.models.mcp_api_key import McpApiKey
 from app.models.message import Message
 from app.models.note import Note
 from app.models.org_membership import OrgMembership
@@ -22,6 +32,12 @@ from app.models.template import Template
 from app.models.user import User
 
 __all__ = [
+    "ApiKey",
+    "AtsIntegration",
+    "AtsMcpRegistry",
+    "ImportBatch",
+    "ImportBatchRow",
+    "ImportAuditLog",
     "Organization",
     "User",
     "Job",

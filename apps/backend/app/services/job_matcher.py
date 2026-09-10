@@ -1,11 +1,13 @@
 import json
 import logging
 from uuid import UUID
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from app.models.job import Job
-from app.core.config import settings
+
 import openai
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.config import settings
+from app.models.job import Job
 
 logger = logging.getLogger(__name__)
 

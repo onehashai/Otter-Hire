@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, ForeignKey, Index, Text
+from sqlalchemy import Column, DateTime, ForeignKey, Index, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -13,8 +13,10 @@ class Note(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid7)
     org_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
     candidate_id = Column(UUID(as_uuid=True), ForeignKey("candidates.id"), nullable=False)
-    author_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    author_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    external_note_id = Column(String(255), nullable=True, index=True)
     content = Column(Text, nullable=False)
+    source_author_name = Column(String(255), nullable=True)
     mentions = Column(JSONB)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 

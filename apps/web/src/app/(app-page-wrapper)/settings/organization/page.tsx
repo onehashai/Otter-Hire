@@ -271,14 +271,12 @@ export default function OrganizationSettings() {
             placeholder="Enter company's website"
             className="text-sm h-10 md:h-9"
           />
-          {catchAllEmail && (
-            <InputField
-              label="Organization Catch-All Inbox"
-              value={catchAllEmail}
-              readOnly
-              className="text-sm h-10 md:h-9 bg-gray-50 text-gray-500 cursor-not-allowed"
-            />
-          )}
+          <InputField
+            label="Organization Email"
+            value={catchAllEmail ?? (user?.org_id ? `org-${user.org_id.replace(/-/g, "")}@applications.otter.bz` : "")}
+            readOnly
+            className="text-sm h-10 md:h-9 bg-muted/40 font-mono text-xs"
+          />
           <Separator />
           <Button
             size="sm"

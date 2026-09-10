@@ -1,0 +1,11 @@
+{
+  "id": "email_export",
+  "name": "Email CSV Export",
+  "enabled": true,
+  "auth": {"type": "none"},
+  "base_url": "http://localhost",
+  "endpoints": {"candidates": {"path": "/", "method": "GET"}},
+  "pagination": {"style": "none"},
+  "rate_limits": {"requests_per_second": 5, "max_retries": 0, "backoff_seconds": 0},
+  "mappings": {"candidate": {"first_name": "first_name", "last_name": "last_name", "email": "email", "phone": "phone", "skills": "skills", "resume_text": "resume_text"}}
+}

@@ -33,6 +33,9 @@ PERMISSIONS = {
     "automations:create",
     "automations:update",
     "automations:delete",
+    "data_migration:import",
+    "data_migration:export",
+    "data_migration:manage",
 }
 
 ROLE_PERMISSIONS: dict[str, set[str]] = {
@@ -66,6 +69,9 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "automations:create",
         "automations:update",
         "automations:delete",
+        "data_migration:import",
+        "data_migration:export",
+        "data_migration:manage",
     },
     "recruiter": {
         "jobs:read",

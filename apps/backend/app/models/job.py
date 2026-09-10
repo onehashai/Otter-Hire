@@ -24,6 +24,7 @@ class Job(Base):
     org_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
     created_by_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     title = Column(String(255), nullable=False)
+    external_job_id = Column(String(255), nullable=True, index=True)
     description = Column(Text)
     category = Column(String(50))
     category_id = Column(UUID(as_uuid=True), ForeignKey("job_categories.id", ondelete="SET NULL"))

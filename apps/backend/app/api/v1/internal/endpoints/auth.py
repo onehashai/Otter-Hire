@@ -86,8 +86,10 @@ def _create_session_token(user: User, membership: OrgMembership) -> str:
             "org_id": str(membership.org_id),
             "membership_role": membership.role,
             "account_role": user.role,
+            "is_verified": user.is_verified,
         }
     )
+
 
 
 def _set_access_cookie(response: Response, token: str) -> None:

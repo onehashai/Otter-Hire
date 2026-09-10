@@ -47,6 +47,8 @@ class CandidateAssignmentItemResponse(BaseModel):
     assigned_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
+    resume_score: Optional[int] = None
+    resume_score_status: Optional[str] = None
 
 
 class CandidateJobScoreResponse(BaseModel):

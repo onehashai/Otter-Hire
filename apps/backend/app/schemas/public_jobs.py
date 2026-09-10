@@ -123,7 +123,9 @@ class PublicApplyFileUploadResponse(BaseModel):
 class InboundAttachmentPayload(BaseModel):
     filename: str
     content_type: str
-    content_base64: str
+    content_base64: str | None = None
+    storage_key: str | None = None
+    size: int | None = None
 
 
 class InboundEmailPayload(BaseModel):

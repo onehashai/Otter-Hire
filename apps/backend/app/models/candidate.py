@@ -16,6 +16,7 @@ class Candidate(Base):
     stage_id = Column(UUID(as_uuid=True), ForeignKey("stages.id"))
     status = Column(String, nullable=False)
     name = Column(String, nullable=False)
+    external_candidate_id = Column(String(255), nullable=True, index=True)
     email = Column(String, nullable=False)
     phone = Column(String)
     address = Column(String)

@@ -1,0 +1,26 @@
+{
+  "id": "otter_local",
+  "name": "Otter Hire API",
+  "auth": {"type": "api_key", "header_name": "X-API-Key"},
+  "base_url": "http://localhost:8000",
+  "endpoints": {
+    "jobs": {"path": "/v1/external/jobs", "method": "GET", "response_root_key": "items"},
+    "stages": {"path": "/v1/external/stages", "method": "GET", "response_root_key": "items"},
+    "candidates": {"path": "/v1/external/candidates", "method": "GET", "response_root_key": "items"},
+    "applications": {"path": "/v1/external/applications", "method": "GET", "response_root_key": "items"},
+    "resumes": {"path": "/v1/external/resumes", "method": "GET", "response_root_key": "items"},
+    "interviews": {"path": "/v1/external/interviews", "method": "GET", "response_root_key": "items"},
+    "notes": {"path": "/v1/external/notes", "method": "GET", "response_root_key": "items"}
+  },
+  "pagination": {"style": "page", "page_param": "page", "page_size_param": "page_size", "page_size": 50},
+  "rate_limits": {"requests_per_second": 5, "max_retries": 3, "backoff_seconds": 0.5},
+  "mappings": {
+    "job": {"external_job_id": "id", "title": "title", "description": "description"},
+    "stage": {"external_stage_id": "id", "external_job_id": "job_id", "name": "name", "position": "position"},
+    "candidate": {"external_candidate_id": "id", "first_name": "first_name", "last_name": "last_name", "email": "email", "phone": "phone", "skills": "skills", "resume_text": "resume_text"},
+    "application": {"external_application_id": "id", "external_candidate_id": "candidate_id", "external_job_id": "job_id", "external_stage_id": "stage_id", "status": "status"},
+    "resume": {"external_document_id": "id", "external_candidate_id": "candidate_id", "source_url": "url", "filename": "filename", "mime_type": "content_type", "content_base64": "content_base64"},
+    "interview": {"external_interview_id": "id", "external_candidate_id": "candidate_id", "external_job_id": "job_id", "scheduled_at": "scheduled_at", "interviewer_name": "interviewer_name"},
+    "note": {"external_note_id": "id", "external_candidate_id": "candidate_id", "content": "content", "author_name": "author_name"}
+  }
+}

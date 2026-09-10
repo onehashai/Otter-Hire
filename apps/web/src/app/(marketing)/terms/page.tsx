@@ -39,10 +39,12 @@ You are responsible for maintaining the confidentiality of your login, password,
 Otter Hire may collect information about your use of the Service ("Usage Data") for analytics purposes to review, analyse, and optimise the Service.`,
   },
   {
-    title: "User Accounts",
-    content: `To use certain features of the Service, you must register for an account. You agree to provide accurate, current, and complete information during registration and to update such information to keep it accurate, current, and complete.
+    title: "User Accounts & Authentication",
+    content: `To use certain features of the Service, you must register for an account. You may register using an email and password or via third-party OAuth providers such as Google OAuth. When signing up via Google OAuth, you authorize Otter Hire to access your basic profile information (email address, full name, profile picture) solely for account creation, authentication, and security verification.
 
-You are responsible for safeguarding the password you use to access the Service and for any activities or actions under your password. You agree not to disclose your password to any third party. You must notify us immediately upon becoming aware of any breach of security or unauthorised use of your account.
+You agree to provide accurate, current, and complete information during registration and to update such information to keep it accurate, current, and complete.
+
+You are responsible for safeguarding the credentials you use to access the Service and for any activities or actions under your account. You agree not to disclose your credentials to any third party. You must notify us immediately upon becoming aware of any breach of security or unauthorised use of your account.
 
 Otter Hire reserves the right to disable any user account at any time if, in our reasonable opinion, you have failed to comply with any of the provisions of this TOS.`,
   },

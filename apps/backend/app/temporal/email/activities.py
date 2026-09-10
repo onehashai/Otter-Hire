@@ -40,6 +40,7 @@ async def download_email_activity(input_data: InboundWorkflowInput) -> str:
         region_name=settings.aws_s3_region,
         aws_access_key_id=settings.aws_access_key_id,
         aws_secret_access_key=settings.aws_secret_access_key,
+        endpoint_url=settings.s3_endpoint_url,
     )
     raw_email = await asyncio.to_thread(
         lambda: s3_client.get_object(Bucket=input_data.bucket, Key=input_data.key)["Body"].read()
@@ -106,6 +107,7 @@ async def download_and_extract_resume_activity(input_data: InboundWorkflowInput)
         region_name=settings.aws_s3_region,
         aws_access_key_id=settings.aws_access_key_id,
         aws_secret_access_key=settings.aws_secret_access_key,
+        endpoint_url=settings.s3_endpoint_url,
     )
     raw_email = await asyncio.to_thread(
         lambda: s3_client.get_object(Bucket=input_data.bucket, Key=input_data.key)["Body"].read()
@@ -298,11 +300,15 @@ async def send_outbound_email_activity(input_data: OutboundWorkflowInput) -> dic
                 from_name_val = None
 
             if not from_email_addr or "@" not in from_email_addr:
-                await db.execute(
-                    sa_update(Message).where(Message.id == message_id).values(status="failed")
-                )
-                await db.commit()
-                return {"status": "failed", "reason": "no_outbound_configured"}
+                if not settings.is_production:
+                    from_email_addr = settings.local_smtp_from
+                    from_name_val = settings.platform_name
+                else:
+                    await db.execute(
+                        sa_update(Message).where(Message.id == message_id).values(status="failed")
+                    )
+                    await db.commit()
+                    return {"status": "failed", "reason": "no_outbound_configured"}
 
             display_name = input_data.from_name or from_name_val or from_email_addr
 

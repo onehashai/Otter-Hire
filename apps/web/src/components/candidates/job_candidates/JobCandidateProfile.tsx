@@ -47,6 +47,7 @@ import {
   type OrgUserResponse,
 } from "@/api";
 import { toast } from "@onehash/ui/sonner";
+import { normalizeApiUrl } from "@/api/client/client";
 import { mapCandidateBase } from "@/lib/resume-insights";
 
 const toTitle = (value: string) =>
@@ -468,16 +469,17 @@ export function JobCandidateProfile({
     (tab: string) => {
       if (!allowedTabs.has(tab)) return;
       setActiveTab(tab);
-      const params = new URLSearchParams(searchParams.toString());
-      if (tab === "overview") {
-        params.delete("tab");
-      } else {
-        params.set("tab", tab);
+      if (typeof window !== "undefined") {
+        const url = new URL(window.location.href);
+        if (tab === "overview") {
+          url.searchParams.delete("tab");
+        } else {
+          url.searchParams.set("tab", tab);
+        }
+        window.history.replaceState(null, "", url.toString());
       }
-      const query = params.toString();
-      router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
     },
-    [allowedTabs, pathname, router, searchParams],
+    [allowedTabs],
   );
 
   useEffect(() => {
@@ -488,9 +490,10 @@ export function JobCandidateProfile({
 
   useEffect(() => {
     const tab = searchParams.get("tab") || "overview";
-    if (!allowedTabs.has(tab) || tab === activeTab) return;
-    setActiveTab(tab);
-  }, [activeTab, allowedTabs, searchParams]);
+    if (allowedTabs.has(tab)) {
+      setActiveTab(tab);
+    }
+  }, [allowedTabs, searchParams]);
   const profileLinkFields = useMemo(() => {
     const schema = (jobDetail?.application_form_schema ?? {}) as Record<string, unknown>;
     const raw = Array.isArray(schema.profile_links)
@@ -580,7 +583,7 @@ export function JobCandidateProfile({
           )}
           <ActionButtons
             candidateName={uiCandidate.name}
-            candidateId={candidate!.id}
+            candidateId={candidate?.id ?? id ?? ""}
             jobId={jobRouteJobId ?? candidate?.job_id ?? undefined}
             currentStageId={currentAssignment?.stage_id ?? candidate?.stage_id}
             stages={jobStages}
@@ -632,9 +635,7 @@ export function JobCandidateProfile({
                       resumeUrl={resumeDoc?.url ?? null}
                       previewUrl={
                         id && resumeDoc?.id
-                          ? `${getApiBase()}/v1/internal/candidates/${encodeURIComponent(id)}/documents/${encodeURIComponent(
-                              resumeDoc.id,
-                            )}/preview`
+                          ? normalizeApiUrl(`/v1/internal/candidates/${encodeURIComponent(id)}/documents/${encodeURIComponent(resumeDoc.id)}/preview`)
                           : null
                       }
                       resumeName={resumeDoc?.name ?? null}
@@ -661,9 +662,9 @@ export function JobCandidateProfile({
               </TabsContent>
               <TabsContent value="messages" className="mt-0">
                 <CandidateMessagesTab
-                  candidateId={candidate!.id}
+                  candidateId={candidate?.id ?? id ?? ""}
                   candidateName={uiCandidate.name}
-                  candidateEmail={candidate!.email}
+                  candidateEmail={candidate?.email ?? ""}
                   jobId={jobRouteJobId ?? candidate?.job_id ?? null}
                   jobTitle={currentAssignment?.job_title ?? candidate?.job_title ?? null}
                 />

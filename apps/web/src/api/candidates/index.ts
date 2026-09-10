@@ -36,6 +36,8 @@ export type CandidateAssignmentItemResponse = {
   assigned_at: string | null;
   created_at: string;
   updated_at: string;
+  resume_score?: number | null;
+  resume_score_status?: "pending" | "ready" | "failed" | null;
 };
 
 export type CandidateJobScoreResponse = {
@@ -203,9 +205,13 @@ export async function getCandidateJobScore(
   candidateId: string,
   jobId: string,
 ): Promise<CandidateJobScoreResponse> {
-  return apiFetch<CandidateJobScoreResponse>(`/candidates/${candidateId}/jobs/${jobId}/score`, {
-    method: "GET",
-  });
+  try {
+    return await apiFetch<CandidateJobScoreResponse>(`/candidates/${candidateId}/jobs/${jobId}/score`, {
+      method: "GET",
+    });
+  } catch {
+    return { total_score: null, status: "none", sections: {} };
+  }
 }
 
 export async function updateCandidate(

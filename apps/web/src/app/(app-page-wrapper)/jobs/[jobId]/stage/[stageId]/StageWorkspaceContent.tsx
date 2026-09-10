@@ -22,6 +22,7 @@ import { JobWorkspaceViewToggle } from "@/components/candidates/job_candidates/J
 import { updateCandidateStage } from "@/api";
 import { JobEditDrawer } from "@/components/jobs/JobEditDrawer";
 import { toast } from "@onehash/ui/sonner";
+import { ErrorBoundary } from "@/components/common/ErrorBoundary";
 
 const MOBILE_BREAKPOINT_PX = 768;
 
@@ -403,8 +404,9 @@ export default function StageWorkspaceContent() {
           open={addOpen}
           onOpenChange={setAddOpen}
           jobId={jobId}
-          jobTitle={workspace.title}
+          jobTitle={workspace?.title ?? ""}
           stageId={stageForList?.id ?? null}
+          stageName={stageForList?.name ?? ""}
           onAdded={async () => {
             await reload();
           }}
@@ -484,9 +486,9 @@ export default function StageWorkspaceContent() {
             }
           }}
           jobId={jobId}
-          jobTitle={workspace.title}
+          jobTitle={workspace?.title ?? ""}
           stageId={selectedStageForAdd}
-          stageName={workspace.stages.find((s) => s.id === selectedStageForAdd)?.name}
+          stageName={workspace?.stages?.find((s) => s.id === selectedStageForAdd)?.name ?? ""}
           onAdded={async () => {
             await reload();
           }}
@@ -503,24 +505,26 @@ export default function StageWorkspaceContent() {
 
       {candidateIdParam ? (
         <section className="flex-1 overflow-auto p-4">
-          <JobCandidateProfile
-            candidateId={candidateIdParam}
-            jobRouteJobId={jobId}
-            isStageThreePane={true}
-            onCandidateUpdated={async () => {
-              await reload();
-            }}
-            onStageMoved={async (destinationStageId) => {
-              setMovingToStageId(destinationStageId);
-              const current = new URLSearchParams(window.location.search);
-              const view = current.get("view") || "list";
-              router.replace(
-                `/jobs/${encodeURIComponent(jobId)}/stage/${encodeURIComponent(destinationStageId)}/candidates/${encodeURIComponent(candidateIdParam)}?view=${view}`,
-                { scroll: false },
-              );
-              await reload();
-            }}
-          />
+          <ErrorBoundary>
+            <JobCandidateProfile
+              candidateId={candidateIdParam}
+              jobRouteJobId={jobId}
+              isStageThreePane={true}
+              onCandidateUpdated={async () => {
+                await reload();
+              }}
+              onStageMoved={async (destinationStageId) => {
+                setMovingToStageId(destinationStageId);
+                const current = new URLSearchParams(window.location.search);
+                const view = current.get("view") || "list";
+                router.replace(
+                  `/jobs/${encodeURIComponent(jobId)}/stage/${encodeURIComponent(destinationStageId)}/candidates/${encodeURIComponent(candidateIdParam)}?view=${view}`,
+                  { scroll: false },
+                );
+                await reload();
+              }}
+            />
+          </ErrorBoundary>
         </section>
       ) : (
         <section className="flex-1 grid place-items-center text-sm text-muted-foreground">
@@ -537,9 +541,9 @@ export default function StageWorkspaceContent() {
           }
         }}
         jobId={jobId}
-        jobTitle={workspace.title}
+        jobTitle={workspace?.title ?? ""}
         stageId={selectedStageForAdd}
-        stageName={workspace.stages.find((s) => s.id === selectedStageForAdd)?.name}
+        stageName={workspace?.stages?.find((s) => s.id === selectedStageForAdd)?.name ?? ""}
         onAdded={async () => {
           await reload();
         }}

@@ -35,6 +35,7 @@ class StorageService:
             region_name=settings.aws_s3_region,
             aws_access_key_id=settings.aws_access_key_id,
             aws_secret_access_key=settings.aws_secret_access_key,
+            endpoint_url=settings.s3_endpoint_url,
         )
 
     def _safe_local_path(self, object_key: str) -> Path:
@@ -44,7 +45,14 @@ class StorageService:
         return path
 
     def _s3_key(self, object_key: str) -> str:
-        return f"{self.s3_prefix}/{object_key.lstrip('/')}"
+        clean = object_key.lstrip('/')
+        prefix = (self.s3_prefix or "").strip()
+        if prefix and clean.startswith(f"{prefix}/"):
+            return clean
+        for known in ["otter-hire-stag", "otter-hire-prod", "smartats", "staging"]:
+            if clean.startswith(f"{known}/"):
+                return clean
+        return f"{prefix}/{clean}" if prefix else clean
 
     async def write_bytes(self, object_key: str, content: bytes, content_type: str) -> str:
         if self.use_s3:
@@ -64,14 +72,20 @@ class StorageService:
 
     async def read_bytes(self, object_key: str) -> bytes:
         if self.use_s3:
-            s3_key = self._s3_key(object_key)
-            response = self.s3_client.get_object(Bucket=self.bucket, Key=s3_key)
-            return response["Body"].read()
+            clean = object_key.lstrip('/')
+            for try_prefix in [self._s3_key(object_key), clean, f"otter-hire-stag/{clean}", f"otter-hire-prod/{clean}"]:
+                try:
+                    response = self.s3_client.get_object(Bucket=self.bucket, Key=try_prefix)
+                    return response["Body"].read()
+                except Exception:
+                    continue
+            raise FileNotFoundError(f"S3 object not found for key: {object_key}")
 
         path = self._safe_local_path(object_key)
         if not path.is_file():
             raise FileNotFoundError(object_key)
         return path.read_bytes()
+
 
     async def delete_object(self, object_key: str) -> None:
         if self.use_s3:

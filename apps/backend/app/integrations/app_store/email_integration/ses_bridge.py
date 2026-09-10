@@ -388,6 +388,8 @@ async def _resolve_inbox_context(
         )
         org_inbox = org_result.scalar_one_or_none()
         if org_inbox is None:
+            if settings.inbound_webhook_secret:
+                return str(settings.inbound_webhook_secret), inbox_address, conv_id_str
             return None
         cfg = org_inbox.config or {}
         secret = cfg.get("secret_hash") or settings.inbound_webhook_secret
@@ -554,6 +556,7 @@ async def run_ses_raw_bridge_loop(stop_event: asyncio.Event) -> None:
         region_name=settings.aws_s3_region,
         aws_access_key_id=settings.aws_access_key_id,
         aws_secret_access_key=settings.aws_secret_access_key,
+        endpoint_url=settings.s3_endpoint_url,
     )
     logger.info("SES bridge started bucket=%s prefix=%s", bucket, prefix)
     last_cleanup_epoch = 0.0

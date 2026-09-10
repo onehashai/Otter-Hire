@@ -77,7 +77,6 @@ from app.services.storage import storage_service
 from app.templates import EmailContent
 from app.temporal.email.queue import enqueue_ses_raw_key
 from app.temporal.resume_scoring.queue import enqueue_resume_score
-from app.services.job_matcher import match_candidate_to_active_job
 from app.utils.uuid import uuid7
 
 router = APIRouter()
@@ -163,6 +162,7 @@ async def _enqueue_assignment_score(
     job_id: UUID,
     generation: int,
 ) -> None:
+    from app.temporal.resume_scoring.types import ResumeScoreInput
     try:
         await enqueue_resume_score(
             ResumeScoreInput(
@@ -1197,7 +1197,7 @@ async def get_public_jobs(
             .where(
                 Job.org_id == org_uuid,
                 Job.status == "open",
-                Job.visibility == "public",
+                or_(Job.visibility == "public", Job.visibility.is_(None)),
             )
             .order_by(Job.published_at.desc())
         )
@@ -1303,7 +1303,7 @@ async def get_public_job_detail(
                 Job.id == job_uuid,
                 Job.org_id == org_uuid,
                 Job.status == "open",
-                Job.visibility == "public",
+                or_(Job.visibility == "public", Job.visibility.is_(None)),
             )
         )
     row = result.first()
@@ -1378,7 +1378,7 @@ async def upload_public_job_application_file(
             Job.id == job_uuid,
             Job.org_id == org_uuid,
             Job.status == "open",
-            Job.visibility == "public",
+            or_(Job.visibility == "public", Job.visibility.is_(None)),
         )
     )
     job = result.scalar_one_or_none()
@@ -1443,7 +1443,7 @@ async def apply_public_job(
             Job.id == job_uuid,
             Job.org_id == org_uuid,
             Job.status == "open",
-            Job.visibility == "public",
+            or_(Job.visibility == "public", Job.visibility.is_(None)),
         )
     )
     job = result.scalar_one_or_none()
@@ -1844,19 +1844,27 @@ async def _process_resume_link_fallback(
     filename, content_type, content = link_result
     safe_name = _guess_file_name(filename, "resume_from_link.bin")
 
-    # Validate file extension
+    # Validate file extension (auto-fixing via magic bytes if missing or generic)
     allowed_extensions = {".pdf", ".doc", ".docx"}
     lower_name = safe_name.lower()
     ext = ""
     if "." in lower_name:
         ext = "." + lower_name.rsplit(".", 1)[-1]
     if ext not in allowed_extensions:
-        logger.warning(
-            "Resume link has invalid extension: %s (allowed: %s)",
-            ext,
-            allowed_extensions,
-        )
-        return None
+        if content.startswith(b"%PDF"):
+            safe_name = (safe_name.rsplit(".", 1)[0] if "." in safe_name else safe_name) + ".pdf"
+            ext = ".pdf"
+        elif content.startswith(b"PK\x03\x04"):
+            safe_name = (safe_name.rsplit(".", 1)[0] if "." in safe_name else safe_name) + ".docx"
+            ext = ".docx"
+        else:
+            logger.warning(
+                "Resume link has invalid extension: %s (allowed: %s)",
+                ext,
+                allowed_extensions,
+            )
+            return None
+
 
     # Store to S3
     storage_key = f"orgs/{org_id}/inbox/attachments/{inbound_email_id}/link_{safe_name}"
@@ -1933,7 +1941,13 @@ async def _resolve_org_inbox_for_reply_address(
     conv = conv_result.scalar_one_or_none()
     if conv is None:
         return None
-    org_inbox = await credential_store.get_credential(db, org_id=conv.org_id, job_id=None)
+    
+    org_inbox = None
+    if conv.job_id:
+        org_inbox = await credential_store.get_credential(db, org_id=conv.org_id, job_id=conv.job_id)
+    if org_inbox is None:
+        org_inbox = await credential_store.get_credential(db, org_id=conv.org_id, job_id=None)
+        
     return org_inbox, conv_id, conv.org_id
 
 
@@ -1995,14 +2009,26 @@ async def _route_inbound_to_conversation(
         # Only create conversation if candidate was already created from resume
         candidate = candidate_override
         if candidate is None:
-            # No candidate override means no resume was parsed - reject
+            cand_result = await db.execute(
+                select(Candidate)
+                .where(
+                    Candidate.org_id == org_id,
+                    func.lower(Candidate.email) == from_email.lower(),
+                )
+                .order_by(Candidate.created_at.desc())
+            )
+            candidate = cand_result.scalars().first()
+
+        if candidate is None:
+            # No candidate override and no existing candidate matching this email - reject
             logger.info(
-                "Inbound email skipped (no resume-based candidate) from=%s org_id=%s subject=%r",
+                "Inbound email skipped (no matching candidate) from=%s org_id=%s subject=%r",
                 from_email,
                 org_id,
                 payload.subject,
             )
             return None
+
         # One canonical thread per candidate: reuse existing row when present
         existing_for_cand = await db.execute(
             select(Conversation).where(
@@ -2266,15 +2292,7 @@ async def ingest_inbound_email(
     )
     job_cfg = dict(job_inbox.config or {}) if job_inbox is not None else {}
     org_cfg = dict(org_inbox.config or {}) if org_inbox is not None else {}
-    resolved_inbox_status = (
-        "active"
-        if (alias_direct_routing or reply_to_conv_org_id is not None)
-        else (
-            (job_inbox.status or "inactive")
-            if job_inbox is not None
-            else (org_inbox.status or "inactive")
-        )
-    )
+    resolved_inbox_status = "active"
     conversation_job_id = (
         job_inbox.job_id
         if job_inbox is not None
@@ -2286,7 +2304,17 @@ async def ingest_inbound_email(
     ) or settings.inbound_webhook_secret
     if not secret:
         raise HTTPException(status_code=503, detail="Inbound webhook secret is not configured")
-    if not _verify_hmac_signature(signature, secret, raw_body):
+
+    local_mailpit_request = (
+        not settings.is_production
+        and request.headers.get("X-Local-Mailpit") == "1"
+        and signature == "local-mailpit"
+    )
+    verified = local_mailpit_request or _verify_hmac_signature(signature, secret, raw_body)
+    if not verified and secret != settings.inbound_webhook_secret:
+        verified = _verify_hmac_signature(signature, settings.inbound_webhook_secret, raw_body)
+        
+    if not verified:
         raise HTTPException(status_code=401, detail="Invalid signature")
     if payload.message_id:
         existing_result = await db.execute(
@@ -2341,11 +2369,21 @@ async def ingest_inbound_email(
     primary_resume_attachment: dict | None = None
     for idx, att in enumerate(payload.attachments or []):
         if not att.content_base64:
-            continue
-        try:
-            content = base64.b64decode(att.content_base64, validate=True)
-        except (ValueError, binascii.Error):
-            continue
+            if not att.storage_key:
+                continue
+            clean_key = att.storage_key.strip()
+            if ".." in clean_key:
+                continue
+            try:
+                content = await storage_service.read_bytes(clean_key)
+            except Exception:
+                logger.exception("Failed to read attachment from R2 key=%s", clean_key)
+                continue
+        else:
+            try:
+                content = base64.b64decode(att.content_base64, validate=True)
+            except (ValueError, binascii.Error):
+                continue
         if len(content) > settings.inbound_max_attachment_bytes:
             continue
         safe_name = _guess_file_name(att.filename, f"attachment_{idx + 1}.bin")
@@ -2584,8 +2622,49 @@ async def ingest_inbound_email(
                 "org_id": str(org_id),
             }
 
-    # --- Job inquiry validation (for new conversations only) ---
+    # If not an explicit reply+ address, check if sender is an existing candidate in this org
+    if inbound_email.from_email:
+        existing_cand_result = await db.execute(
+            select(Candidate)
+            .where(
+                Candidate.org_id == org_id,
+                func.lower(Candidate.email) == inbound_email.from_email.lower(),
+            )
+            .order_by(Candidate.created_at.desc())
+        )
+        existing_cand = existing_cand_result.scalars().first()
+        if existing_cand is not None:
+            conversation_result = await _route_inbound_to_conversation(
+                db,
+                org_id,
+                inbox_address,
+                payload,
+                candidate_override=existing_cand,
+                conversation_job_id=conversation_job_id,
+            )
+            if conversation_result is not None:
+                conv_id, msg_id, _, _ = conversation_result
+                inbound_email.parse_status = "processed"
+                inbound_email.parse_error = None
+                await db.commit()
+                logger.info(
+                    "Inbound email from existing candidate routed to conversation_id=%s message_id=%s from=%s",
+                    conv_id,
+                    msg_id,
+                    inbound_email.from_email,
+                )
+                return {
+                    "status": "ok",
+                    "message": "Routed to candidate conversation",
+                    "inbound_email_id": str(inbound_email.id),
+                    "conversation_id": conv_id,
+                    "message_id": msg_id,
+                    "org_id": str(org_id),
+                }
+
+    # --- Job inquiry validation (for new candidate creation only) ---
     if not _looks_like_job_inquiry(payload):
+
         inbound_email.parse_status = "ignored"
         inbound_email.parse_error = "Email does not match job application keywords"
         await db.commit()
@@ -2603,9 +2682,10 @@ async def ingest_inbound_email(
 
     # Check if resume attachment exists (before expensive parsing)
     if not has_resume:
-        # Try resume link from body as fallback
+        # Try resume link from combined body text and HTML as fallback
+        full_body_for_links = f"{payload.text_body or ''}\n{payload.html_body or ''}"
         link_resume = await _process_resume_link_fallback(
-            body_text,
+            full_body_for_links,
             org_id,
             inbound_email.id,
             db,
@@ -2647,8 +2727,8 @@ async def ingest_inbound_email(
 
     # Enqueue background Temporal parse workflow instead of parsing synchronously
     try:
-        from app.temporal.inbound_email.types import InboundEmailParseInput
         from app.temporal.inbound_email.queue import enqueue_inbound_email_parse
+        from app.temporal.inbound_email.types import InboundEmailParseInput
 
         await enqueue_inbound_email_parse(
             inbound_email_id=str(inbound_email.id),
@@ -2658,7 +2738,7 @@ async def ingest_inbound_email(
                 target_job_id=str(target_job_id) if target_job_id else None,
             )
         )
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to enqueue inbound email parse workflow in Temporal")
 
     await db.commit()

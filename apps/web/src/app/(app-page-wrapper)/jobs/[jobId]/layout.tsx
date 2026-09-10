@@ -203,7 +203,7 @@ function SetupLayoutInner({ children }: { children: React.ReactNode }) {
             toast.error(t("preview_org_missing", "Organization not found. Cannot open preview."));
             return;
           }
-          const previewUrl = `${window.location.protocol}//${process.env.NEXT_PUBLIC_JOBS_SUBDOMAIN || "jobs"}.${process.env.NEXT_PUBLIC_APP_ROOT_HOST || "localhost:3000"}/${user.org_id}/${id}`;
+          const previewUrl = `${window.location.origin}/${user.org_id}/${id}`;
           window.open(previewUrl, "_blank", "noopener,noreferrer");
         }}
       >

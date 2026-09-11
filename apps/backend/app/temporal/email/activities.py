@@ -284,10 +284,8 @@ async def send_outbound_email_activity(input_data: OutboundWorkflowInput) -> dic
     async with AsyncSessionLocal() as db:
         reply_as_from = (input_data.reply_to or "").strip()
         if reply_as_from and "@" in reply_as_from:
-            if "smartats.in" in reply_as_from:
-                from_email_addr = "noreply@applications.otter.bz"
-            else:
-                from_email_addr = reply_as_from
+            mail_domain = (settings.SES_MAIL_DOMAIN or "smartats.in").strip().lstrip("@")
+            from_email_addr = f"noreply@{mail_domain}"
             if input_data.org_name:
                 display_name = f"{input_data.from_name or 'Recruiter'} from {input_data.org_name}"
             else:

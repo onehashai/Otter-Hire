@@ -325,6 +325,11 @@ export async function middleware(request: NextRequest) {
   const hasAccessToken = Boolean(request.cookies.get("access_token")?.value);
 
   if (AUTH_ROUTES.has(pathname)) {
+    // Local sessions can become stale while the dev backend is restarted. Keep
+    // the sign-in screen reachable so a user can establish a fresh session.
+    if (isLocalDevHost(currentHost)) {
+      return NextResponse.next();
+    }
     if (hasAccessToken) {
       const isExpiredSessionRecovery =
         pathname === "/login" && request.nextUrl.searchParams.get("session_expired") === "true";
@@ -345,9 +350,10 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  // Authentication API calls must reach FastAPI without the page-level route guard
+  // Internal API calls must reach FastAPI without the page-level route guard
   // converting an unauthenticated JSON response into a login-page redirect.
-  if (pathname.startsWith("/v1/internal/auth/")) {
+  // FastAPI remains the source of truth for API authentication and authorization.
+  if (pathname.startsWith("/v1/internal/")) {
     return NextResponse.next();
   }
 

@@ -247,7 +247,7 @@ class Settings(BaseSettings):
     local_mailpit_url: str = Field(default="http://localhost:8025", validation_alias="LOCAL_MAILPIT_URL")
     local_mailpit_poll_seconds: int = Field(default=2, validation_alias="LOCAL_MAILPIT_POLL_SECONDS")
     local_mailpit_enabled: bool = Field(default=True, validation_alias="LOCAL_MAILPIT_ENABLED")
-    ats_auto_import_enabled: bool = Field(default=False, validation_alias="ATS_AUTO_IMPORT_ENABLED")
+    ats_auto_import_enabled: bool = Field(default=True, validation_alias="ATS_AUTO_IMPORT_ENABLED")
     ats_migration_checkpoint_dir: str = Field(
         default="storage/migrations/checkpoints", validation_alias="ATS_MIGRATION_CHECKPOINT_DIR"
     )
@@ -255,7 +255,7 @@ class Settings(BaseSettings):
         default=15, validation_alias="ATS_MIGRATION_SCHEDULE_MINUTES"
     )
     ses_local_mock: bool = Field(default=True, validation_alias="SES_LOCAL_MOCK")
-    mcp_server_enabled: bool = Field(default=False, validation_alias="MCP_SERVER_ENABLED")
+    mcp_server_enabled: bool = Field(default=True, validation_alias="MCP_SERVER_ENABLED")
     mcp_server_host: str = Field(default="127.0.0.1", validation_alias="MCP_SERVER_HOST")
     mcp_server_port: int = Field(default=8765, validation_alias="MCP_SERVER_PORT")
 

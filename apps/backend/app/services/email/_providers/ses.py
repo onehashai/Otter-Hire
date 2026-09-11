@@ -68,7 +68,10 @@ class SesProvider(EmailProvider):
         mail_domain = (settings.SES_MAIL_DOMAIN or "").strip().lstrip("@")
         if not mail_domain:
             raise RuntimeError("SES_MAIL_DOMAIN is required for conversation email")
-        actual_from = f"noreply@{mail_domain}"
+        if "smartats.in" in mail_domain:
+            actual_from = "noreply@applications.otter.bz"
+        else:
+            actual_from = f"noreply@{mail_domain}"
         reply_to_addr = from_email
 
         ses_id: str = await asyncio.to_thread(

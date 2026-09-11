@@ -2244,7 +2244,8 @@ async def ingest_inbound_email(
             job_result = await db.execute(select(Job).where(Job.id == alias_job_id))
             alias_job = job_result.scalar_one_or_none()
             if alias_job is None:
-                raise HTTPException(status_code=404, detail="Job not found")
+                logger.info("Inbound email skipped: job %s not found for address %s", alias_job_id, inbox_address)
+                return {"status": "ok", "message": "Job not found (orphaned email)"}
             job_by_id_result = await db.execute(
                 select(IntegrationCredential).where(IntegrationCredential.job_id == alias_job_id)
             )
@@ -2257,7 +2258,8 @@ async def ingest_inbound_email(
                 )
                 alias_org = org_result.scalar_one_or_none()
                 if alias_org is None:
-                    raise HTTPException(status_code=404, detail="Organization not found")
+                    logger.info("Inbound email skipped: org %s not found for address %s", alias_org_id, inbox_address)
+                    return {"status": "ok", "message": "Organization not found (orphaned email)"}
                 org_cred_result = await db.execute(
                     select(IntegrationCredential).where(
                         IntegrationCredential.org_id == alias_org_id,
@@ -2267,7 +2269,8 @@ async def ingest_inbound_email(
                 org_inbox = org_cred_result.scalar_one_or_none()
                 alias_direct_routing = True
             else:
-                raise HTTPException(status_code=404, detail="Inbox configuration not found")
+                logger.info("Inbound email skipped: inbox configuration not found for address %s", inbox_address)
+                return {"status": "ok", "message": "Inbox configuration not found"}
     elif org_inbox is not None:
         # Exact match: still use reply+ conversation id from address or payload
         reply_to_conv_id = _parse_reply_conversation_id(inbox_address)

@@ -163,7 +163,7 @@ class Settings(BaseSettings):
     inbound_resume_min_confidence: int = Field(
         default=6, validation_alias="INBOUND_RESUME_MIN_CONFIDENCE"
     )
-    ses_raw_bridge_enabled: bool = Field(default=False, validation_alias="SES_RAW_BRIDGE_ENABLED")
+    ses_raw_bridge_enabled: bool = Field(default=True, validation_alias="SES_RAW_BRIDGE_ENABLED")
     ses_raw_bridge_bucket: str | None = Field(
         default=None, validation_alias="SES_RAW_BRIDGE_BUCKET"
     )
@@ -254,7 +254,7 @@ class Settings(BaseSettings):
     ats_migration_schedule_minutes: int = Field(
         default=15, validation_alias="ATS_MIGRATION_SCHEDULE_MINUTES"
     )
-    ses_local_mock: bool = Field(default=True, validation_alias="SES_LOCAL_MOCK")
+    ses_local_mock: bool = Field(default=False, validation_alias="SES_LOCAL_MOCK")
     mcp_server_enabled: bool = Field(default=True, validation_alias="MCP_SERVER_ENABLED")
     mcp_server_host: str = Field(default="127.0.0.1", validation_alias="MCP_SERVER_HOST")
     mcp_server_port: int = Field(default=8765, validation_alias="MCP_SERVER_PORT")

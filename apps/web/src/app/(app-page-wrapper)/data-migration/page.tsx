@@ -9,8 +9,8 @@ import { McpSetupPanel } from "@/components/import-export/McpSetupPanel";
 import { McpProviderCards } from "@/components/import-export/McpProviderCards";
 import { API_BASE_URL } from "@/api";
 
-const AUTO_IMPORT_ENABLED = process.env.NEXT_PUBLIC_ATS_AUTO_IMPORT_ENABLED === "true";
-const MCP_ENABLED = process.env.NEXT_PUBLIC_MCP_SERVER_ENABLED === "true";
+const AUTO_IMPORT_ENABLED = process.env.NEXT_PUBLIC_ATS_AUTO_IMPORT_ENABLED !== "false";
+const MCP_ENABLED = process.env.NEXT_PUBLIC_MCP_SERVER_ENABLED !== "false";
 
 type Batch = {
   id: string;

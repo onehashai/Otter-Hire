@@ -318,12 +318,12 @@ class Settings(BaseSettings):
     def ses_effective_transactional_from_email(self) -> str:
         """SES platform transactional From (not used for ZeptoMail or reply+ conversation mail)."""
         t = (self.ses_transactional_from_email or "").strip()
-        if t:
+        if t and "smartats.in" not in t:
             return t
         leg = (self.ses_from_email or "").strip()
-        if leg:
+        if leg and "smartats.in" not in leg:
             return leg
-        return "noreply@smartats.in"
+        return "noreply@applications.otter.bz"
 
     @property
     def ses_effective_transactional_from_name(self) -> str | None:

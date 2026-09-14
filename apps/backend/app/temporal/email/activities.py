@@ -35,12 +35,17 @@ async def download_email_activity(input_data: InboundWorkflowInput) -> str:
     if "AMAZON_SES_SETUP_NOTIFICATION" in input_data.key:
         return json.dumps({"status": "ignored", "reason": "setup_notification"})
 
+    ses_endpoint = None if (settings.s3_endpoint_url and "cloudflarestorage.com" in settings.s3_endpoint_url) else settings.s3_endpoint_url
+    ses_region = "ap-south-1" if (not settings.aws_s3_region or settings.aws_s3_region == "auto") else settings.aws_s3_region
+    ses_access_key = settings.aws_ses_access_key or settings.aws_access_key_id
+    ses_secret_key = settings.aws_ses_secret_key or settings.aws_secret_access_key
+
     s3_client = boto3.client(
         "s3",
-        region_name=settings.aws_s3_region,
-        aws_access_key_id=settings.aws_access_key_id,
-        aws_secret_access_key=settings.aws_secret_access_key,
-        endpoint_url=settings.s3_endpoint_url,
+        region_name=ses_region,
+        aws_access_key_id=ses_access_key,
+        aws_secret_access_key=ses_secret_key,
+        endpoint_url=ses_endpoint,
     )
     raw_email = await asyncio.to_thread(
         lambda: s3_client.get_object(Bucket=input_data.bucket, Key=input_data.key)["Body"].read()
@@ -102,12 +107,17 @@ async def download_and_extract_resume_activity(input_data: InboundWorkflowInput)
     if "AMAZON_SES_SETUP_NOTIFICATION" in input_data.key:
         return {"status": "ignored", "reason": "setup_notification"}
 
+    ses_endpoint = None if (settings.s3_endpoint_url and "cloudflarestorage.com" in settings.s3_endpoint_url) else settings.s3_endpoint_url
+    ses_region = "ap-south-1" if (not settings.aws_s3_region or settings.aws_s3_region == "auto") else settings.aws_s3_region
+    ses_access_key = settings.aws_ses_access_key or settings.aws_access_key_id
+    ses_secret_key = settings.aws_ses_secret_key or settings.aws_secret_access_key
+
     s3_client = boto3.client(
         "s3",
-        region_name=settings.aws_s3_region,
-        aws_access_key_id=settings.aws_access_key_id,
-        aws_secret_access_key=settings.aws_secret_access_key,
-        endpoint_url=settings.s3_endpoint_url,
+        region_name=ses_region,
+        aws_access_key_id=ses_access_key,
+        aws_secret_access_key=ses_secret_key,
+        endpoint_url=ses_endpoint,
     )
     raw_email = await asyncio.to_thread(
         lambda: s3_client.get_object(Bucket=input_data.bucket, Key=input_data.key)["Body"].read()

@@ -547,16 +547,21 @@ async def run_ses_raw_bridge_loop(stop_event: asyncio.Event) -> None:
         logger.warning("SES bridge disabled because bucket is missing")
         return
 
-    logger.info("AWS Region: %s", settings.aws_s3_region)
-    logger.info("AWS Access Key Prefix: %s", (settings.aws_access_key_id or "")[:8])
+    ses_endpoint = None if (settings.s3_endpoint_url and "cloudflarestorage.com" in settings.s3_endpoint_url) else settings.s3_endpoint_url
+    ses_region = "ap-south-1" if (not settings.aws_s3_region or settings.aws_s3_region == "auto") else settings.aws_s3_region
+    ses_access_key = settings.aws_ses_access_key or settings.aws_access_key_id
+    ses_secret_key = settings.aws_ses_secret_key or settings.aws_secret_access_key
+
+    logger.info("AWS Region: %s", ses_region)
+    logger.info("AWS Access Key Prefix: %s", (ses_access_key or "")[:8])
     logger.info("Bucket: %s", bucket)
     logger.info("Prefix: %s", prefix)
     s3_client = boto3.client(
         "s3",
-        region_name=settings.aws_s3_region,
-        aws_access_key_id=settings.aws_access_key_id,
-        aws_secret_access_key=settings.aws_secret_access_key,
-        endpoint_url=settings.s3_endpoint_url,
+        region_name=ses_region,
+        aws_access_key_id=ses_access_key,
+        aws_secret_access_key=ses_secret_key,
+        endpoint_url=ses_endpoint,
     )
     logger.info("SES bridge started bucket=%s prefix=%s", bucket, prefix)
     last_cleanup_epoch = 0.0

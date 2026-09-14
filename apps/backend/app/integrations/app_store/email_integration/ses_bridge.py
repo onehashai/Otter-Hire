@@ -49,17 +49,25 @@ def _parse_references(references_raw: str) -> list[str]:
     return ids
 
 
-def _extract_recipient(to_values: list[str]) -> str | None:
+def _extract_recipient(msg) -> str | None:
+    to_values = msg.get_all("To", [])
+    env_to = msg.get("Envelope-To") or msg.get("X-Original-To") or msg.get("X-Forwarded-To")
+    if env_to:
+        to_values.insert(0, env_to)
     joined = ", ".join(to_values or [])
-    emails = re.findall(r"([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})", joined)
+    emails = re.findall(r"([A-Za-z0-9._%+--]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})", joined)
     if not emails:
         return None
+    # Prioritize reply+ or job- or org- email addresses if present in any of the To/Envelope headers
+    for e in emails:
+        el = e.strip().lower()
+        if "reply+" in el or "job-" in el or "org-" in el:
+            return el
     return emails[0].strip().lower()
 
 
 def _extract_text_and_attachments(raw_email: bytes) -> dict:
     msg = BytesParser(policy=policy.default).parsebytes(raw_email)
-    to_values = msg.get_all("To", [])
     from_value = msg.get("From") or ""
     _, from_email = parseaddr(from_value)
 
@@ -106,7 +114,7 @@ def _extract_text_and_attachments(raw_email: bytes) -> dict:
     x_auto_response_suppress = (msg.get("X-Auto-Response-Suppress") or "").strip() or None
 
     return {
-        "inbox_address": _extract_recipient(to_values),
+        "inbox_address": _extract_recipient(msg),
         "from_email": (from_email or "").strip().lower() or None,
         "subject": (msg.get("Subject") or "").strip() or None,
         "message_id": message_id,

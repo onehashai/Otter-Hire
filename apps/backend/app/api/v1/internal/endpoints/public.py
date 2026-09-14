@@ -1931,10 +1931,15 @@ def _extract_org_id_from_forwarding_address(inbox_address: str) -> str | None:
 
 
 async def _resolve_org_inbox_for_reply_address(
-    db: "AsyncSession", inbox_address: str
+    db: "AsyncSession", inbox_address: str, reply_conv_hint: str | None = None
 ) -> tuple[Optional["IntegrationCredential"], UUID, UUID] | None:
-    """When inbox_address is reply+<conv_id>@..., resolve org inbox via conversation lookup."""
+    """When inbox_address is reply+<conv_id>@... or reply_conv_hint is present, resolve org inbox via conversation lookup."""
     conv_id = _parse_reply_conversation_id(inbox_address)
+    if conv_id is None and reply_conv_hint:
+        try:
+            conv_id = UUID(reply_conv_hint)
+        except (ValueError, TypeError):
+            conv_id = None
     if conv_id is None:
         return None
     conv_result = await db.execute(select(Conversation).where(Conversation.id == conv_id))
@@ -2236,8 +2241,9 @@ async def ingest_inbound_email(
 
     reply_to_conv_org_id: UUID | None = None
     if org_inbox is None and job_inbox is None:
-        # To: reply+<conversation_id>@... → resolve org_inbox via conversation lookup
-        resolved = await _resolve_org_inbox_for_reply_address(db, inbox_address)
+        # To: reply+<conversation_id>@... or payload.reply_to_conversation_id → resolve org_inbox via conversation lookup
+        reply_conv_hint = getattr(payload, "reply_to_conversation_id", None)
+        resolved = await _resolve_org_inbox_for_reply_address(db, inbox_address, reply_conv_hint=reply_conv_hint)
         if resolved is not None:
             org_inbox, reply_to_conv_id, reply_to_conv_org_id = resolved
         elif alias_job_id is not None:

@@ -301,6 +301,8 @@ _REPLY_CONVERSATION_PATTERN = re.compile(
 
 async def _resolve_inbox_context(
     inbox_address: str,
+    in_reply_to: str | None = None,
+    references: str | None = None,
 ) -> tuple[str, str, str | None] | None:
     """
     Resolve secret + canonical inbox address + optional reply_to_conversation_id.
@@ -309,6 +311,7 @@ async def _resolve_inbox_context(
     3) Direct match on organizations.inbox_address
     4) Fallback for forwarding alias org-<orgid>@inbound.domain -> lookup by org_id
     5) Fallback for reply+<conversation_id>@... -> lookup conversation, then org_inbox by org_id
+    6) Fallback for In-Reply-To / References header match on Message.email_message_id
     Returns (secret, canonical_inbox_address, reply_to_conversation_id_str or None).
     """
     async with AsyncSessionLocal() as db:
@@ -331,13 +334,7 @@ async def _resolve_inbox_context(
                 cfg = by_id.config or {}
                 secret = cfg.get("secret_hash") or settings.inbound_webhook_secret
                 if secret:
-                    # Preserve the alias as the canonical recipient so direct mail
-                    # to job-<job_id>@... keeps using the alias-based ingestion path
-                    # even when a forwarding inbox config exists but is not active.
                     return str(secret), inbox_address, None
-            # Allow direct mail to job-<job_id>@... even when no inbox integration
-            # has been configured for the job yet. In that case, use the alias as
-            # the canonical address and the global inbound webhook secret.
             if settings.inbound_webhook_secret:
                 return str(settings.inbound_webhook_secret), inbox_address, None
 
@@ -365,25 +362,41 @@ async def _resolve_inbox_context(
                 cfg = org_inbox.config or {}
                 secret = cfg.get("secret_hash") or settings.inbound_webhook_secret
                 if secret:
-                    # Preserve the alias as the canonical recipient so direct mail
-                    # to org-<org_id>@... keeps using the alias-based ingestion path
-                    # even when a forwarding inbox config exists but is not active.
                     return str(secret), inbox_address, None
-            # Allow direct mail to org-<org_id>@... even when no inbox integration
-            # has been configured for the org yet. In that case, use the alias as
-            # the canonical address and the global inbound webhook secret.
             if settings.inbound_webhook_secret:
                 return str(settings.inbound_webhook_secret), inbox_address, None
 
         # reply+<conversation_id>@... -> resolve via conversation
         m = _REPLY_CONVERSATION_PATTERN.match((inbox_address or "").strip().lower())
-        if not m:
+        conv_id_str = None
+        if m:
+            conv_id_str = m.group(1)
+        
+        # Header-based fallback via In-Reply-To / References
+        if not conv_id_str and (in_reply_to or references):
+            target_ids = []
+            if in_reply_to:
+                target_ids.append(in_reply_to.strip().strip("<>"))
+            if references:
+                target_ids.extend(_parse_references(references))
+            if target_ids:
+                msg_match = await db.execute(
+                    select(Message.conversation_id).where(
+                        Message.email_message_id.in_(target_ids) | Message.provider_message_id.in_(target_ids)
+                    ).limit(1)
+                )
+                matched_conv_id = msg_match.scalar_one_or_none()
+                if matched_conv_id:
+                    conv_id_str = str(matched_conv_id)
+
+        if not conv_id_str:
             return None
-        conv_id_str = m.group(1)
+
         try:
             conv_uuid = UUID(conv_id_str)
         except (ValueError, TypeError):
             return None
+
         conv_result = await db.execute(select(Conversation).where(Conversation.id == conv_uuid))
         conv = conv_result.scalar_one_or_none()
         if conv is None:
@@ -490,7 +503,11 @@ async def _process_raw_key(s3_client, bucket: str, key: str) -> None:
             logger.warning("SES bridge skipped key=%s reason=missing_recipient", key)
             return
 
-        inbox_context = await _resolve_inbox_context(inbox_address)
+        inbox_context = await _resolve_inbox_context(
+            inbox_address,
+            in_reply_to=normalized.get("in_reply_to"),
+            references=normalized.get("references"),
+        )
         if not inbox_context:
             logger.warning(
                 "SES bridge skipped key=%s inbox=%s reason=inbox_or_secret_not_found",

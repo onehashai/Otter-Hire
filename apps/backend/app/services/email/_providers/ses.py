@@ -69,8 +69,8 @@ class SesProvider(EmailProvider):
         if not mail_domain:
             raise RuntimeError("SES_MAIL_DOMAIN is required for conversation email")
         actual_from = f"noreply@{mail_domain}"
-        if "smartats.in" in from_email:
-            reply_to_addr = from_email.replace("smartats.in", "applications.otter.bz")
+        if "smartats.in" in from_email and "applications.smartats.in" not in from_email:
+            reply_to_addr = from_email.replace("smartats.in", "applications.smartats.in")
         else:
             reply_to_addr = from_email
 

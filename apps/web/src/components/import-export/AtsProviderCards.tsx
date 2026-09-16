@@ -11,24 +11,25 @@ type Integration = {
   status: string;
   last_synced_at: string | null;
   masked_key_last4?: string | null;
-};
-
-type Capability = {
-  provider: string;
-  display_name: string;
-  entities: Record<string, boolean>;
-  mapping_template: Record<string, Record<string, string>>;
+  provider_details?: { last_sync_error?: string };
 };
 
 const providers = [
-  ["greenhouse", "Greenhouse", "API key with Basic Auth"],
-  ["lever", "Lever", "API key"],
+  ["greenhouse", "Greenhouse", "OAuth access token"],
+  ["lever", "Lever", "API key with Basic Auth"],
   ["workday", "Workday", "Provider admin setup"],
   ["icims", "iCIMS", "Provider authorization"],
   ["smartrecruiters", "SmartRecruiters", "API key"],
   ["bamboohr", "BambooHR", "API key and company subdomain"],
-  ["workable", "Workable", "Bearer token"],
+  ["workable", "Workable", "Bearer token and company URL"],
+  // ["generic", "Generic REST ATS", "Custom read-only REST endpoints"],
 ] as const;
+
+const providerBaseUrls: Record<string, string> = {
+  greenhouse: "https://harvest.greenhouse.io",
+  lever: "https://api.lever.co",
+  smartrecruiters: "https://api.smartrecruiters.com",
+};
 
 export function AtsProviderCards() {
   const [integrations, setIntegrations] = useState<Integration[]>([]);
@@ -37,12 +38,18 @@ export function AtsProviderCards() {
   const [subdomain, setSubdomain] = useState("");
   const [details, setDetails] = useState("");
   const [message, setMessage] = useState("");
-  const [capabilities, setCapabilities] = useState<Capability[]>([]);
-  const [template, setTemplate] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   const [generic, setGeneric] = useState({
     name: "",
     baseUrl: "",
     path: "/candidates",
+    endpoints: JSON.stringify(
+      {
+        candidates: { path: "/candidates", method: "GET", response_root_key: "items" },
+      },
+      null,
+      2,
+    ),
     header: "Authorization",
     mapping: "{}",
     since: "updated_since",
@@ -58,64 +65,164 @@ export function AtsProviderCards() {
       credentials: "include",
     });
     if (response.ok) setIntegrations(await response.json());
-    const capabilityResponse = await fetch(`${API_BASE_URL}/ats-migrations/capabilities`, {
-      credentials: "include",
-    });
-    if (capabilityResponse.ok) setCapabilities(await capabilityResponse.json());
   }
 
   useEffect(() => {
     void load();
+    const interval = window.setInterval(() => void load(), 5000);
+    return () => window.clearInterval(interval);
   }, []);
+
+  async function sync(id: string) {
+    const response = await fetch(`${API_BASE_URL}/ats-migrations/integrations/${id}/sync`, {
+      method: "POST",
+      credentials: "include",
+    });
+    setMessage(
+      response.ok ? "Background sync started." : `Sync could not be started (${response.status}).`,
+    );
+    await load();
+  }
 
   function existing(provider: string) {
     return integrations.find((item) => item.provider === provider);
   }
 
-  async function connect(provider: string) {
-    let providerDetails: Record<string, string> = {};
+  function normalizeSubdomain(value: string, suffix: string): string | null {
+    const raw = value.trim();
+    if (!raw) return null;
+    let host = raw;
+    try {
+      host = new URL(raw.includes("://") ? raw : `https://${raw}`).hostname;
+    } catch {
+      return null;
+    }
+    const suffixWithDot = `.${suffix}`;
+    const subdomain = host.toLowerCase().endsWith(suffixWithDot)
+      ? host.slice(0, -suffixWithDot.length)
+      : host;
+    return /^[a-z0-9-]+$/i.test(subdomain) ? subdomain : null;
+  }
+
+  function providerBaseUrl(provider: string): string | null {
+    if (provider === "workable") {
+      const value = subdomain.trim().replace(/\/+$/, "");
+      try {
+        const url = new URL(value);
+        if (
+          url.protocol !== "https:" ||
+          !/^[a-z0-9-]+\.workable\.com$/i.test(url.hostname) ||
+          url.pathname !== "/" ||
+          url.search ||
+          url.hash
+        ) {
+          return null;
+        }
+        return value;
+      } catch {
+        return null;
+      }
+    }
+    if (provider === "bamboohr") {
+      const normalized = normalizeSubdomain(subdomain, "bamboohr.com");
+      return normalized ? `https://${normalized}.bamboohr.com` : null;
+    }
     if (provider === "workday" || provider === "icims") {
-      providerDetails = { setup_request: details };
-    } else if (provider === "bamboohr") {
-      providerDetails = { subdomain };
+      return "https://provider-setup.invalid";
     }
-    const response = await fetch(`${API_BASE_URL}/ats-migrations/integrations`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({
-        provider,
-        base_url: "http://localhost",
-        api_key: key || null,
-        auth_type: provider === "workable" ? "bearer" : "api_key",
-        provider_details: providerDetails,
-      }),
-    });
-    if (response.ok && provider !== "workday" && provider !== "icims") {
-      const integration = await response.json();
-      const syncResponse = await fetch(
-        `${API_BASE_URL}/ats-migrations/integrations/${integration.id}/sync`,
-        { method: "POST", credentials: "include" },
-      );
+    return providerBaseUrls[provider] ?? null;
+  }
+
+  async function connect(provider: string) {
+    const baseUrl = providerBaseUrl(provider);
+    if (!baseUrl) {
       setMessage(
-        syncResponse.ok
-          ? "Connected. Background sync started."
-          : "Connected, but background sync could not be started.",
+        provider === "bamboohr"
+          ? "Enter your BambooHR company subdomain."
+          : provider === "workable"
+            ? "Enter a valid Workable URL such as https://companyname.workable.com."
+            : "This provider does not have an API URL configured.",
       );
-    } else {
-      setMessage(response.ok ? "Setup request submitted." : "Unable to save this connection.");
+      return;
     }
-    setKey("");
-    setDetails("");
-    await load();
+    if (provider === "workable") {
+      const credential = key.trim();
+      if (!credential) {
+        setMessage("Paste your Workable API token in the second field.");
+        return;
+      }
+      if (/^(https?:\/\/|.*\.workable\.com\/?$)/i.test(credential)) {
+        setMessage("Paste the Workable API token, not the company URL or a Bearer prefix.");
+        return;
+      }
+    }
+    setBusy(true);
+    setMessage("");
+    try {
+      let providerDetails: Record<string, string> = {};
+      if (provider === "workday" || provider === "icims") {
+        providerDetails = { setup_request: details };
+      } else if (provider === "bamboohr" || provider === "workable") {
+        providerDetails = { subdomain };
+      }
+      const response = await fetch(`${API_BASE_URL}/ats-migrations/integrations`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          provider,
+          base_url: baseUrl,
+          api_key: key || null,
+          auth_type:
+            provider === "workable" || provider === "greenhouse"
+              ? "bearer"
+              : provider === "lever" || provider === "bamboohr"
+                ? "basic"
+                : "api_key",
+          provider_details: providerDetails,
+        }),
+      });
+      if (response.ok && provider !== "workday" && provider !== "icims") {
+        const integration = await response.json();
+        const syncResponse = await fetch(
+          `${API_BASE_URL}/ats-migrations/integrations/${integration.id}/sync`,
+          { method: "POST", credentials: "include" },
+        );
+        setMessage(
+          syncResponse.ok
+            ? "Connected. Background sync started."
+            : `Connected, but sync could not be started (${syncResponse.status}).`,
+        );
+      } else {
+        setMessage(
+          response.ok
+            ? "Setup request submitted."
+            : `Unable to save this connection (${response.status}).`,
+        );
+      }
+      setKey("");
+      setDetails("");
+      await load();
+    } catch {
+      setMessage("Unable to reach staging. Check your login and try again.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function connectGeneric() {
-    let mapping: Record<string, string>;
+    let mapping: Record<string, Record<string, string>>;
+    let endpointConfig: Record<string, Record<string, unknown>>;
     try {
-      mapping = JSON.parse(generic.mapping);
+      const parsedMapping = JSON.parse(generic.mapping) as Record<string, unknown>;
+      mapping = Object.values(parsedMapping).some(
+        (value) => value !== null && typeof value === "object" && !Array.isArray(value),
+      )
+        ? (parsedMapping as Record<string, Record<string, string>>)
+        : { candidate: parsedMapping as Record<string, string> };
+      endpointConfig = JSON.parse(generic.endpoints);
     } catch {
-      setMessage("Field mapping must be valid JSON.");
+      setMessage("Endpoint and field mappings must be valid JSON.");
       return;
     }
     const response = await fetch(`${API_BASE_URL}/ats-migrations/generic`, {
@@ -126,6 +233,7 @@ export function AtsProviderCards() {
         display_name: generic.name,
         base_url: generic.baseUrl,
         candidates_endpoint_path: generic.path,
+        endpoint_config: endpointConfig,
         auth_header_name: generic.header,
         pagination_style: "page",
         since_param_name: generic.since,
@@ -135,10 +243,23 @@ export function AtsProviderCards() {
         client_secret: generic.clientSecret || null,
         authorize_url: generic.authorizeUrl || null,
         token_url: generic.tokenUrl || null,
-        field_mapping_config: { candidate: mapping },
+        field_mapping_config: mapping,
       }),
     });
-    setMessage(response.ok ? "Generic ATS connected." : "Unable to save the generic connector.");
+    if (response.ok) {
+      const integration = await response.json();
+      const syncResponse = await fetch(
+        `${API_BASE_URL}/ats-migrations/integrations/${integration.id}/sync`,
+        { method: "POST", credentials: "include" },
+      );
+      setMessage(
+        syncResponse.ok
+          ? "Generic ATS connected. Background sync started."
+          : `Connected, but sync could not be started (${syncResponse.status}).`,
+      );
+    } else {
+      setMessage(`Unable to save the generic connector (${response.status}).`);
+    }
     setKey("");
     await load();
   }
@@ -161,86 +282,14 @@ export function AtsProviderCards() {
           Connect a provider, then review each imported batch before it reaches Candidates.
         </p>
       </div>
-      {capabilities.length > 0 && (
-        <div className="overflow-x-auto rounded-lg border bg-card p-4">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h3 className="font-medium">Provider capabilities</h3>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Availability is read from the active connector configuration.
-              </p>
-            </div>
-          </div>
-          <table className="mt-3 w-full min-w-[680px] text-left text-xs">
-            <thead className="text-muted-foreground">
-              <tr>
-                <th className="py-2">Provider</th>
-                {[
-                  "jobs",
-                  "stages",
-                  "candidates",
-                  "applications",
-                  "resumes",
-                  "interviews",
-                  "notes",
-                ].map((entity) => (
-                  <th key={entity} className="px-2 py-2 capitalize">
-                    {entity}
-                  </th>
-                ))}
-                <th className="py-2">Template</th>
-              </tr>
-            </thead>
-            <tbody>
-              {capabilities
-                .filter((item) => ["greenhouse", "lever", "workable"].includes(item.provider))
-                .map((item) => (
-                  <tr key={item.provider} className="border-t">
-                    <td className="py-2 font-medium">{item.display_name}</td>
-                    {[
-                      "jobs",
-                      "stages",
-                      "candidates",
-                      "applications",
-                      "resumes",
-                      "interviews",
-                      "notes",
-                    ].map((entity) => (
-                      <td key={entity} className="px-2 py-2">
-                        {item.entities[entity] ? "Supported" : "Unavailable"}
-                      </td>
-                    ))}
-                    <td className="py-2">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() =>
-                          setTemplate(template === item.provider ? null : item.provider)
-                        }
-                      >
-                        {template === item.provider ? "Hide" : "View"}
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
-          {template && (
-            <pre className="mt-3 max-h-64 overflow-auto rounded-md bg-muted/40 p-3 text-xs">
-              {JSON.stringify(
-                capabilities.find((item) => item.provider === template)?.mapping_template,
-                null,
-                2,
-              )}
-            </pre>
-          )}
-        </div>
-      )}
       {message && <p className="text-sm text-muted-foreground">{message}</p>}
       <div className="grid gap-3 md:grid-cols-2">
         {providers.map(([id, name, description]) => {
           const item = existing(id);
           const pending = id === "workday" || id === "icims";
+          const connected = Boolean(
+            item && item.status !== "disconnected" && item.status !== "pending_provider_setup",
+          );
           return (
             <div key={id} className="rounded-lg border bg-card p-4">
               <div className="flex items-start justify-between gap-3">
@@ -248,7 +297,7 @@ export function AtsProviderCards() {
                   <h3 className="font-medium">{name}</h3>
                   <p className="mt-1 text-xs text-muted-foreground">{description}</p>
                 </div>
-                {item?.status === "connected" ? (
+                {connected ? (
                   <span className="inline-flex items-center gap-1 text-xs text-emerald-600">
                     <Check className="h-3 w-3" />
                     Connected
@@ -257,20 +306,38 @@ export function AtsProviderCards() {
                   <span className="text-xs text-amber-600">Pending setup</span>
                 ) : null}
               </div>
-              {item?.status === "connected" ? (
+              {item &&
+              item.status !== "disconnected" &&
+              item.status !== "pending_provider_setup" ? (
                 <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
-                  <span>
-                    {item.masked_key_last4
-                      ? `Key ends in ${item.masked_key_last4}`
-                      : "Credential saved"}
-                    {item.last_synced_at
-                      ? ` · Last synced ${new Date(item.last_synced_at).toLocaleString()}`
-                      : ""}
-                  </span>
-                  <Button size="sm" variant="ghost" onClick={() => disconnect(item.id)}>
-                    <Unplug className="mr-1 h-3 w-3" />
-                    Disconnect
-                  </Button>
+                  <div>
+                    <span>
+                      {item.status === "syncing"
+                        ? "Syncing"
+                        : item.masked_key_last4
+                          ? `Key ends in ${item.masked_key_last4}`
+                          : "Credential saved"}
+                      {item.last_synced_at
+                        ? ` · Last synced ${new Date(item.last_synced_at).toLocaleString()}`
+                        : ""}
+                    </span>
+                    {item.provider_details?.last_sync_error && (
+                      <p className="mt-2 max-w-xl text-destructive">
+                        {item.provider_details.last_sync_error}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    {item.status !== "syncing" && (
+                      <Button size="sm" variant="outline" onClick={() => void sync(item.id)}>
+                        Sync
+                      </Button>
+                    )}
+                    <Button size="sm" variant="ghost" onClick={() => disconnect(item.id)}>
+                      <Unplug className="mr-1 h-3 w-3" />
+                      Disconnect
+                    </Button>
+                  </div>
                 </div>
               ) : (
                 <>
@@ -298,7 +365,7 @@ export function AtsProviderCards() {
                             value={details}
                             onChange={(event) => setDetails(event.target.value)}
                           />
-                          <Button size="sm" onClick={() => connect(id)}>
+                          <Button size="sm" pending={busy} onClick={() => void connect(id)}>
                             Submit setup request
                           </Button>
                         </>
@@ -310,6 +377,14 @@ export function AtsProviderCards() {
                             value={generic.name}
                             onChange={(event) =>
                               setGeneric({ ...generic, name: event.target.value })
+                            }
+                          />
+                          <textarea
+                            className="min-h-28 w-full rounded-md border bg-background p-2 font-mono text-xs"
+                            placeholder="Endpoint configuration JSON"
+                            value={generic.endpoints}
+                            onChange={(event) =>
+                              setGeneric({ ...generic, endpoints: event.target.value })
                             }
                           />
                           <input
@@ -328,7 +403,10 @@ export function AtsProviderCards() {
                             }
                           >
                             <option value="api_key">Static API key</option>
-                            <option value="oauth2">OAuth2</option>
+                            <option value="bearer">Bearer token</option>
+                            <option value="basic">Basic credential</option>
+                            <option value="oauth2">OAuth access token</option>
+                            <option value="none">No authentication</option>
                           </select>
                           <input
                             className="h-9 w-full rounded-md border bg-background px-2 text-sm"
@@ -346,46 +424,14 @@ export function AtsProviderCards() {
                               setGeneric({ ...generic, header: event.target.value })
                             }
                           />
-                          {generic.auth === "oauth2" ? (
-                            <>
-                              <input
-                                className="h-9 w-full rounded-md border bg-background px-2 text-sm"
-                                placeholder="OAuth client ID"
-                                value={generic.clientId}
-                                onChange={(event) =>
-                                  setGeneric({ ...generic, clientId: event.target.value })
-                                }
-                              />
-                              <input
-                                className="h-9 w-full rounded-md border bg-background px-2 text-sm"
-                                placeholder="OAuth client secret"
-                                type="password"
-                                value={generic.clientSecret}
-                                onChange={(event) =>
-                                  setGeneric({ ...generic, clientSecret: event.target.value })
-                                }
-                              />
-                              <input
-                                className="h-9 w-full rounded-md border bg-background px-2 text-sm"
-                                placeholder="Authorize URL"
-                                value={generic.authorizeUrl}
-                                onChange={(event) =>
-                                  setGeneric({ ...generic, authorizeUrl: event.target.value })
-                                }
-                              />
-                              <input
-                                className="h-9 w-full rounded-md border bg-background px-2 text-sm"
-                                placeholder="Token URL"
-                                value={generic.tokenUrl}
-                                onChange={(event) =>
-                                  setGeneric({ ...generic, tokenUrl: event.target.value })
-                                }
-                              />
-                            </>
-                          ) : (
+                          {generic.auth !== "none" && (
                             <input
                               className="h-9 w-full rounded-md border bg-background px-2 text-sm"
-                              placeholder="API key"
+                              placeholder={
+                                generic.auth === "oauth2"
+                                  ? "OAuth access token"
+                                  : "API key or credential"
+                              }
                               type="password"
                               value={key}
                               onChange={(event) => setKey(event.target.value)}
@@ -393,7 +439,7 @@ export function AtsProviderCards() {
                           )}
                           <textarea
                             className="min-h-20 w-full rounded-md border bg-background p-2 text-sm"
-                            placeholder="Field mapping JSON"
+                            placeholder="Entity field mapping JSON"
                             value={generic.mapping}
                             onChange={(event) =>
                               setGeneric({ ...generic, mapping: event.target.value })
@@ -405,10 +451,14 @@ export function AtsProviderCards() {
                         </>
                       ) : (
                         <>
-                          {id === "bamboohr" && (
+                          {(id === "bamboohr" || id === "workable") && (
                             <input
                               className="h-9 w-full rounded-md border bg-background px-2 text-sm"
-                              placeholder="Company subdomain"
+                              placeholder={
+                                id === "workable"
+                                  ? "https://companyname.workable.com"
+                                  : `${name} subdomain or full URL`
+                              }
                               value={subdomain}
                               onChange={(event) => setSubdomain(event.target.value)}
                             />

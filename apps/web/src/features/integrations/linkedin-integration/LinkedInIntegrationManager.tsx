@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Switch } from "@onehash/ui/switch";
+import { InputField } from "@onehash/ui/input";
 import { Button } from "@onehash/ui/button";
 import {
   Dialog,
@@ -20,6 +22,8 @@ import {
   getLinkedInStatus,
   getLinkedInOrganizations,
   completeLinkedInSetup,
+  subscribeLinkedInLeads,
+  unsubscribeLinkedInLeads,
   type LinkedInStatus,
   type LinkedInOrganization,
 } from "@/api/linkedin";
@@ -39,6 +43,12 @@ export function LinkedInIntegrationManager({ onChanged }: LinkedInIntegrationMan
   const [selectedOrgId, setSelectedOrgId] = useState<string>("");
   const [loadingOrgs, setLoadingOrgs] = useState(false);
   const [completingSetup, setCompletingSetup] = useState(false);
+  const [includeLeads, setIncludeLeads] = useState(false);
+  const [accountId, setAccountId] = useState("");
+  const [subscribing, setSubscribing] = useState(false);
+  const oauthCleanup = useRef<(() => void) | null>(null);
+
+  useEffect(() => () => oauthCleanup.current?.(), []);
 
   const fetchStatus = async () => {
     try {
@@ -74,6 +84,7 @@ export function LinkedInIntegrationManager({ onChanged }: LinkedInIntegrationMan
       }
     } catch (error) {
       console.error("Failed to fetch organizations:", error);
+      toast.error(error instanceof Error ? error.message : "Could not load Company Pages");
       setOrganizations([]);
       setSelectedOrgId("");
     } finally {
@@ -145,24 +156,25 @@ export function LinkedInIntegrationManager({ onChanged }: LinkedInIntegrationMan
   };
 
   const handleConnect = async () => {
+    const popup = window.open("about:blank", "LinkedIn OAuth", "width=600,height=700");
+    if (!popup) {
+      toast.error("Allow popups for this site, then connect again.");
+      return;
+    }
     setConnecting(true);
     try {
-      const { authorization_url } = await connectLinkedIn();
-
-      const width = 600;
-      const height = 700;
-      const left = window.screen.width / 2 - width / 2;
-      const top = window.screen.height / 2 - height / 2;
-
-      const popup = window.open(
-        authorization_url,
-        "LinkedIn OAuth",
-        `width=${width},height=${height},left=${left},top=${top}`,
-      );
+      const { authorization_url, callback_origin } = await connectLinkedIn(includeLeads);
 
       const handleMessage = async (event: MessageEvent) => {
+        if (event.origin !== callback_origin || event.source !== popup) return;
+        if (event.data?.type === "linkedin_error") {
+          oauthCleanup.current?.();
+          setConnecting(false);
+          toast.error(event.data.error || "LinkedIn authorization failed");
+          return;
+        }
         if (event.data?.type === "linkedin_oauth_complete") {
-          popup?.close();
+          oauthCleanup.current?.();
           await fetchStatus();
           setSetupDialogOpen(true);
           await fetchOrganizations();
@@ -174,13 +186,21 @@ export function LinkedInIntegrationManager({ onChanged }: LinkedInIntegrationMan
       window.addEventListener("message", handleMessage);
 
       const checkClosed = setInterval(() => {
-        if (popup?.closed) {
-          clearInterval(checkClosed);
+        if (popup.closed) {
+          oauthCleanup.current?.();
           setConnecting(false);
-          window.removeEventListener("message", handleMessage);
+          void fetchStatus();
         }
       }, 500);
+      oauthCleanup.current = () => {
+        clearInterval(checkClosed);
+        window.removeEventListener("message", handleMessage);
+        popup.close();
+        oauthCleanup.current = null;
+      };
+      popup.location.href = authorization_url;
     } catch (error) {
+      popup.close();
       const message = error instanceof Error ? error.message : "Failed to connect LinkedIn";
       toast.error(message);
       setConnecting(false);
@@ -248,63 +268,174 @@ export function LinkedInIntegrationManager({ onChanged }: LinkedInIntegrationMan
 
   return (
     <>
-      <div className="flex items-center justify-between gap-2">
-        {isSetupComplete ? (
-          <div className="flex items-center justify-between gap-2 w-full">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-8 w-8 p-0"
-                  onClick={handleOpenSetup}
-                  disabled={loadingOrgs || completingSetup}
-                >
-                  <Settings className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Manage</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
-                  onClick={() => setDisconnectDialogOpen(true)}
-                  disabled={disconnecting}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Disconnect</TooltipContent>
-            </Tooltip>
-          </div>
-        ) : isSetupIncomplete ? (
-          <>
-            <div className="flex items-center gap-2 text-xs text-amber-600 font-medium">
-              ⚠ Setup Incomplete
+      <div className="space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-xs break-words">
+            {status.status === "expired"
+              ? "Authorization Expired"
+              : isSetupComplete
+                ? "Connected"
+                : isSetupIncomplete
+                  ? "Setup Required (Select Company Page)"
+                  : "Not Connected"}
+          </span>
+          <Switch
+            aria-label="LinkedIn connection"
+            checked={status.connected}
+            disabled={connecting || disconnecting || status.oauth_configured === false}
+            onCheckedChange={(checked) => {
+              if (checked) void handleConnect();
+              else setDisconnectDialogOpen(true);
+            }}
+          />
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          {isSetupComplete ? (
+            <div className="flex items-center justify-between gap-2 w-full">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 w-8 p-0"
+                    onClick={handleOpenSetup}
+                    disabled={loadingOrgs || completingSetup}
+                  >
+                    <Settings className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Manage</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                    onClick={() => setDisconnectDialogOpen(true)}
+                    disabled={disconnecting}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Disconnect</TooltipContent>
+              </Tooltip>
             </div>
-            <Button size="sm" variant="outline" onClick={handleOpenSetup} className="text-xs h-8">
-              Complete Setup
+          ) : isSetupIncomplete ? (
+            <>
+              <div className="flex items-center gap-2 text-xs text-amber-600 font-medium">
+                Company Page required
+              </div>
+              <Button size="sm" variant="outline" onClick={handleOpenSetup} className="text-xs h-8">
+                Complete Setup
+              </Button>
+            </>
+          ) : (
+            <Button
+              size="sm"
+              onClick={handleConnect}
+              disabled={connecting || status.oauth_configured === false}
+              className="text-xs h-8 w-full"
+            >
+              {connecting ? (
+                <>
+                  <Loader2 className="h-3 w-3 mr-2 animate-spin" />
+                  Connecting...
+                </>
+              ) : (
+                "Connect"
+              )}
             </Button>
-          </>
-        ) : (
-          <Button
-            size="sm"
-            onClick={handleConnect}
-            disabled={connecting}
-            className="text-xs h-8 w-full"
-          >
-            {connecting ? (
-              <>
-                <Loader2 className="h-3 w-3 mr-2 animate-spin" />
-                Connecting...
-              </>
-            ) : (
-              "Connect"
-            )}
+          )}
+        </div>
+        {isSetupComplete && !status.can_post && (
+          <Button size="sm" variant="outline" onClick={handleConnect} disabled={connecting}>
+            Reauthorize posting
           </Button>
+        )}
+        {status.lead_sync_enabled && (
+          <div className="space-y-2 border-t pt-3">
+            <label className="flex items-center justify-between gap-3 text-xs">
+              Include Lead Sync permission
+              <Switch
+                checked={includeLeads}
+                onCheckedChange={setIncludeLeads}
+                aria-label="Include Lead Sync permission"
+              />
+            </label>
+            {status.connected && !status.can_sync_leads && includeLeads && (
+              <Button size="sm" variant="outline" onClick={handleConnect} disabled={connecting}>
+                Authorize Lead Sync
+              </Button>
+            )}
+            {status.can_sync_leads && (
+              <>
+                <p className="text-xs">
+                  Lead Sync:{" "}
+                  {status.lead_subscription?.status === "active" ? "Connected" : "Not Connected"}
+                </p>
+                {status.lead_sync_last_error && (
+                  <p role="alert" className="text-xs text-destructive break-words">
+                    {status.lead_sync_last_error}
+                  </p>
+                )}
+                {status.lead_subscription && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={subscribing}
+                    onClick={async () => {
+                      setSubscribing(true);
+                      try {
+                        await unsubscribeLinkedInLeads();
+                        await fetchStatus();
+                      } catch (error) {
+                        toast.error(
+                          error instanceof Error ? error.message : "Could not disconnect Lead Sync",
+                        );
+                      } finally {
+                        setSubscribing(false);
+                      }
+                    }}
+                  >
+                    Disconnect Lead Forms
+                  </Button>
+                )}
+                {!status.lead_subscription && (
+                  <>
+                    <InputField
+                      aria-label="LinkedIn ad account ID"
+                      placeholder="Campaign Manager ad account ID"
+                      inputMode="numeric"
+                      value={accountId}
+                      onChange={(e) => setAccountId(e.target.value)}
+                    />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={subscribing || !/^\d+$/.test(accountId)}
+                      onClick={async () => {
+                        setSubscribing(true);
+                        try {
+                          await subscribeLinkedInLeads(accountId);
+                          await fetchStatus();
+                          toast.success("Lead Sync connected");
+                        } catch (error) {
+                          toast.error(
+                            error instanceof Error ? error.message : "Could not connect Lead Sync",
+                          );
+                        } finally {
+                          setSubscribing(false);
+                        }
+                      }}
+                    >
+                      {subscribing ? "Connecting..." : "Connect Lead Forms"}
+                    </Button>
+                  </>
+                )}
+              </>
+            )}
+          </div>
         )}
       </div>
 

@@ -20,6 +20,8 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
     { label: t("nav_team"), path: "/settings/team", icon: "Users" },
     { label: t("nav_job_categories"), path: "/settings/categories", icon: "Briefcase" },
     { label: t("nav_integrations"), path: "/settings/integrations", icon: "Sparkles" },
+    { label: t("nav_api_keys", "API Key"), path: "/settings/api-keys", icon: "Code" },
+    { label: t("nav_mcp_server", "MCP Server"), path: "/settings/mcp-server", icon: "Globe" },
     { label: t("nav_security"), path: "/settings/security", icon: "Shield" },
   ];
 
@@ -42,6 +44,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
               <Link
                 key={path}
                 href={path}
+                aria-current={isActive ? "page" : undefined}
                 className={cn(
                   "px-3 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition-colors min-h-[40px] flex items-center gap-2",
                   isActive ? "bg-foreground text-background" : "bg-muted text-muted-foreground",
@@ -61,6 +64,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
               <Link
                 key={path}
                 href={path}
+                aria-current={isActive ? "page" : undefined}
                 className={cn(
                   "flex w-full items-center gap-2.5 text-left px-3 py-1.5 rounded-lg text-sm transition-colors",
                   isActive

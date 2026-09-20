@@ -30,12 +30,10 @@ def _get_redis_client():
 
 @activity.defn(name="download_email_activity")
 async def download_email_activity(input_data: InboundWorkflowInput) -> str:
-    import boto3
-
     if "AMAZON_SES_SETUP_NOTIFICATION" in input_data.key:
         return json.dumps({"status": "ignored", "reason": "setup_notification"})
 
-    from app.services.file_storage import build_s3_client
+    from app.services.storage import build_s3_client
 
     s3_client = build_s3_client()
     raw_email = await asyncio.to_thread(
@@ -88,8 +86,6 @@ async def extract_resume_activity(raw_email_b64: str) -> dict:
 
 @activity.defn(name="download_and_extract_resume_activity")
 async def download_and_extract_resume_activity(input_data: InboundWorkflowInput) -> dict:
-    import boto3
-
     from app.integrations.app_store.email_integration.ses_bridge import (
         _extract_text_and_attachments,
         _resolve_inbox_context,
@@ -98,7 +94,7 @@ async def download_and_extract_resume_activity(input_data: InboundWorkflowInput)
     if "AMAZON_SES_SETUP_NOTIFICATION" in input_data.key:
         return {"status": "ignored", "reason": "setup_notification"}
 
-    from app.services.file_storage import build_s3_client
+    from app.services.storage import build_s3_client
 
     s3_client = build_s3_client()
     raw_email = await asyncio.to_thread(
@@ -276,8 +272,9 @@ async def send_outbound_email_activity(input_data: OutboundWorkflowInput) -> dic
     async with AsyncSessionLocal() as db:
         reply_as_from = (input_data.reply_to or "").strip()
         if reply_as_from and "@" in reply_as_from:
-            mail_domain = (settings.SES_MAIL_DOMAIN or "smartats.in").strip().lstrip("@")
-            from_email_addr = f"noreply@{mail_domain}"
+            # The conversation layer has already built the canonical reply route.
+            # Preserve it exactly so the provider can set it as Reply-To.
+            from_email_addr = reply_as_from
             if input_data.org_name:
                 display_name = f"{input_data.from_name or 'Recruiter'} from {input_data.org_name}"
             else:

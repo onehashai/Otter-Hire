@@ -96,6 +96,34 @@ async def parse_inbound_email_activity(input_data: InboundEmailParseInput) -> di
                 if _is_resume_attachment(att.get("filename"), att.get("content_type")):
                     resume_attachments.append((original_idx, att))
 
+            # Link-only resumes are downloaded by the inbound endpoint before this
+            # activity is queued. Reuse that stored object when the raw MIME email
+            # has no attachment to avoid dropping the link during async handoff.
+            if not resume_attachments and inbound_email.attachment_primary_storage_key:
+                try:
+                    linked_content = await storage_service.read_bytes(
+                        inbound_email.attachment_primary_storage_key
+                    )
+                except Exception:
+                    logger.exception(
+                        "Failed to read linked resume key=%s",
+                        inbound_email.attachment_primary_storage_key,
+                    )
+                else:
+                    resume_attachments.append(
+                        (
+                            -1,
+                            {
+                                "filename": inbound_email.attachment_primary_filename
+                                or "resume.pdf",
+                                "content_type": inbound_email.attachment_primary_content_type
+                                or "application/pdf",
+                                "content_bytes": linked_content,
+                                "storage_key": inbound_email.attachment_primary_storage_key,
+                            },
+                        )
+                    )
+
             if not resume_attachments:
                 inbound_email.parse_status = "ignored"
                 inbound_email.parse_error = "No resume attachment found in parsed email"
@@ -107,7 +135,12 @@ async def parse_inbound_email_activity(input_data: InboundEmailParseInput) -> di
             for original_idx, resume_attachment in resume_attachments:
                 # Decode base64 content
                 try:
-                    content = base64.b64decode(resume_attachment.get("content_base64") or "")
+                    linked_content = resume_attachment.get("content_bytes")
+                    content = (
+                        linked_content
+                        if isinstance(linked_content, bytes)
+                        else base64.b64decode(resume_attachment.get("content_base64") or "")
+                    )
                 except Exception:
                     logger.warning("Failed to decode attachment content for %s", resume_attachment.get("filename"))
                     continue
@@ -274,7 +307,10 @@ async def parse_inbound_email_activity(input_data: InboundEmailParseInput) -> di
                 
                 from app.api.v1.internal.endpoints.public import _guess_file_name
                 safe_name = _guess_file_name(resume_filename, f"attachment_{original_idx + 1}.bin")
-                current_resume_key = f"orgs/{org_id}/inbox/attachments/{inbound_email.id}/{original_idx + 1}_{safe_name}"
+                current_resume_key = str(
+                    resume_attachment.get("storage_key")
+                    or f"orgs/{org_id}/inbox/attachments/{inbound_email.id}/{original_idx + 1}_{safe_name}"
+                )
                 
                 resume_url = await storage_service.resolve_url(current_resume_key)
                 session.add(

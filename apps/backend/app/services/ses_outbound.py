@@ -45,6 +45,18 @@ def _ensure_message_id_format(msg_id: str) -> str:
     return s if s.startswith("<") and s.endswith(">") else f"<{s}>"
 
 
+def _fit_references_header(references: str | None, max_length: int = 980) -> str:
+    """Normalize References and keep the newest IDs within SES's header limit."""
+    normalized = [
+        _ensure_message_id_format(item.strip())
+        for item in (references or "").split()
+        if item.strip()
+    ]
+    while normalized and len(" ".join(normalized)) > max_length:
+        normalized.pop(0)
+    return " ".join(normalized)
+
+
 def send_email_via_ses(
     *,
     from_email: str,
@@ -85,9 +97,7 @@ def send_email_via_ses(
         if in_reply_to:
             msg["In-Reply-To"] = _ensure_message_id_format(in_reply_to)
         if references:
-            refs = " ".join(
-                _ensure_message_id_format(r.strip()) for r in references.split() if r.strip()
-            )
+            refs = _fit_references_header(references)
             if refs:
                 msg["References"] = refs
 
@@ -155,10 +165,7 @@ def send_email_via_ses(
                 {"Name": "In-Reply-To", "Value": _ensure_message_id_format(in_reply_to)}
             )
         if references:
-            # References is space-separated list of message-ids; normalize each to angle-bracket form
-            refs = " ".join(
-                _ensure_message_id_format(r.strip()) for r in references.split() if r.strip()
-            )
+            refs = _fit_references_header(references)
             if refs:
                 content["Simple"]["Headers"].append({"Name": "References", "Value": refs})
 

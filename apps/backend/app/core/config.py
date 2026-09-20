@@ -1,4 +1,5 @@
 import json
+from typing import Literal
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -71,6 +72,9 @@ class Settings(BaseSettings):
     linkedin_webhook_secret: str | None = Field(
         default=None, validation_alias="LINKEDIN_WEBHOOK_SECRET"
     )
+    linkedin_api_version: str = Field(
+        default="202606", pattern=r"^\d{6}$", validation_alias="LINKEDIN_API_VERSION"
+    )
     feature_linkedin_distribution: bool = Field(
         default=False, validation_alias="FEATURE_LINKEDIN_DISTRIBUTION"
     )
@@ -104,12 +108,16 @@ class Settings(BaseSettings):
     )
 
     # ZeptoMail — used when ZEPTOMAIL_API_KEY + ZEPTOMAIL_FROM_EMAIL are present
+    email_provider: Literal["auto", "local_smtp", "zeptomail", "ses"] = Field(
+        default="auto",
+        validation_alias="EMAIL_PROVIDER",
+    )
     zeptomail_api_key: str | None = Field(default=None, validation_alias="ZEPTOMAIL_API_KEY")
     zeptomail_from_email: str | None = Field(default=None, validation_alias="ZEPTOMAIL_FROM_EMAIL")
     zeptomail_from_name: str | None = Field(default=None, validation_alias="ZEPTOMAIL_FROM_NAME")
 
-    # SES — transactional From (verification, invites, platform email). ZeptoMail path is unchanged.
-    # Conversational SES mail uses From = reply+...@<SES_MAIL_DOMAIN> (not these vars).
+    # SES — verified From used for transactional and conversational email.
+    # Conversation replies are routed separately through SES_MAIL_DOMAIN.
     ses_transactional_from_email: str = Field(
         default="",
         validation_alias="SES_TRANSACTIONAL_FROM_EMAIL",

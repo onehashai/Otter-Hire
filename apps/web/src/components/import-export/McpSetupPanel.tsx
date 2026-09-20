@@ -5,10 +5,10 @@ import { Clipboard, KeyRound } from "lucide-react";
 import { Button } from "@onehash/ui/button";
 import { API_BASE_URL } from "@/api";
 
-const MCP_URL = process.env.NEXT_PUBLIC_MCP_SERVER_URL || "http://127.0.0.1:8765/sse";
+const MCP_URL = process.env.NEXT_PUBLIC_MCP_SERVER_URL || "https://smartats.in/mcp/sse";
 
-export function McpSetupPanel() {
-  const [name, setName] = useState("Otter Hire MCP");
+export function McpSetupPanel({ canManage = true }: { canManage?: boolean }) {
+  const [name, setName] = useState("Otter Hire AI Client");
   const [scope, setScope] = useState<"read_only" | "read_write">("read_only");
   const [key, setKey] = useState("");
   const [message, setMessage] = useState("");
@@ -49,11 +49,11 @@ export function McpSetupPanel() {
   }
 
   return (
-    <section className="mt-6 space-y-5 rounded-lg border bg-card p-5" aria-labelledby="mcp-title">
+    <section className="space-y-5" aria-labelledby="mcp-title">
       <div className="flex flex-wrap items-start justify-between gap-3 border-b pb-4">
         <div>
           <h2 id="mcp-title" className="text-base font-semibold">
-            Otter Hire MCP server
+            MCP Server
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
             Connect Claude, Cursor, or another MCP-compatible AI client to Otter Hire.
@@ -89,7 +89,7 @@ export function McpSetupPanel() {
         <code className="break-all text-xs text-muted-foreground">{MCP_URL}</code>
       </div>
       <div className="flex flex-wrap gap-2">
-        <Button onClick={() => void generateKey()}>
+        <Button disabled={!canManage} onClick={() => void generateKey()}>
           <KeyRound className="mr-2 h-4 w-4" />
           Generate MCP key
         </Button>
@@ -100,6 +100,11 @@ export function McpSetupPanel() {
           </Button>
         )}
       </div>
+      {!canManage && (
+        <p className="text-sm text-muted-foreground">
+          Only organization owners and administrators can generate connection keys.
+        </p>
+      )}
       {key && (
         <div className="space-y-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-900 dark:bg-amber-950/30">
           <p className="font-medium">Copy this key now</p>

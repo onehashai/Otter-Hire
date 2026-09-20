@@ -13,7 +13,7 @@ from app.services.migration.config_loader import load_connector_registry
 from app.services.migration.orchestrator import job_status, start_migration
 
 router = APIRouter(prefix="/migrations", tags=["migrations"])
-CONFIG_DIR = Path(__file__).resolve().parents[3] / "migration_configs"
+CONFIG_DIR = Path(__file__).resolve().parents[4] / "migration_configs"
 
 
 def _enabled() -> None:

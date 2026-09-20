@@ -56,6 +56,8 @@ async def upsert_canonical_candidate(
         candidate.parsed_resume = resume
     await db.flush()
     if payload.job_id:
+        candidate.job_id = payload.job_id
+        candidate.stage_id = payload.stage_id
         await link_candidate_to_job(db, org_id, candidate, payload.job_id, payload.stage_id, source)
     return candidate
 

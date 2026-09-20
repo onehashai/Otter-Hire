@@ -54,6 +54,7 @@ class TeamMemberResponse(BaseModel):
 
 class JobCreateRequest(BaseModel):
     title: str = Field(min_length=1, max_length=100)
+    post_to_linkedin: bool = False
 
 
 class JobUpdateRequest(BaseModel):
@@ -124,7 +125,7 @@ class JobDetailResponse(BaseModel):
     application_form_schema: dict[str, Any] = {}
     hiring_stages: list[HiringStageResponse] = []
     team_members: list[TeamMemberResponse] = []
-    created_by_user_id: UUID
+    created_by_user_id: Optional[UUID] = None
     published_at: Optional[datetime] = None
     closed_at: Optional[datetime] = None
     created_at: datetime

@@ -299,6 +299,7 @@ async def create_job(
         org_id=current_user.org_id,
         created_by_user_id=current_user.id,
         title=body.title,
+        post_to_linkedin=body.post_to_linkedin,
         category=default_category_name,
         category_id=default_category.id if default_category else None,
         workplace_type="remote",
@@ -484,6 +485,8 @@ async def update_job(
             job_id=job.id,
         )
 
+    if body.post_to_linkedin is True and job.status == "open":
+        await linkedin_service.sync_job_distribution_to_linkedin(db, job)
     await db.commit()
 
     db.expunge_all()

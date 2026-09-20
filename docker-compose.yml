@@ -140,6 +140,31 @@ services:
       timeout: 5s
       retries: 3
 
+  mcp:
+    build:
+      context: ./apps/backend
+      dockerfile: Dockerfile
+    container_name: ats-mcp
+    env_file:
+      - ./apps/backend/.env
+    environment:
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/ats_db
+      MCP_SERVER_HOST: 0.0.0.0
+      MCP_SERVER_PORT: 8765
+    ports:
+      - "127.0.0.1:8765:8765"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./apps/backend:/app
+    command: sh -lc "python -m app.mcp"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import socket; socket.create_connection(('127.0.0.1', 8765), 3).close()\""]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
   web:
     build:
       context: .
@@ -151,6 +176,7 @@ services:
         NEXT_PUBLIC_APP_ROOT_HOST: ${NEXT_PUBLIC_APP_ROOT_HOST:-smartats.in}
         NEXT_PUBLIC_SES_MAIL_DOMAIN: applications.smartats.in
         NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-https://smartats.in}
+        NEXT_PUBLIC_MCP_SERVER_URL: ${NEXT_PUBLIC_MCP_SERVER_URL:-https://smartats.in/mcp/sse}
         NEXT_PUBLIC_TEMPORAL_UI_URL: ${NEXT_PUBLIC_TEMPORAL_UI_URL:-http://temporal.localhost.com:8081}
     container_name: ats-web
     environment:
@@ -160,6 +186,7 @@ services:
       NEXT_PUBLIC_APP_ROOT_HOST: ${NEXT_PUBLIC_APP_ROOT_HOST:-smartats.in}
       NEXT_PUBLIC_SES_MAIL_DOMAIN: applications.smartats.in
       NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-https://smartats.in}
+      NEXT_PUBLIC_MCP_SERVER_URL: ${NEXT_PUBLIC_MCP_SERVER_URL:-https://smartats.in/mcp/sse}
       NEXT_PUBLIC_TEMPORAL_UI_URL: ${NEXT_PUBLIC_TEMPORAL_UI_URL:-http://temporal.localhost.com:8081}
       # Internal server-side URL — uses Docker network directly (fast, no host-gateway)
       NEXT_INTERNAL_API_BASE_URL: http://backend:8000

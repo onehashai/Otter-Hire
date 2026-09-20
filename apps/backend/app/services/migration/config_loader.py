@@ -13,21 +13,25 @@ class ConnectorAuth(BaseModel):
     secret_ref: str | None = None
 
 
-class ConnectorEndpoint(BaseModel):
-    path: str
-    method: Literal["GET", "POST"] = "GET"
-    response_root_key: str | None = None
-
-
 class PaginationConfig(BaseModel):
     style: Literal["cursor", "offset", "page", "link_header", "none"] = "none"
     items_path: str | None = None
     cursor_request_param: str = "cursor"
     cursor_response_path: str | None = None
+    cursor_is_url: bool = False
     page_param: str = "page"
-    page_size_param: str = "limit"
+    page_size_param: str | None = "limit"
     page_size: int = Field(default=100, ge=1, le=1000)
     since_param_name: str | None = None
+    since_format: str | None = None
+
+
+class ConnectorEndpoint(BaseModel):
+    path: str
+    method: Literal["GET", "POST"] = "GET"
+    response_root_key: str | None = None
+    params: dict[str, Any] = Field(default_factory=dict)
+    pagination: PaginationConfig | None = None
 
 
 class RateLimitConfig(BaseModel):
@@ -68,6 +72,9 @@ def get_path(value: Any, path: str | None) -> Any:
     for part in path.split("."):
         if isinstance(current, dict):
             current = current.get(part)
+        elif isinstance(current, list) and part.isdigit():
+            index = int(part)
+            current = current[index] if index < len(current) else None
         else:
             return None
     return current

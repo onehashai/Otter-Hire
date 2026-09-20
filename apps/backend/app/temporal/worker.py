@@ -27,6 +27,7 @@ from app.temporal.email.workflow import (
 from app.temporal.migration.activities import (
     commit_batch_activity,
     fetch_candidates,
+    mark_ats_sync_failed,
     send_import_complete_email_activity,
     transfer_resume_attachment,
     validate_and_map_batch,
@@ -37,6 +38,7 @@ from app.temporal.resume_parsing.workflow import JobApplyResumeParseWorkflow
 from app.temporal.resume_scoring.activities import score_candidate_job_activity
 from app.temporal.resume_scoring.workflow import ResumeScoreWorkflow
 from app.temporal.sentry_interceptor import SentryInterceptor
+from app.temporal.linkedin import LinkedInLeadWorkflow, ingest_linkedin_lead
 
 logger = logging.getLogger("ats_worker")
 
@@ -117,6 +119,12 @@ async def run_temporal_worker() -> None:
             max_concurrent_workflow_tasks=10,
         )
         migration_workers = []
+        if settings.feature_linkedin_applicant_ingestion:
+            migration_workers.append(Worker(
+                client, task_queue="linkedin-leads", workflows=[LinkedInLeadWorkflow],
+                activities=[ingest_linkedin_lead], interceptors=_sentry_interceptors,
+                max_concurrent_activities=5,
+            ))
         if settings.ats_auto_import_enabled:
             migration_workers.append(
                 Worker(
@@ -125,6 +133,7 @@ async def run_temporal_worker() -> None:
                     workflows=[AtsSyncWorkflow, CommitBatchWorkflow],
                     activities=[
                         fetch_candidates,
+                        mark_ats_sync_failed,
                         validate_and_map_batch,
                         commit_batch_activity,
                         send_import_complete_email_activity,
@@ -138,6 +147,8 @@ async def run_temporal_worker() -> None:
         queues = "email-inbound,inbound-email-parse,email-outbound,careers-resume-parse,resume-scoring"
         if settings.ats_auto_import_enabled:
             queues += ",ats-migration"
+        if settings.feature_linkedin_applicant_ingestion:
+            queues += ",linkedin-leads"
         logger.info("[WORKER] Started task_queues=%s namespace=%s", queues, settings.temporal_namespace)
         logger.info("[WORKER] Polling for tasks...")
 

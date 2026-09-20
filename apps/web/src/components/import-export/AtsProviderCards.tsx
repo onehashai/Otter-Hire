@@ -4,25 +4,30 @@ import { useEffect, useState } from "react";
 import { Check, Plug, Unplug } from "lucide-react";
 import { Button } from "@onehash/ui/button";
 import { API_BASE_URL } from "@/api";
+import { AtsCredentialGuide } from "./AtsCredentialGuide";
 
 type Integration = {
   id: string;
   provider: string;
+  connection_type?: "api" | "native_mcp" | "smartats_bridge";
   status: string;
   last_synced_at: string | null;
   masked_key_last4?: string | null;
   provider_details?: { last_sync_error?: string };
+  mcp_connection_type?: string | null;
+  bridge_tools?: string[];
 };
 
+type ConnectionType = "api" | "smartats_bridge";
+
 const providers = [
-  ["greenhouse", "Greenhouse", "OAuth access token"],
+  ["greenhouse", "Greenhouse", "OAuth client ID and client secret"],
   ["lever", "Lever", "API key with Basic Auth"],
   ["workday", "Workday", "Provider admin setup"],
   ["icims", "iCIMS", "Provider authorization"],
   ["smartrecruiters", "SmartRecruiters", "API key"],
   ["bamboohr", "BambooHR", "API key and company subdomain"],
   ["workable", "Workable", "Bearer token and company URL"],
-  // ["generic", "Generic REST ATS", "Custom read-only REST endpoints"],
 ] as const;
 
 const providerBaseUrls: Record<string, string> = {
@@ -31,14 +36,22 @@ const providerBaseUrls: Record<string, string> = {
   smartrecruiters: "https://api.smartrecruiters.com",
 };
 
-export function AtsProviderCards() {
+export function AtsProviderCards({
+  connectionType = "api",
+  onSyncRequested,
+}: {
+  connectionType?: ConnectionType;
+  onSyncRequested?: (integrationId: string) => void;
+}) {
   const [integrations, setIntegrations] = useState<Integration[]>([]);
   const [open, setOpen] = useState<string | null>(null);
   const [key, setKey] = useState("");
+  const [clientId, setClientId] = useState("");
   const [subdomain, setSubdomain] = useState("");
   const [details, setDetails] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [syncingId, setSyncingId] = useState<string | null>(null);
   const [generic, setGeneric] = useState({
     name: "",
     baseUrl: "",
@@ -74,18 +87,37 @@ export function AtsProviderCards() {
   }, []);
 
   async function sync(id: string) {
-    const response = await fetch(`${API_BASE_URL}/ats-migrations/integrations/${id}/sync`, {
-      method: "POST",
-      credentials: "include",
-    });
-    setMessage(
-      response.ok ? "Background sync started." : `Sync could not be started (${response.status}).`,
-    );
-    await load();
+    if (onSyncRequested) {
+      onSyncRequested(id);
+      return;
+    }
+    setSyncingId(id);
+    try {
+      const response = await fetch(`${API_BASE_URL}/ats-migrations/integrations/${id}/sync`, {
+        method: "POST",
+        credentials: "include",
+      });
+      setMessage(response.ok ? "Background sync started." : await responseError(response));
+      await load();
+    } finally {
+      setSyncingId(null);
+    }
   }
 
   function existing(provider: string) {
-    return integrations.find((item) => item.provider === provider);
+    return integrations.find((item) => {
+      const itemType = item.connection_type || (item.mcp_connection_type ? "native_mcp" : "api");
+      return item.provider === provider && itemType === connectionType;
+    });
+  }
+
+  async function responseError(response: Response): Promise<string> {
+    try {
+      const payload = (await response.json()) as { detail?: string; message?: string };
+      return payload.detail || payload.message || `Request failed (${response.status}).`;
+    } catch {
+      return `Request failed (${response.status}).`;
+    }
   }
 
   function normalizeSubdomain(value: string, suffix: string): string | null {
@@ -122,6 +154,10 @@ export function AtsProviderCards() {
       } catch {
         return null;
       }
+    }
+    if (provider === "greenhouse" && (!clientId.trim() || !key.trim())) {
+      setMessage("Enter the Greenhouse OAuth client ID and client secret.");
+      return;
     }
     if (provider === "bamboohr") {
       const normalized = normalizeSubdomain(subdomain, "bamboohr.com");
@@ -164,8 +200,14 @@ export function AtsProviderCards() {
         providerDetails = { setup_request: details };
       } else if (provider === "bamboohr" || provider === "workable") {
         providerDetails = { subdomain };
+      } else if (provider === "greenhouse") {
+        providerDetails = { client_id: clientId.trim() };
       }
-      const response = await fetch(`${API_BASE_URL}/ats-migrations/integrations`, {
+      const endpoint =
+        connectionType === "smartats_bridge"
+          ? "/ats-migrations/bridge/integrations"
+          : "/ats-migrations/integrations";
+      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -174,34 +216,42 @@ export function AtsProviderCards() {
           base_url: baseUrl,
           api_key: key || null,
           auth_type:
-            provider === "workable" || provider === "greenhouse"
+            provider === "workable"
               ? "bearer"
-              : provider === "lever" || provider === "bamboohr"
-                ? "basic"
-                : "api_key",
+              : provider === "greenhouse"
+                ? "oauth2"
+                : provider === "lever" || provider === "bamboohr"
+                  ? "basic"
+                  : "api_key",
           provider_details: providerDetails,
         }),
       });
       if (response.ok && provider !== "workday" && provider !== "icims") {
         const integration = await response.json();
-        const syncResponse = await fetch(
-          `${API_BASE_URL}/ats-migrations/integrations/${integration.id}/sync`,
-          { method: "POST", credentials: "include" },
-        );
-        setMessage(
-          syncResponse.ok
-            ? "Connected. Background sync started."
-            : `Connected, but sync could not be started (${syncResponse.status}).`,
-        );
+        if (onSyncRequested) {
+          onSyncRequested(integration.id);
+        } else {
+          const syncResponse = await fetch(
+            `${API_BASE_URL}/ats-migrations/integrations/${integration.id}/sync`,
+            { method: "POST", credentials: "include" },
+          );
+          setMessage(
+            syncResponse.ok
+              ? connectionType === "smartats_bridge"
+                ? "Bridge connected. Background sync started."
+                : "Connected. Background sync started."
+              : `Connected, but sync did not start: ${await responseError(syncResponse)}`,
+          );
+        }
       } else {
-        setMessage(
-          response.ok
-            ? "Setup request submitted."
-            : `Unable to save this connection (${response.status}).`,
-        );
+        setMessage(response.ok ? "Setup request submitted." : await responseError(response));
       }
-      setKey("");
-      setDetails("");
+      if (response.ok) {
+        setKey("");
+        setClientId("");
+        setDetails("");
+        setOpen(null);
+      }
       await load();
     } catch {
       setMessage("Unable to reach staging. Check your login and try again.");
@@ -273,215 +323,238 @@ export function AtsProviderCards() {
   }
 
   return (
-    <section className="mt-6 space-y-4" aria-labelledby="ats-providers-title">
+    <section className="mt-6 space-y-4" aria-labelledby={`${connectionType}-providers-title`}>
       <div>
-        <h2 id="ats-providers-title" className="text-base font-semibold">
-          Import from your ATS
+        <h2 id={`${connectionType}-providers-title`} className="text-base font-semibold">
+          {connectionType === "smartats_bridge" ? "Migration Bridge" : "Import from your ATS"}
         </h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Connect a provider, then review each imported batch before it reaches Candidates.
+          {connectionType === "smartats_bridge"
+            ? "Connect a read-only provider credential, then review each import before it reaches Candidates."
+            : "Connect a provider, then review each imported batch before it reaches Candidates."}
         </p>
       </div>
       {message && <p className="text-sm text-muted-foreground">{message}</p>}
       <div className="grid gap-3 md:grid-cols-2">
-        {providers.map(([id, name, description]) => {
-          const item = existing(id);
-          const pending = id === "workday" || id === "icims";
-          const connected = Boolean(
-            item && item.status !== "disconnected" && item.status !== "pending_provider_setup",
-          );
-          return (
-            <div key={id} className="rounded-lg border bg-card p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h3 className="font-medium">{name}</h3>
-                  <p className="mt-1 text-xs text-muted-foreground">{description}</p>
-                </div>
-                {connected ? (
-                  <span className="inline-flex items-center gap-1 text-xs text-emerald-600">
-                    <Check className="h-3 w-3" />
-                    Connected
-                  </span>
-                ) : item?.status === "pending_provider_setup" ? (
-                  <span className="text-xs text-amber-600">Pending setup</span>
-                ) : null}
-              </div>
-              {item &&
-              item.status !== "disconnected" &&
-              item.status !== "pending_provider_setup" ? (
-                <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
+        {providers
+          .filter(([id]) => connectionType === "api" || (id !== "workday" && id !== "icims"))
+          .map(([id, name, description]) => {
+            const item = existing(id);
+            const pending = id === "workday" || id === "icims";
+            const connected = Boolean(item && ["connected", "syncing"].includes(item.status));
+            return (
+              <div key={id} className="rounded-lg border bg-card p-4">
+                <div className="flex items-start justify-between gap-3">
                   <div>
-                    <span>
-                      {item.status === "syncing"
-                        ? "Syncing"
-                        : item.masked_key_last4
-                          ? `Key ends in ${item.masked_key_last4}`
-                          : "Credential saved"}
-                      {item.last_synced_at
-                        ? ` · Last synced ${new Date(item.last_synced_at).toLocaleString()}`
-                        : ""}
+                    <h3 className="font-medium">{name}</h3>
+                    <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+                  </div>
+                  {connected ? (
+                    <span className="inline-flex items-center gap-1 text-xs text-emerald-600">
+                      <Check className="h-3 w-3" />
+                      Connected
                     </span>
-                    {item.provider_details?.last_sync_error && (
-                      <p className="mt-2 max-w-xl text-destructive">
-                        {item.provider_details.last_sync_error}
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex gap-2">
-                    {item.status !== "syncing" && (
-                      <Button size="sm" variant="outline" onClick={() => void sync(item.id)}>
-                        Sync
-                      </Button>
-                    )}
-                    <Button size="sm" variant="ghost" onClick={() => disconnect(item.id)}>
-                      <Unplug className="mr-1 h-3 w-3" />
-                      Disconnect
-                    </Button>
-                  </div>
+                  ) : item?.status === "pending_provider_setup" ? (
+                    <span className="text-xs text-amber-600">Pending setup</span>
+                  ) : item?.status === "error" ? (
+                    <span className="text-xs text-destructive">Connection error</span>
+                  ) : null}
                 </div>
-              ) : (
-                <>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="mt-4"
-                    onClick={() => setOpen(open === id ? null : id)}
-                  >
-                    <Plug className="mr-2 h-3 w-3" />
-                    Connect
-                  </Button>
-                  {open === id && (
-                    <div className="mt-3 space-y-3 border-t pt-3">
-                      {pending ? (
-                        <>
-                          <p className="text-sm text-muted-foreground">
-                            {id === "workday"
-                              ? "Your Workday admin must create an ISU and custom report first."
-                              : "An iCIMS Integration Specialist must authorize the integration."}
-                          </p>
-                          <textarea
-                            className="min-h-20 w-full rounded-md border bg-background p-2 text-sm"
-                            placeholder="Tenant and contact details"
-                            value={details}
-                            onChange={(event) => setDetails(event.target.value)}
-                          />
-                          <Button size="sm" pending={busy} onClick={() => void connect(id)}>
-                            Submit setup request
-                          </Button>
-                        </>
-                      ) : (id as string) === "generic" ? (
-                        <>
-                          <input
-                            className="h-9 w-full rounded-md border bg-background px-2 text-sm"
-                            placeholder="Display name"
-                            value={generic.name}
-                            onChange={(event) =>
-                              setGeneric({ ...generic, name: event.target.value })
-                            }
-                          />
-                          <textarea
-                            className="min-h-28 w-full rounded-md border bg-background p-2 font-mono text-xs"
-                            placeholder="Endpoint configuration JSON"
-                            value={generic.endpoints}
-                            onChange={(event) =>
-                              setGeneric({ ...generic, endpoints: event.target.value })
-                            }
-                          />
-                          <input
-                            className="h-9 w-full rounded-md border bg-background px-2 text-sm"
-                            placeholder="Base URL"
-                            value={generic.baseUrl}
-                            onChange={(event) =>
-                              setGeneric({ ...generic, baseUrl: event.target.value })
-                            }
-                          />
-                          <select
-                            className="h-9 w-full rounded-md border bg-background px-2 text-sm"
-                            value={generic.auth}
-                            onChange={(event) =>
-                              setGeneric({ ...generic, auth: event.target.value })
-                            }
-                          >
-                            <option value="api_key">Static API key</option>
-                            <option value="bearer">Bearer token</option>
-                            <option value="basic">Basic credential</option>
-                            <option value="oauth2">OAuth access token</option>
-                            <option value="none">No authentication</option>
-                          </select>
-                          <input
-                            className="h-9 w-full rounded-md border bg-background px-2 text-sm"
-                            placeholder="Candidates endpoint path"
-                            value={generic.path}
-                            onChange={(event) =>
-                              setGeneric({ ...generic, path: event.target.value })
-                            }
-                          />
-                          <input
-                            className="h-9 w-full rounded-md border bg-background px-2 text-sm"
-                            placeholder="Auth header name"
-                            value={generic.header}
-                            onChange={(event) =>
-                              setGeneric({ ...generic, header: event.target.value })
-                            }
-                          />
-                          {generic.auth !== "none" && (
+                {item && connected ? (
+                  <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
+                    <div>
+                      <span>
+                        {item.status === "syncing"
+                          ? "Syncing"
+                          : item.masked_key_last4
+                            ? `Key ends in ${item.masked_key_last4}`
+                            : "Credential saved"}
+                        {item.last_synced_at
+                          ? ` · Last synced ${new Date(item.last_synced_at).toLocaleString()}`
+                          : ""}
+                      </span>
+                      {item.provider_details?.last_sync_error && (
+                        <p className="mt-2 max-w-xl text-destructive">
+                          {item.provider_details.last_sync_error}
+                        </p>
+                      )}
+                      {connectionType === "smartats_bridge" && item.bridge_tools?.length ? (
+                        <p className="mt-2 max-w-xl">Read tools: {item.bridge_tools.join(", ")}</p>
+                      ) : null}
+                    </div>
+                    <div className="flex gap-2">
+                      {item.status !== "syncing" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          pending={syncingId === item.id}
+                          onClick={() => void sync(item.id)}
+                        >
+                          Sync
+                        </Button>
+                      )}
+                      <Button size="sm" variant="ghost" onClick={() => disconnect(item.id)}>
+                        <Unplug className="mr-1 h-3 w-3" />
+                        Disconnect
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="mt-4"
+                      onClick={() => setOpen(open === id ? null : id)}
+                    >
+                      <Plug className="mr-2 h-3 w-3" />
+                      Connect
+                    </Button>
+                    {open === id && (
+                      <div className="mt-3 space-y-3 border-t pt-3">
+                        <AtsCredentialGuide provider={id} />
+                        {pending ? (
+                          <>
+                            <textarea
+                              className="min-h-20 w-full rounded-md border bg-background p-2 text-sm"
+                              placeholder="Tenant and contact details"
+                              value={details}
+                              onChange={(event) => setDetails(event.target.value)}
+                            />
+                            <Button size="sm" pending={busy} onClick={() => void connect(id)}>
+                              Submit setup request
+                            </Button>
+                          </>
+                        ) : (id as string) === "generic" ? (
+                          <>
+                            <input
+                              className="h-9 w-full rounded-md border bg-background px-2 text-sm"
+                              placeholder="Display name"
+                              value={generic.name}
+                              onChange={(event) =>
+                                setGeneric({ ...generic, name: event.target.value })
+                              }
+                            />
+                            <textarea
+                              className="min-h-28 w-full rounded-md border bg-background p-2 font-mono text-xs"
+                              placeholder="Endpoint configuration JSON"
+                              value={generic.endpoints}
+                              onChange={(event) =>
+                                setGeneric({ ...generic, endpoints: event.target.value })
+                              }
+                            />
+                            <input
+                              className="h-9 w-full rounded-md border bg-background px-2 text-sm"
+                              placeholder="Base URL"
+                              value={generic.baseUrl}
+                              onChange={(event) =>
+                                setGeneric({ ...generic, baseUrl: event.target.value })
+                              }
+                            />
+                            <select
+                              className="h-9 w-full rounded-md border bg-background px-2 text-sm"
+                              value={generic.auth}
+                              onChange={(event) =>
+                                setGeneric({ ...generic, auth: event.target.value })
+                              }
+                            >
+                              <option value="api_key">Static API key</option>
+                              <option value="bearer">Bearer token</option>
+                              <option value="basic">Basic credential</option>
+                              <option value="oauth2">OAuth access token</option>
+                              <option value="none">No authentication</option>
+                            </select>
+                            <input
+                              className="h-9 w-full rounded-md border bg-background px-2 text-sm"
+                              placeholder="Candidates endpoint path"
+                              value={generic.path}
+                              onChange={(event) =>
+                                setGeneric({ ...generic, path: event.target.value })
+                              }
+                            />
+                            <input
+                              className="h-9 w-full rounded-md border bg-background px-2 text-sm"
+                              placeholder="Auth header name"
+                              value={generic.header}
+                              onChange={(event) =>
+                                setGeneric({ ...generic, header: event.target.value })
+                              }
+                            />
+                            {generic.auth !== "none" && (
+                              <input
+                                className="h-9 w-full rounded-md border bg-background px-2 text-sm"
+                                placeholder={
+                                  generic.auth === "oauth2"
+                                    ? "OAuth access token"
+                                    : "API key or credential"
+                                }
+                                type="password"
+                                value={key}
+                                onChange={(event) => setKey(event.target.value)}
+                              />
+                            )}
+                            <textarea
+                              className="min-h-20 w-full rounded-md border bg-background p-2 text-sm"
+                              placeholder="Entity field mapping JSON"
+                              value={generic.mapping}
+                              onChange={(event) =>
+                                setGeneric({ ...generic, mapping: event.target.value })
+                              }
+                            />
+                            <Button size="sm" onClick={() => void connectGeneric()}>
+                              Save &amp; Sync
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            {id === "greenhouse" && (
+                              <input
+                                className="h-9 w-full rounded-md border bg-background px-2 text-sm"
+                                placeholder="Greenhouse OAuth client ID"
+                                value={clientId}
+                                onChange={(event) => setClientId(event.target.value)}
+                              />
+                            )}
+                            {(id === "bamboohr" || id === "workable") && (
+                              <input
+                                className="h-9 w-full rounded-md border bg-background px-2 text-sm"
+                                placeholder={
+                                  id === "workable"
+                                    ? "https://companyname.workable.com"
+                                    : `${name} subdomain or full URL`
+                                }
+                                value={subdomain}
+                                onChange={(event) => setSubdomain(event.target.value)}
+                              />
+                            )}
                             <input
                               className="h-9 w-full rounded-md border bg-background px-2 text-sm"
                               placeholder={
-                                generic.auth === "oauth2"
-                                  ? "OAuth access token"
-                                  : "API key or credential"
+                                id === "greenhouse"
+                                  ? "Greenhouse OAuth client secret"
+                                  : "Paste API key or token"
                               }
                               type="password"
                               value={key}
                               onChange={(event) => setKey(event.target.value)}
                             />
-                          )}
-                          <textarea
-                            className="min-h-20 w-full rounded-md border bg-background p-2 text-sm"
-                            placeholder="Entity field mapping JSON"
-                            value={generic.mapping}
-                            onChange={(event) =>
-                              setGeneric({ ...generic, mapping: event.target.value })
-                            }
-                          />
-                          <Button size="sm" onClick={() => void connectGeneric()}>
-                            Save &amp; Sync
-                          </Button>
-                        </>
-                      ) : (
-                        <>
-                          {(id === "bamboohr" || id === "workable") && (
-                            <input
-                              className="h-9 w-full rounded-md border bg-background px-2 text-sm"
-                              placeholder={
-                                id === "workable"
-                                  ? "https://companyname.workable.com"
-                                  : `${name} subdomain or full URL`
-                              }
-                              value={subdomain}
-                              onChange={(event) => setSubdomain(event.target.value)}
-                            />
-                          )}
-                          <input
-                            className="h-9 w-full rounded-md border bg-background px-2 text-sm"
-                            placeholder="Paste API key or token"
-                            type="password"
-                            value={key}
-                            onChange={(event) => setKey(event.target.value)}
-                          />
-                          <Button size="sm" onClick={() => connect(id)}>
-                            Save &amp; Sync
-                          </Button>
-                        </>
-                      )}
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          );
-        })}
+                            {item?.provider_details?.last_sync_error && (
+                              <p className="text-sm text-destructive">
+                                {item.provider_details.last_sync_error}
+                              </p>
+                            )}
+                            <Button size="sm" pending={busy} onClick={() => void connect(id)}>
+                              Save &amp; Sync
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            );
+          })}
       </div>
     </section>
   );

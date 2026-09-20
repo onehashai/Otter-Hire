@@ -88,9 +88,11 @@ function QuotedBodyToggle({ text }: { text: string }) {
 
 function FullEmailToggle({
   msg,
+  subject,
   onOpenModal,
 }: {
   msg: MessageRead;
+  subject: string;
   onOpenModal: (data: EmailViewModalData) => void;
 }) {
   const fullText = msg.body?.trim();
@@ -107,7 +109,7 @@ function FullEmailToggle({
             from_name: msg.sender_name || msg.from_email,
             from_email: msg.from_email,
             to_email: msg.to_email,
-            subject: msg.subject || "(no subject)",
+            subject,
             received_at: msg.created_at,
             body: msg.body,
             body_quoted: msg.body_quoted,
@@ -123,8 +125,6 @@ function FullEmailToggle({
     </div>
   );
 }
-
-
 
 export type CandidateMessagesTabProps = {
   candidateId: string;
@@ -239,7 +239,9 @@ export function CandidateMessagesTab({
             return {
               ...prev,
               messages: prev.messages.map((m) =>
-                m.id === data.message_id ? { ...m, status: data.status as MessageRead["status"] } : m,
+                m.id === data.message_id
+                  ? { ...m, status: data.status as MessageRead["status"] }
+                  : m,
               ),
             };
           });
@@ -391,9 +393,7 @@ export function CandidateMessagesTab({
                               <Mail className="h-2.5 w-2.5 text-primary" />
                               Show Body
                             </button>
-                            <span className="text-[10px] text-muted-foreground pt-0.5">
-                              {when}
-                            </span>
+                            <span className="text-[10px] text-muted-foreground pt-0.5">{when}</span>
                           </div>
                         </div>
                         <p className="text-muted-foreground leading-snug">
@@ -411,7 +411,11 @@ export function CandidateMessagesTab({
                           />
                         ) : null}
                         {msg.body_quoted ? <QuotedBodyToggle text={msg.body_quoted} /> : null}
-                        <FullEmailToggle msg={msg} onOpenModal={setActiveModalEmail} />
+                        <FullEmailToggle
+                          msg={msg}
+                          subject={subject}
+                          onOpenModal={setActiveModalEmail}
+                        />
                         {msg.attachments && msg.attachments.length > 0 ? (
                           <div
                             className={cn(

@@ -20,6 +20,10 @@ class CanonicalCandidate(BaseModel):
     custom_fields: dict[str, Any] = Field(default_factory=dict)
     job_id: UUID | None = None
     stage_id: UUID | None = None
+    external_job_id: str | None = None
+    external_job_shortcode: str | None = None
+    external_stage_id: str | None = None
+    external_stage_name: str | None = None
 
     @field_validator("email")
     @classmethod

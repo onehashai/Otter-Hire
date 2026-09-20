@@ -30,7 +30,7 @@ class AtsIntegrationCreate(BaseModel):
 class GenericAtsConfigCreate(BaseModel):
     display_name: str = Field(min_length=1, max_length=160)
     base_url: str = Field(min_length=1, max_length=500)
-    auth_type: Literal["api_key", "oauth2"] = "api_key"
+    auth_type: Literal["api_key", "bearer", "basic", "oauth2", "none"] = "api_key"
     api_key: str | None = None
     auth_header_name: str = Field(default="Authorization", min_length=1, max_length=120)
     client_id: str | None = None
@@ -38,6 +38,7 @@ class GenericAtsConfigCreate(BaseModel):
     authorize_url: str | None = None
     token_url: str | None = None
     candidates_endpoint_path: str = Field(min_length=1, max_length=500)
+    endpoint_config: dict[str, dict[str, Any]] = Field(default_factory=dict)
     field_mapping_config: FieldMappingConfig = Field(default_factory=FieldMappingConfig)
     pagination_style: Literal["offset", "cursor", "page"] = "page"
     since_param_name: str | None = None
@@ -74,6 +75,7 @@ class McpKeyRead(BaseModel):
 class AtsIntegrationRead(BaseModel):
     id: UUID
     provider: str
+    connection_type: Literal["api", "native_mcp", "smartats_bridge"] = "api"
     base_url: str
     status: str
     last_synced_at: datetime | None
@@ -83,6 +85,7 @@ class AtsIntegrationRead(BaseModel):
     provider_details: dict[str, Any] = Field(default_factory=dict)
     mcp_connection_type: str | None = None
     mcp_tools: list[str] = Field(default_factory=list)
+    bridge_tools: list[str] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
 
@@ -95,15 +98,26 @@ class AtsMcpProviderRead(BaseModel):
     last_verified_date: date | None
     notes: str | None
     supported_operations: list[str] = Field(default_factory=list)
+    connection_ready: bool = True
+    connection_note: str | None = None
 
     model_config = {"from_attributes": True}
 
 
 class AtsMcpConnectRequest(BaseModel):
     access_token: str = Field(min_length=1)
-    refresh_token: str | None = None
     endpoint_url: str | None = None
+    account_host: str | None = None
     tool_names: list[str] = Field(default_factory=list)
+    tool_mapping: dict[str, str] = Field(default_factory=dict)
+
+
+class AtsMcpOAuthStartRequest(BaseModel):
+    endpoint_url: str | None = None
+
+
+class AtsMcpOAuthStartResponse(BaseModel):
+    authorization_url: str
 
 
 class BatchRowRead(BaseModel):
@@ -113,6 +127,9 @@ class BatchRowRead(BaseModel):
     error_reason: str | None
     mapped_payload: dict[str, Any] | None
     matched_candidate_id: UUID | None
+    result_status: str | None = None
+    result_record_id: UUID | None = None
+    result_reason: str | None = None
     entity_type: str = "candidate"
 
 
@@ -129,6 +146,7 @@ class ImportBatchRead(BaseModel):
     approved_by: UUID | None
     approved_at: datetime | None
     entity_counts: dict[str, Any] = Field(default_factory=dict)
+    error_reason: str | None = None
 
     model_config = {"from_attributes": True}
 

@@ -220,7 +220,11 @@ def _list_latest_raw_keys(
 
     for page in page_iterator:
         pages_scanned += 1
-        page_objects = [(obj["Key"], obj.get("LastModified")) for obj in page.get("Contents", [])]
+        page_objects = [
+            (obj["Key"], obj.get("LastModified"))
+            for obj in page.get("Contents", [])
+            if str(obj.get("Key") or "").lower().endswith(".eml")
+        ]
         if not page_objects:
             continue
 
@@ -573,8 +577,7 @@ async def run_ses_raw_bridge_loop(stop_event: asyncio.Event) -> None:
         logger.warning("SES bridge disabled because bucket is missing")
         return
 
-    ses_endpoint = None if (settings.s3_endpoint_url and "cloudflarestorage.com" in settings.s3_endpoint_url) else settings.s3_endpoint_url
-    from app.services.file_storage import build_s3_client
+    from app.services.storage import build_s3_client
 
     s3_client = build_s3_client()
     logger.info("SES bridge started bucket=%s prefix=%s", bucket, prefix)

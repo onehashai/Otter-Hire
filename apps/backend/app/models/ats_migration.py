@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import CheckConstraint, Column, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -13,12 +13,14 @@ class AtsIntegration(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid7)
     org_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
     provider = Column(String(80), nullable=False)
+    connection_type = Column(String(32), nullable=False, server_default="api")
     auth_type = Column(String(30), nullable=False, server_default="api_key")
     encrypted_api_key = Column(Text, nullable=True)
     credential_last4 = Column(String(4), nullable=True)
     oauth_access_token_encrypted = Column(Text, nullable=True)
     oauth_refresh_token_encrypted = Column(Text, nullable=True)
     mcp_connection_type = Column(String(32), nullable=True)
+    mcp_endpoint_encrypted = Column(Text, nullable=True)
     mcp_tools_cache = Column(JSONB, nullable=False, server_default="{}")
     provider_details = Column(JSONB, nullable=False, server_default="{}")
     base_url = Column(String(500), nullable=False)
@@ -30,7 +32,18 @@ class AtsIntegration(Base):
     batches = relationship("ImportBatch", back_populates="integration", cascade="all, delete-orphan")
     generic_config = relationship("GenericAtsConfig", back_populates="integration", uselist=False, cascade="all, delete-orphan")
 
-    __table_args__ = (UniqueConstraint("org_id", "provider", name="uq_ats_integrations_org_provider"),)
+    __table_args__ = (
+        CheckConstraint(
+            "connection_type IN ('api', 'native_mcp', 'smartats_bridge')",
+            name="ck_ats_integrations_connection_type",
+        ),
+        UniqueConstraint(
+            "org_id",
+            "provider",
+            "connection_type",
+            name="uq_ats_integrations_org_provider_connection",
+        ),
+    )
 
 
 class ImportBatch(Base):
@@ -45,6 +58,7 @@ class ImportBatch(Base):
     flagged_rows = Column(Integer, nullable=False, server_default="0")
     error_rows = Column(Integer, nullable=False, server_default="0")
     entity_counts = Column(JSONB, nullable=False, server_default="{}")
+    error_reason = Column(Text, nullable=True)
     temporal_workflow_id = Column(String(255), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     approved_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
@@ -83,6 +97,9 @@ class ImportBatchRow(Base):
     error_reason = Column(Text, nullable=True)
     matched_candidate_id = Column(UUID(as_uuid=True), ForeignKey("candidates.id", ondelete="SET NULL"), nullable=True)
     row_number = Column(Integer, nullable=False)
+    result_status = Column(String(20), nullable=True)
+    result_record_id = Column(UUID(as_uuid=True), nullable=True)
+    result_reason = Column(Text, nullable=True)
 
     batch = relationship("ImportBatch", back_populates="rows")
 

@@ -10,14 +10,14 @@ class ListLatestRawKeysTests(unittest.TestCase):
         base = datetime(2026, 3, 13, 4, 0, tzinfo=timezone.utc)
         page_1 = {
             "Contents": [
-                {"Key": "ats/raw/a", "LastModified": base},
-                {"Key": "ats/raw/b", "LastModified": base + timedelta(minutes=1)},
+                {"Key": "ats/raw/a.eml", "LastModified": base},
+                {"Key": "ats/raw/b.eml", "LastModified": base + timedelta(minutes=1)},
             ]
         }
         page_2 = {
             "Contents": [
-                {"Key": "ats/raw/c", "LastModified": base + timedelta(minutes=90)},
-                {"Key": "ats/raw/d", "LastModified": base + timedelta(minutes=80)},
+                {"Key": "ats/raw/c.eml", "LastModified": base + timedelta(minutes=90)},
+                {"Key": "ats/raw/d.eml", "LastModified": base + timedelta(minutes=80)},
             ]
         }
 
@@ -37,4 +37,4 @@ class ListLatestRawKeysTests(unittest.TestCase):
         self.assertEqual(pages_scanned, 2)
         self.assertEqual(objects_seen, 4)
         self.assertEqual(newest_seen, base + timedelta(minutes=90))
-        self.assertEqual([key for key, _ in latest], ["ats/raw/c", "ats/raw/d"])
+        self.assertEqual([key for key, _ in latest], ["ats/raw/c.eml", "ats/raw/d.eml"])

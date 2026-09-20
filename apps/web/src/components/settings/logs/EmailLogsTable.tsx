@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Badge } from "@onehash/ui/badge";
 import { Button } from "@onehash/ui/button";
 import { Card, CardContent } from "@onehash/ui/card";
@@ -49,12 +49,7 @@ function ExpandedDetail({
   const [bodyData, setBodyData] = useState<{ text_body: string; html_body: string } | null>(null);
   const [bodyError, setBodyError] = useState<string | null>(null);
 
-  const handleToggleBody = async () => {
-    if (showBody) {
-      setShowBody(false);
-      return;
-    }
-    setShowBody(true);
+  const loadBody = useCallback(async () => {
     if (!bodyData && !loadingBody) {
       setLoadingBody(true);
       setBodyError(null);
@@ -69,14 +64,21 @@ function ExpandedDetail({
         setLoadingBody(false);
       }
     }
+  }, [bodyData, isAdmin, loadingBody, row.id]);
+
+  const handleToggleBody = () => {
+    if (showBody) {
+      setShowBody(false);
+      return;
+    }
+    setShowBody(true);
+    void loadBody();
   };
 
-  React.useEffect(() => {
-    if (!bodyData && !loadingBody) {
-      handleToggleBody();
-    }
-  }, []);
-
+  useEffect(() => {
+    setShowBody(true);
+    void loadBody();
+  }, [loadBody]);
 
   return (
     <div className="px-4 py-3 bg-muted/30 border-t text-xs space-y-3">
@@ -155,7 +157,9 @@ function ExpandedDetail({
                     className="w-full h-64 border rounded bg-white"
                   />
                 ) : (
-                  <div className="text-muted-foreground italic py-1">No email content available.</div>
+                  <div className="text-muted-foreground italic py-1">
+                    No email content available.
+                  </div>
                 )}
               </div>
             ) : null}
@@ -165,7 +169,6 @@ function ExpandedDetail({
     </div>
   );
 }
-
 
 export interface EmailLogsTableProps {
   rows: (EmailLogRow & { org_name?: string })[];
@@ -215,7 +218,7 @@ export function EmailLogsTable({
         id: row.id,
         from_name: row.from_name || row.from_email,
         from_email: row.from_email,
-        to_email: row.to_email || "Inbox",
+        to_email: row.inbox_address || "Inbox",
         subject: row.subject || "(no subject)",
         received_at: row.received_at,
         body: data.text_body,
@@ -227,7 +230,7 @@ export function EmailLogsTable({
         id: row.id,
         from_name: row.from_name || row.from_email,
         from_email: row.from_email,
-        to_email: row.to_email || "Inbox",
+        to_email: row.inbox_address || "Inbox",
         subject: row.subject || "(no subject)",
         received_at: row.received_at,
         body: "Could not load email body.",
@@ -236,8 +239,6 @@ export function EmailLogsTable({
       setLoadingModalId(null);
     }
   };
-
-
 
   return (
     <div className="space-y-4">

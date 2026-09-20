@@ -4,7 +4,7 @@ import hashlib
 import secrets
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -62,8 +62,18 @@ async def create_api_key(
     user: User = Depends(require_permission("data_migration:manage")),
 ):
     _enabled()
+    normalized_name = name.strip()
+    if not normalized_name:
+        raise HTTPException(status_code=422, detail="API key name is required")
     raw_key = "sk_live_" + secrets.token_urlsafe(32)
-    db.add(ApiKey(org_id=user.org_id, name=name[:120], key_prefix=raw_key[:16], key_hash=hashlib.sha256(raw_key.encode()).hexdigest()))
+    db.add(
+        ApiKey(
+            org_id=user.org_id,
+            name=normalized_name[:120],
+            key_prefix=raw_key[:16],
+            key_hash=hashlib.sha256(raw_key.encode()).hexdigest(),
+        )
+    )
     await db.commit()
     return {"key": raw_key, "warning": "Store this key now; it cannot be shown again."}
 
@@ -74,5 +84,39 @@ async def list_api_keys(
     user: User = Depends(require_permission("data_migration:manage")),
 ):
     _enabled()
-    keys = (await db.execute(select(ApiKey).where(ApiKey.org_id == user.org_id).order_by(ApiKey.created_at.desc()))).scalars()
-    return {"items": [{"id": key.id, "name": key.name, "prefix": key.key_prefix, "active": key.is_active, "created_at": key.created_at} for key in keys]}
+    keys = (
+        await db.execute(
+            select(ApiKey).where(ApiKey.org_id == user.org_id).order_by(ApiKey.created_at.desc())
+        )
+    ).scalars()
+    return {
+        "items": [
+            {
+                "id": key.id,
+                "name": key.name,
+                "prefix": key.key_prefix,
+                "active": key.is_active,
+                "created_at": key.created_at,
+                "last_used_at": key.last_used_at,
+            }
+            for key in keys
+        ]
+    }
+
+
+@router.delete("/api-keys/{key_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def revoke_api_key(
+    key_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_permission("data_migration:manage")),
+):
+    _enabled()
+    api_key = (
+        await db.execute(select(ApiKey).where(ApiKey.id == key_id, ApiKey.org_id == user.org_id))
+    ).scalar_one_or_none()
+    if api_key is None:
+        raise HTTPException(status_code=404, detail="API key not found")
+
+    api_key.is_active = False
+    await db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

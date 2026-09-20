@@ -72,7 +72,7 @@ export type JobDetailResponse = {
   application_form_schema: Record<string, unknown>;
   hiring_stages: JobHiringStageResponse[];
   team_members: JobTeamMemberResponse[];
-  created_by_user_id: string;
+  created_by_user_id: string | null;
   published_at: string | null;
   closed_at: string | null;
   created_at: string;

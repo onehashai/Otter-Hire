@@ -97,6 +97,7 @@ def create_mcp_server() -> FastMCP:
         "Otter Hire ATS",
         host=settings.mcp_server_host,
         port=settings.mcp_server_port,
+        mount_path="/mcp",
         sse_path="/sse",
     )
 
@@ -437,6 +438,15 @@ def create_mcp_server() -> FastMCP:
             integration.encrypted_api_key = None
             integration.oauth_access_token_encrypted = None
             integration.oauth_refresh_token_encrypted = None
+            integration.mcp_endpoint_encrypted = None
+            integration.mcp_connection_type = None
+            integration.mcp_tools_cache = {}
+            integration.provider_details = {
+                field: value
+                for field, value in (integration.provider_details or {}).items()
+                if not str(field).startswith("mcp_")
+                and not str(field).startswith("_mcp_")
+            }
             integration.status = "disconnected"
             await _audit(
                 db,

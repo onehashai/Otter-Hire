@@ -46,8 +46,41 @@ export type IntegrationEmailConfigActionResponse = IntegrationInboxActionRespons
   app_id: "email_integration";
 };
 
+export type DeveloperApiKey = {
+  id: string;
+  name: string;
+  prefix: string;
+  active: boolean;
+  created_at: string;
+  last_used_at: string | null;
+};
+
+export type DeveloperApiKeysResponse = {
+  items: DeveloperApiKey[];
+};
+
+export type DeveloperApiKeyCreateResponse = {
+  key: string;
+  warning: string;
+};
+
 export function getIntegrationApps(): Promise<IntegrationAppsResponse> {
   return apiFetch<IntegrationAppsResponse>("/integrations/apps", { method: "GET" });
+}
+
+export function getDeveloperApiKeys(): Promise<DeveloperApiKeysResponse> {
+  return apiFetch<DeveloperApiKeysResponse>("/import-export/api-keys", { method: "GET" });
+}
+
+export function createDeveloperApiKey(name: string): Promise<DeveloperApiKeyCreateResponse> {
+  const query = new URLSearchParams({ name });
+  return apiFetch<DeveloperApiKeyCreateResponse>(`/import-export/api-keys?${query}`, {
+    method: "POST",
+  });
+}
+
+export function revokeDeveloperApiKey(keyId: string): Promise<void> {
+  return apiFetch<void>(`/import-export/api-keys/${keyId}`, { method: "DELETE" });
 }
 
 export function getInstalledIntegrationApps(): Promise<IntegrationInstalledAppsResponse> {

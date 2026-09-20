@@ -8,6 +8,21 @@ from app.core.config import settings
 logger = logging.getLogger("ats_backend")
 
 
+def build_s3_client():
+    """Build the configured S3-compatible client, including Cloudflare R2."""
+    import boto3
+
+    if not settings.aws_s3_region:
+        raise ValueError("S3 config missing: AWS_S3_REGION")
+    return boto3.client(
+        "s3",
+        region_name=settings.aws_s3_region,
+        aws_access_key_id=settings.aws_access_key_id,
+        aws_secret_access_key=settings.aws_secret_access_key,
+        endpoint_url=settings.s3_endpoint_url,
+    )
+
+
 class StorageService:
     def __init__(self) -> None:
         self.is_production = settings.is_production
@@ -30,13 +45,7 @@ class StorageService:
         logger.info("AWS Access Key Prefix: %s", (settings.aws_access_key_id or "")[:8])
         logger.info("Bucket: %s", self.bucket)
         logger.info("Prefix: %s", self.s3_prefix)
-        self.s3_client = boto3.client(
-            "s3",
-            region_name=settings.aws_s3_region,
-            aws_access_key_id=settings.aws_access_key_id,
-            aws_secret_access_key=settings.aws_secret_access_key,
-            endpoint_url=settings.s3_endpoint_url,
-        )
+        self.s3_client = build_s3_client()
 
     def _safe_local_path(self, object_key: str) -> Path:
         path = (self.local_root / object_key.lstrip("/")).resolve()

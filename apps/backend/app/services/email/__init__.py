@@ -10,7 +10,8 @@ Public API (drop-in replacement for the old app/services/email.py):
 Provider is selected once at runtime based on available credentials:
   - ZeptoMail if ZEPTOMAIL_API_KEY + ZEPTOMAIL_FROM_EMAIL are set (unchanged)
   - SES       if AWS credentials + transactional From (SES_TRANSACTIONAL_FROM_EMAIL or legacy SES_FROM_EMAIL;
-                default effective From noreply@smartats.in). Conversational SES uses reply+...@SES_MAIL_DOMAIN.
+                default effective From noreply@smartats.in). Conversational SES sets
+                reply+...@SES_MAIL_DOMAIN as Reply-To.
 """
 
 from app.services.email._dispatch import send_email

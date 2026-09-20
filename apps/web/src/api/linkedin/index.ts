@@ -1,8 +1,15 @@
-import { apiGet, apiPost } from "../client/client";
+import { apiDelete, apiGet, apiPost } from "../client/client";
 
 export interface LinkedInStatus {
   connected: boolean;
   status: string;
+  oauth_configured?: boolean;
+  distribution_enabled?: boolean;
+  lead_sync_enabled?: boolean;
+  can_post?: boolean;
+  can_sync_leads?: boolean;
+  lead_sync_last_error?: string | null;
+  lead_subscription?: { id: string; status: string; owner: Record<string, string> } | null;
   setup_complete?: boolean;
   setup_incomplete?: boolean;
   profile?: {
@@ -33,6 +40,7 @@ export interface LinkedInOrganizationsResponse {
 export interface LinkedInConnectResponse {
   authorization_url: string;
   state: string;
+  callback_origin: string;
 }
 
 export interface LinkedInCompleteSetupRequest {
@@ -46,8 +54,18 @@ export async function getLinkedInStatus(): Promise<LinkedInStatus> {
   return apiGet<LinkedInStatus>("/integrations/linkedin/status");
 }
 
-export async function connectLinkedIn(): Promise<LinkedInConnectResponse> {
-  return apiGet<LinkedInConnectResponse>("/integrations/linkedin/connect");
+export async function connectLinkedIn(leadSync = false): Promise<LinkedInConnectResponse> {
+  return apiGet<LinkedInConnectResponse>(`/integrations/linkedin/connect?lead_sync=${leadSync}`);
+}
+
+export async function subscribeLinkedInLeads(accountId?: string): Promise<void> {
+  await apiPost("/integrations/linkedin/lead-subscription", {
+    sponsored_account_id: accountId || null,
+  });
+}
+
+export async function unsubscribeLinkedInLeads(): Promise<void> {
+  await apiDelete("/integrations/linkedin/lead-subscription");
 }
 
 export async function getLinkedInOrganizations(): Promise<LinkedInOrganizationsResponse> {

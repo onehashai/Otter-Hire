@@ -64,7 +64,7 @@ async def test_multi_entity_commit_transfers_and_links_every_entity(db: AsyncSes
         "job": [{"external_job_id": "job-1", "title": "Backend Engineer"}],
         "stage": [{
             "external_stage_id": "stage-1", "external_job_id": "job-1",
-            "name": "Screen", "position": 1,
+            "name": "Screen", "position": None,
         }],
         "candidate": [{
             "external_candidate_id": "candidate-1", "first_name": "Ada",
@@ -95,7 +95,17 @@ async def test_multi_entity_commit_transfers_and_links_every_entity(db: AsyncSes
     assert (preview["created"], preview["updated"], preview["skipped"]) == (7, 0, 0)
 
     local_storage = LocalStorageStub()
+    parse_requests = []
+
+    async def fake_enqueue_resume_parse(*, application_id, input_data):
+        parse_requests.append((application_id, input_data))
+        return {"workflow_id": f"test-{application_id}", "started": True}
+
     monkeypatch.setattr("app.temporal.migration.activities.storage_service", local_storage)
+    monkeypatch.setattr(
+        "app.temporal.migration.activities.enqueue_job_apply_resume_parse",
+        fake_enqueue_resume_parse,
+    )
     monkeypatch.setattr(
         "app.temporal.migration.activities.AsyncSessionLocal",
         async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False),
@@ -108,6 +118,7 @@ async def test_multi_entity_commit_transfers_and_links_every_entity(db: AsyncSes
     assert result["committed"] == 6
     assert result["resumes_transferred"] == 1
     assert result["unresolved_errors"] == 0
+    assert len(parse_requests) == 1
 
     job = (await db.execute(select(Job).where(Job.external_job_id == "job-1"))).scalar_one()
     stage = (await db.execute(select(Stage).where(Stage.external_stage_id == "stage-1"))).scalar_one()
@@ -132,6 +143,8 @@ async def test_multi_entity_commit_transfers_and_links_every_entity(db: AsyncSes
     ))).scalar_one()
 
     assert stage.job_id == job.id
+    assert stage.position == 1
+    assert job.created_by_user_id == actor.id
     assert application.candidate_id == candidate.id
     assert application.job_id == job.id
     assert application.stage_id == stage.id
@@ -144,4 +157,6 @@ async def test_multi_entity_commit_transfers_and_links_every_entity(db: AsyncSes
     assert document.candidate_id == candidate.id
     assert document.mime_type == "application/pdf"
     assert local_storage.objects[document.object_key] == resume_content
+    assert parse_requests[0][1].candidate_id == str(candidate.id)
+    assert parse_requests[0][1].object_key == document.object_key
     assert audit.metadata_json["committed_clean"] == 6

@@ -19,15 +19,23 @@ class AtsSyncWorkflow:
             maximum_interval=timedelta(minutes=2),
             maximum_attempts=5,
         )
-        raw_records = await workflow.execute_activity(
-            "fetch_candidates", input_data,
-            start_to_close_timeout=timedelta(minutes=10), retry_policy=retry,
-        )
-        return await workflow.execute_activity(
-            "validate_and_map_batch",
-            {"integration_id": input_data.integration_id, "raw_records": raw_records, "source": "ats-sync"},
-            start_to_close_timeout=timedelta(minutes=10), retry_policy=retry,
-        )
+        try:
+            raw_records = await workflow.execute_activity(
+                "fetch_candidates", input_data,
+                start_to_close_timeout=timedelta(minutes=10), retry_policy=retry,
+            )
+            return await workflow.execute_activity(
+                "validate_and_map_batch",
+                {"integration_id": input_data.integration_id, "raw_records": raw_records},
+                start_to_close_timeout=timedelta(minutes=10), retry_policy=retry,
+            )
+        except Exception as exc:
+            await workflow.execute_activity(
+                "mark_ats_sync_failed",
+                {"integration_id": input_data.integration_id, "error": str(exc)},
+                start_to_close_timeout=timedelta(minutes=1),
+            )
+            raise
 
 
 @workflow.defn

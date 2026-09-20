@@ -36,11 +36,13 @@ export class ErrorBoundary extends Component<Props, State> {
       return (
         <div className="flex flex-col items-center justify-center p-8 gap-3 text-center border rounded-lg bg-card my-4">
           <div className="h-10 w-10 rounded-full bg-destructive/10 text-destructive flex items-center justify-center">
-            <Icon name="AlertCircle" className="h-5 w-5" />
+            <Icon name="CircleAlert" className="h-5 w-5" />
           </div>
           <p className="text-sm font-medium">Something went wrong rendering this view</p>
           <p className="text-xs font-semibold text-destructive max-w-lg break-words">
-            {this.state.error?.name ? `${this.state.error.name}: ${this.state.error.message}` : this.state.error?.message || "An unexpected client-side error occurred."}
+            {this.state.error?.name
+              ? `${this.state.error.name}: ${this.state.error.message}`
+              : this.state.error?.message || "An unexpected client-side error occurred."}
           </p>
           {this.state.error?.stack && (
             <pre className="text-[10px] text-left text-muted-foreground overflow-auto max-w-xl max-h-40 p-2 bg-muted rounded font-mono whitespace-pre-wrap">

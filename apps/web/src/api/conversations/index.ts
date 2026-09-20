@@ -37,6 +37,8 @@ export type MessageRead = {
   html_body: string | null;
   status: MessageStatus;
   provider_message_id: string | null;
+  email_message_id: string | null;
+  in_reply_to: string | null;
   created_at: string;
   attachments?: MessageAttachment[];
 };

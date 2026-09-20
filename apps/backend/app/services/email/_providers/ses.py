@@ -10,7 +10,8 @@ from app.services.email._base import ConversationSendResult, EmailProvider
 class SesProvider(EmailProvider):
     """
     Platform-level SES: transactional mail uses SES_TRANSACTIONAL_FROM_* (default noreply@smartats.in).
-    Conversation mail uses send_conversation(from_email=...) — typically reply+...@SES_MAIL_DOMAIN.
+    Conversation mail uses the same verified sender and sets the supplied
+    reply+...@SES_MAIL_DOMAIN address as Reply-To.
     """
 
     @property
@@ -19,9 +20,9 @@ class SesProvider(EmailProvider):
 
     def is_configured(self) -> bool:
         return bool(
-            (settings.aws_access_key_id or "").strip()
-            and (settings.aws_secret_access_key or "").strip()
-            and (settings.aws_s3_region or "").strip()
+            (settings.aws_ses_access_key or settings.aws_access_key_id or "").strip()
+            and (settings.aws_ses_secret_key or settings.aws_secret_access_key or "").strip()
+            and (settings.aws_ses_region or settings.aws_s3_region or "").strip()
             and (settings.ses_effective_transactional_from_email or "").strip()
         )
 
@@ -64,15 +65,13 @@ class SesProvider(EmailProvider):
     ) -> ConversationSendResult:
         from app.services.ses_outbound import send_email_via_ses
 
-        # Use the verified environment-specific domain for SES identity authorization.
-        mail_domain = (settings.SES_MAIL_DOMAIN or "").strip().lstrip("@")
-        if not mail_domain:
-            raise RuntimeError("SES_MAIL_DOMAIN is required for conversation email")
-        actual_from = f"noreply@{mail_domain}"
-        if "smartats.in" in from_email and "applications.smartats.in" not in from_email:
-            reply_to_addr = from_email.replace("smartats.in", "applications.smartats.in")
-        else:
-            reply_to_addr = from_email
+        actual_from = settings.ses_effective_transactional_from_email.strip()
+        if "@" not in actual_from:
+            raise RuntimeError("SES_TRANSACTIONAL_FROM_EMAIL must be a valid email address")
+
+        reply_to_addr = from_email.strip()
+        if "@" not in reply_to_addr:
+            raise RuntimeError("Conversation Reply-To must be a valid email address")
 
         ses_id: str = await asyncio.to_thread(
             send_email_via_ses,

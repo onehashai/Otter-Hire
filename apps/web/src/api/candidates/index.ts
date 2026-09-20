@@ -42,7 +42,7 @@ export type CandidateAssignmentItemResponse = {
 
 export type CandidateJobScoreResponse = {
   total_score: number | null;
-  status: "pending" | "ready" | "failed" | null;
+  status: "none" | "pending" | "ready" | "failed" | null;
   sections: Record<string, unknown>;
 };
 
@@ -206,9 +206,12 @@ export async function getCandidateJobScore(
   jobId: string,
 ): Promise<CandidateJobScoreResponse> {
   try {
-    return await apiFetch<CandidateJobScoreResponse>(`/candidates/${candidateId}/jobs/${jobId}/score`, {
-      method: "GET",
-    });
+    return await apiFetch<CandidateJobScoreResponse>(
+      `/candidates/${candidateId}/jobs/${jobId}/score`,
+      {
+        method: "GET",
+      },
+    );
   } catch {
     return { total_score: null, status: "none", sections: {} };
   }

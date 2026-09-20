@@ -13,7 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@onehash/ui/dialog";
-import { Clock, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { toast } from "@onehash/ui/sonner";
 import { useTranslation } from "react-i18next";
 import { useJobSetup } from "../context";
@@ -33,7 +33,14 @@ export default function IntegrationPage() {
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
   const [disconnectConfirmOpen, setDisconnectConfirmOpen] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
-  const { jobId, isLoading, postToLinkedin, setPostToLinkedin } = useJobSetup();
+  const {
+    jobId,
+    isLoading,
+    postToLinkedin,
+    setPostToLinkedin,
+    linkedinSyncStatus,
+    linkedinLastError,
+  } = useJobSetup();
 
   useEffect(() => {
     let mounted = true;
@@ -53,7 +60,7 @@ export default function IntegrationPage() {
     };
   }, []);
 
-  const isLinkedInReady = Boolean(linkedinStatus?.connected && linkedinStatus?.setup_complete);
+  const isLinkedInReady = Boolean(linkedinStatus?.can_post);
   const isEmailPendingVerification =
     emailStatus?.configured === true && emailStatus?.status === "pending";
 
@@ -84,7 +91,13 @@ export default function IntegrationPage() {
             <div className="space-y-1">
               <div className="flex items-center gap-2">
                 <p className="text-sm font-medium">{t("email_integration")}</p>
-                <Badge variant={emailStatus?.status === "active" || isEmailPendingVerification ? "default" : "secondary"}>
+                <Badge
+                  variant={
+                    emailStatus?.status === "active" || isEmailPendingVerification
+                      ? "default"
+                      : "secondary"
+                  }
+                >
                   {emailStatus?.status === "active" || isEmailPendingVerification
                     ? t("connected")
                     : t("not_connected")}
@@ -110,9 +123,7 @@ export default function IntegrationPage() {
                 onClick={() => setEmailDialogOpen(true)}
                 disabled={isLoading || !jobId}
               >
-                {emailStatus?.configured || isEmailPendingVerification
-                    ? t("manage")
-                    : t("connect")}
+                {emailStatus?.configured || isEmailPendingVerification ? t("manage") : t("connect")}
               </Button>
             </div>
           </div>
@@ -131,29 +142,29 @@ export default function IntegrationPage() {
                 </Badge>
               </div>
               <p className="text-xs text-muted-foreground">{t("post_to_linkedin_description")}</p>
-              {!loadingLinkedInStatus && postToLinkedin && !isLinkedInReady ? (
+              {!loadingLinkedInStatus && !isLinkedInReady ? (
                 <Alert className="mt-2">
                   <AlertDescription className="text-xs">
                     {t("linkedin_setup_required_for_distribution")}
                   </AlertDescription>
                 </Alert>
               ) : null}
+              {linkedinSyncStatus === "posted" && <p className="text-xs">Posted to Company Page</p>}
+              {linkedinLastError && (
+                <p role="alert" className="text-xs text-destructive break-words">
+                  {linkedinLastError}
+                </p>
+              )}
             </div>
-            {/* TODO(job-integrations): Remove the sr-only Switch + Coming Soon Button; render only <Switch checked={postToLinkedin} onCheckedChange={setPostToLinkedin} /> in this flex (same wrapper as Email row). */}
             <div className="flex items-center gap-2">
-              <span className="sr-only">
-                <Switch checked={postToLinkedin} onCheckedChange={setPostToLinkedin} />
-              </span>
-              <Button
-                type="button"
-                size="sm"
-                className="h-8 gap-1.5 disabled:opacity-100"
-                disabled
-                tabIndex={-1}
-              >
-                <Clock className="h-4 w-4 shrink-0" aria-hidden />
-                Coming soon
-              </Button>
+              <Switch
+                aria-label="Post to LinkedIn"
+                checked={postToLinkedin}
+                onCheckedChange={setPostToLinkedin}
+                disabled={
+                  isLoading || loadingLinkedInStatus || (!isLinkedInReady && !postToLinkedin)
+                }
+              />
             </div>
           </div>
         </div>

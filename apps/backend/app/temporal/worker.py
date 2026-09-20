@@ -24,6 +24,7 @@ from app.temporal.email.workflow import (
     InboundEmailWorkflow,
     OutboundEmailWorkflow,
 )
+from app.temporal.linkedin import LinkedInLeadWorkflow, ingest_linkedin_lead
 from app.temporal.migration.activities import (
     commit_batch_activity,
     fetch_candidates,
@@ -38,7 +39,6 @@ from app.temporal.resume_parsing.workflow import JobApplyResumeParseWorkflow
 from app.temporal.resume_scoring.activities import score_candidate_job_activity
 from app.temporal.resume_scoring.workflow import ResumeScoreWorkflow
 from app.temporal.sentry_interceptor import SentryInterceptor
-from app.temporal.linkedin import LinkedInLeadWorkflow, ingest_linkedin_lead
 
 logger = logging.getLogger("ats_worker")
 

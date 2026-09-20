@@ -6,8 +6,8 @@ import hmac
 import secrets
 from datetime import datetime, timezone
 from typing import Any
-from uuid import uuid4
 from urllib.parse import urlencode
+from uuid import uuid4
 
 import httpx
 from fastapi import HTTPException

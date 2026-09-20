@@ -35,8 +35,6 @@ class StorageService:
             self.s3_prefix = ""
             return
 
-        import boto3
-
         if not settings.aws_s3_bucket or not settings.aws_s3_region:
             raise ValueError("S3 config missing: AWS_S3_BUCKET / AWS_S3_REGION")
         self.bucket = settings.aws_s3_bucket

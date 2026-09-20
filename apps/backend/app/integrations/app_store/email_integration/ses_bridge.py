@@ -17,7 +17,6 @@ from email.parser import BytesParser
 from email.utils import parseaddr
 from uuid import UUID
 
-import boto3
 import redis
 from sqlalchemy import delete, select
 
@@ -25,9 +24,9 @@ from app.core.config import settings
 from app.db.session import AsyncSessionLocal
 from app.integrations.app_store.email_integration import credential_store
 from app.models.conversation import Conversation
-from app.models.message import Message
 from app.models.email import InboundEmail
 from app.models.integration_credential import IntegrationCredential
+from app.models.message import Message
 
 logger = logging.getLogger(__name__)
 

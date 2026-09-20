@@ -251,7 +251,6 @@ async def parse_inbound_email_activity(input_data: InboundEmailParseInput) -> di
                         )
                 candidate = candidate_query.scalars().first() if candidate_query is not None else None
 
-                candidate_created = False
                 if candidate is None:
                     candidate = Candidate(
                         org_id=org_id,
@@ -270,7 +269,6 @@ async def parse_inbound_email_activity(input_data: InboundEmailParseInput) -> di
                     )
                     session.add(candidate)
                     await session.flush()
-                    candidate_created = True
                 else:
                     # Duplicate candidate: create duplicate profile for review
                     existing_candidate = candidate
@@ -293,7 +291,6 @@ async def parse_inbound_email_activity(input_data: InboundEmailParseInput) -> di
                     )
                     session.add(candidate)
                     await session.flush()
-                    candidate_created = True
 
                 # 6. Associate candidate document
                 latest_version_result = await session.execute(

@@ -35,6 +35,7 @@ __all__ = [
     "ApiKey",
     "AtsIntegration",
     "AtsMcpRegistry",
+    "GenericAtsConfig",
     "ImportBatch",
     "ImportBatchRow",
     "ImportAuditLog",
@@ -59,6 +60,7 @@ __all__ = [
     "InboundEmail",
     "Conversation",
     "Message",
+    "McpApiKey",
     "Automation",
     "AutomationExecution",
 ]

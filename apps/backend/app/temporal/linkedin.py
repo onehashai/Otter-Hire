@@ -10,6 +10,7 @@ from temporalio.common import RetryPolicy
 async def ingest_linkedin_lead(connection: str, event: dict) -> str:
     from fastapi import HTTPException
     from temporalio.exceptions import ApplicationError
+
     from app.db.session import AsyncSessionLocal
     from app.integrations.linkedin.leads import ingest_notification
 
@@ -19,6 +20,7 @@ async def ingest_linkedin_lead(connection: str, event: dict) -> str:
         except HTTPException as exc:
             await db.rollback()
             from sqlalchemy import select
+
             from app.models.integration_credential import IntegrationCredential
 
             cred = (await db.execute(select(IntegrationCredential).where(

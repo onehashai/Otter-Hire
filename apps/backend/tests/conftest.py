@@ -4,8 +4,13 @@ Pytest configuration and shared fixtures.
 Provides database session and common test utilities.
 """
 
+import os
 import sys
 from pathlib import Path
+
+# Email automation tests need a deterministic inbound domain without depending
+# on a developer or deployment .env file.
+os.environ.setdefault("SES_MAIL_DOMAIN", "applications.example.test")
 
 # Add parent directory to path so we can import app
 sys.path.insert(0, str(Path(__file__).parent.parent))

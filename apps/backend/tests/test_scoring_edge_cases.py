@@ -157,9 +157,7 @@ def test_experience_none_required_returns_100() -> None:
     # skills >= 50 path (pass skills_score=60 to skip LLM)
     import asyncio
 
-    result = asyncio.get_event_loop().run_until_complete(
-        compute_experience_score(jd, resume, skills_score=60)
-    )
+    result = asyncio.run(compute_experience_score(jd, resume, skills_score=60))
     assert result == 100
 
 
@@ -168,9 +166,7 @@ def test_experience_zero_required_returns_100() -> None:
     resume = _resume(skills=[], total_years=0.0, relevant_years=0.0)
     import asyncio
 
-    result = asyncio.get_event_loop().run_until_complete(
-        compute_experience_score(jd, resume, skills_score=60)
-    )
+    result = asyncio.run(compute_experience_score(jd, resume, skills_score=60))
     assert result == 100
 
 
@@ -179,9 +175,7 @@ def test_experience_meets_requirement_returns_100() -> None:
     resume = _resume(skills=[], total_years=4.0, relevant_years=4.0, role_families=["engineering"])
     import asyncio
 
-    result = asyncio.get_event_loop().run_until_complete(
-        compute_experience_score(jd, resume, skills_score=60)
-    )
+    result = asyncio.run(compute_experience_score(jd, resume, skills_score=60))
     assert result == 100
 
 
@@ -190,9 +184,7 @@ def test_experience_proportional_score() -> None:
     resume = _resume(skills=[], total_years=2.0, relevant_years=2.0, role_families=["engineering"])
     import asyncio
 
-    result = asyncio.get_event_loop().run_until_complete(
-        compute_experience_score(jd, resume, skills_score=60)
-    )
+    result = asyncio.run(compute_experience_score(jd, resume, skills_score=60))
     assert result == 40
 
 
@@ -206,9 +198,7 @@ def test_experience_domain_mismatch_uses_relevant_years() -> None:
     )
     import asyncio
 
-    result = asyncio.get_event_loop().run_until_complete(
-        compute_experience_score(jd, resume, skills_score=60)
-    )
+    result = asyncio.run(compute_experience_score(jd, resume, skills_score=60))
     assert result == 20
 
 
@@ -222,9 +212,7 @@ def test_experience_no_role_family_uses_total_years_floor() -> None:
     )
     import asyncio
 
-    result = asyncio.get_event_loop().run_until_complete(
-        compute_experience_score(jd, resume, skills_score=60)
-    )
+    result = asyncio.run(compute_experience_score(jd, resume, skills_score=60))
     assert result == 64
 
 

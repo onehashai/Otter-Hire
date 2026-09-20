@@ -6,7 +6,7 @@ pytest-asyncio==0.21.1
 pytest-cov==4.1.0
 
 # Async testing support
-anyio==4.2.0
+anyio==4.10.0
 
 # Mocking and fixtures
 pytest-mock==3.12.0

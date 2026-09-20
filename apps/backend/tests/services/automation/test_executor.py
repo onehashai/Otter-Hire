@@ -4,6 +4,8 @@ Integration tests for automation execution system.
 Tests the complete flow: trigger → query → execute → log
 """
 
+from unittest.mock import AsyncMock, patch
+
 import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,6 +18,17 @@ from app.models.template import Template
 from app.models.user import User
 from app.services.automation import execute_automations_for_trigger
 from app.utils.uuid import uuid7
+
+
+@pytest.fixture(autouse=True)
+def mock_outbound_queue():
+    """Keep automation integration tests independent from Temporal."""
+    with patch(
+        "app.temporal.email.queue.enqueue_outbound_email",
+        new_callable=AsyncMock,
+    ) as mock_enqueue:
+        mock_enqueue.return_value = {"workflow_id": "test-wf", "started": True}
+        yield mock_enqueue
 
 
 @pytest.fixture

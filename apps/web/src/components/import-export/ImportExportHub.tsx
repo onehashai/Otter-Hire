@@ -1,8 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { Download, Upload } from "lucide-react";
+import { Download, Eye, Upload } from "lucide-react";
 import { Button } from "@onehash/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@onehash/ui/dialog";
 import { API_BASE_URL } from "@/api";
 
 const CSV_HEADERS = ["First Name", "Last Name", "E-Mail", "Phone", "Skills", "Resume Text"];
@@ -24,15 +31,6 @@ const SAMPLE_CSV_ROWS = [
     "Customer-facing sales professional with enterprise account experience.",
   ],
 ];
-
-const CSV_FIELD_MAPPINGS = [
-  ["First Name", "Candidate first name"],
-  ["Last Name", "Candidate last name"],
-  ["E-Mail", "Candidate email"],
-  ["Phone", "Candidate phone number"],
-  ["Skills", "Candidate skills, separated with semicolons"],
-  ["Resume Text", "Candidate resume text"],
-] as const;
 
 function toCsv(rows: readonly (readonly string[])[]): string {
   return rows
@@ -70,6 +68,9 @@ function MigrationSteps({ title, steps }: { title: string; steps: string[] }) {
 export function ImportExportHub() {
   const [file, setFile] = useState<File | null>(null);
   const [result, setResult] = useState("");
+  const [preview, setPreview] = useState<"sample" | "blank" | null>(null);
+
+  const previewRows = preview === "sample" ? [CSV_HEADERS, ...SAMPLE_CSV_ROWS] : [CSV_HEADERS];
 
   async function importCsv() {
     if (!file) return;
@@ -98,37 +99,50 @@ export function ImportExportHub() {
         </p>
       </div>
       <div className="space-y-3 p-5">
-        <div className="space-y-3 rounded-md border p-4">
+        <div className="space-y-3">
           <div>
             <h4 className="text-sm font-medium">Candidate CSV template</h4>
             <p className="mt-1 text-sm text-muted-foreground">
               Download a sample, replace its example rows with your candidate data, then upload it below.
             </p>
           </div>
-          <div className="grid gap-2 text-sm sm:grid-cols-2">
-            {CSV_FIELD_MAPPINGS.map(([column, destination]) => (
-              <div key={column} className="flex justify-between gap-3 border-b py-1.5 last:border-b-0">
-                <span className="font-medium">{column}</span>
-                <span className="text-right text-muted-foreground">{destination}</span>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Sample CSV</p>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() =>
+                    downloadCsv("otter-hire-candidate-sample.csv", [CSV_HEADERS, ...SAMPLE_CSV_ROWS])
+                  }
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  Download sample CSV
+                </Button>
+                <Button type="button" variant="ghost" onClick={() => setPreview("sample")}>
+                  <Eye className="mr-2 h-4 w-4" />
+                  Preview
+                </Button>
               </div>
-            ))}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => downloadCsv("otter-hire-candidate-sample.csv", [CSV_HEADERS, ...SAMPLE_CSV_ROWS])}
-            >
-              <Download className="mr-2 h-4 w-4" />
-              Download sample CSV
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => downloadCsv("otter-hire-candidate-template.csv", [CSV_HEADERS])}
-            >
-              Download blank template
-            </Button>
+            </div>
+            <div className="space-y-2 sm:border-l sm:pl-4">
+              <p className="text-sm font-medium">Blank template</p>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => downloadCsv("otter-hire-candidate-template.csv", [CSV_HEADERS])}
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  Download blank template
+                </Button>
+                <Button type="button" variant="ghost" onClick={() => setPreview("blank")}>
+                  <Eye className="mr-2 h-4 w-4" />
+                  Preview
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
         <label className="flex min-h-24 cursor-pointer items-center justify-center rounded-md border border-dashed text-sm text-muted-foreground hover:bg-muted/40">
@@ -164,6 +178,21 @@ export function ImportExportHub() {
           ]}
         />
       </div>
+      <Dialog open={preview !== null} onOpenChange={(open) => !open && setPreview(null)}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>{preview === "sample" ? "Sample CSV preview" : "Blank template preview"}</DialogTitle>
+            <DialogDescription>
+              {preview === "sample"
+                ? "Replace the example rows with your candidate data before uploading."
+                : "Use these headers as the first row of your CSV file."}
+            </DialogDescription>
+          </DialogHeader>
+          <pre className="max-h-[45vh] overflow-auto rounded-md border bg-muted/30 p-4 text-xs leading-6">
+            {toCsv(previewRows)}
+          </pre>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

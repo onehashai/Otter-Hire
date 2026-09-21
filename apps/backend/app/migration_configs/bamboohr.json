@@ -14,7 +14,7 @@
   "pagination": {"style": "none"},
   "rate_limits": {"requests_per_second": 2, "max_retries": 5, "backoff_seconds": 1},
   "mappings": {
-    "job": {"external_job_id": "id", "title": "title", "description": "description"},
+    "job": {"external_job_id": "id", "title": "title", "description": "description", "category": "department"},
     "stage": {"external_stage_id": "id", "name": "name", "position": "position"},
     "candidate": {"external_candidate_id": "applicant.id", "first_name": "applicant.firstName", "last_name": "applicant.lastName", "email": "applicant.email", "phone": "applicant.phone"},
     "application": {"external_application_id": "id", "external_candidate_id": "applicant.id", "external_job_id": "job.id", "external_stage_id": "status.id", "status": "status.name"},

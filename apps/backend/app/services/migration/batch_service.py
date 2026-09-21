@@ -5,6 +5,7 @@ from typing import Any, Iterable
 from uuid import UUID
 
 from sqlalchemy import or_, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.ats_migration import AtsIntegration, ImportAuditLog, ImportBatch, ImportBatchRow
@@ -12,6 +13,7 @@ from app.models.candidate import Candidate
 from app.models.document import CandidateDocument
 from app.models.interview import Interview
 from app.models.job import Job
+from app.models.job_category import JobCategory
 from app.models.job_application import JobApplication
 from app.models.note import Note
 from app.models.stage import Stage
@@ -32,6 +34,8 @@ ENTITY_ORDER = {
     "interview": 5,
     "note": 6,
 }
+
+UNCATEGORIZED_JOB_CATEGORY = "Uncategorized"
 
 REQUIRED_ENTITY_FIELDS = {
     "job": ("external_job_id", "title"),
@@ -89,9 +93,48 @@ def _normalize_application_status(value: Any) -> str:
 
 
 def _display_text(value: Any) -> str:
+    if isinstance(value, (list, tuple)):
+        return next((text for item in value if (text := _display_text(item))), "")
     if isinstance(value, dict):
         value = value.get("label") or value.get("name") or value.get("title") or value.get("value")
     return str(value).strip() if value not in (None, "") else ""
+
+
+def _normalize_job_category(value: Any) -> str:
+    return " ".join(_display_text(value).split())[:50]
+
+
+def _normalize_country(value: Any) -> str | None:
+    country = _display_text(value).upper()
+    return country if len(country) == 2 and country.isalpha() else None
+
+
+def _normalize_workplace_type(value: Any) -> str | None:
+    if isinstance(value, bool):
+        return "remote" if value else "onsite"
+    normalized = _display_text(value).lower().replace("-", "_").replace(" ", "_")
+    if normalized in {"onsite", "on_site", "office"}:
+        return "onsite"
+    if normalized in {"remote", "telecommuting"}:
+        return "remote"
+    if normalized == "hybrid":
+        return "hybrid"
+    return None
+
+
+async def _get_or_create_job_category(
+    db: AsyncSession, org_id: UUID, name: str
+) -> JobCategory:
+    """Return a category for an imported job without racing concurrent syncs."""
+    await db.execute(
+        pg_insert(JobCategory)
+        .values(org_id=org_id, name=name, is_system_default=False)
+        .on_conflict_do_nothing(constraint="uq_job_categories_org_name")
+    )
+    return (await db.execute(select(JobCategory).where(
+        JobCategory.org_id == org_id,
+        JobCategory.name == name,
+    ))).scalar_one()
 
 
 async def _resolve_candidate_job(
@@ -328,6 +371,28 @@ async def commit_batch(
                     continue
                 target.title = title
                 target.description = payload.get("description")
+                # Do not overwrite a category or location a recruiter set in Otter
+                # when the source omits it. New source jobs with no classification
+                # are explicitly placed in Uncategorized rather than showing a dash.
+                source_category = _normalize_job_category(payload.get("category"))
+                category_name = source_category or (
+                    UNCATEGORIZED_JOB_CATEGORY if not target.category else ""
+                )
+                if category_name:
+                    category = await _get_or_create_job_category(
+                        db, batch.integration.org_id, category_name
+                    )
+                    target.category = category.name
+                    target.category_id = category.id
+                city = _display_text(payload.get("city"))[:255]
+                if city:
+                    target.city = city
+                country = _normalize_country(payload.get("country"))
+                if country:
+                    target.country = country
+                workplace_type = _normalize_workplace_type(payload.get("workplace_type"))
+                if workplace_type:
+                    target.workplace_type = workplace_type
                 db.add(target)
                 await db.flush()
                 _set_row_result(

@@ -110,6 +110,26 @@ def test_named_connector_contracts_use_current_provider_routes() -> None:
     workable = registry["workable"]
     assert workable.endpoints["candidates"].pagination.cursor_is_url is True
     assert workable.endpoints["candidates"].pagination.page_size_param == "limit"
+    assert workable.mappings["job"] == {
+        "external_job_id": "id",
+        "title": "title",
+        "description": "description",
+        "shortcode": "shortcode",
+        "category": "department",
+        "city": "location.city",
+        "country": "location.country_code",
+        "workplace_type": "location.workplace_type",
+    }
+    assert lever.mappings["job"]["category"] == "categories.department|categories.team"
+    assert smartrecruiters.mappings["job"]["category"] == "department.label"
+    assert bamboohr.mappings["job"]["category"] == "department"
+    assert greenhouse.mappings["job"]["category"] == "departments.0.name"
+
+
+def test_mapping_path_uses_the_first_populated_alternative() -> None:
+    job = {"categories": {"department": "", "team": "Engineering"}}
+
+    assert get_path(job, "categories.department|categories.team") == "Engineering"
 
 
 @pytest.mark.anyio

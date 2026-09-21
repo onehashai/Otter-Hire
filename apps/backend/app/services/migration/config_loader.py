@@ -68,6 +68,15 @@ def load_connector_registry(directory: Path) -> dict[str, ConnectorConfig]:
 def get_path(value: Any, path: str | None) -> Any:
     if not path:
         return value
+    # Connector payloads do not always expose the same classification field.
+    # A pipe lets a mapping use the first populated provider field without
+    # embedding provider-specific branching in the import service.
+    if "|" in path:
+        for candidate_path in path.split("|"):
+            resolved = get_path(value, candidate_path)
+            if resolved not in (None, "", [], {}):
+                return resolved
+        return None
     current = value
     for part in path.split("."):
         if isinstance(current, dict):

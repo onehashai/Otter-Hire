@@ -13,6 +13,7 @@ from app.models.candidate_jobs import CandidateJobs
 from app.models.document import CandidateDocument
 from app.models.interview import Interview
 from app.models.job import Job
+from app.models.job_category import JobCategory
 from app.models.job_application import JobApplication
 from app.models.note import Note
 from app.models.organization import Organization
@@ -61,7 +62,10 @@ async def test_multi_entity_commit_transfers_and_links_every_entity(db: AsyncSes
 
     resume_content = b"%PDF-local-integration-test"
     bundle = {
-        "job": [{"external_job_id": "job-1", "title": "Backend Engineer"}],
+        "job": [{
+            "external_job_id": "job-1", "title": "Backend Engineer",
+            "city": "Indore", "country": "IN", "workplace_type": "on_site",
+        }],
         "stage": [{
             "external_stage_id": "stage-1", "external_job_id": "job-1",
             "name": "Screen", "position": None,
@@ -121,6 +125,9 @@ async def test_multi_entity_commit_transfers_and_links_every_entity(db: AsyncSes
     assert len(parse_requests) == 1
 
     job = (await db.execute(select(Job).where(Job.external_job_id == "job-1"))).scalar_one()
+    category = (await db.execute(select(JobCategory).where(
+        JobCategory.org_id == org.id, JobCategory.name == "Uncategorized"
+    ))).scalar_one()
     stage = (await db.execute(select(Stage).where(Stage.external_stage_id == "stage-1"))).scalar_one()
     candidate = (await db.execute(
         select(Candidate).where(Candidate.external_candidate_id == "candidate-1")
@@ -145,6 +152,11 @@ async def test_multi_entity_commit_transfers_and_links_every_entity(db: AsyncSes
     assert stage.job_id == job.id
     assert stage.position == 1
     assert job.created_by_user_id == actor.id
+    assert job.category == "Uncategorized"
+    assert job.category_id == category.id
+    assert job.city == "Indore"
+    assert job.country == "IN"
+    assert job.workplace_type == "onsite"
     assert application.candidate_id == candidate.id
     assert application.job_id == job.id
     assert application.stage_id == stage.id

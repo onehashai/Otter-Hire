@@ -17,7 +17,7 @@
   "pagination": {"style": "link_header", "page_size": 500, "since_param_name": "updated_at[gte]"},
   "rate_limits": {"requests_per_second": 2, "max_retries": 5, "backoff_seconds": 1},
   "mappings": {
-    "job": {"external_job_id": "id", "title": "name", "description": "notes"},
+    "job": {"external_job_id": "id", "title": "name", "description": "notes", "category": "departments.0.name", "city": "offices.0.name"},
     "stage": {"external_stage_id": "id", "external_job_id": "job_id", "name": "name", "position": "sort_order"},
     "candidate": {"external_candidate_id": "id", "first_name": "first_name", "last_name": "last_name", "email": "email_addresses.0.value", "phone": "phone_numbers.0.value", "skills": "tags"},
     "application": {"external_application_id": "id", "external_candidate_id": "candidate_id", "external_job_id": "job_id", "external_stage_id": "job_interview_stage_id", "status": "status"},

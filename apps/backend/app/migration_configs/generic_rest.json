@@ -16,7 +16,7 @@
   "pagination": {"style": "cursor", "cursor_request_param": "cursor", "cursor_response_path": "next_cursor", "page_size": 100},
   "rate_limits": {"requests_per_second": 2, "max_retries": 5, "backoff_seconds": 1},
   "mappings": {
-    "job": {"external_job_id": "id", "title": "title", "description": "description"},
+    "job": {"external_job_id": "id", "title": "title", "description": "description", "category": "category", "city": "city", "country": "country", "workplace_type": "workplace_type"},
     "stage": {"external_stage_id": "id", "external_job_id": "job_id", "name": "name", "position": "position"},
     "candidate": {"external_candidate_id": "id", "first_name": "first_name", "last_name": "last_name", "email": "email", "phone": "phone", "skills": "skills", "resume_text": "resume_text"},
     "application": {"external_application_id": "id", "external_candidate_id": "candidate_id", "external_job_id": "job_id", "external_stage_id": "stage_id", "status": "status"},

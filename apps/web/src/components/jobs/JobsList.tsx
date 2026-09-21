@@ -81,7 +81,11 @@ function JobCard({ job, onJobArchived }: { job: JobListItemResponse; onJobArchiv
               </Badge>
             </div>
             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              <span>{job.category ? t(job.category, { defaultValue: job.category }) : "—"}</span>
+              <span>
+                {job.category
+                  ? t(job.category, { defaultValue: job.category })
+                  : t("uncategorized", { defaultValue: "Uncategorized" })}
+              </span>
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">

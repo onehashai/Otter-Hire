@@ -282,6 +282,15 @@ class Settings(BaseSettings):
         return "https" if self.is_production else "http"
 
     @property
+    def external_api_base_url(self) -> str:
+        """Public API origin, tolerant of legacy env values that include the API prefix."""
+        base_url = (self.api_base_url or "").rstrip("/")
+        for suffix in ("/v1/internal", "/v1"):
+            if base_url.endswith(suffix):
+                return base_url.removesuffix(suffix)
+        return base_url
+
+    @property
     def google_oauth_enabled(self) -> bool:
         return bool(self.google_client_id and self.google_client_secret)
 

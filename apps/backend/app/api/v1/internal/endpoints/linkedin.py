@@ -62,7 +62,7 @@ async def connect_linkedin(response: Response, lead_sync: bool = False, current_
                         httponly=True, secure=settings.api_base_url.startswith("https://"),
                         samesite="lax", path="/v1/internal/integrations/linkedin/callback")
     response.headers["Cache-Control"] = "no-store"
-    parts = urlsplit(settings.api_base_url)
+    parts = urlsplit(settings.external_api_base_url)
     return {"authorization_url": service.get_authorization_url(state, verifier, scopes), "state": state,
             "callback_origin": parts.scheme + "://" + parts.netloc}
 

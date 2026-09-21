@@ -78,7 +78,7 @@ def _enabled() -> None:
 
 
 def _mcp_callback_url() -> str:
-    return f"{settings.api_base_url.rstrip('/')}/v1/internal/ats-migrations/mcp/oauth/callback"
+    return f"{settings.external_api_base_url}/v1/internal/ats-migrations/mcp/oauth/callback"
 
 
 def _mcp_redirect(*, provider: str, result: str, detail: str | None = None) -> RedirectResponse:

@@ -46,7 +46,7 @@ async def subscribe(db, org_id: str, sponsored_account_id: str | None) -> dict:
         return existing
     if existing.get("status") == "active":
         raise HTTPException(409, "Disconnect the existing Lead Sync subscription before changing its account.")
-    callback = f"{settings.api_base_url.rstrip('/')}/v1/internal/integrations/linkedin/webhook?connection={cred.id}"
+    callback = f"{settings.external_api_base_url}/v1/internal/integrations/linkedin/webhook?connection={cred.id}"
     async with httpx.AsyncClient(timeout=20) as client:
         # A successful read proves the token can access this owner, not just a
         # user-supplied account ID. No ad management/write scope is necessary.

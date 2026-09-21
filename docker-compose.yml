@@ -43,14 +43,14 @@ services:
     image: redis:7-alpine
     container_name: ats-redis
     ports:
-      - "6379:6379"
+      - "127.0.0.1:${REDIS_HOST_PORT:-6379}:6379"
 
   mailpit:
     image: axllent/mailpit:latest
     container_name: ats-mailpit
     ports:
-      - "1025:1025"
-      - "8025:8025"
+      - "127.0.0.1:${MAILPIT_SMTP_HOST_PORT:-1025}:1025"
+      - "127.0.0.1:${MAILPIT_UI_HOST_PORT:-8025}:8025"
 
   postgres:
     image: postgres:16-alpine
@@ -60,7 +60,7 @@ services:
       POSTGRES_PASSWORD: postgres         
       POSTGRES_DB: ats_db
     ports:
-      - "5433:5432"
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5433}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -79,7 +79,7 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/ats_db
       PLATFORM_NAME: Otter Hire
-      CORS_ORIGINS: http://localhost.com:3000,http://app.localhost.com:3000,http://jobs.localhost.com:3000,http://smartats.in:3000,https://smartats.in,http://app.smartats.in:3000,https://app.smartats.in,http://jobs.smartats.in:3000,https://jobs.smartats.in
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost.com:3000,http://app.localhost.com:3000,http://jobs.localhost.com:3000,http://smartats.in:3000,https://smartats.in,http://app.smartats.in:3000,https://app.smartats.in,http://jobs.smartats.in:3000,https://jobs.smartats.in}
       APP_DOMAIN: ${APP_DOMAIN:-smartats.in}
       APP_SUBDOMAIN: app
       JOBS_SUBDOMAIN: jobs
@@ -114,7 +114,7 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/ats_db
       PLATFORM_NAME: Otter Hire
-      CORS_ORIGINS: http://localhost.com:3000,http://app.localhost.com:3000,http://jobs.localhost.com:3000,http://smartats.in:3000,https://smartats.in,http://app.smartats.in:3000,https://app.smartats.in,http://jobs.smartats.in:3000,https://jobs.smartats.in
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost.com:3000,http://app.localhost.com:3000,http://jobs.localhost.com:3000,http://smartats.in:3000,https://smartats.in,http://app.smartats.in:3000,https://app.smartats.in,http://jobs.smartats.in:3000,https://jobs.smartats.in}
       APP_DOMAIN: ${APP_DOMAIN:-smartats.in}
       APP_SUBDOMAIN: app
       JOBS_SUBDOMAIN: jobs
@@ -174,7 +174,7 @@ services:
         NEXT_PUBLIC_APP_SUBDOMAIN: app
         NEXT_PUBLIC_JOBS_SUBDOMAIN: jobs
         NEXT_PUBLIC_APP_ROOT_HOST: ${NEXT_PUBLIC_APP_ROOT_HOST:-smartats.in}
-        NEXT_PUBLIC_SES_MAIL_DOMAIN: applications.smartats.in
+        NEXT_PUBLIC_SES_MAIL_DOMAIN: ${NEXT_PUBLIC_SES_MAIL_DOMAIN:-applications.smartats.in}
         NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-https://smartats.in}
         NEXT_PUBLIC_MCP_SERVER_URL: ${NEXT_PUBLIC_MCP_SERVER_URL:-https://smartats.in/mcp/sse}
         NEXT_PUBLIC_TEMPORAL_UI_URL: ${NEXT_PUBLIC_TEMPORAL_UI_URL:-http://temporal.localhost.com:8081}
@@ -184,7 +184,7 @@ services:
       NEXT_PUBLIC_APP_SUBDOMAIN: app
       NEXT_PUBLIC_JOBS_SUBDOMAIN: jobs
       NEXT_PUBLIC_APP_ROOT_HOST: ${NEXT_PUBLIC_APP_ROOT_HOST:-smartats.in}
-      NEXT_PUBLIC_SES_MAIL_DOMAIN: applications.smartats.in
+      NEXT_PUBLIC_SES_MAIL_DOMAIN: ${NEXT_PUBLIC_SES_MAIL_DOMAIN:-applications.smartats.in}
       NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-https://smartats.in}
       NEXT_PUBLIC_MCP_SERVER_URL: ${NEXT_PUBLIC_MCP_SERVER_URL:-https://smartats.in/mcp/sse}
       NEXT_PUBLIC_TEMPORAL_UI_URL: ${NEXT_PUBLIC_TEMPORAL_UI_URL:-http://temporal.localhost.com:8081}

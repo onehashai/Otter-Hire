@@ -927,7 +927,7 @@ async def google_oauth_redirect(request: Request, response: Response) -> Redirec
     state_hash = sha256(state_token.encode()).hexdigest()
     code_verifier, code_challenge = _build_pkce_pair()
 
-    callback_uri = f"{settings.api_base_url}/v1/internal/auth/google/callback"
+    callback_uri = f"{settings.external_api_base_url}/v1/internal/auth/google/callback"
     params = {
         "client_id": settings.google_client_id,
         "redirect_uri": callback_uri,
@@ -1016,7 +1016,7 @@ async def google_oauth_callback(
         return _error_redirect("OAuth session missing. Please try signing in again.")
 
     # Exchange code for tokens — must match exactly what was sent to Google
-    callback_uri = f"{settings.api_base_url}/v1/internal/auth/google/callback"
+    callback_uri = f"{settings.external_api_base_url}/v1/internal/auth/google/callback"
     try:
         async with httpx.AsyncClient() as client:
             token_resp = await client.post(
@@ -1243,7 +1243,7 @@ async def google_link_redirect(
 
     # Reuse the same redirect URI as regular Google OAuth — only one URI needs to be
     # registered in Google Cloud Console.
-    callback_uri = f"{settings.api_base_url}/v1/internal/auth/google/callback"
+    callback_uri = f"{settings.external_api_base_url}/v1/internal/auth/google/callback"
     params = {
         "client_id": settings.google_client_id,
         "redirect_uri": callback_uri,

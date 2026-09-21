@@ -12,9 +12,9 @@ from uuid import uuid4
 import httpx
 from fastapi import HTTPException, Response
 
+from app.api.v1.internal.endpoints import linkedin as endpoints
 from app.core.config import settings
 from app.integrations.linkedin import leads, oauth, service
-from app.api.v1.internal.endpoints import linkedin as endpoints
 
 
 class FakeRedis:
@@ -69,9 +69,14 @@ class LinkedInContractTests(unittest.IsolatedAsyncioTestCase):
     async def test_connect_sets_secure_http_only_cookie(self):
         response = Response()
         user = SimpleNamespace(org_id=uuid4(), id=uuid4())
-        with patch.object(settings, "linkedin_client_id", "client"), patch.object(settings, "linkedin_client_secret", "secret"), patch.object(settings, "api_base_url", "https://smartats.in"), patch.object(oauth, "create_request", AsyncMock(return_value=("state", "binding", "verifier"))):
+        with patch.object(settings, "linkedin_client_id", "client"), patch.object(settings, "linkedin_client_secret", "secret"), patch.object(settings, "api_base_url", "https://smartats.in/v1/internal"), patch.object(oauth, "create_request", AsyncMock(return_value=("state", "binding", "verifier"))):
             result = await endpoints.connect_linkedin(response, False, user)
         self.assertEqual(result["callback_origin"], "https://smartats.in")
+        query = parse_qs(urlsplit(result["authorization_url"]).query)
+        self.assertEqual(
+            query["redirect_uri"],
+            ["https://smartats.in/v1/internal/integrations/linkedin/callback"],
+        )
         self.assertIn("HttpOnly", response.headers["set-cookie"])
         self.assertIn("Secure", response.headers["set-cookie"])
         self.assertIn("SameSite=lax", response.headers["set-cookie"])

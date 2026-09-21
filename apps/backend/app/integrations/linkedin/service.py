@@ -95,7 +95,7 @@ def get_authorization_url(state: str, verifier: str, scopes: list[str]) -> str:
     if not settings.linkedin_oauth_enabled:
         raise HTTPException(status_code=500, detail="LinkedIn OAuth is not configured")
 
-    redirect_uri = f"{settings.api_base_url.rstrip('/')}/v1/internal/integrations/linkedin/callback"
+    redirect_uri = f"{settings.external_api_base_url}/v1/internal/integrations/linkedin/callback"
 
     params = {
         "response_type": "code",
@@ -115,7 +115,7 @@ async def exchange_code_for_token(code: str, verifier: str) -> dict[str, Any]:
     if not settings.linkedin_oauth_enabled:
         raise HTTPException(status_code=500, detail="LinkedIn OAuth is not configured")
 
-    redirect_uri = f"{settings.api_base_url.rstrip('/')}/v1/internal/integrations/linkedin/callback"
+    redirect_uri = f"{settings.external_api_base_url}/v1/internal/integrations/linkedin/callback"
 
     async with httpx.AsyncClient() as client:
         response = await client.post(

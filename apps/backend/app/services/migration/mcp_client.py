@@ -686,9 +686,19 @@ async def _fetch_workable_bundle(
         (tool for tool in tools if tool.get("name") == "get_candidate" and _is_read_tool(tool)),
         None,
     )
+    activity_tool = next(
+        (
+            tool
+            for tool in tools
+            if tool.get("name") == "get_candidate_activities" and _is_read_tool(tool)
+        ),
+        None,
+    )
     stages: list[dict[str, Any]] = []
     candidates: list[dict[str, Any]] = []
     resumes: list[dict[str, Any]] = []
+    messages: list[dict[str, Any]] = []
+    warnings: list[str] = []
     for job in jobs:
         shortcode = job.get("shortcode") or job.get("code")
         if not shortcode:
@@ -750,6 +760,36 @@ async def _fetch_workable_bundle(
                     candidate = {**candidate, **detailed[0]}
             candidate.setdefault("job", job_context)
             candidates.append(candidate)
+            if activity_tool and candidate_id is not None:
+                try:
+                    activity_arguments = {
+                        **_named_argument(
+                            activity_tool, ("account", "subdomain"), account, "account"
+                        ),
+                        **_named_argument(
+                            activity_tool,
+                            ("candidate_id", "id"),
+                            candidate_id,
+                            "candidate ID",
+                        ),
+                    }
+                    if "shortcode" in _tool_properties(activity_tool):
+                        activity_arguments["shortcode"] = shortcode
+                    for activity_record in await _fetch_tool_pages(
+                        session,
+                        activity_tool,
+                        "message",
+                        None,
+                        fixed_arguments=activity_arguments,
+                    ):
+                        messages.append({**activity_record, "candidate_id": candidate_id})
+                except Exception as exc:
+                    warning = (
+                        "Message history was not imported from Workable MCP for "
+                        f"candidate {candidate_id}: {str(exc)[:300]}"
+                    )
+                    if warning not in warnings:
+                        warnings.append(warning)
             resume_url = candidate.get("resume_url")
             if resume_url:
                 metadata = candidate.get("resume_metadata")
@@ -766,7 +806,11 @@ async def _fetch_workable_bundle(
     bundle = {"job": jobs, "stage": stages, "candidate": candidates}
     if resumes:
         bundle["resume"] = resumes
-    return bundle
+    if messages:
+        bundle["message"] = messages
+    if warnings:
+        bundle["__warnings"] = warnings
+    return adapt_provider_bundle("workable", bundle)
 
 
 async def _fetch_detail_record(

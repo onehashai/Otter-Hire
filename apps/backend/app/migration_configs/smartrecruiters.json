@@ -17,6 +17,7 @@
     "stage": {"external_stage_id": "id", "external_job_id": "jobId", "name": "name", "position": "position"},
     "candidate": {"external_candidate_id": "id", "first_name": "firstName", "last_name": "lastName", "email": "email", "phone": "phoneNumber", "skills": "skills"},
     "application": {"external_application_id": "id", "external_candidate_id": "candidateId", "external_job_id": "jobId", "external_stage_id": "status.id", "status": "status.name"},
-    "resume": {"external_document_id": "id", "external_candidate_id": "candidate_id", "source_url": "url", "filename": "name", "mime_type": "contentType"}
+    "resume": {"external_document_id": "id", "external_candidate_id": "candidate_id", "source_url": "url", "filename": "name", "mime_type": "contentType"},
+    "message": {"provider_message_id": "provider_message_id", "external_candidate_id": "external_candidate_id", "direction": "direction", "sender_email": "sender_email", "recipient_email": "recipient_email", "subject": "subject", "body_text": "body_text", "body_html": "body_html", "sent_at": "sent_at", "email_message_id": "email_message_id", "in_reply_to": "in_reply_to", "references_header": "references_header"}
   }
 }

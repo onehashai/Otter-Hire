@@ -67,6 +67,7 @@ class ImportBatch(Base):
     flagged_rows = Column(Integer, nullable=False, server_default="0")
     error_rows = Column(Integer, nullable=False, server_default="0")
     entity_counts = Column(JSONB, nullable=False, server_default="{}")
+    warnings = Column(JSONB, nullable=False, server_default="[]")
     error_reason = Column(Text, nullable=True)
     temporal_workflow_id = Column(String(255), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

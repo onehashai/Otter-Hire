@@ -73,6 +73,7 @@ def _message_to_read(msg: Message, sender_name: str | None = None) -> MessageRea
         sender_name=sender_name,
         from_email=msg.from_email,
         to_email=msg.to_email,
+        subject=msg.subject,
         body=msg.body,
         body_visible=body_visible,
         body_quoted=body_quoted,
@@ -81,6 +82,8 @@ def _message_to_read(msg: Message, sender_name: str | None = None) -> MessageRea
         provider_message_id=msg.provider_message_id,
         email_message_id=msg.email_message_id,
         in_reply_to=msg.in_reply_to,
+        references_header=msg.references_header,
+        source_provider=msg.source_provider,
         created_at=msg.created_at,
         attachments=parsed_attachments,
     )
@@ -92,7 +95,7 @@ def _conversation_to_detail(conv: Conversation) -> ConversationDetail:
             msg,
             sender_name=msg.sender_user.name if msg.sender_user else None,
         )
-        for msg in conv.messages
+        for msg in sorted(conv.messages, key=lambda item: (item.created_at, str(item.id)))
     ]
     return ConversationDetail(
         id=conv.id,
@@ -165,7 +168,12 @@ async def _append_outbound_message(
         if last_with_id and last_with_id.email_message_id
         else None
     )
-    references_val: str | None = in_reply_to_msg_id if in_reply_to_msg_id else None
+    reference_parts: list[str] = []
+    if last_with_id and str(last_with_id.references_header or "").strip():
+        reference_parts.append(str(last_with_id.references_header).strip())
+    if in_reply_to_msg_id:
+        reference_parts.append(in_reply_to_msg_id)
+    references_val = " ".join(reference_parts) or None
 
     from_email = reply_to or ""
     now = datetime.now(tz=timezone.utc)
@@ -180,11 +188,13 @@ async def _append_outbound_message(
         sender_user_id=current_user.id,
         from_email=from_email,
         to_email=conv.candidate.email,
+        subject=email_subject,
         body=body.body,
         html_body=body.html_body,
         attachments=[a.model_dump() for a in (body.attachments or [])],
         status="queued",
         in_reply_to=in_reply_to_msg_id,
+        references_header=references_val,
         created_at=now,
     )
     db.add(msg)
@@ -384,6 +394,7 @@ async def create_conversation(
         sender_user_id=current_user.id,
         from_email=from_email,
         to_email=candidate.email,
+        subject=body.subject,
         body=body.body,
         html_body=body.html_body,
         status="queued",

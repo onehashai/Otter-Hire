@@ -12,7 +12,8 @@
     "application_stages": {"path": "/v3/application_stages", "method": "GET", "params": {"per_page": 500, "current": true}},
     "resumes": {"path": "/v3/attachments", "method": "GET", "params": {"per_page": 500, "type": "resume"}},
     "interviews": {"path": "/v3/interviews", "method": "GET", "params": {"per_page": 500}},
-    "notes": {"path": "/v3/notes", "method": "GET", "params": {"per_page": 500}}
+    "notes": {"path": "/v3/notes", "method": "GET", "params": {"per_page": 500}},
+    "message_activity_feed": {"path": "/v1/candidates/{external_candidate_id}/activity_feed", "method": "GET", "pagination": {"style": "none"}}
   },
   "pagination": {"style": "link_header", "page_size": 500, "since_param_name": "updated_at[gte]"},
   "rate_limits": {"requests_per_second": 2, "max_retries": 5, "backoff_seconds": 1},
@@ -23,6 +24,7 @@
     "application": {"external_application_id": "id", "external_candidate_id": "candidate_id", "external_job_id": "job_id", "external_stage_id": "job_interview_stage_id", "status": "status"},
     "resume": {"external_document_id": "id", "external_candidate_id": "candidate_id", "source_url": "url", "filename": "filename", "mime_type": "content_type"},
     "interview": {"external_interview_id": "id", "external_candidate_id": "candidate_id", "external_job_id": "job_id", "scheduled_at": "starts_at", "interviewer_name": "interviewers.0.name"},
-    "note": {"external_note_id": "id", "external_candidate_id": "candidate_id", "content": "body", "author_name": "user_name"}
+    "note": {"external_note_id": "id", "external_candidate_id": "candidate_id", "content": "body", "author_name": "user_name"},
+    "message": {"provider_message_id": "provider_message_id", "external_candidate_id": "external_candidate_id", "direction": "direction", "sender_email": "sender_email", "recipient_email": "recipient_email", "subject": "subject", "body_text": "body_text", "body_html": "body_html", "sent_at": "sent_at", "email_message_id": "email_message_id", "in_reply_to": "in_reply_to", "references_header": "references_header"}
   }
 }

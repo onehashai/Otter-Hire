@@ -24,6 +24,7 @@ class MessageRead(BaseModel):
     sender_name: str | None = None
     from_email: str
     to_email: str
+    subject: str | None = None
     body: str
     body_visible: str | None = None
     body_quoted: str | None = None
@@ -32,6 +33,8 @@ class MessageRead(BaseModel):
     provider_message_id: str | None = None
     email_message_id: str | None = None
     in_reply_to: str | None = None
+    references_header: str | None = None
+    source_provider: str | None = None
     created_at: datetime
     attachments: list[MessageAttachment] = Field(default_factory=list)
 

@@ -31,6 +31,7 @@ type Batch = {
   error_rows: number;
   created_at: string;
   entity_counts?: Record<string, number | string>;
+  warnings?: string[];
   error_reason?: string | null;
 };
 
@@ -385,6 +386,11 @@ function ImportBatchesDialog({
                         ))}
                       </div>
                     )}
+                    {batch.warnings?.map((warning) => (
+                      <p key={warning} className="mt-2 break-words text-xs text-amber-600 dark:text-amber-400">
+                        {warning}
+                      </p>
+                    ))}
                     {batch.error_reason && (
                       <p className="mt-3 break-words text-sm text-destructive">
                         Import failed: {batch.error_reason}

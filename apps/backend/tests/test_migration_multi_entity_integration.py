@@ -10,11 +10,13 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.models.ats_migration import AtsIntegration, ImportAuditLog
 from app.models.candidate import Candidate
 from app.models.candidate_jobs import CandidateJobs
+from app.models.conversation import Conversation
 from app.models.document import CandidateDocument
 from app.models.interview import Interview
 from app.models.job import Job
-from app.models.job_category import JobCategory
 from app.models.job_application import JobApplication
+from app.models.job_category import JobCategory
+from app.models.message import Message
 from app.models.note import Note
 from app.models.organization import Organization
 from app.models.stage import Stage
@@ -92,11 +94,37 @@ async def test_multi_entity_commit_transfers_and_links_every_entity(db: AsyncSes
             "external_note_id": "note-1", "external_candidate_id": "candidate-1",
             "content": "Imported from local ATS", "author_name": "External Author",
         }],
+        "message": [
+            {
+                "provider_message_id": "email-older",
+                "external_candidate_id": "candidate-1",
+                "direction": "inbound",
+                "sender_email": "ada@example.com",
+                "recipient_email": "recruiter@example.com",
+                "subject": "Re: Backend Engineer",
+                "body_text": "Older message",
+                "sent_at": "2026-09-01T09:00:00+00:00",
+                "email_message_id": "<older@example.test>",
+                "references_header": "<root@example.test>",
+            },
+            {
+                "provider_message_id": "email-newer",
+                "external_candidate_id": "candidate-1",
+                "direction": "outbound",
+                "sender_email": "recruiter@example.com",
+                "recipient_email": "ada@example.com",
+                "subject": "Re: Backend Engineer",
+                "body_html": '<p>Newer <strong>message</strong><script>alert(1)</script></p>',
+                "sent_at": "2026-09-02T09:00:00+00:00",
+                "in_reply_to": "<older@example.test>",
+                "references_header": "<root@example.test> <older@example.test>",
+            },
+        ],
     }
     batch = await create_pending_batch(db, integration, bundle, "integration-test")
     await db.refresh(batch, ["rows"])
     preview = await preview_batch(db, batch)
-    assert (preview["created"], preview["updated"], preview["skipped"]) == (7, 0, 0)
+    assert (preview["created"], preview["updated"], preview["skipped"]) == (9, 0, 0)
 
     local_storage = LocalStorageStub()
     parse_requests = []
@@ -119,7 +147,7 @@ async def test_multi_entity_commit_transfers_and_links_every_entity(db: AsyncSes
         CommitBatchInput(batch_id=str(batch.id), actor_id=str(actor.id))
     )
     assert result["status"] == "completed"
-    assert result["committed"] == 6
+    assert result["committed"] == 8
     assert result["resumes_transferred"] == 1
     assert result["unresolved_errors"] == 0
     assert len(parse_requests) == 1
@@ -142,6 +170,14 @@ async def test_multi_entity_commit_transfers_and_links_every_entity(db: AsyncSes
         select(Interview).where(Interview.external_interview_id == "interview-1")
     )).scalar_one()
     note = (await db.execute(select(Note).where(Note.external_note_id == "note-1"))).scalar_one()
+    conversation = (await db.execute(
+        select(Conversation).where(Conversation.candidate_id == candidate.id)
+    )).scalar_one()
+    messages = (await db.execute(
+        select(Message)
+        .where(Message.conversation_id == conversation.id)
+        .order_by(Message.created_at)
+    )).scalars().all()
     document = (await db.execute(select(CandidateDocument).where(
         CandidateDocument.external_document_id == "document-1"
     ))).scalar_one()
@@ -166,6 +202,13 @@ async def test_multi_entity_commit_transfers_and_links_every_entity(db: AsyncSes
     assert interview.source_interviewer_name == "External Interviewer"
     assert note.candidate_id == candidate.id
     assert note.source_author_name == "External Author"
+    assert [message.provider_message_id for message in messages] == ["email-older", "email-newer"]
+    assert messages[0].source_provider == "generic"
+    assert messages[0].email_message_id == "<older@example.test>"
+    assert messages[1].references_header == "<root@example.test> <older@example.test>"
+    assert messages[1].body == "Newer message"
+    assert messages[1].html_body == "<p>Newer <strong>message</strong></p>"
+    assert conversation.last_message_at == messages[1].created_at
     assert document.candidate_id == candidate.id
     assert document.mime_type == "application/pdf"
     assert local_storage.objects[document.object_key] == resume_content

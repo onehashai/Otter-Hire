@@ -20,6 +20,7 @@ from app.services.migration.config_loader import (
 )
 from app.services.migration.fetcher import GenericFetcher
 from app.services.migration.mcp_client import _select_tools
+from app.services.migration.message_content import sanitize_imported_message_content
 from app.services.migration.provider_adapter import adapt_provider_bundle
 from app.services.migration.provider_auth import (
     ProviderConnectionError,
@@ -69,12 +70,14 @@ def test_smartats_bridge_route_and_provider_contracts_are_available() -> None:
         "list_resumes",
         "list_interviews",
         "list_notes",
+        "list_messages",
     ]
     assert bridge_tools_for(registry["workable"]) == [
         "list_jobs",
         "list_stages",
         "list_candidates",
         "list_resumes",
+        "list_messages",
     ]
 
 
@@ -547,6 +550,143 @@ def test_greenhouse_adapter_links_current_stage_and_application_children() -> No
     assert bundle["resume"][0]["candidate_id"] == "candidate-1"
     assert bundle["interview"][0]["job_id"] == "job-1"
     assert "application_stage" not in bundle
+
+
+def test_greenhouse_activity_feed_normalizes_email_and_note_history() -> None:
+    bundle = adapt_provider_bundle(
+        "greenhouse",
+        {
+            "candidate": [
+                {
+                    "id": "candidate-1",
+                    "email_addresses": [{"value": "ada@example.com"}],
+                }
+            ],
+            "message_activity_feed": [
+                {
+                    "candidate_id": "candidate-1",
+                    "emails": [
+                        {
+                            "id": "email-1",
+                            "created_at": "2026-09-01T09:00:00Z",
+                            "from": "ada@example.com",
+                            "to": "recruiter@example.com",
+                            "subject": "Re: Interview",
+                            "body": "Thanks for the update",
+                        }
+                    ],
+                    "notes": [
+                        {
+                            "id": "note-1",
+                            "created_at": "2026-09-01T09:01:00Z",
+                            "body": "Recruiter follow-up",
+                        }
+                    ],
+                },
+                {
+                    "id": "email-2",
+                    "candidate_id": "candidate-1",
+                    "type": "email",
+                    "created_at": "2026-09-01T09:02:00Z",
+                    "from": "recruiter@example.com",
+                    "to": "ada@example.com",
+                    "subject": "Next steps",
+                    "body": "Here are the next steps.",
+                },
+            ],
+        },
+    )
+
+    assert [row["provider_message_id"] for row in bundle["message"]] == [
+        "email:email-1",
+        "note:note-1:0",
+        "email:email-2",
+    ]
+    assert bundle["message"][0]["direction"] == "inbound"
+    assert bundle["message"][1]["direction"] == "outbound"
+
+
+def test_lever_note_threads_are_available_in_message_history() -> None:
+    bundle = adapt_provider_bundle(
+        "lever",
+        {
+            "candidate": [
+                {
+                    "id": "opportunity-1",
+                    "contact": "candidate-1",
+                    "name": "Ada Lovelace",
+                    "emails": ["ada@example.com"],
+                }
+            ],
+            "note": [
+                {
+                    "id": "note-1",
+                    "candidate_id": "opportunity-1",
+                    "text": "Recruiter note",
+                    "fields": [
+                        {
+                            "value": "Please arrange a screen.",
+                            "createdAt": 1_725_177_600_000,
+                        }
+                    ],
+                }
+            ],
+        },
+    )
+
+    assert bundle["message"] == [
+        {
+            "provider_message_id": "note:note-1:0",
+            "external_candidate_id": "candidate-1",
+            "direction": "outbound",
+            "sender_email": None,
+            "recipient_email": None,
+            "subject": "Recruiter note",
+            "body_text": "Please arrange a screen.",
+            "body_html": None,
+            "sent_at": 1_725_177_600_000,
+            "email_message_id": None,
+            "in_reply_to": None,
+            "references_header": None,
+        }
+    ]
+
+
+def test_workable_activity_messages_normalize_without_stage_events() -> None:
+    bundle = adapt_provider_bundle(
+        "workable",
+        {
+            "candidate": [{"id": "candidate-1", "email": "ada@example.com"}],
+            "message": [
+                {
+                    "id": "comment-1",
+                    "candidate_id": "candidate-1",
+                    "action": "comment",
+                    "created_at": "2026-09-01T09:00:00Z",
+                    "body": "Candidate left a note",
+                },
+                {
+                    "id": "stage-1",
+                    "candidate_id": "candidate-1",
+                    "action": "moved",
+                    "created_at": "2026-09-01T09:01:00Z",
+                    "body": "Stage changed",
+                },
+            ],
+        },
+    )
+
+    assert len(bundle["message"]) == 1
+    assert bundle["message"][0]["provider_message_id"] == "comment:comment-1"
+
+
+def test_imported_message_html_is_rebuilt_without_scripts_or_event_handlers() -> None:
+    plain, safe_html = sanitize_imported_message_content(
+        '<p>Hello <img src=x onerror="alert(1)"><a href="javascript:alert(2)">there</a></p><script>steal()</script>'
+    )
+
+    assert plain == "Hello there"
+    assert safe_html == '<p>Hello <a>there</a></p>'
 
 
 def test_named_provider_url_validation_blocks_wrong_hosts() -> None:

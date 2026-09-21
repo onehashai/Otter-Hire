@@ -18,6 +18,7 @@ _ENTITY_ENDPOINTS = {
     "list_resumes": {"resumes"},
     "list_interviews": {"interviews"},
     "list_notes": {"notes"},
+    "list_messages": {"messages", "message_activity_feed"},
 }
 
 

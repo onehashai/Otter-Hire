@@ -31,6 +31,7 @@ export type MessageRead = {
   sender_name: string | null;
   from_email: string;
   to_email: string;
+  subject: string | null;
   body: string;
   body_visible: string | null;
   body_quoted: string | null;
@@ -39,6 +40,8 @@ export type MessageRead = {
   provider_message_id: string | null;
   email_message_id: string | null;
   in_reply_to: string | null;
+  references_header: string | null;
+  source_provider: string | null;
   created_at: string;
   attachments?: MessageAttachment[];
 };

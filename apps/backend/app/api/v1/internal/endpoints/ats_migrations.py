@@ -954,6 +954,7 @@ async def download_batch_report(
             "flagged": batch.flagged_rows,
             "errors": batch.error_rows,
         },
+        "warnings": batch.warnings or [],
         "rows": [
             {
                 "row_id": row.id,

@@ -1,4 +1,4 @@
-from sqlalchemy import CheckConstraint, Column, DateTime, ForeignKey, Index, String, Text
+from sqlalchemy import CheckConstraint, Column, DateTime, ForeignKey, Index, String, Text, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -30,6 +30,7 @@ class Message(Base):
     )
     from_email = Column(String(320), nullable=False)
     to_email = Column(String(320), nullable=False)
+    subject = Column(String(1000), nullable=True)
     body = Column(Text, nullable=False)
     html_body = Column(Text, nullable=True)
     attachments = Column(JSONB, nullable=False, server_default="[]")
@@ -37,6 +38,10 @@ class Message(Base):
     provider_message_id = Column(String(500), nullable=True)
     email_message_id = Column(String(998), nullable=True)
     in_reply_to = Column(String(998), nullable=True)
+    references_header = Column(Text, nullable=True)
+    # Set only for records copied from another ATS. Keeping this nullable preserves
+    # the existing SES and inbound-email message paths unchanged.
+    source_provider = Column(String(80), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     __table_args__ = (
@@ -55,6 +60,16 @@ class Message(Base):
         Index("ix_messages_conversation_created", "conversation_id", "created_at"),
         Index("ix_messages_org_id", "org_id"),
         Index("ix_messages_email_message_id", "email_message_id"),
+        Index(
+            "uq_messages_org_source_provider_external",
+            "org_id",
+            "source_provider",
+            "provider_message_id",
+            unique=True,
+            postgresql_where=text(
+                "source_provider IS NOT NULL AND provider_message_id IS NOT NULL"
+            ),
+        ),
     )
 
     conversation = relationship("Conversation", back_populates="messages")

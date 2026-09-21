@@ -146,6 +146,7 @@ class ImportBatchRead(BaseModel):
     approved_by: UUID | None
     approved_at: datetime | None
     entity_counts: dict[str, Any] = Field(default_factory=dict)
+    warnings: list[str] = Field(default_factory=list)
     error_reason: str | None = None
 
     model_config = {"from_attributes": True}

@@ -11,7 +11,8 @@
     "applications": {"path": "/applications", "method": "GET", "response_root_key": "items"},
     "resumes": {"path": "/resumes", "method": "GET", "response_root_key": "items"},
     "interviews": {"path": "/interviews", "method": "GET", "response_root_key": "items"},
-    "notes": {"path": "/notes", "method": "GET", "response_root_key": "items"}
+    "notes": {"path": "/notes", "method": "GET", "response_root_key": "items"},
+    "messages": {"path": "/messages", "method": "GET", "response_root_key": "items"}
   },
   "pagination": {"style": "cursor", "cursor_request_param": "cursor", "cursor_response_path": "next_cursor", "page_size": 100},
   "rate_limits": {"requests_per_second": 2, "max_retries": 5, "backoff_seconds": 1},
@@ -22,6 +23,7 @@
     "application": {"external_application_id": "id", "external_candidate_id": "candidate_id", "external_job_id": "job_id", "external_stage_id": "stage_id", "status": "status"},
     "resume": {"external_document_id": "id", "external_candidate_id": "candidate_id", "source_url": "url", "filename": "filename", "mime_type": "content_type", "content_base64": "content_base64"},
     "interview": {"external_interview_id": "id", "external_candidate_id": "candidate_id", "external_job_id": "job_id", "scheduled_at": "scheduled_at", "interviewer_name": "interviewer_name"},
-    "note": {"external_note_id": "id", "external_candidate_id": "candidate_id", "content": "content", "author_name": "author_name"}
+    "note": {"external_note_id": "id", "external_candidate_id": "candidate_id", "content": "content", "author_name": "author_name"},
+    "message": {"provider_message_id": "id", "external_candidate_id": "candidate_id", "direction": "direction", "sender_email": "from_email", "recipient_email": "to_email", "subject": "subject", "body_text": "body", "body_html": "html_body", "sent_at": "sent_at", "email_message_id": "email_message_id", "in_reply_to": "in_reply_to", "references_header": "references"}
   }
 }

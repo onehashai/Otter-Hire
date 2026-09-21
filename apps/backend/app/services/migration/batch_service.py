@@ -10,11 +10,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.ats_migration import AtsIntegration, ImportAuditLog, ImportBatch, ImportBatchRow
 from app.models.candidate import Candidate
+from app.models.conversation import Conversation
 from app.models.document import CandidateDocument
 from app.models.interview import Interview
 from app.models.job import Job
-from app.models.job_category import JobCategory
 from app.models.job_application import JobApplication
+from app.models.job_category import JobCategory
+from app.models.message import Message
 from app.models.note import Note
 from app.models.stage import Stage
 from app.schemas.canonical import CanonicalCandidate
@@ -24,15 +26,21 @@ from app.services.import_export_service import (
     upsert_canonical_candidate,
 )
 from app.services.migration.config_loader import get_path
+from app.services.migration.message_content import (
+    normalized_message_direction,
+    parse_imported_message_timestamp,
+    sanitize_imported_message_content,
+)
 
 ENTITY_ORDER = {
     "job": 0,
     "stage": 1,
     "candidate": 2,
     "application": 3,
-    "resume": 4,
-    "interview": 5,
-    "note": 6,
+    "interview": 4,
+    "note": 5,
+    "message": 6,
+    "resume": 7,
 }
 
 UNCATEGORIZED_JOB_CATEGORY = "Uncategorized"
@@ -53,6 +61,7 @@ REQUIRED_ENTITY_FIELDS = {
         "scheduled_at",
     ),
     "note": ("external_note_id", "external_candidate_id", "content"),
+    "message": ("provider_message_id", "external_candidate_id"),
 }
 
 
@@ -241,6 +250,125 @@ async def _upsert_candidate_application(
     return application, created
 
 
+def _email_value(value: Any, fallback: str | None) -> str:
+    if isinstance(value, list):
+        value = next((item for item in value if item), None)
+    if isinstance(value, dict):
+        value = value.get("email") or value.get("address") or value.get("value")
+    return str(value or fallback or "").strip()[:320]
+
+
+async def _upsert_imported_message(
+    db: AsyncSession,
+    batch: ImportBatch,
+    payload: dict[str, Any],
+) -> tuple[Message, bool]:
+    """Put source communications into the existing per-candidate conversation."""
+    candidate = (
+        await db.execute(
+            select(Candidate).where(
+                Candidate.org_id == batch.integration.org_id,
+                Candidate.external_candidate_id
+                == str(payload.get("external_candidate_id")),
+            )
+        )
+    ).scalar_one_or_none()
+    if candidate is None:
+        raise ValueError("References an unavailable candidate")
+
+    source_provider = str(batch.integration.provider or "external_ats")[:80]
+    provider_message_id = str(payload["provider_message_id"])[:500]
+    existing = (
+        await db.execute(
+            select(Message).where(
+                Message.org_id == batch.integration.org_id,
+                Message.source_provider == source_provider,
+                Message.provider_message_id == provider_message_id,
+            )
+        )
+    ).scalar_one_or_none()
+
+    from_email = _email_value(
+        payload.get("sender_email") or payload.get("from_email"),
+        candidate.email if payload.get("direction") == "inbound" else f"{source_provider}@imported.invalid",
+    )
+    direction = normalized_message_direction(
+        payload.get("direction"), from_email, candidate.email or ""
+    )
+    to_email = _email_value(
+        payload.get("recipient_email") or payload.get("to_email"),
+        f"{source_provider}@imported.invalid" if direction == "inbound" else candidate.email,
+    )
+    if direction == "inbound" and not from_email:
+        from_email = candidate.email[:320]
+    if direction == "outbound" and not to_email:
+        to_email = candidate.email[:320]
+
+    body, html_body = sanitize_imported_message_content(
+        payload.get("body_text") or payload.get("body"),
+        payload.get("body_html") or payload.get("html_body"),
+    )
+    if not body and not html_body:
+        raise ValueError("Message body is required")
+    try:
+        sent_at = parse_imported_message_timestamp(
+            payload.get("sent_at") or payload.get("created_at") or payload.get("timestamp")
+        )
+    except (TypeError, ValueError, OverflowError, OSError) as exc:
+        raise ValueError("sent_at must be a valid timestamp") from exc
+
+    subject = str(payload.get("subject") or "").strip()[:1000]
+    conversation = (
+        await db.execute(
+            select(Conversation).where(
+                Conversation.org_id == batch.integration.org_id,
+                Conversation.candidate_id == candidate.id,
+            )
+        )
+    ).scalar_one_or_none()
+    if conversation is None:
+        conversation = Conversation(
+            org_id=batch.integration.org_id,
+            candidate_id=candidate.id,
+            job_id=candidate.job_id,
+            subject=subject or f"Imported history with {candidate.name}"[:1000],
+            channel="email",
+            status="open",
+            last_message_at=sent_at,
+            created_at=sent_at,
+        )
+        db.add(conversation)
+        await db.flush()
+    elif conversation.job_id is None and candidate.job_id is not None:
+        conversation.job_id = candidate.job_id
+
+    target = existing or Message(
+        org_id=batch.integration.org_id,
+        conversation_id=conversation.id,
+        source_provider=source_provider,
+        provider_message_id=provider_message_id,
+    )
+    target.conversation_id = conversation.id
+    target.direction = direction
+    target.sender_type = "candidate" if direction == "inbound" else "user"
+    target.sender_user_id = None
+    target.from_email = from_email
+    target.to_email = to_email
+    target.subject = subject or None
+    target.body = body
+    target.html_body = html_body
+    target.status = "received" if direction == "inbound" else "sent"
+    target.email_message_id = _email_value(payload.get("email_message_id"), "") or None
+    target.in_reply_to = _email_value(payload.get("in_reply_to"), "") or None
+    target.references_header = str(payload.get("references_header") or "").strip() or None
+    target.created_at = sent_at
+    db.add(target)
+    if conversation.last_message_at is None or sent_at > conversation.last_message_at:
+        conversation.last_message_at = sent_at
+    await db.flush()
+    return target, existing is not None
+
+
 async def create_pending_batch(
     db: AsyncSession,
     integration: AtsIntegration,
@@ -248,11 +376,31 @@ async def create_pending_batch(
     source: str,
 ) -> ImportBatch:
     bundles = raw_records if isinstance(raw_records, dict) else {"candidate": raw_records}
-    batch = ImportBatch(integration_id=integration.id, source=source, status="pending_approval", entity_counts={})
+    warnings = [
+        str(warning)[:1000]
+        for warning in bundles.get("__warnings", [])
+        if str(warning).strip()
+    ]
+    batch = ImportBatch(
+        integration_id=integration.id,
+        source=source,
+        status="pending_approval",
+        entity_counts={},
+        warnings=warnings,
+    )
     db.add(batch)
     await db.flush()
     entity_counts: dict[str, int | str] = {}
-    for entity_type in ("job", "stage", "candidate", "application", "resume", "interview", "note"):
+    for entity_type in (
+        "job",
+        "stage",
+        "candidate",
+        "application",
+        "resume",
+        "interview",
+        "note",
+        "message",
+    ):
       records = bundles.get(entity_type)
       if records is None:
           entity_counts[entity_type] = "unavailable"
@@ -527,6 +675,19 @@ async def commit_batch(
                 db.add(target)
                 await db.flush()
                 _set_row_result(row, "updated" if existing else "created", target.id, "Note imported")
+            elif row.entity_type == "message":
+                try:
+                    target, existed = await _upsert_imported_message(db, batch, payload)
+                except ValueError as exc:
+                    unresolved_errors += 1
+                    _set_row_result(row, "skipped", reason=str(exc))
+                    continue
+                _set_row_result(
+                    row,
+                    "updated" if existed else "created",
+                    target.id,
+                    f"Message imported from {batch.integration.provider}",
+                )
             elif row.entity_type == "resume":
                 # Binary transfer is performed by the following Temporal activity.
                 _set_row_result(row, "created", reason="Resume queued for transfer")
@@ -668,6 +829,14 @@ async def preview_batch(db: AsyncSession, batch: ImportBatch) -> dict[str, Any]:
                     select(Note).where(
                         Note.org_id == org_id,
                         Note.external_note_id == str(payload["external_note_id"]),
+                    )
+                )).scalar_one_or_none()
+            elif row.entity_type == "message" and payload.get("provider_message_id"):
+                existing = (await db.execute(
+                    select(Message).where(
+                        Message.org_id == org_id,
+                        Message.source_provider == batch.integration.provider,
+                        Message.provider_message_id == str(payload["provider_message_id"]),
                     )
                 )).scalar_one_or_none()
             if existing:

@@ -25,6 +25,10 @@ function defaultEmailSubject(jobTitle: string | null | undefined, candidateName:
   return `Conversation with ${candidateName}`.slice(0, 1000);
 }
 
+function importedSourceLabel(source: string): string {
+  return source.replaceAll("_", " ").replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
 function OutboundStatus({ status }: { status: MessageRead["status"] | undefined }) {
   if (!status || status === "received") return null;
   const label =
@@ -306,6 +310,11 @@ export function CandidateMessagesTab({
 
   const hasThread = Boolean(detail && detail.messages.length > 0);
   const empty = !loading && !hasThread;
+  const chronologicalMessages = [...(detail?.messages ?? [])].sort(
+    (left, right) =>
+      new Date(left.created_at).getTime() - new Date(right.created_at).getTime() ||
+      left.id.localeCompare(right.id),
+  );
 
   return (
     <div className="flex flex-col gap-4 min-h-[420px]">
@@ -336,11 +345,11 @@ export function CandidateMessagesTab({
             ref={threadScrollRef}
             className="flex-1 overflow-y-auto p-4 space-y-3 max-h-[min(420px,50vh)]"
           >
-            {(detail?.messages ?? []).map((msg) => {
+            {chronologicalMessages.map((msg) => {
               const outbound = msg.direction === "outbound";
               const preview = (msg.body_visible ?? msg.body ?? "").trim();
               const when = formatTimestamp(msg.created_at);
-              const subject = detail?.subject?.trim() || "(no subject)";
+              const subject = msg.subject?.trim() || detail?.subject?.trim() || "(no subject)";
               const fromLabel = outbound
                 ? (msg.sender_name ?? msg.from_email)
                 : candidateName || msg.from_email;
@@ -402,13 +411,17 @@ export function CandidateMessagesTab({
                         <p className="text-muted-foreground leading-snug">
                           <span className="font-medium text-foreground/90">Subject:</span> {subject}
                         </p>
+                        {msg.source_provider ? (
+                          <span className="inline-flex rounded-md border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300">
+                            Imported from {importedSourceLabel(msg.source_provider)}
+                          </span>
+                        ) : null}
                       </div>
                       <div className="bg-background px-3 py-2.5 text-xs">
                         {preview ? (
-                          <div
-                            className="whitespace-pre-wrap break-words text-foreground leading-relaxed prose prose-sm max-w-none"
-                            dangerouslySetInnerHTML={{ __html: preview }}
-                          />
+                          <p className="whitespace-pre-wrap break-words text-foreground leading-relaxed">
+                            {preview}
+                          </p>
                         ) : null}
                         {msg.body_quoted ? <QuotedBodyToggle text={msg.body_quoted} /> : null}
                         <FullEmailToggle

@@ -23,7 +23,7 @@ from app.models.document import CandidateDocument
 from app.models.job_application import JobApplication
 from app.services.migration.batch_service import commit_batch, create_pending_batch
 from app.services.migration.config_loader import get_path, load_connector_registry
-from app.services.migration.fetcher import GenericFetcher
+from app.services.migration.fetcher import ConnectorFetchError, GenericFetcher
 from app.services.migration.mcp_client import build_mcp_auth, fetch_entity_bundle_from_mcp
 from app.services.migration.mcp_oauth import refresh_access_token, token_expiry
 from app.services.migration.provider_adapter import adapt_provider_bundle
@@ -260,16 +260,19 @@ async def fetch_candidates(input_data: AtsSyncInput) -> list[dict]:
             integration.provider_details,
         )
         since = input_data.since
-        configured_entities = {
-            "job": "jobs",
-            "candidate": "candidates",
-            "stage": "stages",
-            "application": "applications",
-            "resume": "resumes",
-            "interview": "interviews",
-            "note": "notes",
-        }
+        configured_entities = (
+            ("job", "jobs"),
+            ("candidate", "candidates"),
+            ("stage", "stages"),
+            ("application", "applications"),
+            ("resume", "resumes"),
+            ("interview", "interviews"),
+            ("note", "notes"),
+            ("message", "messages"),
+            ("message", "message_activity_feed"),
+        )
         bundle: dict[str, list[dict]] = {}
+        message_warnings: list[str] = []
         fetcher = GenericFetcher(
             config.model_copy(update={"base_url": integration.base_url}), secret
         )
@@ -323,9 +326,8 @@ async def fetch_candidates(input_data: AtsSyncInput) -> list[dict]:
                     fetched.append(linked)
             return fetched
 
-        # Fetch parents before dependent endpoints such as Greenhouse stages, notes, and resumes.
-        for entity in ("job", "candidate", "stage", "application", "resume", "interview", "note"):
-            endpoint_name = configured_entities[entity]
+        # Fetch parents before dependent endpoints such as activity feeds and resumes.
+        for entity, endpoint_name in configured_entities:
             if endpoint_name in config.endpoints:
                 if (
                     integration.provider == "bamboohr"
@@ -334,7 +336,26 @@ async def fetch_candidates(input_data: AtsSyncInput) -> list[dict]:
                 ):
                     bundle[entity] = list(bundle.get("candidate", []))
                     continue
-                bundle[entity] = await fetch_entity(entity, endpoint_name)
+                try:
+                    records = await fetch_entity(entity, endpoint_name)
+                except ConnectorFetchError as exc:
+                    if entity != "message":
+                        raise
+                    detail = str(exc)
+                    warning = (
+                        f"Message history was not imported from {integration.provider}: {detail}. "
+                        "Jobs, candidates, resumes, and applications were still imported."
+                    )
+                    logger.warning("%s", warning)
+                    message_warnings.append(warning)
+                    continue
+                if entity == "message":
+                    if endpoint_name == "message_activity_feed":
+                        bundle[endpoint_name] = records
+                    else:
+                        bundle.setdefault("message", []).extend(records)
+                else:
+                    bundle[entity] = records
         if "application_stages" in config.endpoints:
             bundle["application_stage"] = await fetch_entity(
                 "application_stage", "application_stages"
@@ -376,7 +397,10 @@ async def fetch_candidates(input_data: AtsSyncInput) -> list[dict]:
         )
         if integration.provider == "bamboohr" and bundle.get("application"):
             bundle["candidate"] = list(bundle["application"])
-        return adapt_provider_bundle(integration.provider, bundle) or {"candidate": []}
+        adapted = adapt_provider_bundle(integration.provider, bundle) or {"candidate": []}
+        if message_warnings:
+            adapted["__warnings"] = message_warnings
+        return adapted
 
 
 @activity.defn(name="validate_and_map_batch")

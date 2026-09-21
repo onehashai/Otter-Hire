@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from hashlib import sha256
 from typing import Any
 
 
@@ -68,6 +69,154 @@ def _contact_value(record: dict[str, Any], direct: tuple[str, ...], lists: tuple
             if value not in (None, ""):
                 return value
     return None
+
+
+def _email_value(value: Any) -> str | None:
+    if isinstance(value, list):
+        return _email_value(_first(value))
+    if isinstance(value, dict):
+        value = value.get("email") or value.get("address") or value.get("value")
+    return str(value).strip() if value not in (None, "") else None
+
+
+def _message_identity(
+    provider: str,
+    kind: str,
+    raw: dict[str, Any],
+    candidate_id: str,
+    sequence: int = 0,
+) -> str:
+    identifier = _record_id(
+        raw,
+        "id",
+        "uuid",
+        "message_id",
+        "messageId",
+        "external_id",
+        "externalId",
+    )
+    if identifier not in (None, ""):
+        return f"{kind}:{identifier}"
+    signature = "|".join(
+        str(raw.get(key) or "")
+        for key in ("created_at", "createdAt", "timestamp", "subject", "body", "text", "content")
+    )
+    digest = sha256(f"{provider}|{kind}|{candidate_id}|{sequence}|{signature}".encode()).hexdigest()
+    return f"{kind}:{digest[:40]}"
+
+
+def _canonical_message(
+    provider: str,
+    raw: dict[str, Any],
+    candidate_id: Any,
+    *,
+    kind: str,
+    sequence: int = 0,
+    direction: str | None = None,
+    candidate_email: str | None = None,
+) -> dict[str, Any] | None:
+    if candidate_id in (None, ""):
+        return None
+    external_candidate_id = str(candidate_id)
+    user = raw.get("user") if isinstance(raw.get("user"), dict) else {}
+    sender = _email_value(
+        raw.get("from")
+        or raw.get("from_email")
+        or raw.get("sender_email")
+        or raw.get("sender")
+        or user.get("email")
+    )
+    recipient = _email_value(
+        raw.get("to")
+        or raw.get("to_email")
+        or raw.get("recipient_email")
+        or raw.get("recipient")
+    )
+    resolved_direction = direction or raw.get("direction") or raw.get("type")
+    if not direction and candidate_email and sender and sender.casefold() == candidate_email.casefold():
+        resolved_direction = "inbound"
+    body = raw.get("body") or raw.get("text") or raw.get("content") or raw.get("value") or ""
+    if not isinstance(body, str):
+        body = str(body)
+    html_body = raw.get("html_body") or raw.get("htmlBody") or raw.get("body_html")
+    sent_at = (
+        raw.get("created_at")
+        or raw.get("createdAt")
+        or raw.get("sent_at")
+        or raw.get("sentAt")
+        or raw.get("timestamp")
+        or raw.get("completedAt")
+        or raw.get("updated_at")
+    )
+    if not body.strip() or sent_at in (None, ""):
+        return None
+    headers = raw.get("headers") if isinstance(raw.get("headers"), dict) else {}
+    return {
+        "provider_message_id": _message_identity(provider, kind, raw, external_candidate_id, sequence),
+        "external_candidate_id": external_candidate_id,
+        "direction": resolved_direction,
+        "sender_email": sender,
+        "recipient_email": recipient,
+        "subject": raw.get("subject") or raw.get("title") or raw.get("action"),
+        "body_text": body,
+        "body_html": html_body,
+        "sent_at": sent_at,
+        "email_message_id": raw.get("email_message_id")
+        or raw.get("emailMessageId")
+        or raw.get("rfc822_message_id")
+        or headers.get("Message-ID")
+        or headers.get("message-id"),
+        "in_reply_to": raw.get("in_reply_to")
+        or raw.get("inReplyTo")
+        or headers.get("In-Reply-To")
+        or headers.get("in-reply-to"),
+        "references_header": raw.get("references")
+        or raw.get("References")
+        or headers.get("References")
+        or headers.get("references"),
+    }
+
+
+def _append_message(target: list[dict[str, Any]], message: dict[str, Any] | None) -> None:
+    if message and message["provider_message_id"] not in {
+        existing["provider_message_id"] for existing in target
+    }:
+        target.append(message)
+
+
+def _messages_from_note(
+    provider: str,
+    raw: dict[str, Any],
+    candidate_id: Any,
+    *,
+    candidate_email: str | None = None,
+) -> list[dict[str, Any]]:
+    fields = _as_records(raw.get("fields"))
+    comments = fields or [raw]
+    messages: list[dict[str, Any]] = []
+    for index, comment in enumerate(comments):
+        message = _canonical_message(
+            provider,
+            {
+                **raw,
+                **comment,
+                "id": f"{raw.get('id') or raw.get('uuid') or 'note'}:{index}",
+                "body": comment.get("value") or comment.get("body") or raw.get("content") or raw.get("body"),
+                "created_at": comment.get("createdAt")
+                or comment.get("created_at")
+                or raw.get("createdAt")
+                or raw.get("created_at")
+                or raw.get("completedAt"),
+                "subject": raw.get("text") or raw.get("subject") or "Recruiter note",
+            },
+            candidate_id,
+            kind="note",
+            sequence=index,
+            direction="outbound",
+            candidate_email=candidate_email,
+        )
+        _append_message(messages, message)
+    return messages
 
 
 def _ashby_stage(application: dict[str, Any]) -> tuple[Any, str]:
@@ -323,6 +472,36 @@ def _adapt_lever(bundle: dict[str, list[dict[str, Any]]]) -> dict[str, list[dict
                 ) or item.get("text")
             records.append(item)
         adapted[entity] = records
+    candidate_emails = {
+        str(candidate.get("id")): _email_value(candidate.get("emails"))
+        for candidate in candidates
+        if candidate.get("id") not in (None, "")
+    }
+    messages: list[dict[str, Any]] = []
+    for raw in bundle.get("message", []):
+        candidate_id = str(raw.get("candidate_id") or raw.get("opportunity_id") or "")
+        candidate_id = opportunity_candidates.get(candidate_id, candidate_id)
+        _append_message(
+            messages,
+            _canonical_message(
+                "lever",
+                raw,
+                candidate_id,
+                kind="email",
+                candidate_email=candidate_emails.get(candidate_id),
+            ),
+        )
+    for raw in adapted.get("note", []):
+        candidate_id = raw.get("candidate_id")
+        for message in _messages_from_note(
+            "lever",
+            raw,
+            candidate_id,
+            candidate_email=candidate_emails.get(str(candidate_id)),
+        ):
+            _append_message(messages, message)
+    if messages:
+        adapted["message"] = messages
     return adapted
 
 
@@ -373,6 +552,39 @@ def _adapt_smartrecruiters(
         adapted["application"] = applications
     if stages:
         adapted["stage"] = list(stages.values())
+    messages: list[dict[str, Any]] = []
+    for raw in bundle.get("message", []):
+        _append_message(
+            messages,
+            _canonical_message(
+                "smartrecruiters",
+                raw,
+                raw.get("candidate_id") or raw.get("candidateId"),
+                kind="email",
+            ),
+        )
+    for candidate in candidates:
+        candidate_id = candidate.get("id")
+        candidate_email = _email_value(candidate.get("email"))
+        history = candidate.get("communicationHistory") or candidate.get("activity_history") or {}
+        history = history if isinstance(history, dict) else {}
+        for key, kind in (("comments", "comment"), ("notes", "note"), ("messages", "email")):
+            records = _as_records(candidate.get(key)) + _as_records(history.get(key))
+            for index, raw in enumerate(records):
+                _append_message(
+                    messages,
+                    _canonical_message(
+                        "smartrecruiters",
+                        raw,
+                        candidate_id,
+                        kind=kind,
+                        sequence=index,
+                        direction="outbound" if kind in {"comment", "note"} else None,
+                        candidate_email=candidate_email,
+                    ),
+                )
+    if messages:
+        adapted["message"] = messages
     return adapted
 
 
@@ -507,6 +719,114 @@ def _adapt_greenhouse(
                 record["candidate_id"] = application.get("candidate_id")
             if not record.get("job_id"):
                 record["job_id"] = application.get("job_id")
+    candidate_emails = {
+        str(candidate.get("id")): _email_value(candidate.get("email_addresses"))
+        for candidate in adapted.get("candidate", [])
+        if candidate.get("id") not in (None, "")
+    }
+    messages: list[dict[str, Any]] = []
+    for raw in bundle.get("message", []):
+        _append_message(
+            messages,
+            _canonical_message(
+                "greenhouse",
+                raw,
+                raw.get("candidate_id"),
+                kind="email",
+                candidate_email=candidate_emails.get(str(raw.get("candidate_id"))),
+            ),
+        )
+    for feed in bundle.get("message_activity_feed", []):
+        candidate_id = feed.get("candidate_id")
+        candidate_email = candidate_emails.get(str(candidate_id))
+        feed_type = str(
+            feed.get("type") or feed.get("action") or feed.get("event_type") or ""
+        ).casefold()
+        if feed_type in {"email", "message", "comment", "note"}:
+            if feed_type in {"comment", "note"}:
+                for message in _messages_from_note(
+                    "greenhouse", feed, candidate_id, candidate_email=candidate_email
+                ):
+                    _append_message(messages, message)
+            else:
+                _append_message(
+                    messages,
+                    _canonical_message(
+                        "greenhouse",
+                        feed,
+                        candidate_id,
+                        kind=feed_type,
+                        candidate_email=candidate_email,
+                    ),
+                )
+        for raw in _as_records(feed.get("emails")):
+            _append_message(
+                messages,
+                _canonical_message(
+                    "greenhouse",
+                    raw,
+                    candidate_id,
+                    kind="email",
+                    candidate_email=candidate_email,
+                ),
+            )
+        for raw in _as_records(feed.get("notes")):
+            for message in _messages_from_note(
+                "greenhouse", raw, candidate_id, candidate_email=candidate_email
+            ):
+                _append_message(messages, message)
+        for raw in _as_records(feed.get("activities")):
+            if str(raw.get("action") or "").lower() not in {"comment", "message"}:
+                continue
+            _append_message(
+                messages,
+                _canonical_message(
+                    "greenhouse",
+                    raw,
+                    candidate_id,
+                    kind="activity",
+                    candidate_email=candidate_email,
+                ),
+            )
+    for raw in adapted.get("note", []):
+        candidate_id = raw.get("candidate_id")
+        for message in _messages_from_note(
+            "greenhouse",
+            raw,
+            candidate_id,
+            candidate_email=candidate_emails.get(str(candidate_id)),
+        ):
+            _append_message(messages, message)
+    if messages:
+        adapted["message"] = messages
+    return adapted
+
+
+def _adapt_workable(bundle: dict[str, list[dict[str, Any]]]) -> dict[str, list[dict[str, Any]]]:
+    adapted = deepcopy(bundle)
+    candidate_emails = {
+        str(candidate.get("id")): _email_value(candidate.get("email"))
+        for candidate in adapted.get("candidate", [])
+        if candidate.get("id") not in (None, "")
+    }
+    messages: list[dict[str, Any]] = []
+    for raw in bundle.get("message", []):
+        action = str(raw.get("action") or raw.get("type") or "").lower()
+        if action and action not in {"comment", "message"}:
+            continue
+        candidate_id = raw.get("candidate_id") or raw.get("candidateId")
+        _append_message(
+            messages,
+            _canonical_message(
+                "workable",
+                raw,
+                candidate_id,
+                kind=action or "activity",
+                candidate_email=candidate_emails.get(str(candidate_id)),
+            ),
+        )
+    if messages:
+        adapted["message"] = messages
     return adapted
 
 
@@ -522,6 +842,8 @@ def adapt_provider_bundle(
         return _adapt_bamboohr(bundle)
     if provider == "greenhouse":
         return _adapt_greenhouse(bundle)
+    if provider == "workable":
+        return _adapt_workable(bundle)
     if provider == "ashby":
         return _adapt_ashby(bundle)
     return bundle

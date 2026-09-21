@@ -21,6 +21,7 @@
     "application": {"external_application_id": "id", "external_candidate_id": "candidate_id", "external_job_id": "posting", "external_stage_id": "stage_id", "status": "status"},
     "resume": {"external_document_id": "id", "external_candidate_id": "candidate_id", "source_url": "file.downloadUrl", "filename": "file.name"},
     "interview": {"external_interview_id": "id", "external_candidate_id": "candidate_id", "external_job_id": "job_id", "scheduled_at": "date", "interviewer_name": "interviewers.0.name"},
-    "note": {"external_note_id": "id", "external_candidate_id": "candidate_id", "content": "content", "author_name": "author_name"}
+    "note": {"external_note_id": "id", "external_candidate_id": "candidate_id", "content": "content", "author_name": "author_name"},
+    "message": {"provider_message_id": "provider_message_id", "external_candidate_id": "external_candidate_id", "direction": "direction", "sender_email": "sender_email", "recipient_email": "recipient_email", "subject": "subject", "body_text": "body_text", "body_html": "body_html", "sent_at": "sent_at", "email_message_id": "email_message_id", "in_reply_to": "in_reply_to", "references_header": "references_header"}
   }
 }

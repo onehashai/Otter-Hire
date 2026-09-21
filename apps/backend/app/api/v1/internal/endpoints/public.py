@@ -1796,6 +1796,13 @@ def _looks_like_job_inquiry(payload: "InboundEmailPayload") -> bool:
     return False
 
 
+def _has_candidate_application_signal(
+    payload: "InboundEmailPayload", *, has_resume: bool
+) -> bool:
+    """Accept a resume as a stronger application signal than free-form email text."""
+    return has_resume or _looks_like_job_inquiry(payload)
+
+
 def _is_automated_email(payload: "InboundEmailPayload") -> str | None:
     """Return a reason string if the email should be discarded, else None."""
     auto_submitted = (payload.auto_submitted or "no").lower()
@@ -2671,9 +2678,43 @@ async def ingest_inbound_email(
                     "org_id": str(org_id),
                 }
 
-    # --- Job inquiry validation (for new candidate creation only) ---
-    if not _looks_like_job_inquiry(payload):
+    # Resolve a resume link before applying the fallback text filter. A valid
+    # resume attachment or link is stronger evidence of an application than a
+    # short subject such as the job title alone.
+    if not has_resume:
+        full_body_for_links = f"{payload.text_body or ''}\n{payload.html_body or ''}"
+        link_resume = await _process_resume_link_fallback(
+            full_body_for_links,
+            org_id,
+            inbound_email.id,
+            db,
+        )
 
+        if link_resume is not None:
+            resume_attachment, content = link_resume
+            stored_attachments.append((resume_attachment, content))
+            has_resume = True
+            inbound_email.has_resume_attachment = True
+            inbound_email.attachment_count = max(int(inbound_email.attachment_count or 0), 1)
+            inbound_email.attachment_primary_storage_key = str(
+                resume_attachment.get("storage_key") or ""
+            )
+            inbound_email.attachment_primary_sha256 = str(
+                resume_attachment.get("sha256") or ""
+            )
+            inbound_email.attachment_primary_filename = str(
+                resume_attachment.get("filename") or ""
+            )
+            inbound_email.attachment_primary_content_type = str(
+                resume_attachment.get("content_type") or "application/octet-stream"
+            )
+            inbound_email.attachment_primary_size_bytes = int(
+                resume_attachment.get("size_bytes") or 0
+            )
+
+    # For new candidates without a resume, retain the narrow text-based filter
+    # so generic mail and unrelated enquiries do not create candidate records.
+    if not _has_candidate_application_signal(payload, has_resume=has_resume):
         inbound_email.parse_status = "ignored"
         inbound_email.parse_error = "Email does not match job application keywords"
         await db.commit()
@@ -2689,50 +2730,23 @@ async def ingest_inbound_email(
             "org_id": str(org_id),
         }
 
-    # Check if resume attachment exists (before expensive parsing)
     if not has_resume:
-        # Try resume link from combined body text and HTML as fallback
-        full_body_for_links = f"{payload.text_body or ''}\n{payload.html_body or ''}"
-        link_resume = await _process_resume_link_fallback(
-            full_body_for_links,
-            org_id,
-            inbound_email.id,
-            db,
+        inbound_email.parse_status = "ignored"
+        inbound_email.parse_error = (
+            "No resume attachment or link found - candidate creation requires resume"
         )
-
-        if link_resume is None:
-            inbound_email.parse_status = "ignored"
-            inbound_email.parse_error = (
-                "No resume attachment or link found - candidate creation requires resume"
-            )
-            await db.commit()
-            logger.info(
-                "Inbound email ignored (no resume): from=%s subject=%r",
-                inbound_email.from_email,
-                (inbound_email.subject or "")[:60],
-            )
-            return {
-                "status": "ok",
-                "message": "Ignored: no resume attachment",
-                "inbound_email_id": str(inbound_email.id),
-                "org_id": str(org_id),
-            }
-
-        # Resume link found and stored
-        resume_attachment, content = link_resume
-        stored_attachments.append((resume_attachment, content))
-        has_resume = True
-        inbound_email.has_resume_attachment = True
-        inbound_email.attachment_count = max(int(inbound_email.attachment_count or 0), 1)
-        inbound_email.attachment_primary_storage_key = str(
-            resume_attachment.get("storage_key") or ""
+        await db.commit()
+        logger.info(
+            "Inbound email ignored (no resume): from=%s subject=%r",
+            inbound_email.from_email,
+            (inbound_email.subject or "")[:60],
         )
-        inbound_email.attachment_primary_sha256 = str(resume_attachment.get("sha256") or "")
-        inbound_email.attachment_primary_filename = str(resume_attachment.get("filename") or "")
-        inbound_email.attachment_primary_content_type = str(
-            resume_attachment.get("content_type") or "application/octet-stream"
-        )
-        inbound_email.attachment_primary_size_bytes = int(resume_attachment.get("size_bytes") or 0)
+        return {
+            "status": "ok",
+            "message": "Ignored: no resume attachment",
+            "inbound_email_id": str(inbound_email.id),
+            "org_id": str(org_id),
+        }
 
     # Enqueue background Temporal parse workflow instead of parsing synchronously
     try:

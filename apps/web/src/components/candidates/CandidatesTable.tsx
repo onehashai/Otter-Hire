@@ -89,10 +89,11 @@ type Props = {
 
 function formatSourceLabel(source: string | null | undefined, t: (key: string) => string): string {
   if (!source) return "—";
-  if (source === "job_portal") return t("candidates_source_job_portal");
-  if (source === "email_automation") return t("source_email") ?? "Email";
-  if (source === "Manual" || source === "manual") return t("source_manual");
-  return source
+  const displaySource = source.replace(/^migration:/i, "");
+  if (displaySource === "job_portal") return t("candidates_source_job_portal");
+  if (displaySource === "email_automation") return t("source_email") ?? "Email";
+  if (displaySource === "Manual" || displaySource === "manual") return t("source_manual");
+  return displaySource
     .split("_")
     .map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1) : ""))
     .join(" ");

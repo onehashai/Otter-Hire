@@ -543,14 +543,15 @@ export function JobCandidateProfile({
     );
   }
 
+  const displaySource = uiCandidate.source.replace(/^migration:/i, "");
   const sourceBadgeLabel =
-    uiCandidate.source === "Manual"
+    displaySource === "Manual"
       ? "Manually Added"
-      : uiCandidate.source === "email_automation"
+      : displaySource === "email_automation"
         ? "Email Automation"
-        : uiCandidate.source === "job_portal"
+        : displaySource === "job_portal"
           ? "Job Portal"
-          : toTitle(uiCandidate.source).replaceAll("_", " ");
+          : toTitle(displaySource).replaceAll("_", " ");
 
   return (
     <>

@@ -70,8 +70,6 @@ export function ImportExportHub() {
   const [result, setResult] = useState("");
   const [preview, setPreview] = useState<"sample" | "blank" | null>(null);
 
-  const previewRows = preview === "sample" ? [CSV_HEADERS, ...SAMPLE_CSV_ROWS] : [CSV_HEADERS];
-
   async function importCsv() {
     if (!file) return;
     if (!window.confirm(`Import ${file.name} into your Otter Hire organization?`)) return;
@@ -188,9 +186,32 @@ export function ImportExportHub() {
                 : "Use these headers as the first row of your CSV file."}
             </DialogDescription>
           </DialogHeader>
-          <pre className="max-h-[45vh] overflow-auto rounded-md border bg-muted/30 p-4 text-xs leading-6">
-            {toCsv(previewRows)}
-          </pre>
+          <div className="max-h-[45vh] overflow-auto rounded-md border">
+            {preview === "sample" ? (
+              SAMPLE_CSV_ROWS.map((row, rowIndex) => (
+                <section key={row[2]} className="border-b p-4 last:border-b-0">
+                  <h4 className="text-sm font-medium">Example candidate {rowIndex + 1}</h4>
+                  <dl className="mt-3 divide-y">
+                    {CSV_HEADERS.map((header, columnIndex) => (
+                      <div key={header} className="py-2">
+                        <dt className="text-xs font-medium text-muted-foreground">{header}</dt>
+                        <dd className="mt-1 text-sm break-words">{row[columnIndex]}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </section>
+              ))
+            ) : (
+              <dl className="divide-y p-4">
+                {CSV_HEADERS.map((header) => (
+                  <div key={header} className="py-2">
+                    <dt className="text-xs font-medium text-muted-foreground">{header}</dt>
+                    <dd className="mt-1 text-sm text-muted-foreground">Blank</dd>
+                  </div>
+                ))}
+              </dl>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </div>

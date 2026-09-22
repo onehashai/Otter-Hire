@@ -27,6 +27,9 @@ import { CheckCircle2, Settings, Trash2 } from "lucide-react";
 import { toast } from "@onehash/ui/sonner";
 import { useAuthSession } from "@/app/providers";
 
+// Temporarily hide the Email Integration controls without changing inbound email processing.
+const SHOW_EMAIL_INTEGRATION_UI = false;
+
 function IntegrationAppIcon({ slug, name }: { slug: string; name: string }) {
   const [src, setSrc] = useState("/favicon.ico");
 
@@ -66,6 +69,9 @@ export default function IntegrationsSettingsPage() {
   const [disconnecting, setDisconnecting] = useState(false);
   const canConfigureIntegrations =
     user?.membership_role === "owner" || user?.membership_role === "admin";
+  const visibleApps = apps.filter(
+    (app) => SHOW_EMAIL_INTEGRATION_UI || app.slug !== "email-integration",
+  );
 
   const loadCatalog = async () => {
     setLoading(true);
@@ -100,7 +106,7 @@ export default function IntegrationsSettingsPage() {
   }, []);
 
   useEffect(() => {
-    if (searchParams.get("app") === "email-integration") {
+    if (SHOW_EMAIL_INTEGRATION_UI && searchParams.get("app") === "email-integration") {
       if (canConfigureIntegrations) {
         setManageDialogOpen(true);
       }
@@ -119,7 +125,7 @@ export default function IntegrationsSettingsPage() {
 
       {loading ? (
         <div className="text-sm text-muted-foreground">Loading integrations...</div>
-      ) : apps.length === 0 ? (
+      ) : visibleApps.length === 0 ? (
         <Card>
           <CardContent className="p-8 text-center text-sm text-muted-foreground">
             No integrations available.
@@ -127,7 +133,7 @@ export default function IntegrationsSettingsPage() {
         </Card>
       ) : (
         <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-          {apps.map((app) => (
+          {visibleApps.map((app) => (
             <Card key={app.app_id} className="flex flex-col">
               <CardHeader className="pb-3">
                 <div className="flex items-start gap-3">
@@ -279,62 +285,65 @@ export default function IntegrationsSettingsPage() {
         </div>
       )}
 
-      {/* Manage dialog */}
-      <Dialog open={manageDialogOpen} onOpenChange={setManageDialogOpen}>
-        <DialogContent className="sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Email Integration</DialogTitle>
-            <DialogDescription>
-              Configure careers inbox forwarding and verification for inbound resume parsing.
-            </DialogDescription>
-          </DialogHeader>
+      {/* Temporarily hidden with the Email Integration card. The backend workflow remains active. */}
+      {SHOW_EMAIL_INTEGRATION_UI && (
+        <Dialog open={manageDialogOpen} onOpenChange={setManageDialogOpen}>
+          <DialogContent className="sm:max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Email Integration</DialogTitle>
+              <DialogDescription>
+                Configure careers inbox forwarding and verification for inbound resume parsing.
+              </DialogDescription>
+            </DialogHeader>
 
-          <EmailIntegrationManager onChanged={loadCatalog} />
+            <EmailIntegrationManager onChanged={loadCatalog} />
 
-          <DialogFooter>
-            <Button
-              type="button"
-              className="text-xs h-8"
-              onClick={() => setManageDialogOpen(false)}
-            >
-              Close
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            <DialogFooter>
+              <Button
+                type="button"
+                className="text-xs h-8"
+                onClick={() => setManageDialogOpen(false)}
+              >
+                Close
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
 
-      {/* Disconnect confirmation dialog */}
-      <Dialog open={disconnectDialogOpen} onOpenChange={setDisconnectDialogOpen}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Disconnect Email Integration</DialogTitle>
-            <DialogDescription>
-              This will remove the email integration and stop inbound email parsing. This action
-              cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              className="text-xs h-8"
-              onClick={() => setDisconnectDialogOpen(false)}
-              disabled={disconnecting}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              className="text-xs h-8"
-              onClick={handleDisconnect}
-              disabled={disconnecting}
-            >
-              {disconnecting ? "Disconnecting…" : "Disconnect"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {SHOW_EMAIL_INTEGRATION_UI && (
+        <Dialog open={disconnectDialogOpen} onOpenChange={setDisconnectDialogOpen}>
+          <DialogContent className="sm:max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Disconnect Email Integration</DialogTitle>
+              <DialogDescription>
+                This will remove the email integration and stop inbound email parsing. This action
+                cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="text-xs h-8"
+                onClick={() => setDisconnectDialogOpen(false)}
+                disabled={disconnecting}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                className="text-xs h-8"
+                onClick={handleDisconnect}
+                disabled={disconnecting}
+              >
+                {disconnecting ? "Disconnecting…" : "Disconnect"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </TooltipProvider>
   );
 }

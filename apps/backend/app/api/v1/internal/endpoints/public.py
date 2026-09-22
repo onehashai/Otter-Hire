@@ -751,6 +751,10 @@ def _parse_resume_bytes(filename: str, content_type: str, content: bytes) -> str
         except Exception:
             pass
         return parsed
+    if lower_name.endswith(".doc") or lower_type == "application/msword":
+        from app.services.resume.extractors.doc_text import extract_doc_plain_text
+
+        return extract_doc_plain_text(content)
     raise ValueError("Unsupported resume format")
 
 

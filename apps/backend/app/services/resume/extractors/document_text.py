@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from app.services.resume.extractors.doc_text import extract_doc_plain_text
 from app.services.resume.extractors.docx_text import extract_docx_plain_text
 from app.services.resume.extractors.pdf_text import extract_pdf_plain_text
 from app.services.resume.hyperlinks import ResumeHyperlink
@@ -39,6 +40,13 @@ def extract_document(filename: str, content_type: str, content: bytes) -> Extrac
             format="docx",
             warnings=warnings,
             hyperlinks=hyperlinks,
+        )
+
+    if lower_name.endswith(".doc") or lower_type == "application/msword":
+        return ExtractedDocument(
+            text=extract_doc_plain_text(content),
+            format="doc",
+            warnings=["legacy_doc_extracted_with_antiword"],
         )
 
     raise ValueError("Unsupported resume format")

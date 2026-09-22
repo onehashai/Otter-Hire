@@ -19,6 +19,14 @@ from app.temporal.inbound_email.types import InboundEmailParseInput
 logger = logging.getLogger(__name__)
 
 
+def _has_stored_resume_fallback(inbound_email: InboundEmail) -> bool:
+    """Return whether a receiver-stored resume can recover a missing raw email."""
+    return bool(
+        inbound_email.has_resume_attachment
+        and (inbound_email.attachment_primary_storage_key or "").strip()
+    )
+
+
 @activity.defn(name="parse_inbound_email_activity")
 async def parse_inbound_email_activity(input_data: InboundEmailParseInput) -> dict:
     """Download raw email, extract resume, parse using run_resume_pipeline, resolve candidate, trigger score matching, and route conversations."""
@@ -63,31 +71,47 @@ async def parse_inbound_email_activity(input_data: InboundEmailParseInput) -> di
             if inbound_email.parse_status == "processed":
                 return {"status": "ok", "reason": "already_processed"}
 
-            # 2. Fetch raw email from S3
-            if not inbound_email.raw_storage_key:
+            # 2. Fetch raw email when available. The receiver separately stores
+            # resume attachments, so an expired raw MIME object must not discard
+            # an otherwise recoverable application.
+            raw_email: bytes | None = None
+            if inbound_email.raw_storage_key:
+                try:
+                    if settings.s3_enabled:
+                        raw_bucket = (settings.ses_raw_bridge_bucket or "").strip()
+                        bucket = raw_bucket or (settings.aws_s3_bucket or "").strip()
+                        raw_email = await asyncio.to_thread(
+                            lambda: storage_service.s3_client.get_object(
+                                Bucket=bucket,
+                                Key=inbound_email.raw_storage_key,
+                            )["Body"].read()
+                        )
+                    else:
+                        raw_email = await storage_service.read_bytes(inbound_email.raw_storage_key)
+                except Exception:
+                    if not _has_stored_resume_fallback(inbound_email):
+                        logger.exception(
+                            "Failed to read raw email key=%s", inbound_email.raw_storage_key
+                        )
+                        return {"status": "failed", "reason": "s3_read_failed"}
+                    logger.warning(
+                        "Raw email unavailable; using stored resume fallback key=%s",
+                        inbound_email.raw_storage_key,
+                        exc_info=True,
+                    )
+            elif not _has_stored_resume_fallback(inbound_email):
                 inbound_email.parse_status = "ignored"
                 inbound_email.parse_error = "InboundEmail raw_storage_key is missing"
                 await session.commit()
                 return {"status": "ignored", "reason": "missing_raw_storage_key"}
 
-            try:
-                if settings.s3_enabled:
-                    raw_bucket = (settings.ses_raw_bridge_bucket or "").strip()
-                    bucket = raw_bucket or (settings.aws_s3_bucket or "").strip()
-                    raw_email = await asyncio.to_thread(
-                        lambda: storage_service.s3_client.get_object(
-                            Bucket=bucket,
-                            Key=inbound_email.raw_storage_key
-                        )["Body"].read()
-                    )
-                else:
-                    raw_email = await storage_service.read_bytes(inbound_email.raw_storage_key)
-            except Exception:
-                logger.exception("Failed to read raw email key=%s", inbound_email.raw_storage_key)
-                return {"status": "failed", "reason": "s3_read_failed"}
-
-            # 3. Parse raw email
-            normalized = _extract_text_and_attachments(raw_email)
+            # 3. Parse raw email when present. The stored-resume fallback below
+            # supplies the attachment for recovery records with no raw MIME data.
+            normalized = (
+                _extract_text_and_attachments(raw_email)
+                if raw_email is not None
+                else {"text_body": None, "html_body": None, "attachments": []}
+            )
             attachments = normalized.get("attachments") or []
 
             # Gather all resume attachments along with their original indices

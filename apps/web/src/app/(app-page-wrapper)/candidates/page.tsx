@@ -27,7 +27,14 @@ import { Button } from "@onehash/ui/button";
 import { EmptyCard, ErrorCard } from "@onehash/ui/card";
 import { Label } from "@onehash/ui/label";
 import { Calendar } from "@onehash/ui/calendar";
-import { SelectField } from "@onehash/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectField,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@onehash/ui/select";
 import { format, subDays, startOfDay, endOfDay } from "date-fns";
 import { AddCandidateDialog } from "@/components/candidates/shared/dialogs/AddCandidateDialog";
 import { ResolveDuplicateDialog } from "@/components/candidates/shared/dialogs/ResolveDuplicateDialog";
@@ -66,12 +73,50 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { getMyPreferences, updateMyPreferences } from "@/api/users";
 import { classifyError } from "@/api/client/client";
 
-const PAGE_SIZE = 25;
+const PAGE_SIZE_OPTIONS = [20, 30, 40, 50, 100, 200] as const;
+const DEFAULT_PAGE_SIZE = 20;
 const ASSIGNMENT_ALL = "all";
 const ASSIGNMENT_ASSIGNED = "assigned";
 const ASSIGNMENT_UNASSIGNED = "unassigned";
 
 type LastActivityPreset = "today" | "7d" | "30d" | "custom" | null;
+type CandidatePageSize = (typeof PAGE_SIZE_OPTIONS)[number];
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function asStringArray(value: unknown): string[] | undefined {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : undefined;
+}
+
+function normalizeCandidatePageSize(value: unknown): CandidatePageSize {
+  const pageSize = typeof value === "number" ? value : Number(value);
+  return PAGE_SIZE_OPTIONS.includes(pageSize as CandidatePageSize)
+    ? (pageSize as CandidatePageSize)
+    : DEFAULT_PAGE_SIZE;
+}
+
+function withCandidateTablePreferences(
+  preferences: Record<string, unknown>,
+  candidatePreferences: Record<string, unknown>,
+): Record<string, unknown> {
+  const tables = asRecord(preferences.tables);
+  return {
+    ...preferences,
+    tables: {
+      ...tables,
+      candidates: {
+        ...asRecord(tables.candidates),
+        ...candidatePreferences,
+      },
+    },
+  };
+}
 
 export default function CandidatesPage() {
   const { t } = useTranslation();
@@ -82,6 +127,7 @@ export default function CandidatesPage() {
   const [lastActivityPreset, setLastActivityPreset] = useState<LastActivityPreset>(null);
   const [lastActivityRange, setLastActivityRange] = useState<{ from?: Date; to?: Date }>({});
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<CandidatePageSize>(DEFAULT_PAGE_SIZE);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [addOpen, setAddOpen] = useState(false);
   const [resolveOpen, setResolveOpen] = useState(false);
@@ -105,6 +151,7 @@ export default function CandidatesPage() {
   const [columnSubmenuOpen, setColumnSubmenuOpen] = useState(false);
   const [columnPickerOpen, setColumnPickerOpen] = useState(false);
   const [preferencesLoaded, setPreferencesLoaded] = useState(false);
+  const [preferenceSnapshot, setPreferenceSnapshot] = useState<Record<string, unknown>>({});
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<{ message: string; forbidden: boolean } | null>(null);
@@ -114,6 +161,7 @@ export default function CandidatesPage() {
   const lastSavedOrderRef = useRef<string>(
     JSON.stringify(normalizeCandidateColumnOrder(CANDIDATE_ALL_COLUMNS)),
   );
+  const lastSavedPageSizeRef = useRef<CandidatePageSize>(DEFAULT_PAGE_SIZE);
   const draggedColumnRef = useRef<CandidateColumnKey | null>(null);
 
   useSetPageMetadata({
@@ -196,18 +244,22 @@ export default function CandidatesPage() {
     (async () => {
       try {
         const response = await getMyPreferences();
-        const prefs = response.preferences as {
-          tables?: { candidates?: { visible_columns?: string[]; column_order?: string[] } };
-        };
-        const stored = prefs?.tables?.candidates?.visible_columns;
-        const storedOrder = prefs?.tables?.candidates?.column_order;
+        const preferences = asRecord(response.preferences);
+        const tables = asRecord(preferences.tables);
+        const candidatePreferences = asRecord(tables.candidates);
+        const stored = asStringArray(candidatePreferences.visible_columns);
+        const storedOrder = asStringArray(candidatePreferences.column_order);
+        const storedPageSize = normalizeCandidatePageSize(candidatePreferences.page_size);
         const normalized = normalizeVisibleCandidateColumns(stored);
         const normalizedOrder = normalizeCandidateColumnOrder(storedOrder);
         if (!cancelled) {
           setVisibleColumns(normalized);
           setColumnOrder(normalizedOrder);
+          setPageSize(storedPageSize);
+          setPreferenceSnapshot(preferences);
           lastSavedColumnsRef.current = JSON.stringify(normalized);
           lastSavedOrderRef.current = JSON.stringify(normalizedOrder);
+          lastSavedPageSizeRef.current = storedPageSize;
         }
       } catch {
         // Keep defaults when preferences are unavailable.
@@ -228,35 +280,43 @@ export default function CandidatesPage() {
     const serializedOrder = JSON.stringify(normalizedOrder);
     if (
       serialized === lastSavedColumnsRef.current &&
-      serializedOrder === lastSavedOrderRef.current
+      serializedOrder === lastSavedOrderRef.current &&
+      pageSize === lastSavedPageSizeRef.current
     ) {
       return;
     }
     const id = setTimeout(() => {
       void (async () => {
         try {
-          await updateMyPreferences({
-            tables: {
-              candidates: {
-                visible_columns: normalized,
-                column_order: normalizedOrder,
-                version: 1,
-              },
-            },
-          });
+          const response = await updateMyPreferences(
+            withCandidateTablePreferences(preferenceSnapshot, {
+              visible_columns: normalized,
+              column_order: normalizedOrder,
+              page_size: pageSize,
+              version: 1,
+            }),
+          );
+          setPreferenceSnapshot(asRecord(response.preferences));
           lastSavedColumnsRef.current = serialized;
           lastSavedOrderRef.current = serializedOrder;
+          lastSavedPageSizeRef.current = pageSize;
         } catch {
-          toast.error("Unable to save column preferences.");
+          toast.error("Unable to save candidate table preferences.");
         }
       })();
     }, 300);
     return () => clearTimeout(id);
-  }, [preferencesLoaded, visibleColumns, columnOrder]);
+  }, [preferencesLoaded, visibleColumns, columnOrder, pageSize, preferenceSnapshot]);
 
-  const totalPages = useMemo(() => Math.max(1, Math.ceil(total / PAGE_SIZE)), [total]);
-  const offset = (page - 1) * PAGE_SIZE;
+  const totalPages = useMemo(() => Math.max(1, Math.ceil(total / pageSize)), [total, pageSize]);
+  const offset = (page - 1) * pageSize;
+  const startRow = total === 0 ? 0 : offset + 1;
+  const endRow = total === 0 ? 0 : Math.min(offset + items.length, total);
   const selectedCount = selectedIds.size;
+
+  useEffect(() => {
+    if (total > 0 && page > totalPages) setPage(totalPages);
+  }, [page, total, totalPages]);
 
   const hasActiveFilters = assignment !== ASSIGNMENT_ALL || lastActivityPreset !== null;
   const clearAllFilters = () => {
@@ -382,7 +442,7 @@ export default function CandidatesPage() {
         ...(assignment === ASSIGNMENT_ASSIGNED ? { assigned_only: true } : {}),
         ...lastActivityApiParams,
         search: debouncedSearch || undefined,
-        limit: PAGE_SIZE,
+        limit: pageSize,
         offset,
       });
       setItems(res.items);
@@ -394,7 +454,7 @@ export default function CandidatesPage() {
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch, assignment, offset, lastActivityApiParams]);
+  }, [debouncedSearch, assignment, offset, lastActivityApiParams, pageSize]);
 
   useEffect(() => {
     void refresh();
@@ -471,6 +531,14 @@ export default function CandidatesPage() {
 
   const handleExport = () => {
     exportCsv(items, `candidates_page_${page}.csv`);
+  };
+
+  const handlePageSizeChange = (value: string) => {
+    const nextPageSize = normalizeCandidatePageSize(value);
+    if (nextPageSize === pageSize) return;
+    setPageSize(nextPageSize);
+    setPage(1);
+    setSelectedIds(new Set());
   };
 
   const visibleIds = useMemo(() => items.map((c) => c.id), [items]);
@@ -809,17 +877,38 @@ export default function CandidatesPage() {
               setResolveOpen(true);
             }}
           />
-          <div className="flex items-center justify-between pt-4">
-            <p className="text-xs text-muted-foreground">
-              Page {page} of {totalPages} · {total} candidates
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-4">
+            <p className="text-xs text-muted-foreground" aria-live="polite">
+              Showing {startRow} - {endRow} of {total} candidates
             </p>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <div className="flex items-center gap-2">
+                <Label className="text-xs text-muted-foreground whitespace-nowrap">
+                  Rows per page:
+                </Label>
+                <Select value={String(pageSize)} onValueChange={handlePageSizeChange}>
+                  <SelectTrigger className="h-8 w-[72px] text-xs" aria-label="Rows per page">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PAGE_SIZE_OPTIONS.map((option) => (
+                      <SelectItem key={option} value={String(option)} className="text-xs">
+                        {option}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <span className="text-xs text-muted-foreground whitespace-nowrap" aria-live="polite">
+                Page {page} of {totalPages}
+              </span>
               <Button
                 variant="outline"
                 size="sm"
                 className="h-8 text-xs w-20"
                 disabled={loading || page <= 1}
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
+                aria-label="Previous page"
               >
                 {t("previous")}
               </Button>
@@ -829,6 +918,7 @@ export default function CandidatesPage() {
                 className="h-8 text-xs w-20"
                 disabled={loading || page >= totalPages}
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                aria-label="Next page"
               >
                 {t("next")}
               </Button>

@@ -7,6 +7,7 @@ from app.api.v1.internal.endpoints.ats_migrations import router as ats_migration
 from app.api.v1.internal.endpoints.auth import router as auth_router
 from app.api.v1.internal.endpoints.automations import router as automations_router
 from app.api.v1.internal.endpoints.candidates import router as candidates_router
+from app.api.v1.internal.endpoints.email_log_pagination import router as email_log_pagination_router
 from app.api.v1.internal.endpoints.conversations import router as conversations_router
 from app.api.v1.internal.endpoints.files import router as files_router
 from app.api.v1.internal.endpoints.import_export import router as import_export_router
@@ -43,6 +44,7 @@ internal_router.include_router(admin_router)
 internal_router.include_router(jobs_router)
 internal_router.include_router(users_router)
 internal_router.include_router(organizations_router)
+internal_router.include_router(email_log_pagination_router)
 internal_router.include_router(templates_router)
 internal_router.include_router(automations_router)
 internal_router.include_router(job_categories_router)

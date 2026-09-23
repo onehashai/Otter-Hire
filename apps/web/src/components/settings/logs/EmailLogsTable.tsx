@@ -11,6 +11,7 @@ import { Icon } from "@onehash/ui/icon";
 import { cn } from "@/lib/utils";
 import { getOrgEmailLogBody, getAdminEmailLogBody, type EmailLogRow } from "@/api/email-logs";
 import { EmailViewModal, type EmailViewModalData } from "@/components/common/EmailViewModal";
+import { TablePagination } from "@/components/common/TablePagination";
 
 const STATUS_CFG: Record<string, { label: string; cls: string }> = {
   processed: {
@@ -35,6 +36,51 @@ function StatusBadge({ status }: { status: string }) {
 
 function formatTs(iso: string) {
   return new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+}
+
+export function downloadEmailLogsCsv(rows: EmailLogRow[], filename: string) {
+  const headers = [
+    "ID",
+    "Timestamp",
+    "Sender",
+    "Recipient",
+    "Subject",
+    "Inbox Address",
+    "Status",
+    "Error Reason",
+    "Attachments Count",
+  ];
+  const escape = (value: string | number | null | undefined) => {
+    const text = String(value ?? "");
+    const safeText = /^[=+\-@]/.test(text) ? `'${text}` : text;
+    return `"${safeText.replace(/"/g, '""')}"`;
+  };
+  const csv = [
+    headers.join(","),
+    ...rows.map((row) =>
+      [
+        row.id,
+        row.received_at,
+        row.from_email,
+        row.inbox_address,
+        row.subject,
+        row.inbox_address,
+        row.parse_status,
+        row.parse_error,
+        row.attachment_count,
+      ]
+        .map(escape)
+        .join(","),
+    ),
+  ].join("\n");
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 function ExpandedDetail({
@@ -172,6 +218,9 @@ function ExpandedDetail({
 
 export interface EmailLogsTableProps {
   rows: (EmailLogRow & { org_name?: string })[];
+  total: number;
+  page: number;
+  pageSize: number;
   loading: boolean;
   error: string;
   statusFilter: string;
@@ -180,6 +229,10 @@ export interface EmailLogsTableProps {
   onSenderChange: (v: string) => void;
   onClearFilters: () => void;
   onRetry: () => void;
+  onPageChange: (page: number) => void;
+  onPageSizeChange: (pageSize: number) => void;
+  onExport: () => void;
+  exporting?: boolean;
   showOrgColumn?: boolean;
   isAdmin?: boolean;
   extraFilters?: React.ReactNode;
@@ -187,6 +240,9 @@ export interface EmailLogsTableProps {
 
 export function EmailLogsTable({
   rows,
+  total,
+  page,
+  pageSize,
   loading,
   error,
   statusFilter,
@@ -195,6 +251,10 @@ export function EmailLogsTable({
   onSenderChange,
   onClearFilters,
   onRetry,
+  onPageChange,
+  onPageSizeChange,
+  onExport,
+  exporting = false,
   showOrgColumn,
   isAdmin,
   extraFilters,
@@ -277,7 +337,20 @@ export function EmailLogsTable({
             </Button>
           )}
         </div>
-        <div className="flex sm:justify-end shrink-0 w-full sm:w-auto">{extraFilters}</div>
+        <div className="flex gap-2 sm:justify-end shrink-0 w-full sm:w-auto">
+          {extraFilters}
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-8 text-xs gap-1.5 shrink-0 w-full sm:w-auto"
+            onClick={onExport}
+            disabled={loading || exporting || total === 0}
+          >
+            <Icon name="Archive" className="h-3.5 w-3.5" />
+            {exporting ? "Exporting…" : "Export CSV"}
+          </Button>
+        </div>
       </div>
 
       <Card>
@@ -374,6 +447,18 @@ export function EmailLogsTable({
           )}
         </CardContent>
       </Card>
+
+      {!loading && !error ? (
+        <TablePagination
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          itemsOnPage={rows.length}
+          disabled={exporting}
+          onPageChange={onPageChange}
+          onPageSizeChange={onPageSizeChange}
+        />
+      ) : null}
 
       <EmailViewModal
         open={!!modalEmail}

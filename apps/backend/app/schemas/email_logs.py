@@ -24,3 +24,17 @@ class EmailLogRow(BaseModel):
 class AdminEmailLogRow(EmailLogRow):
     org_id: UUID
     org_name: str
+
+
+class EmailLogPageResponse(BaseModel):
+    items: list[EmailLogRow]
+    total: int
+    limit: int
+    offset: int
+
+
+class AdminEmailLogPageResponse(BaseModel):
+    items: list[AdminEmailLogRow]
+    total: int
+    limit: int
+    offset: int

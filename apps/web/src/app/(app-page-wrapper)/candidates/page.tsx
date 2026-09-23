@@ -27,14 +27,7 @@ import { Button } from "@onehash/ui/button";
 import { EmptyCard, ErrorCard } from "@onehash/ui/card";
 import { Label } from "@onehash/ui/label";
 import { Calendar } from "@onehash/ui/calendar";
-import {
-  Select,
-  SelectContent,
-  SelectField,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@onehash/ui/select";
+import { SelectField } from "@onehash/ui/select";
 import { format, subDays, startOfDay, endOfDay } from "date-fns";
 import { AddCandidateDialog } from "@/components/candidates/shared/dialogs/AddCandidateDialog";
 import { ResolveDuplicateDialog } from "@/components/candidates/shared/dialogs/ResolveDuplicateDialog";
@@ -72,15 +65,20 @@ import { toast } from "@onehash/ui/sonner";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { getMyPreferences, updateMyPreferences } from "@/api/users";
 import { classifyError } from "@/api/client/client";
+import {
+  DEFAULT_TABLE_PAGE_SIZE,
+  TABLE_PAGE_SIZE_OPTIONS,
+  TablePagination,
+} from "@/components/common/TablePagination";
 
-const PAGE_SIZE_OPTIONS = [20, 30, 40, 50, 100, 200] as const;
-const DEFAULT_PAGE_SIZE = 20;
+const PAGE_SIZE_OPTIONS = TABLE_PAGE_SIZE_OPTIONS;
+const DEFAULT_PAGE_SIZE = DEFAULT_TABLE_PAGE_SIZE;
 const ASSIGNMENT_ALL = "all";
 const ASSIGNMENT_ASSIGNED = "assigned";
 const ASSIGNMENT_UNASSIGNED = "unassigned";
 
 type LastActivityPreset = "today" | "7d" | "30d" | "custom" | null;
-type CandidatePageSize = (typeof PAGE_SIZE_OPTIONS)[number];
+type CandidatePageSize = number;
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -310,8 +308,6 @@ export default function CandidatesPage() {
 
   const totalPages = useMemo(() => Math.max(1, Math.ceil(total / pageSize)), [total, pageSize]);
   const offset = (page - 1) * pageSize;
-  const startRow = total === 0 ? 0 : offset + 1;
-  const endRow = total === 0 ? 0 : Math.min(offset + items.length, total);
   const selectedCount = selectedIds.size;
 
   useEffect(() => {
@@ -533,7 +529,7 @@ export default function CandidatesPage() {
     exportCsv(items, `candidates_page_${page}.csv`);
   };
 
-  const handlePageSizeChange = (value: string) => {
+  const handlePageSizeChange = (value: number) => {
     const nextPageSize = normalizeCandidatePageSize(value);
     if (nextPageSize === pageSize) return;
     setPageSize(nextPageSize);
@@ -877,53 +873,16 @@ export default function CandidatesPage() {
               setResolveOpen(true);
             }}
           />
-          <div className="flex flex-wrap items-center justify-between gap-3 pt-4">
-            <p className="text-xs text-muted-foreground" aria-live="polite">
-              Showing {startRow} - {endRow} of {total} candidates
-            </p>
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              <div className="flex items-center gap-2">
-                <Label className="text-xs text-muted-foreground whitespace-nowrap">
-                  Rows per page:
-                </Label>
-                <Select value={String(pageSize)} onValueChange={handlePageSizeChange}>
-                  <SelectTrigger className="h-8 w-[72px] text-xs" aria-label="Rows per page">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {PAGE_SIZE_OPTIONS.map((option) => (
-                      <SelectItem key={option} value={String(option)} className="text-xs">
-                        {option}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <span className="text-xs text-muted-foreground whitespace-nowrap" aria-live="polite">
-                Page {page} of {totalPages}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 text-xs w-20"
-                disabled={loading || page <= 1}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                aria-label="Previous page"
-              >
-                {t("previous")}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 text-xs w-20"
-                disabled={loading || page >= totalPages}
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                aria-label="Next page"
-              >
-                {t("next")}
-              </Button>
-            </div>
-          </div>
+          <TablePagination
+            page={page}
+            pageSize={pageSize}
+            total={total}
+            itemsOnPage={items.length}
+            recordLabel="candidates"
+            disabled={loading}
+            onPageChange={setPage}
+            onPageSizeChange={handlePageSizeChange}
+          />
 
           {selectedCount > 0 ? (
             <div className="fixed bottom-[calc(3.5rem+1.5rem)] md:bottom-6 left-1/2 -translate-x-1/2 z-[60]">

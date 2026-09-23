@@ -22,6 +22,13 @@ export type AdminEmailLogRow = EmailLogRow & {
   org_name: string;
 };
 
+export type EmailLogsPage<T extends EmailLogRow = EmailLogRow> = {
+  items: T[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
 export type EmailLogFilters = {
   status?: string;
   sender?: string;
@@ -46,8 +53,18 @@ export function getOrgEmailLogs(filters: EmailLogFilters = {}): Promise<EmailLog
   );
 }
 
-export function getOrgEmailLogBody(logId: string): Promise<{ text_body: string; html_body: string }> {
-  return apiGet<{ text_body: string; html_body: string }>(`/organizations/email-logs/${logId}/body`);
+export function getOrgEmailLogsPaginated(filters: EmailLogFilters = {}): Promise<EmailLogsPage> {
+  return apiGet<EmailLogsPage>(
+    `/organizations/email-logs/paginated${toQS(filters as Record<string, string | number | undefined>)}`,
+  );
+}
+
+export function getOrgEmailLogBody(
+  logId: string,
+): Promise<{ text_body: string; html_body: string }> {
+  return apiGet<{ text_body: string; html_body: string }>(
+    `/organizations/email-logs/${logId}/body`,
+  );
 }
 
 export function getAdminEmailLogs(
@@ -59,7 +76,17 @@ export function getAdminEmailLogs(
   );
 }
 
-export function getAdminEmailLogBody(logId: string): Promise<{ text_body: string; html_body: string }> {
-  return apiGet<{ text_body: string; html_body: string }>(`/admin/email-logs/${logId}/body`);
+export function getAdminEmailLogsPaginated(
+  orgId?: string,
+  filters: EmailLogFilters = {},
+): Promise<EmailLogsPage<AdminEmailLogRow>> {
+  return apiGet<EmailLogsPage<AdminEmailLogRow>>(
+    `/admin/email-logs/paginated${toQS({ org_id: orgId, ...(filters as Record<string, string | number | undefined>) })}`,
+  );
 }
 
+export function getAdminEmailLogBody(
+  logId: string,
+): Promise<{ text_body: string; html_body: string }> {
+  return apiGet<{ text_body: string; html_body: string }>(`/admin/email-logs/${logId}/body`);
+}

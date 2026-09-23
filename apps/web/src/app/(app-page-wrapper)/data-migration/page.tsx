@@ -47,6 +47,7 @@ const PROVIDER_LABELS: Record<string, string> = {
   greenhouse: "Greenhouse",
   icims: "iCIMS",
   lever: "Lever",
+  recruiterbox: "Recruiterbox",
   smartrecruiters: "SmartRecruiters",
   workable: "Workable",
   workday: "Workday",
@@ -387,7 +388,10 @@ function ImportBatchesDialog({
                       </div>
                     )}
                     {batch.warnings?.map((warning) => (
-                      <p key={warning} className="mt-2 break-words text-xs text-amber-600 dark:text-amber-400">
+                      <p
+                        key={warning}
+                        className="mt-2 break-words text-xs text-amber-600 dark:text-amber-400"
+                      >
                         {warning}
                       </p>
                     ))}

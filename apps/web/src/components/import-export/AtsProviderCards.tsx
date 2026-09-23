@@ -23,6 +23,7 @@ type ConnectionType = "api" | "smartats_bridge";
 const providers = [
   ["greenhouse", "Greenhouse", "OAuth client ID and client secret"],
   ["lever", "Lever", "API key with Basic Auth"],
+  ["recruiterbox", "Recruiterbox", "API key with Basic Auth"],
   ["workday", "Workday", "Provider admin setup"],
   ["icims", "iCIMS", "Provider authorization"],
   ["smartrecruiters", "SmartRecruiters", "API key"],
@@ -33,6 +34,7 @@ const providers = [
 const providerBaseUrls: Record<string, string> = {
   greenhouse: "https://harvest.greenhouse.io",
   lever: "https://api.lever.co",
+  recruiterbox: "https://api.recruiterbox.com",
   smartrecruiters: "https://api.smartrecruiters.com",
 };
 
@@ -220,7 +222,7 @@ export function AtsProviderCards({
               ? "bearer"
               : provider === "greenhouse"
                 ? "oauth2"
-                : provider === "lever" || provider === "bamboohr"
+                : provider === "lever" || provider === "recruiterbox" || provider === "bamboohr"
                   ? "basic"
                   : "api_key",
           provider_details: providerDetails,
@@ -532,7 +534,9 @@ export function AtsProviderCards({
                               placeholder={
                                 id === "greenhouse"
                                   ? "Greenhouse OAuth client secret"
-                                  : "Paste API key or token"
+                                  : id === "recruiterbox"
+                                    ? "Recruiterbox API key"
+                                    : "Paste API key or token"
                               }
                               type="password"
                               value={key}

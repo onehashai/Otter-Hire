@@ -17,6 +17,7 @@ class ProviderConnectionError(ValueError):
 _FIXED_HOSTS = {
     "greenhouse": {"harvest.greenhouse.io"},
     "lever": {"api.lever.co", "api.eu.lever.co"},
+    "recruiterbox": {"api.recruiterbox.com"},
     "smartrecruiters": {"api.smartrecruiters.com"},
 }
 

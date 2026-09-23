@@ -127,13 +127,15 @@ def _canonical_message(
         or user.get("email")
     )
     recipient = _email_value(
-        raw.get("to")
-        or raw.get("to_email")
-        or raw.get("recipient_email")
-        or raw.get("recipient")
+        raw.get("to") or raw.get("to_email") or raw.get("recipient_email") or raw.get("recipient")
     )
     resolved_direction = direction or raw.get("direction") or raw.get("type")
-    if not direction and candidate_email and sender and sender.casefold() == candidate_email.casefold():
+    if (
+        not direction
+        and candidate_email
+        and sender
+        and sender.casefold() == candidate_email.casefold()
+    ):
         resolved_direction = "inbound"
     body = raw.get("body") or raw.get("text") or raw.get("content") or raw.get("value") or ""
     if not isinstance(body, str):
@@ -152,7 +154,9 @@ def _canonical_message(
         return None
     headers = raw.get("headers") if isinstance(raw.get("headers"), dict) else {}
     return {
-        "provider_message_id": _message_identity(provider, kind, raw, external_candidate_id, sequence),
+        "provider_message_id": _message_identity(
+            provider, kind, raw, external_candidate_id, sequence
+        ),
         "external_candidate_id": external_candidate_id,
         "direction": resolved_direction,
         "sender_email": sender,
@@ -201,7 +205,10 @@ def _messages_from_note(
                 **raw,
                 **comment,
                 "id": f"{raw.get('id') or raw.get('uuid') or 'note'}:{index}",
-                "body": comment.get("value") or comment.get("body") or raw.get("content") or raw.get("body"),
+                "body": comment.get("value")
+                or comment.get("body")
+                or raw.get("content")
+                or raw.get("body"),
                 "created_at": comment.get("createdAt")
                 or comment.get("created_at")
                 or raw.get("createdAt")
@@ -830,6 +837,116 @@ def _adapt_workable(bundle: dict[str, list[dict[str, Any]]]) -> dict[str, list[d
     return adapted
 
 
+def _adapt_recruiterbox(bundle: dict[str, list[dict[str, Any]]]) -> dict[str, list[dict[str, Any]]]:
+    """Flatten Recruiterbox openings and candidate applications into import rows."""
+    adapted = deepcopy(bundle)
+    candidates: list[dict[str, Any]] = []
+    stages: dict[tuple[str, str], dict[str, Any]] = {}
+    applications: list[dict[str, Any]] = []
+    resumes: list[dict[str, Any]] = []
+
+    for opening in adapted.get("job", []):
+        opening_id = _record_id(opening, "id")
+        if opening_id in (None, ""):
+            continue
+        opening_id = str(opening_id)
+        for position, stage in enumerate(_as_records(opening.get("stages"))):
+            stage_id = _record_id(stage, "id")
+            stage_name = _label(stage.get("name") or stage.get("title"))
+            if stage_id in (None, "") or not stage_name:
+                continue
+            stage_id = str(stage_id)
+            stages[(str(opening_id), str(stage_id))] = {
+                "id": stage_id,
+                "job_id": opening_id,
+                "name": str(stage_name),
+                "position": stage.get("position", position),
+            }
+
+    for raw_candidate in adapted.get("candidate", []):
+        candidate = dict(raw_candidate)
+        candidate_id = _record_id(candidate, "id")
+        if candidate_id in (None, ""):
+            continue
+        candidate["id"] = str(candidate_id)
+        candidate_id = candidate["id"]
+        opening = candidate.get("opening") if isinstance(candidate.get("opening"), dict) else {}
+        stage = candidate.get("stage") if isinstance(candidate.get("stage"), dict) else {}
+        opening_id = candidate.get("opening_id") or opening.get("id")
+        stage_id = candidate.get("stage_id") or stage.get("id")
+        stage_name = candidate.get("stage_name") or stage.get("name")
+        if opening_id is not None:
+            candidate["opening_id"] = str(opening_id)
+            opening_id = str(opening_id)
+        if stage_id is not None:
+            candidate["stage_id"] = str(stage_id)
+            stage_id = str(stage_id)
+        if stage_name:
+            candidate["stage_name"] = _label(stage_name)
+        candidates.append(candidate)
+        if (
+            opening_id is not None
+            and stage_id is not None
+            and (str(opening_id), str(stage_id)) not in stages
+        ):
+            stages[(str(opening_id), str(stage_id))] = {
+                "id": str(stage_id),
+                "job_id": opening_id,
+                "name": str(_label(stage_name) or stage_id),
+                "position": len(stages),
+            }
+
+        if opening_id is not None:
+            applications.append(
+                {
+                    "id": f"{candidate_id}:{opening_id}",
+                    "candidate_id": candidate_id,
+                    "opening_id": opening_id,
+                    "stage_id": stage_id,
+                    "state": candidate.get("state") or candidate.get("stage_name") or "Applied",
+                }
+            )
+
+        resume = candidate.get("resume")
+        resume_records = (
+            _as_records(resume)
+            if isinstance(resume, list)
+            else [resume]
+            if isinstance(resume, dict)
+            else []
+        )
+        if not resume_records and any(
+            candidate.get(key) for key in ("file_url", "file_name", "content")
+        ):
+            resume_records = [candidate]
+        for resume_record in resume_records:
+            source_url = resume_record.get("file_url") or resume_record.get("url")
+            content = resume_record.get("content") or resume_record.get("content_base64")
+            if not source_url and not content:
+                continue
+            resumes.append(
+                {
+                    **resume_record,
+                    "id": resume_record.get("id") or f"{candidate_id}:resume",
+                    "candidate_id": candidate_id,
+                    "file_url": source_url,
+                    "file_name": resume_record.get("file_name")
+                    or resume_record.get("filename")
+                    or "resume",
+                    "content": content,
+                }
+            )
+
+    adapted["candidate"] = candidates
+    if applications:
+        adapted["application"] = applications
+    if stages:
+        adapted["stage"] = list(stages.values())
+    if resumes:
+        adapted["resume"] = resumes
+    return adapted
+
+
 def adapt_provider_bundle(
     provider: str, bundle: dict[str, list[dict[str, Any]]]
 ) -> dict[str, list[dict[str, Any]]]:
@@ -844,6 +961,8 @@ def adapt_provider_bundle(
         return _adapt_greenhouse(bundle)
     if provider == "workable":
         return _adapt_workable(bundle)
+    if provider == "recruiterbox":
+        return _adapt_recruiterbox(bundle)
     if provider == "ashby":
         return _adapt_ashby(bundle)
     return bundle

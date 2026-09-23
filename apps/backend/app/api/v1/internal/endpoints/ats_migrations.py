@@ -66,7 +66,15 @@ from app.temporal.migration.workflows import AtsSyncWorkflow, CommitBatchWorkflo
 
 router = APIRouter(prefix="/ats-migrations", tags=["ats-migrations"])
 CONFIG_DIR = Path(__file__).resolve().parents[4] / "migration_configs"
-NAMED_PROVIDERS = {"greenhouse", "lever", "smartrecruiters", "bamboohr", "workable", "otter_local"}
+NAMED_PROVIDERS = {
+    "greenhouse",
+    "lever",
+    "recruiterbox",
+    "smartrecruiters",
+    "bamboohr",
+    "workable",
+    "otter_local",
+}
 PENDING_PROVIDERS = {"workday", "icims"}
 MCP_OAUTH_STATE_TTL = timedelta(minutes=10)
 MCP_MIGRATION_READY_PROVIDERS = MCP_MAPPED_PROVIDERS
@@ -168,7 +176,11 @@ async def _upsert_provider_integration(
     db: AsyncSession,
 ) -> AtsIntegrationRead:
     connector = load_connector_registry(CONFIG_DIR).get(body.provider)
-    allowed_providers = BRIDGE_PROVIDERS if connection_type == "smartats_bridge" else NAMED_PROVIDERS | PENDING_PROVIDERS
+    allowed_providers = (
+        BRIDGE_PROVIDERS
+        if connection_type == "smartats_bridge"
+        else NAMED_PROVIDERS | PENDING_PROVIDERS
+    )
     if body.provider not in allowed_providers or (
         connector is None and body.provider not in PENDING_PROVIDERS
     ):
@@ -377,7 +389,8 @@ async def start_sync(
     )
     integration.status = "syncing"
     integration.provider_details = {
-        **(integration.provider_details or {}), "sync_workflow_id": workflow_id,
+        **(integration.provider_details or {}),
+        "sync_workflow_id": workflow_id,
     }
     await db.commit()
     return {"workflow_id": workflow_id, "status": "queued"}
@@ -392,9 +405,12 @@ async def sync_status(
 ):
     _enabled()
     integration = (
-        await db.execute(select(AtsIntegration).where(
-            AtsIntegration.id == integration_id, AtsIntegration.org_id == user.org_id,
-        ))
+        await db.execute(
+            select(AtsIntegration).where(
+                AtsIntegration.id == integration_id,
+                AtsIntegration.org_id == user.org_id,
+            )
+        )
     ).scalar_one_or_none()
     if not integration or not workflow_id.startswith(f"ats-sync-{integration_id}-"):
         raise HTTPException(status_code=404, detail="Sync not found")

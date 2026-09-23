@@ -6,6 +6,7 @@ BRIDGE_PROVIDERS = {
     "bamboohr",
     "greenhouse",
     "lever",
+    "recruiterbox",
     "smartrecruiters",
     "workable",
 }

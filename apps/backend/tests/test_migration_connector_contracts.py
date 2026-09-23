@@ -59,6 +59,7 @@ def test_smartats_bridge_route_and_provider_contracts_are_available() -> None:
         "bamboohr",
         "greenhouse",
         "lever",
+        "recruiterbox",
         "smartrecruiters",
         "workable",
     }
@@ -96,6 +97,15 @@ def test_named_connector_contracts_use_current_provider_routes() -> None:
     assert lever.endpoints["jobs"].path == "/v1/postings"
     assert lever.endpoints["candidates"].path == "/v1/opportunities"
     assert lever.pagination.cursor_request_param == "offset"
+
+    recruiterbox = registry["recruiterbox"]
+    assert recruiterbox.auth.type == "basic"
+    assert recruiterbox.endpoints["jobs"].path == "/v2/openings"
+    assert recruiterbox.endpoints["candidates"].path == "/v2/candidates"
+    assert (
+        recruiterbox.endpoints["candidate_details"].path == "/v2/candidates/{external_candidate_id}"
+    )
+    assert recruiterbox.pagination.style == "offset"
 
     smartrecruiters = registry["smartrecruiters"]
     assert smartrecruiters.endpoints["jobs"].path == "/jobs"
@@ -460,6 +470,56 @@ def test_smartrecruiters_adapter_exposes_application_and_stage_rows() -> None:
     }
 
 
+def test_recruiterbox_adapter_exposes_application_stage_and_resume_rows() -> None:
+    bundle = adapt_provider_bundle(
+        "recruiterbox",
+        {
+            "job": [
+                {
+                    "id": 12,
+                    "title": "Software Engineer",
+                    "stages": [{"id": 7, "name": "Screening", "position": 0}],
+                }
+            ],
+            "candidate": [
+                {
+                    "id": 99,
+                    "first_name": "Ada",
+                    "last_name": "Lovelace",
+                    "email": "ada@example.com",
+                    "opening_id": 12,
+                    "stage_id": 7,
+                    "stage_name": "Screening",
+                    "state": "in_process",
+                    "resume": {
+                        "file_name": "ada.pdf",
+                        "file_url": "https://files.example.test/ada.pdf",
+                    },
+                }
+            ],
+        },
+    )
+    registry = load_connector_registry(CONFIG_DIR)
+
+    candidate = CanonicalCandidate.model_validate(
+        _mapped(bundle["candidate"][0], registry["recruiterbox"].mappings["candidate"])
+    )
+    assert candidate.external_candidate_id == "99"
+    assert candidate.external_job_id == "12"
+    assert bundle["application"] == [
+        {
+            "id": "99:12",
+            "candidate_id": "99",
+            "opening_id": "12",
+            "stage_id": "7",
+            "state": "in_process",
+        }
+    ]
+    assert bundle["stage"] == [{"id": "7", "job_id": "12", "name": "Screening", "position": 0}]
+    assert bundle["resume"][0]["candidate_id"] == "99"
+    assert bundle["resume"][0]["file_url"] == "https://files.example.test/ada.pdf"
+
+
 def test_bamboohr_adapter_normalizes_flat_application_and_resume() -> None:
     bundle = adapt_provider_bundle(
         "bamboohr",
@@ -686,7 +746,7 @@ def test_imported_message_html_is_rebuilt_without_scripts_or_event_handlers() ->
     )
 
     assert plain == "Hello there"
-    assert safe_html == '<p>Hello <a>there</a></p>'
+    assert safe_html == "<p>Hello <a>there</a></p>"
 
 
 def test_named_provider_url_validation_blocks_wrong_hosts() -> None:
@@ -694,6 +754,12 @@ def test_named_provider_url_validation_blocks_wrong_hosts() -> None:
         validate_provider_base_url("workable", "https://onehash-1.workable.com/")
         == "https://onehash-1.workable.com"
     )
+    assert (
+        validate_provider_base_url("recruiterbox", "https://api.recruiterbox.com/")
+        == "https://api.recruiterbox.com"
+    )
+    with pytest.raises(ProviderConnectionError):
+        validate_provider_base_url("recruiterbox", "https://example.com")
     with pytest.raises(ProviderConnectionError):
         validate_provider_base_url("workable", "https://workable.example.com")
     with pytest.raises(ProviderConnectionError):

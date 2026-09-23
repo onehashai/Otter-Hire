@@ -73,6 +73,26 @@ const guides: Record<string, Guide> = {
       </>,
     ],
   },
+  recruiterbox: {
+    name: "Recruiterbox",
+    website: "https://app.recruiterbox.com/",
+    docs: "https://developers.recruiterbox.com/reference/generating-an-api-key",
+    steps: [
+      <>
+        Open <strong>Settings &gt; Advanced Settings &gt; API Key</strong> in Recruiterbox (now
+        documented under Trakstar Hire).
+      </>,
+      <>
+        Generate or copy the API key. It is used as the username for HTTP Basic Auth; there is no
+        password.
+      </>,
+      <>
+        Paste only the API key below. The migration reads openings, candidates and candidate resume
+        data from the Recruiterbox API.
+      </>,
+    ],
+    note: "The API is read-only for this migration. Keep the key private and revoke it after the import if it is no longer needed.",
+  },
   bamboohr: {
     name: "BambooHR",
     website: "https://yourcompany.bamboohr.com/",

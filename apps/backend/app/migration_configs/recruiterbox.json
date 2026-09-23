@@ -1,0 +1,81 @@
+{
+  "id": "recruiterbox",
+  "name": "Recruiterbox",
+  "enabled": true,
+  "auth": {"type": "basic", "header_name": "Authorization"},
+  "base_url": "https://api.recruiterbox.com",
+  "endpoints": {
+    "jobs": {
+      "path": "/v2/openings",
+      "method": "GET",
+      "response_root_key": "objects",
+      "params": {"limit": 100, "order_by": "modified_date"},
+      "pagination": {
+        "style": "offset",
+        "page_param": "offset",
+        "page_size_param": "limit",
+        "page_size": 100
+      }
+    },
+    "candidates": {
+      "path": "/v2/candidates",
+      "method": "GET",
+      "response_root_key": "objects",
+      "params": {"limit": 100, "order_by": "modified_date"},
+      "pagination": {
+        "style": "offset",
+        "page_param": "offset",
+        "page_size_param": "limit",
+        "page_size": 100
+      }
+    },
+    "candidate_details": {
+      "path": "/v2/candidates/{external_candidate_id}",
+      "method": "GET",
+      "pagination": {"style": "none"}
+    }
+  },
+  "pagination": {
+    "style": "offset",
+    "page_param": "offset",
+    "page_size_param": "limit",
+    "page_size": 100
+  },
+  "rate_limits": {"requests_per_second": 0.33, "max_retries": 5, "backoff_seconds": 5},
+  "mappings": {
+    "job": {
+      "external_job_id": "id",
+      "title": "title",
+      "description": "description",
+      "category": "team",
+      "city": "location.city",
+      "country": "location.country",
+      "workplace_type": "is_remote_allowed"
+    },
+    "candidate": {
+      "external_candidate_id": "id",
+      "first_name": "first_name",
+      "last_name": "last_name",
+      "email": "email",
+      "phone": "phone",
+      "resume_text": "description",
+      "external_job_id": "opening_id",
+      "external_stage_id": "stage_id",
+      "external_stage_name": "stage_name"
+    },
+    "application": {
+      "external_application_id": "id",
+      "external_candidate_id": "candidate_id",
+      "external_job_id": "opening_id",
+      "external_stage_id": "stage_id",
+      "status": "state"
+    },
+    "resume": {
+      "external_document_id": "id",
+      "external_candidate_id": "candidate_id",
+      "source_url": "file_url",
+      "filename": "file_name",
+      "content_base64": "content"
+    }
+  }
+}

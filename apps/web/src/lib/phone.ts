@@ -2,30 +2,21 @@ import { parsePhoneNumber } from "@onehash/ui/input";
 
 /**
  * Display phone with spacing after the country calling code (e.g. "+91 9174840781").
- * Uses international formatting when the number parses; otherwise inserts a single space after +CC.
+ * Only formats an explicit country calling code. A local number has no reliable
+ * country context, so it must not be assumed to be a US number.
  */
 export function formatPhoneForDisplay(raw: string): string {
   if (!raw || raw.trim() === "" || raw === "—") return raw;
   const compact = raw.trim().replace(/\s/g, "");
 
-  const tryIntl = (): string | null => {
-    try {
-      const p = parsePhoneNumber(compact);
-      if (p) return p.formatInternational();
-    } catch {
-      /* ignore */
-    }
-    try {
-      const p = parsePhoneNumber(compact, "US");
-      if (p) return p.formatInternational();
-    } catch {
-      /* ignore */
-    }
-    return null;
-  };
+  if (!compact.startsWith("+")) return raw;
 
-  const formatted = tryIntl();
-  if (formatted) return formatted;
+  try {
+    const parsed = parsePhoneNumber(compact);
+    if (parsed) return parsed.formatInternational();
+  } catch {
+    /* Preserve the original value when it cannot be parsed. */
+  }
 
   const m = /^\+(\d{1,3})(\d{4,})$/.exec(compact);
   if (m) return `+${m[1]} ${m[2]}`;
@@ -33,19 +24,15 @@ export function formatPhoneForDisplay(raw: string): string {
 }
 
 /**
- * Maps stored candidate phone strings to E.164 for PhoneInput, or undefined when unknown.
+ * Maps explicit international phone strings to E.164 for PhoneInput.
+ * Local numbers are intentionally returned as undefined because their country is unknown.
  */
 export function parseStoredPhone(raw: string): string | undefined {
   if (!raw || raw === "—") return undefined;
   const s = raw.trim();
-  if (!s) return undefined;
+  if (!s || !s.startsWith("+")) return undefined;
   try {
     return parsePhoneNumber(s).number;
-  } catch {
-    // ignore
-  }
-  try {
-    return parsePhoneNumber(s, "US").number;
   } catch {
     return undefined;
   }

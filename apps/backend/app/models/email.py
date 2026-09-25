@@ -42,7 +42,7 @@ class InboundEmail(Base):
         nullable=True,
     )
     parse_status = Column(
-        Enum("ignored", "processed", "failed", name="inbound_parse_status"),
+        Enum("ignored", "processing", "processed", "failed", name="inbound_parse_status"),
         nullable=False,
         server_default="ignored",
     )

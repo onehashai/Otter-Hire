@@ -18,6 +18,10 @@ const STATUS_CFG: Record<string, { label: string; cls: string }> = {
     label: "Parsed",
     cls: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
   },
+  processing: {
+    label: "Processing",
+    cls: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
+  },
   failed: { label: "Failed", cls: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400" },
   ignored: { label: "Ignored", cls: "bg-muted text-muted-foreground" },
 };
@@ -322,6 +326,7 @@ export function EmailLogsTable({
             <SelectContent>
               <SelectItem value="all">All statuses</SelectItem>
               <SelectItem value="processed">Parsed</SelectItem>
+              <SelectItem value="processing">Processing</SelectItem>
               <SelectItem value="failed">Failed</SelectItem>
               <SelectItem value="ignored">Ignored</SelectItem>
             </SelectContent>

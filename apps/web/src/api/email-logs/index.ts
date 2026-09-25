@@ -6,7 +6,7 @@ export type EmailLogRow = {
   from_email: string | null;
   from_name: string | null;
   subject: string | null;
-  parse_status: "ignored" | "processed" | "failed";
+  parse_status: "ignored" | "processing" | "processed" | "failed";
   parse_error: string | null;
   has_resume_attachment: boolean;
   attachment_count: number;

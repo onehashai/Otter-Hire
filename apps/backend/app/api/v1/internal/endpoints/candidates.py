@@ -45,6 +45,7 @@ from app.schemas.candidates import (
     CandidateCsvImportResponse,
     CandidateDetailResponse,
     CandidateDocumentResponse,
+    CandidateEnrichmentResponse,
     CandidateEvaluationResponse,
     CandidateFeedbackCreateRequest,
     CandidateFeedbackResponse,
@@ -64,11 +65,19 @@ from app.schemas.candidates import (
 )
 from app.schemas.validators import is_valid_email, is_valid_phone
 from app.services.automation import execute_automations_for_trigger
+from app.services.avatar_service import store_uploaded_candidate_avatar
 from app.services.email import send_candidate_note_mention_email
-from app.services.media import ensure_resume_type, read_upload_with_size_check
+from app.services.media import (
+    ensure_avatar_type,
+    ensure_resume_type,
+    read_avatar_upload_with_size_check,
+    read_upload_with_size_check,
+)
 from app.services.resume.heuristics import extract_partial_email
 from app.services.resume.pipeline import run_resume_pipeline
 from app.services.storage import storage_service
+from app.temporal.candidate_enrichment.queue import enqueue_candidate_enrichment
+from app.temporal.candidate_enrichment.types import CandidateEnrichmentInput
 from app.temporal.resume_scoring.queue import enqueue_resume_score
 from app.temporal.resume_scoring.types import ResumeScoreInput
 from app.utils.uuid import uuid7
@@ -677,6 +686,17 @@ async def create_candidate(
     )
     await db.commit()
 
+    # Candidate creation must remain responsive. The enrichment workflow handles
+    # avatar fallbacks independently after the document and candidate commit.
+    try:
+        await enqueue_candidate_enrichment(
+            input_data=CandidateEnrichmentInput(
+                org_id=str(current_user.org_id), candidate_id=str(candidate.id)
+            )
+        )
+    except Exception:
+        logger.exception("Unable to queue candidate enrichment candidate_id=%s", candidate.id)
+
     # Fetch stage name for automation metadata
     stage_name = None
     if candidate.stage_id:
@@ -1004,6 +1024,15 @@ async def create_candidate_from_resume(
     )
     await db.commit()
 
+    try:
+        await enqueue_candidate_enrichment(
+            input_data=CandidateEnrichmentInput(
+                org_id=str(current_user.org_id), candidate_id=str(candidate.id)
+            )
+        )
+    except Exception:
+        logger.exception("Unable to queue resume enrichment candidate_id=%s", candidate.id)
+
     if candidate.job_id is not None:
         pending_assignment = await _mark_assignment_score_pending(
             db,
@@ -1116,6 +1145,8 @@ async def list_candidates(
             email=c.email,
             phone=c.phone,
             address=c.address,
+            avatar_url=c.avatar_url,
+            headline=c.headline,
             profile_links=dict(c.profile_links or {}),
             parsed_resume=c.parsed_resume if isinstance(c.parsed_resume, dict) else None,
             source=c.source,
@@ -1125,6 +1156,12 @@ async def list_candidates(
             job_title=job_title,
             stage_id=c.stage_id,
             stage_name=stage_name,
+            is_enriched=bool(c.is_enriched),
+            enriched_at=c.enriched_at,
+            avatar_enrichment_status=c.avatar_enrichment_status,
+            avatar_enrichment_error=c.avatar_enrichment_error,
+            avatar_retry_at=c.avatar_retry_at,
+            avatar_source=c.avatar_source,
             assignments=assignment_map.get(c.id, []),
             created_at=c.created_at,
             updated_at=c.updated_at,
@@ -1244,6 +1281,8 @@ async def list_candidates_paginated(
                 email=c.email,
                 phone=c.phone,
                 address=c.address,
+                avatar_url=c.avatar_url,
+                headline=c.headline,
                 profile_links=c.profile_links,
                 parsed_resume=c.parsed_resume if isinstance(c.parsed_resume, dict) else None,
                 source=c.source,
@@ -1255,6 +1294,12 @@ async def list_candidates_paginated(
                 stage_name=stage_name,
                 is_pending_duplicate_review=c.is_pending_duplicate_review,
                 possible_duplicate_of_id=c.possible_duplicate_of_id,
+                is_enriched=bool(c.is_enriched),
+                enriched_at=c.enriched_at,
+                avatar_enrichment_status=c.avatar_enrichment_status,
+                avatar_enrichment_error=c.avatar_enrichment_error,
+                avatar_retry_at=c.avatar_retry_at,
+                avatar_source=c.avatar_source,
                 assignments=assignment_map.get(c.id, []),
                 created_at=c.created_at,
                 updated_at=c.updated_at,
@@ -1441,6 +1486,8 @@ async def get_candidate(
         email=c.email,
         phone=c.phone,
         address=c.address,
+        avatar_url=c.avatar_url,
+        headline=c.headline,
         profile_links=profile_links,
         parsed_resume=c.parsed_resume if isinstance(c.parsed_resume, dict) else None,
         source=c.source,
@@ -1450,6 +1497,12 @@ async def get_candidate(
         job_title=job_title,
         stage_id=c.stage_id,
         stage_name=stage_name,
+        is_enriched=bool(c.is_enriched),
+        enriched_at=c.enriched_at,
+        avatar_enrichment_status=c.avatar_enrichment_status,
+        avatar_enrichment_error=c.avatar_enrichment_error,
+        avatar_retry_at=c.avatar_retry_at,
+        avatar_source=c.avatar_source,
         assignments=(
             await _load_candidate_assignments(
                 db,
@@ -1460,6 +1513,105 @@ async def get_candidate(
         created_at=c.created_at,
         updated_at=c.updated_at,
     )
+
+
+@router.post(
+    "/{candidate_id}/enrich",
+    response_model=CandidateEnrichmentResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def enrich_candidate(
+    candidate_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("candidates:update")),
+):
+    """Queue a best-effort profile and avatar refresh for one candidate."""
+    candidate = await db.scalar(
+        select(Candidate).where(
+            Candidate.id == candidate_id,
+            Candidate.org_id == current_user.org_id,
+        )
+    )
+    if candidate is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Candidate not found")
+
+    try:
+        queued = await enqueue_candidate_enrichment(
+            input_data=CandidateEnrichmentInput(
+                org_id=str(current_user.org_id),
+                candidate_id=str(candidate.id),
+                force_avatar_refresh=True,
+            ),
+            force=True,
+        )
+    except Exception as exc:
+        logger.exception("Unable to queue candidate enrichment candidate_id=%s", candidate_id)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Candidate enrichment is temporarily unavailable",
+        ) from exc
+
+    return CandidateEnrichmentResponse(status="queued", workflow_id=str(queued["workflow_id"]))
+
+
+@router.post(
+    "/{candidate_id}/avatar",
+    response_model=CandidateDetailResponse,
+)
+async def replace_candidate_avatar(
+    candidate_id: UUID,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("candidates:update")),
+):
+    """Replace a candidate avatar with an authorized, image-only upload."""
+    candidate = await db.scalar(
+        select(Candidate).where(
+            Candidate.id == candidate_id,
+            Candidate.org_id == current_user.org_id,
+        )
+    )
+    if candidate is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Candidate not found")
+
+    ensure_avatar_type(file.content_type)
+    content = await read_avatar_upload_with_size_check(file)
+    avatar_url = await store_uploaded_candidate_avatar(
+        org_id=current_user.org_id,
+        candidate_id=candidate.id,
+        source=content,
+    )
+    if avatar_url is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Profile photo must be a valid image at least 100 by 100 pixels",
+        )
+
+    previous_url = candidate.avatar_url
+    candidate.avatar_url = avatar_url
+    candidate.avatar_source = "manual"
+    candidate.avatar_enrichment_status = "found"
+    candidate.avatar_enrichment_error = None
+    candidate.avatar_retry_at = None
+    await _log_activity(
+        db,
+        org_id=current_user.org_id,
+        candidate_id=candidate.id,
+        created_by_user_id=current_user.id,
+        activity_type="candidate_avatar_updated",
+        metadata={"filename": (file.filename or "profile-photo").strip()},
+    )
+    await db.commit()
+
+    previous_key = _object_key_from_stored_file_url(previous_url or "")
+    candidate_prefix = f"orgs/{current_user.org_id}/candidates/{candidate.id}/avatar_"
+    if previous_key and previous_key.startswith(candidate_prefix):
+        try:
+            await storage_service.delete_object(previous_key)
+        except Exception:
+            logger.warning("Unable to delete replaced avatar key=%s", previous_key)
+
+    return await get_candidate(candidate.id, db, current_user)
 
 
 @router.get("/{candidate_id}/jobs/{job_id}/score", response_model=CandidateJobScoreResponse)
@@ -2880,6 +3032,17 @@ async def upload_candidate_document(
     )
     await db.commit()
     await db.refresh(document)
+
+    # This also covers a manually-added profile photo, not only resume files.
+    try:
+        await enqueue_candidate_enrichment(
+            input_data=CandidateEnrichmentInput(
+                org_id=str(current_user.org_id), candidate_id=str(candidate.id)
+            ),
+            force=True,
+        )
+    except Exception:
+        logger.exception("Unable to queue document enrichment candidate_id=%s", candidate.id)
 
     if normalized_doc_type == "resume" or normalized_field_key == "resume":
         await _enqueue_scores_for_candidate_assignments(

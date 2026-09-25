@@ -56,6 +56,8 @@ async def parse_job_apply_resume_activity(input_data: JobApplyResumeParseInput) 
     from app.services.resume.canonical import ResumeProfile
     from app.services.resume.pipeline import run_resume_pipeline
     from app.services.storage import storage_service
+    from app.temporal.candidate_enrichment.queue import enqueue_candidate_enrichment
+    from app.temporal.candidate_enrichment.types import CandidateEnrichmentInput
 
     org_id = UUID(input_data.org_id)
     candidate_id = UUID(input_data.candidate_id)
@@ -120,6 +122,15 @@ async def parse_job_apply_resume_activity(input_data: JobApplyResumeParseInput) 
                             generation=int(assignment.resume_score_generation or 0),
                         )
                     )
+            try:
+                await enqueue_candidate_enrichment(
+                    input_data=CandidateEnrichmentInput(
+                        org_id=input_data.org_id,
+                        candidate_id=input_data.candidate_id,
+                    )
+                )
+            except Exception:
+                logger.exception("Could not enqueue cached candidate enrichment candidate_id=%s", candidate_id)
             return {"status": "ok", "parse_method": "cache", "candidate_id": str(candidate_id)}
         except Exception:
             logger.warning(
@@ -183,6 +194,16 @@ async def parse_job_apply_resume_activity(input_data: JobApplyResumeParseInput) 
 
     # Store in cache for future duplicate uploads (fire-and-forget)
     await _set_cached_profile_json(content_hash, result.profile.model_dump_json())
+
+    try:
+        await enqueue_candidate_enrichment(
+            input_data=CandidateEnrichmentInput(
+                org_id=input_data.org_id,
+                candidate_id=input_data.candidate_id,
+            )
+        )
+    except Exception:
+        logger.exception("Could not enqueue candidate enrichment candidate_id=%s", candidate_id)
 
     return {
         "status": "ok",

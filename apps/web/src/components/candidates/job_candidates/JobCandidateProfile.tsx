@@ -25,6 +25,7 @@ import {
   getApiBase,
   addCandidateNote,
   deleteCandidateDocument,
+  enrichCandidate,
   getCandidateById,
   getJobs,
   getJobById,
@@ -34,6 +35,7 @@ import {
   getCandidateOverview,
   getCandidateJobScore,
   getOrgUsers,
+  replaceCandidateAvatar,
   updateCandidate,
   uploadCandidateDocument,
   type CandidateDetailResponse,
@@ -169,6 +171,8 @@ export function JobCandidateProfile({
   const [docFile, setDocFile] = useState<File | null>(null);
   const [docType, setDocType] = useState("attachment");
   const [documentLoading, setDocumentLoading] = useState(false);
+  const [enriching, setEnriching] = useState(false);
+  const [replacingAvatar, setReplacingAvatar] = useState(false);
 
   const loadAll = async (candidateId: string) => {
     const [candidateData, overviewData, documentsData, applicationResponsesData] =
@@ -392,6 +396,20 @@ export function JobCandidateProfile({
     }
   };
 
+  const handleReplaceAvatar = async (file: File) => {
+    if (!id) return;
+    try {
+      setReplacingAvatar(true);
+      await replaceCandidateAvatar(id, file);
+      await loadAll(id);
+      toast.success("Profile photo updated");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update profile photo");
+    } finally {
+      setReplacingAvatar(false);
+    }
+  };
+
   const handleDeleteDocument = async (documentId: string) => {
     if (!id) return;
     try {
@@ -436,6 +454,20 @@ export function JobCandidateProfile({
       toast.success("Links updated");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to update links");
+    }
+  };
+
+  const handleEnrich = async () => {
+    if (!id) return;
+    try {
+      setEnriching(true);
+      await enrichCandidate(id);
+      toast.success("Profile enrichment started");
+      window.setTimeout(() => void loadAll(id), 1800);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to start profile enrichment");
+    } finally {
+      setEnriching(false);
     }
   };
 
@@ -702,6 +734,10 @@ export function JobCandidateProfile({
               timeline={uiCandidate.timeline}
               onSaveProfile={handleSaveSummaryProfile}
               onSaveLinks={handleSaveSummaryLinks}
+              onEnrich={handleEnrich}
+              enriching={enriching}
+              onReplaceAvatar={handleReplaceAvatar}
+              replacingAvatar={replacingAvatar}
               onReplaceResume={handleReplaceResume}
               onRemoveResume={handleRemoveResume}
               profileLinkFields={profileLinkFields}

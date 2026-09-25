@@ -5,6 +5,78 @@ from __future__ import annotations
 import re
 from typing import Optional
 
+import phonenumbers
+from phonenumbers import PhoneNumberFormat
+
+US_STATE_CODES = {
+    "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA", "HI", "ID",
+    "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS",
+    "MO", "MT", "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND", "OH", "OK",
+    "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV",
+    "WI", "WY", "DC",
+}
+
+INDIAN_CITIES_AND_STATES = {
+    "INDIA", "BANGALORE", "BENGALURU", "MUMBAI", "DELHI", "NEW DELHI", "HYDERABAD",
+    "PUNE", "CHENNAI", "KOLKATA", "AHMEDABAD", "GURUGRAM", "GURGAON", "NOIDA",
+    "KARNATAKA", "MAHARASHTRA", "TELANGANA", "TAMIL NADU", "UTTAR PRADESH",
+    "WEST BENGAL", "RAJASTHAN", "KERALA", "GUJARAT", "MADHYA PRADESH",
+}
+
+UK_REGIONS = {
+    "UK", "UNITED KINGDOM", "GREAT BRITAIN", "ENGLAND", "SCOTLAND", "WALES",
+    "NORTHERN IRELAND", "LONDON", "MANCHESTER", "BIRMINGHAM", "LEEDS", "GLASGOW",
+    "LIVERPOOL", "BRISTOL", "EDINBURGH",
+}
+
+_COUNTRY_LOCATION_HINTS = {
+    "CA": {"CANADA", "ONTARIO", "TORONTO", "VANCOUVER", "MONTREAL", "ALBERTA", "QUEBEC", "BRITISH COLUMBIA", "OTTAWA", "CALGARY"},
+    "AU": {"AUSTRALIA", "SYDNEY", "MELBOURNE", "BRISBANE", "PERTH", "ADELAIDE", "NEW SOUTH WALES", "QUEENSLAND", "VICTORIA"},
+    "DE": {"GERMANY", "BERLIN", "MUNICH", "HAMBURG", "FRANKFURT"},
+    "FR": {"FRANCE", "PARIS", "LYON", "MARSEILLE"},
+    "SG": {"SINGAPORE"},
+    "AE": {"UAE", "UNITED ARAB EMIRATES", "DUBAI", "ABU DHABI", "SHARJAH"},
+}
+
+
+def infer_country_from_location(location_str: Optional[str]) -> Optional[str]:
+    if not location_str or not location_str.strip():
+        return None
+    normalized = re.sub(r"[^A-Z0-9]+", " ", location_str.upper()).strip()
+    tokens = set(normalized.split())
+    padded = f" {normalized} "
+    if any(f" {hint} " in padded for hint in INDIAN_CITIES_AND_STATES):
+        return "IN"
+    if any(f" {hint} " in padded for hint in UK_REGIONS):
+        return "GB"
+    for region, hints in _COUNTRY_LOCATION_HINTS.items():
+        if any(f" {hint} " in padded for hint in hints):
+            return region
+    if tokens & US_STATE_CODES or any(
+        phrase in padded
+        for phrase in (" USA ", " UNITED STATES ", " UNITED STATES OF AMERICA ")
+    ):
+        return "US"
+    return None
+
+
+def normalize_phone_with_country(
+    raw_phone: Optional[str], location: Optional[str] = None, default_region: str = "US"
+) -> Optional[str]:
+    if not raw_phone or not raw_phone.strip():
+        return None
+    value = raw_phone.strip()
+    try:
+        parsed = phonenumbers.parse(
+            value,
+            None if value.startswith("+") else (infer_country_from_location(location) or default_region),
+        )
+        if phonenumbers.is_valid_number(parsed) or phonenumbers.is_possible_number(parsed):
+            return phonenumbers.format_number(parsed, PhoneNumberFormat.INTERNATIONAL)
+    except (phonenumbers.NumberParseException, ValueError):
+        pass
+    return value
+
 _NAME_BLOCKLIST = {
     "functional",
     "resume",
@@ -231,7 +303,7 @@ def extract_phone(text: str) -> Optional[str]:
         if 8 <= len(digits) <= 15:
             return candidate
 
-    candidates = re.finditer(r"(?:\+?\d[\d()\-\s]{8,}\d)", text)
+    candidates = re.finditer(r"(?:\+?\d|\(\d)[\d()\-\s]{8,}\d", text)
     best: Optional[str] = None
     best_score = -1
 
@@ -250,8 +322,7 @@ def extract_phone(text: str) -> Optional[str]:
 
 
 def _clean_location_candidate(raw: str) -> str:
-    part = re.split(r"[•|]", raw, maxsplit=1)[0]
-    part = re.sub(r"\s+", " ", part).strip(" ,;-")
+    part = re.sub(r"\s+", " ", raw).strip(" ,;-")
     return part
 
 
@@ -301,30 +372,34 @@ def extract_location(text: str) -> Optional[str]:
     }
     lines = [line.strip() for line in text.splitlines() if line.strip()]
     for line in lines[:20]:
-        if len(line) > 80:
-            continue
-        lowered = line.lower()
-        if any(token in lowered for token in blocked_tokens):
-            continue
-        if re.search(r"\(\s*\(", line):
-            continue
-        alpha_count = sum(1 for ch in line if ch.isalpha())
-        if alpha_count < 4:
-            continue
+        for segment in re.split(r"[|•·]", line):
+            if len(segment) > 80:
+                continue
+            lowered = segment.lower()
+            if any(token in lowered for token in blocked_tokens):
+                continue
+            if re.search(r"\(\s*\(", segment):
+                continue
+            alpha_count = sum(1 for ch in segment if ch.isalpha())
+            if alpha_count < 4:
+                continue
 
-        candidate = _clean_location_candidate(line)
-        if _looks_like_location(candidate):
-            return candidate
+            candidate = _clean_location_candidate(segment)
+            if _looks_like_location(candidate) or infer_country_from_location(candidate):
+                return candidate
 
-        if re.fullmatch(r"[A-Za-z .'-]{2,40},\s*[A-Za-z .'-]{2,40}(?:\s+\d{4,6})?", line):
-            return line
+            if re.fullmatch(
+                r"[A-Za-z .'-]{2,40},\s*[A-Za-z .'-]{2,40}(?:\s+\d{4,6})?", candidate
+            ):
+                return candidate
 
-        symbol_count = sum(1 for ch in line if not (ch.isalnum() or ch.isspace() or ch in ",.-'"))
-        if symbol_count > 2:
-            continue
-        relaxed = _clean_location_candidate(line)
-        if _looks_like_location(relaxed):
-            return relaxed
+            symbol_count = sum(
+                1 for ch in segment if not (ch.isalnum() or ch.isspace() or ch in ",.-'")
+            )
+            if symbol_count > 2:
+                continue
+            if _looks_like_location(candidate):
+                return candidate
     return None
 
 

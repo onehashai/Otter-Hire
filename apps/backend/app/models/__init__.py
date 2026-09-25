@@ -9,6 +9,7 @@ from app.models.ats_migration import (
     ImportBatchRow,
 )
 from app.models.automation import Automation, AutomationExecution
+from app.models.blocked_domain import BlockedDomain
 from app.models.candidate import Candidate
 from app.models.candidate_jobs import CandidateJobs
 from app.models.conversation import Conversation
@@ -63,4 +64,5 @@ __all__ = [
     "McpApiKey",
     "Automation",
     "AutomationExecution",
+    "BlockedDomain",
 ]

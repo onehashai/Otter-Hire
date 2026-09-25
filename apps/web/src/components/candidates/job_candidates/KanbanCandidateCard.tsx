@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { type JobWorkspaceCandidateResponse } from "@/api/job/types";
 import { useState } from "react";
 import { Calendar } from "lucide-react";
+import { Avatar } from "@onehash/ui/avatar";
 
 interface KanbanCandidateCardProps {
   candidate: JobWorkspaceCandidateResponse;
@@ -66,9 +67,14 @@ export function KanbanCandidateCard({
 
       <div className="flex gap-3 items-start relative z-10">
         {/* Avatar badge */}
-        <div className="h-8 w-8 rounded-lg bg-primary/5 border border-primary/10 flex items-center justify-center text-xs font-semibold text-primary shrink-0 select-none">
+        <Avatar
+          src={candidate.avatar_url}
+          alt={candidate.name}
+          className="h-8 w-8 shrink-0 rounded-lg border border-primary/10"
+          fallbackClassName="rounded-lg bg-primary/5 text-xs font-semibold text-primary"
+        >
           {initials}
-        </div>
+        </Avatar>
 
         {/* Text Details */}
         <div className="flex-1 min-w-0">
@@ -78,6 +84,11 @@ export function KanbanCandidateCard({
           <p className="text-[11px] text-muted-foreground truncate font-normal mt-0.5">
             {candidate.email || t("no_email", "No email provided")}
           </p>
+          {candidate.headline ? (
+            <p className="mt-1 truncate text-[10px] text-muted-foreground/80">
+              {candidate.headline}
+            </p>
+          ) : null}
 
           <div className="flex items-center gap-1.5 mt-2.5 text-[10px] text-muted-foreground/80">
             <Calendar className="h-3 w-3 text-muted-foreground/60" />

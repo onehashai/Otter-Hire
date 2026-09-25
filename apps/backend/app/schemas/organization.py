@@ -51,6 +51,31 @@ class CreateOrganizationRequest(BaseModel):
     name: str = Field(min_length=1, max_length=255)
 
 
+class BlockedDomainResponse(BaseModel):
+    id: UUID
+    domain: str
+    created_at: datetime
+    created_by_user_id: UUID | None = None
+
+
+class CreateBlockedDomainsRequest(BaseModel):
+    domains: list[str] = Field(min_length=1, max_length=100)
+
+    @field_validator("domains")
+    @classmethod
+    def normalize_domains(cls, values: list[str]) -> list[str]:
+        from app.services.blocked_domains import normalize_blocked_domain
+
+        normalized: list[str] = []
+        for value in values:
+            domain = normalize_blocked_domain(value)
+            if domain not in normalized:
+                normalized.append(domain)
+        if not normalized:
+            raise ValueError("Add at least one email domain")
+        return normalized
+
+
 class OrgInboxResponse(BaseModel):
     id: UUID
     org_id: UUID

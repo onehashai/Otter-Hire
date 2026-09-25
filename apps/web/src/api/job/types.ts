@@ -19,6 +19,8 @@ export type JobWorkspaceCandidateResponse = {
   id: string;
   name: string;
   email: string | null;
+  avatar_url?: string | null;
+  headline?: string | null;
   stage_id: string | null;
   created_at: string;
   updated_at: string;

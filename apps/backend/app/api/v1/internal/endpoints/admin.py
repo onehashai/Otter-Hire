@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
@@ -236,6 +236,124 @@ async def list_admin_email_logs(
     ]
 
 
+@router.post("/email-logs/{email_id}/reprocess")
+async def reprocess_admin_email_log(
+    email_id: UUID,
+    _: User = Depends(require_platform_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Retry a document-backed inbound email without creating a second workflow ID."""
+    inbound_email = (
+        await db.execute(select(InboundEmail).where(InboundEmail.id == email_id))
+    ).scalar_one_or_none()
+    if inbound_email is None:
+        raise HTTPException(status_code=404, detail="Email log not found")
+    if inbound_email.email_kind == "verification":
+        raise HTTPException(
+            status_code=409,
+            detail="Verification messages cannot be reprocessed as applications",
+        )
+    if not (inbound_email.attachment_count or inbound_email.has_resume_attachment):
+        raise HTTPException(
+            status_code=400,
+            detail="This email has no stored attachment to reprocess",
+        )
+    if not (
+        (inbound_email.raw_storage_key or "").strip()
+        or (inbound_email.attachment_primary_storage_key or "").strip()
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="The original email and attachment are no longer available",
+        )
+
+    inbound_email.parse_status = "processing"
+    inbound_email.parse_error = None
+    await db.commit()
+
+    try:
+        from app.temporal.inbound_email.queue import enqueue_inbound_email_parse
+        from app.temporal.inbound_email.types import InboundEmailParseInput
+
+        result = await enqueue_inbound_email_parse(
+            inbound_email_id=str(inbound_email.id),
+            input_data=InboundEmailParseInput(
+                inbound_email_id=str(inbound_email.id),
+                org_id=str(inbound_email.org_id),
+                target_job_id=str(inbound_email.job_id) if inbound_email.job_id else None,
+            ),
+            force=True,
+        )
+    except Exception as exc:
+        inbound_email.parse_status = "failed"
+        inbound_email.parse_error = f"Could not queue reprocessing: {exc}"
+        await db.commit()
+        raise HTTPException(status_code=503, detail="Could not queue email reprocessing") from exc
+
+    return {"status": "queued", "workflow_id": result["workflow_id"]}
+
+
+@router.post("/email-logs/reprocess-attachments")
+async def reprocess_admin_email_attachments(
+    org_id: UUID | None = Query(None),
+    limit: int = Query(100, ge=1, le=500),
+    _: User = Depends(require_platform_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Queue recoverable attachment-backed messages, excluding inbox setup mail."""
+    q = (
+        select(InboundEmail)
+        .where(
+            InboundEmail.email_kind != "verification",
+            or_(
+                InboundEmail.attachment_count > 0,
+                InboundEmail.has_resume_attachment.is_(True),
+            ),
+            or_(
+                InboundEmail.raw_storage_key.is_not(None),
+                InboundEmail.attachment_primary_storage_key.is_not(None),
+            ),
+            or_(
+                InboundEmail.parse_status != "processed",
+                InboundEmail.parsed_candidate_id.is_(None),
+            ),
+        )
+        .order_by(InboundEmail.received_at.asc())
+        .limit(limit)
+    )
+    if org_id:
+        q = q.where(InboundEmail.org_id == org_id)
+    emails = (await db.execute(q)).scalars().all()
+
+    for inbound_email in emails:
+        inbound_email.parse_status = "processing"
+        inbound_email.parse_error = None
+    await db.commit()
+
+    from app.temporal.inbound_email.queue import enqueue_inbound_email_parse
+    from app.temporal.inbound_email.types import InboundEmailParseInput
+
+    queued = 0
+    for inbound_email in emails:
+        try:
+            await enqueue_inbound_email_parse(
+                inbound_email_id=str(inbound_email.id),
+                input_data=InboundEmailParseInput(
+                    inbound_email_id=str(inbound_email.id),
+                    org_id=str(inbound_email.org_id),
+                    target_job_id=str(inbound_email.job_id) if inbound_email.job_id else None,
+                ),
+                force=True,
+            )
+            queued += 1
+        except Exception as exc:
+            inbound_email.parse_status = "failed"
+            inbound_email.parse_error = f"Could not queue reprocessing: {exc}"
+    await db.commit()
+
+    return {"status": "queued", "queued": queued, "requested": len(emails)}
+
+
 @router.get("/email-logs/{email_id}/body")
 async def get_admin_email_log_body(
     email_id: UUID,
@@ -453,7 +571,5 @@ async def download_admin_email_log_attachment(
         )
     except Exception as e:
         raise HTTPException(status_code=404, detail=f"Could not load attachment: {e}")
-
-
 
 

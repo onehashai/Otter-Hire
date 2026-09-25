@@ -136,6 +136,8 @@ class JobWorkspaceCandidateResponse(BaseModel):
     id: UUID
     name: str
     email: Optional[str] = None
+    avatar_url: Optional[str] = None
+    headline: Optional[str] = None
     stage_id: Optional[UUID] = None
     created_at: datetime
     updated_at: datetime

@@ -11,12 +11,15 @@ from app.core.config import settings
 from app.core.security import create_access_token
 from app.db.session import get_db
 from app.deps.auth import get_current_user, require_active_user
+from app.models.blocked_domain import BlockedDomain
 from app.models.email import InboundEmail
 from app.models.org_membership import OrgMembership
 from app.models.organization import Organization
 from app.models.user import User
 from app.schemas.email_logs import EmailLogRow
 from app.schemas.organization import (
+    BlockedDomainResponse,
+    CreateBlockedDomainsRequest,
     CreateOrganizationRequest,
     OrganizationMembershipResponse,
     OrganizationResponse,
@@ -44,6 +47,105 @@ def _set_access_cookie(response: Response, token: str) -> None:
     if settings.cookie_domain:
         cookie_params["domain"] = settings.cookie_domain
     response.set_cookie(**cookie_params)
+
+
+def _require_domain_management_role(current_user: User) -> None:
+    if current_user.membership_role not in ("owner", "admin"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient permissions",
+        )
+
+
+@router.get("/blocked-domains", response_model=list[BlockedDomainResponse])
+async def list_blocked_domains(
+    current_user: User = Depends(require_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    _require_domain_management_role(current_user)
+    result = await db.execute(
+        select(BlockedDomain)
+        .where(BlockedDomain.org_id == current_user.org_id)
+        .order_by(BlockedDomain.created_at.desc(), BlockedDomain.domain.asc())
+    )
+    return [
+        BlockedDomainResponse(
+            id=domain.id,
+            domain=domain.domain,
+            created_at=domain.created_at,
+            created_by_user_id=domain.created_by_user_id,
+        )
+        for domain in result.scalars().all()
+    ]
+
+
+@router.post(
+    "/blocked-domains",
+    response_model=list[BlockedDomainResponse],
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_blocked_domains(
+    body: CreateBlockedDomainsRequest,
+    current_user: User = Depends(require_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    _require_domain_management_role(current_user)
+    existing_result = await db.execute(
+        select(BlockedDomain).where(
+            BlockedDomain.org_id == current_user.org_id,
+            BlockedDomain.domain.in_(body.domains),
+        )
+    )
+    existing = {row.domain: row for row in existing_result.scalars().all()}
+    for domain in body.domains:
+        if domain not in existing:
+            row = BlockedDomain(
+                org_id=current_user.org_id,
+                domain=domain,
+                created_by_user_id=current_user.id,
+            )
+            db.add(row)
+            existing[domain] = row
+
+    await db.commit()
+    result = await db.execute(
+        select(BlockedDomain)
+        .where(
+            BlockedDomain.org_id == current_user.org_id,
+            BlockedDomain.domain.in_(body.domains),
+        )
+        .order_by(BlockedDomain.domain.asc())
+    )
+    return [
+        BlockedDomainResponse(
+            id=domain.id,
+            domain=domain.domain,
+            created_at=domain.created_at,
+            created_by_user_id=domain.created_by_user_id,
+        )
+        for domain in result.scalars().all()
+    ]
+
+
+@router.delete("/blocked-domains/{blocked_domain_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_blocked_domain(
+    blocked_domain_id: UUID,
+    current_user: User = Depends(require_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    _require_domain_management_role(current_user)
+    result = await db.execute(
+        select(BlockedDomain).where(
+            BlockedDomain.id == blocked_domain_id,
+            BlockedDomain.org_id == current_user.org_id,
+        )
+    )
+    blocked_domain = result.scalar_one_or_none()
+    if blocked_domain is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Blocked domain not found")
+
+    await db.delete(blocked_domain)
+    await db.commit()
 
 
 @router.patch("/me", response_model=OrganizationResponse)
@@ -592,7 +694,6 @@ async def download_org_email_log_attachment(
         )
     except Exception as e:
         raise HTTPException(status_code=404, detail=f"Could not load attachment: {e}")
-
 
 
 

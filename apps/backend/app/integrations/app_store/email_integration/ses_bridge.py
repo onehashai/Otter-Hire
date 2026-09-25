@@ -23,6 +23,9 @@ from sqlalchemy import delete, select
 from app.core.config import settings
 from app.db.session import AsyncSessionLocal
 from app.integrations.app_store.email_integration import credential_store
+from app.integrations.app_store.email_integration.inbound_routing import (
+    is_onehash_careers_inbox,
+)
 from app.models.conversation import Conversation
 from app.models.email import InboundEmail
 from app.models.integration_credential import IntegrationCredential
@@ -318,6 +321,11 @@ async def _resolve_inbox_context(
     6) Fallback for In-Reply-To / References header match on Message.email_message_id
     Returns (secret, canonical_inbox_address, reply_to_conversation_id_str or None).
     """
+    # Legacy careers@onehash.ai messages are accepted by the inbound endpoint,
+    # but do not have an IntegrationCredential row to resolve here.
+    if is_onehash_careers_inbox(inbox_address) and settings.inbound_webhook_secret:
+        return str(settings.inbound_webhook_secret), inbox_address, None
+
     async with AsyncSessionLocal() as db:
         # Job-level inbox direct match
         job_cred = await credential_store.get_job_credential_by_address(db, inbox_address)
@@ -476,7 +484,13 @@ def _post_to_inbound_api(payload: dict, secret: str) -> tuple[int, str]:
         return exc.code, exc.read().decode("utf-8", errors="ignore")
 
 
-async def _process_raw_key(s3_client, bucket: str, key: str) -> None:
+async def _process_raw_key(
+    s3_client,
+    bucket: str,
+    key: str,
+    *,
+    received_at: datetime | None = None,
+) -> None:
     logger.info("SES bridge process start key=%s", key)
     if "AMAZON_SES_SETUP_NOTIFICATION" in key:
         logger.info("SES bridge skipped key=%s reason=ses_setup_notification", key)
@@ -533,7 +547,9 @@ async def _process_raw_key(s3_client, bucket: str, key: str) -> None:
             "list_unsubscribe": normalized.get("list_unsubscribe") or False,
             "precedence": normalized.get("precedence"),
             "x_auto_response_suppress": normalized.get("x_auto_response_suppress"),
-            "received_at": datetime.now(timezone.utc).isoformat(),
+            # Object modification time is the provider-independent receipt
+            # timestamp. It remains accurate when a raw email is replayed.
+            "received_at": (received_at or datetime.now(timezone.utc)).isoformat(),
             "raw_storage_key": key,
             "text_body": normalized.get("text_body") or None,
             "html_body": normalized.get("html_body") or None,
@@ -605,12 +621,17 @@ async def run_ses_raw_bridge_loop(stop_event: asyncio.Event) -> None:
 
             semaphore = asyncio.Semaphore(max_parallel)
 
-            async def _process_with_limit(raw_key: str) -> None:
+            async def _process_with_limit(raw_key: str, modified_at: datetime | None) -> None:
                 async with semaphore:
                     started = time.monotonic()
                     try:
                         await asyncio.wait_for(
-                            _process_raw_key(s3_client, bucket, raw_key),
+                            _process_raw_key(
+                                s3_client,
+                                bucket,
+                                raw_key,
+                                received_at=modified_at,
+                            ),
                             timeout=_PROCESS_KEY_TIMEOUT_SECONDS,
                         )
                         logger.info(
@@ -645,7 +666,7 @@ async def run_ses_raw_bridge_loop(stop_event: asyncio.Event) -> None:
                         fallback_grace_seconds,
                     )
                     continue
-                tasks.append(asyncio.create_task(_process_with_limit(key)))
+                tasks.append(asyncio.create_task(_process_with_limit(key, modified_at)))
 
             if tasks:
                 await asyncio.gather(*tasks, return_exceptions=True)

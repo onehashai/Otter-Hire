@@ -11,9 +11,14 @@ from app.services.resume.heuristics import (
     extract_location,
     extract_name,
     extract_phone,
+    normalize_phone_with_country,
     should_replace_name,
 )
-from app.services.resume.hyperlinks import ResumeHyperlink, extract_best_links
+from app.services.resume.hyperlinks import (
+    ResumeHyperlink,
+    extract_best_links,
+    extract_linkedin_url_from_text,
+)
 from app.services.resume.llm_extract import extract_personalinfo_llm, extract_resume_profile_llm
 from app.services.resume.sections import SectionSegment, detect_sections, sections_to_prompt_hint
 from app.services.resume.validation import sanitize_resume_profile
@@ -28,9 +33,10 @@ def _sections_to_map(segments: list[SectionSegment]) -> dict[str, str]:
 
 def _profile_from_heuristics(text: str, fallback_email: str) -> ResumeProfile:
     email = extract_email(text)
-    phone = extract_phone(text)
-    name = extract_name(text, email or fallback_email)
     address = extract_location(text)
+    raw_phone = extract_phone(text)
+    phone = normalize_phone_with_country(raw_phone, location=address) if raw_phone else None
+    name = extract_name(text, email or fallback_email)
     return ResumeProfile(
         personal=PersonalInfo(
             full_name=name,
@@ -45,9 +51,13 @@ def _merge_hyperlinks(
     profile: ResumeProfile,
     hyperlinks: list[ResumeHyperlink],
     *,
+    text: str,
     fallback_email: str,
 ) -> ResumeProfile:
     profile_links, hyperlink_email = extract_best_links(hyperlinks)
+    plain_text_linkedin = extract_linkedin_url_from_text(text)
+    if plain_text_linkedin:
+        profile_links.setdefault("linkedin", plain_text_linkedin)
     personal = profile.personal
     valid_personal_email = extract_email(personal.email or "")
     fallback = fallback_email.strip().lower() if "@" in fallback_email else None
@@ -79,9 +89,6 @@ def enrich_with_heuristics(
     llm_email = extract_email(profile.personal.email or "")
     email = heuristic_email or llm_email
 
-    heuristic_phone = extract_phone(text)
-    phone = heuristic_phone or profile.personal.phone
-
     heuristic_name = extract_name(text, email)
     name = heuristic_name or profile.personal.full_name
     llm_name = profile.personal.full_name
@@ -90,6 +97,9 @@ def enrich_with_heuristics(
         name = llm_name
 
     address = profile.personal.address or extract_location(text)
+    heuristic_phone = extract_phone(text)
+    raw_phone = heuristic_phone or profile.personal.phone
+    phone = normalize_phone_with_country(raw_phone, location=address) if raw_phone else None
 
     return profile.model_copy(
         update={
@@ -171,7 +181,7 @@ def run_resume_pipeline(
     else:
         profile = enrich_with_heuristics(profile, text, fallback_email)
 
-    profile = _merge_hyperlinks(profile, hyperlinks, fallback_email=fallback_email)
+    profile = _merge_hyperlinks(profile, hyperlinks, text=text, fallback_email=fallback_email)
 
     profile = profile.model_copy(update={"section_map": section_map})
     profile = sanitize_resume_profile(profile)

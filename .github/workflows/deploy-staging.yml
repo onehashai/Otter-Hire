@@ -5,12 +5,6 @@ on:
     branches:
       - develop
   workflow_dispatch:
-    inputs:
-      web_only:
-        description: "Deploy only the web service (for frontend-only staging changes)"
-        required: false
-        default: false
-        type: boolean
 
 permissions:
   contents: write
@@ -56,9 +50,7 @@ jobs:
       - name: Detect backend changes
         id: backend_changes
         run: |
-          if [ "${{ inputs.web_only }}" = "true" ]; then
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-          elif git diff --quiet "${{ steps.base.outputs.backend_base }}" "${{ github.sha }}" -- apps/backend/; then
+          if git diff --quiet "${{ steps.base.outputs.backend_base }}" "${{ github.sha }}" -- apps/backend/; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"

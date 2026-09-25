@@ -7,3 +7,4 @@ export * from "./memberships";
 export * from "./create";
 export * from "./avatar";
 export * from "./me";
+export * from "./blocked-domains";

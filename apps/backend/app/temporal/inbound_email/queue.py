@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from uuid import uuid4
 
 import temporalio.exceptions
 
@@ -17,9 +18,12 @@ async def enqueue_inbound_email_parse(
     *,
     inbound_email_id: str,
     input_data: InboundEmailParseInput,
+    force: bool = False,
 ) -> dict[str, str | bool]:
-    """Start a durable parse workflow for inbound email. Idempotent per inbound_email_id."""
+    """Start a durable parse workflow, optionally as an explicit retry."""
     workflow_id = f"inbound-email-parse-{inbound_email_id}"
+    if force:
+        workflow_id = f"{workflow_id}-retry-{uuid4()}"
     client = await get_temporal_client()
     try:
         handle = await client.start_workflow(

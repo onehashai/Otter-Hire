@@ -1,10 +1,17 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
 from app.services.resume.heuristics import extract_email
 from app.services.resume.validation import _sanitize_url
+
+_LINKEDIN_TEXT_URL_RE = re.compile(
+    r"(?<![A-Za-z0-9@._-])(?:https?://)?(?:www\.)?linkedin\.com/in/"
+    r"[A-Za-z0-9_-]{2,100}(?:[/?#][^\s<>()\[\]{}\"']*)?",
+    re.IGNORECASE,
+)
 
 
 @dataclass
@@ -127,3 +134,14 @@ def extract_best_links(hyperlinks: list[ResumeHyperlink]) -> tuple[dict[str, str
                 profile_links["portfolio"] = value
 
     return profile_links, hyperlink_email
+
+
+def extract_linkedin_url_from_text(text: str) -> str | None:
+    """Recover an individual LinkedIn profile displayed as plain resume text."""
+    for match in _LINKEDIN_TEXT_URL_RE.finditer(text or ""):
+        raw = match.group(0).rstrip(".,;:!?)]}>'\"")
+        normalized = raw if raw.lower().startswith(("http://", "https://")) else f"https://{raw}"
+        kind, value = classify_hyperlink(normalized)
+        if kind == "linkedin" and value:
+            return value
+    return None

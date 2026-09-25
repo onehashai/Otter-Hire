@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@onehash/ui/card";
 import { Button } from "@onehash/ui/button";
 import { Badge } from "@onehash/ui/badge";
@@ -21,7 +21,12 @@ import { Label } from "@onehash/ui/label";
 import { formatPhoneForDisplay, parseStoredPhone } from "@/lib/phone";
 import { getInitialsFromName } from "@/lib/name-initials";
 import { useTranslation } from "react-i18next";
-import { isValidEmail, normalizeEmail, sanitizePhoneInput } from "@/lib/validation/contact";
+import {
+  isValidEmail,
+  isValidPhone,
+  normalizeEmail,
+  sanitizePhoneInput,
+} from "@/lib/validation/contact";
 import { TruncatedText } from "@/components/common/TruncatedText";
 import {
   Award,
@@ -80,6 +85,8 @@ interface CandidateSummary {
   email: string;
   phone: string;
   address: string;
+  avatarUrl?: string | null;
+  headline?: string | null;
   stage: string;
   source: string;
   appliedDate: string;
@@ -124,6 +131,10 @@ interface SummaryPanelProps {
   onSaveLinks: (payload: Record<string, string>) => Promise<void>;
   onReplaceResume?: (file: File) => Promise<void>;
   onRemoveResume?: () => Promise<void>;
+  onReplaceAvatar?: (file: File) => Promise<void>;
+  replacingAvatar?: boolean;
+  onEnrich?: () => Promise<void>;
+  enriching?: boolean;
   // Props used by standalone candidate profile (/candidates/[id]).
   onUploadDocument?: () => void;
   onDeleteDocument?: (documentId: string) => void;
@@ -195,6 +206,10 @@ export function SummaryPanel({
   onSaveLinks,
   onReplaceResume,
   onRemoveResume,
+  onReplaceAvatar,
+  replacingAvatar = false,
+  onEnrich,
+  enriching = false,
   onUploadDocument,
   onDeleteDocument,
   profileLinkFields,
@@ -207,6 +222,8 @@ export function SummaryPanel({
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingLinks, setSavingLinks] = useState(false);
   const [resumeFile, setResumeFile] = useState<File | null>(null);
+  const [avatarPreviewOpen, setAvatarPreviewOpen] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
   const [timelineOpen, setTimelineOpen] = useState(false);
   const [insightSkillsOpen, setInsightSkillsOpen] = useState(false);
   const [insightEducationOpen, setInsightEducationOpen] = useState(false);
@@ -215,7 +232,11 @@ export function SummaryPanel({
 
   const [name, setName] = useState(candidate.name);
   const [email, setEmail] = useState(candidate.email);
-  const [phone, setPhone] = useState<string | undefined>(() => parseStoredPhone(candidate.phone));
+  const storedPhoneForEditing = (raw: string | null | undefined): string | undefined => {
+    const localNumber = raw?.trim();
+    return parseStoredPhone(raw || "") ?? (localNumber || undefined);
+  };
+  const [phone, setPhone] = useState<string | undefined>(() => storedPhoneForEditing(candidate.phone));
   const [phoneError, setPhoneError] = useState<string | null>(null);
   const [emailError, setEmailError] = useState<string | null>(null);
   const [address, setAddress] = useState(candidate.address === "—" ? "" : candidate.address);
@@ -227,7 +248,7 @@ export function SummaryPanel({
   useEffect(() => {
     setName(candidate.name);
     setEmail(candidate.email);
-    setPhone(parseStoredPhone(candidate.phone));
+    setPhone(storedPhoneForEditing(candidate.phone));
     setPhoneError(null);
     setEmailError(null);
     setAddress(candidate.address === "—" ? "" : candidate.address);
@@ -268,22 +289,82 @@ export function SummaryPanel({
         <CardContent className="p-5 space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <Avatar className="h-12 w-12" fallbackClassName="bg-muted text-sm font-medium">
-                {initials}
-              </Avatar>
+              <button
+                type="button"
+                className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-default"
+                onClick={() => candidate.avatarUrl && setAvatarPreviewOpen(true)}
+                aria-label={candidate.avatarUrl ? `View ${candidate.name}'s profile photo` : undefined}
+                disabled={!candidate.avatarUrl}
+              >
+                <Avatar
+                  src={candidate.avatarUrl}
+                  alt={candidate.name}
+                  className="h-12 w-12"
+                  fallbackClassName="bg-muted text-sm font-medium"
+                >
+                  {initials}
+                </Avatar>
+              </button>
               <div>
                 <h2 className="text-base font-semibold">{candidate.name}</h2>
                 <p className="text-xs text-muted-foreground">{candidate.role}</p>
+                {candidate.headline ? (
+                  <p className="mt-0.5 max-w-56 truncate text-xs text-muted-foreground">
+                    {candidate.headline}
+                  </p>
+                ) : null}
               </div>
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 w-8 p-0"
-              onClick={() => setProfileEdit((v) => !v)}
-            >
-              <Icon name="PenLine" className="h-4 w-4" />
-            </Button>
+            <div className="flex shrink-0 flex-col items-stretch gap-1">
+              {onEnrich ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 px-2 text-xs"
+                  pending={enriching}
+                  disabled={enriching}
+                  onClick={() => void onEnrich()}
+                >
+                  <Icon name="RefreshCw" className="mr-1 h-3.5 w-3.5" />
+                  Refresh photo
+                </Button>
+              ) : null}
+              {onReplaceAvatar ? (
+                <>
+                  <input
+                    ref={avatarInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif,image/bmp,image/tiff"
+                    className="sr-only"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      event.target.value = "";
+                      if (file) void onReplaceAvatar(file);
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 px-2 text-xs"
+                    pending={replacingAvatar}
+                    disabled={replacingAvatar}
+                    onClick={() => avatarInputRef.current?.click()}
+                  >
+                    <Icon name="ImageUp" className="mr-1 h-3.5 w-3.5" />
+                    Edit photo
+                  </Button>
+                </>
+              ) : null}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 p-0"
+                onClick={() => setProfileEdit((v) => !v)}
+              >
+                <Icon name="PenLine" className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
 
           {profileEdit ? (
@@ -298,14 +379,26 @@ export function SummaryPanel({
                 }}
                 error={emailError ?? undefined}
               />
-              <PhoneNumberField
-                value={phone}
-                onChange={(v) => {
-                  setPhone(v ? sanitizePhoneInput(v) : v);
-                  setPhoneError(null);
-                }}
-                error={phoneError ?? undefined}
-              />
+              {phone && !phone.trim().startsWith("+") ? (
+                <InputField
+                  label="Phone Number"
+                  value={phone}
+                  onChange={(e) => {
+                    setPhone(sanitizePhoneInput(e.target.value));
+                    setPhoneError(null);
+                  }}
+                  error={phoneError ?? undefined}
+                />
+              ) : (
+                <PhoneNumberField
+                  value={phone}
+                  onChange={(v) => {
+                    setPhone(v ? sanitizePhoneInput(v) : v);
+                    setPhoneError(null);
+                  }}
+                  error={phoneError ?? undefined}
+                />
+              )}
               <InputField
                 label="Address"
                 value={address}
@@ -320,15 +413,25 @@ export function SummaryPanel({
                     !name.trim() ||
                     !email.trim() ||
                     !isValidEmail(email) ||
-                    !!(phone && !isValidPhoneNumber(phone))
+                    !!(
+                      phone &&
+                      !(phone.trim().startsWith("+")
+                        ? isValidPhoneNumber(phone)
+                        : isValidPhone(phone))
+                    )
                   }
                   onClick={async () => {
                     if (!isValidEmail(email)) {
                       setEmailError("Enter a valid email address.");
                       return;
                     }
-                    if (phone && !isValidPhoneNumber(phone)) {
-                      setPhoneError("Enter a valid phone number for the selected country.");
+                    if (
+                      phone &&
+                      !(phone.trim().startsWith("+")
+                        ? isValidPhoneNumber(phone)
+                        : isValidPhone(phone))
+                    ) {
+                      setPhoneError("Enter a valid phone number.");
                       return;
                     }
                     try {
@@ -357,7 +460,7 @@ export function SummaryPanel({
                     setProfileEdit(false);
                     setName(candidate.name);
                     setEmail(candidate.email);
-                    setPhone(parseStoredPhone(candidate.phone));
+                    setPhone(storedPhoneForEditing(candidate.phone));
                     setPhoneError(null);
                     setEmailError(null);
                     setAddress(candidate.address === "—" ? "" : candidate.address);
@@ -416,6 +519,22 @@ export function SummaryPanel({
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={avatarPreviewOpen} onOpenChange={setAvatarPreviewOpen}>
+        <DialogContent className="max-w-xl p-4">
+          <DialogHeader className="sr-only">
+            <DialogTitle>{candidate.name}'s profile photo</DialogTitle>
+            <DialogDescription>Candidate profile photo preview</DialogDescription>
+          </DialogHeader>
+          {candidate.avatarUrl ? (
+            <img
+              src={candidate.avatarUrl}
+              alt={`${candidate.name}'s profile photo`}
+              className="max-h-[75vh] w-full rounded-md object-contain"
+            />
+          ) : null}
+        </DialogContent>
+      </Dialog>
 
       <Card>
         <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between">

@@ -19,6 +19,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
     { label: t("nav_organization"), path: "/settings/organization", icon: "Building2" },
     { label: t("nav_team"), path: "/settings/team", icon: "Users" },
     { label: t("nav_job_categories"), path: "/settings/categories", icon: "Briefcase" },
+    { label: "Spam Control", path: "/settings/spam-control", icon: "ShieldOff" },
     { label: t("nav_integrations"), path: "/settings/integrations", icon: "Sparkles" },
     { label: t("nav_api_keys", "API Key"), path: "/settings/api-keys", icon: "Code" },
     { label: t("nav_mcp_server", "MCP Server"), path: "/settings/mcp-server", icon: "Globe" },

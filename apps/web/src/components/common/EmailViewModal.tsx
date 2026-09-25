@@ -1,11 +1,96 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Dialog, DialogContent } from "@onehash/ui/dialog";
 import { Button } from "@onehash/ui/button";
-import { Paperclip, Copy, Check, ChevronDown, Calendar, User, Mail, Hash, Send, Clock, ArrowRight } from "lucide-react";
+import {
+  Paperclip,
+  Copy,
+  Check,
+  ChevronDown,
+  Calendar,
+  User,
+  Mail,
+  Hash,
+  Send,
+  Clock,
+  ArrowRight,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "@onehash/ui/sonner";
+
+const EMAIL_ADDRESS_PATTERN = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
+
+function emailMailtoLink(address: string, key: string | number) {
+  return (
+    <a
+      key={key}
+      href={`mailto:${address}`}
+      className="text-primary underline underline-offset-2 hover:text-primary/80"
+    >
+      {address}
+    </a>
+  );
+}
+
+function linkifyPlainTextEmailAddresses(text: string): ReactNode[] {
+  const parts: ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  const pattern = new RegExp(EMAIL_ADDRESS_PATTERN);
+
+  while ((match = pattern.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(text.slice(lastIndex, match.index));
+    }
+    parts.push(emailMailtoLink(match[0], `${match.index}-${match[0]}`));
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex));
+  }
+  return parts;
+}
+
+function linkifyHtmlEmailAddresses(html: string): string {
+  if (typeof window === "undefined") return html;
+
+  const document = new DOMParser().parseFromString(html, "text/html");
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  const textNodes: Text[] = [];
+  let node: Node | null;
+
+  while ((node = walker.nextNode())) {
+    const parent = node.parentElement;
+    if (parent && !parent.closest("a, script, style")) {
+      textNodes.push(node as Text);
+    }
+  }
+
+  for (const textNode of textNodes) {
+    const value = textNode.textContent || "";
+    const pattern = new RegExp(EMAIL_ADDRESS_PATTERN);
+    let match: RegExpExecArray | null;
+    let lastIndex = 0;
+    const fragment = document.createDocumentFragment();
+
+    while ((match = pattern.exec(value)) !== null) {
+      fragment.append(value.slice(lastIndex, match.index));
+      const link = document.createElement("a");
+      link.href = `mailto:${match[0]}`;
+      link.textContent = match[0];
+      link.className = "text-primary underline underline-offset-2 hover:text-primary/80";
+      fragment.append(link);
+      lastIndex = match.index + match[0].length;
+    }
+
+    if (lastIndex === 0) continue;
+    fragment.append(value.slice(lastIndex));
+    textNode.replaceWith(fragment);
+  }
+
+  return document.body.innerHTML;
+}
 
 export type EmailViewModalData = {
   id?: string;
@@ -29,12 +114,16 @@ type EmailViewModalProps = {
 export function EmailViewModal({ open, onOpenChange, email }: EmailViewModalProps) {
   const [showQuoted, setShowQuoted] = useState(false);
   const [copied, setCopied] = useState(false);
+  const fullHtml = email?.html_body?.trim();
+  const fullText = email?.body?.trim();
+  const linkedHtml = useMemo(
+    () => (fullHtml ? linkifyHtmlEmailAddresses(fullHtml) : null),
+    [fullHtml],
+  );
 
   if (!email) return null;
 
   const senderInitial = (email.from_name || email.from_email || "E").trim().charAt(0).toUpperCase();
-  const fullHtml = email.html_body?.trim();
-  const fullText = email.body?.trim();
 
   const handleCopyText = () => {
     const textToCopy = fullText || fullHtml || "";
@@ -143,9 +232,7 @@ export function EmailViewModal({ open, onOpenChange, email }: EmailViewModalProp
                 <div className="font-mono text-[11px] text-foreground truncate">
                   {email.id || "N/A"}
                 </div>
-                <div className="text-muted-foreground text-[10px]">
-                  Verified Inbound Email
-                </div>
+                <div className="text-muted-foreground text-[10px]">Inbound email record</div>
               </div>
             </div>
           </div>
@@ -153,14 +240,14 @@ export function EmailViewModal({ open, onOpenChange, email }: EmailViewModalProp
 
         {/* Large Scrollable Body Container */}
         <div className="p-6 md:p-8 max-h-[58vh] overflow-y-auto space-y-6 select-text">
-          {fullHtml ? (
+          {linkedHtml ? (
             <div
               className="prose prose-sm md:prose-base max-w-none text-foreground leading-relaxed dark:prose-invert"
-              dangerouslySetInnerHTML={{ __html: fullHtml }}
+              dangerouslySetInnerHTML={{ __html: linkedHtml }}
             />
           ) : fullText ? (
             <pre className="whitespace-pre-wrap font-sans text-sm md:text-base text-foreground leading-relaxed break-words">
-              {fullText}
+              {linkifyPlainTextEmailAddresses(fullText)}
             </pre>
           ) : (
             <p className="text-sm text-muted-foreground italic">(No content body)</p>
@@ -175,7 +262,10 @@ export function EmailViewModal({ open, onOpenChange, email }: EmailViewModalProp
                 className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground font-medium transition-colors"
               >
                 <ChevronDown
-                  className={cn("h-4 w-4 transition-transform shrink-0", showQuoted && "rotate-180")}
+                  className={cn(
+                    "h-4 w-4 transition-transform shrink-0",
+                    showQuoted && "rotate-180",
+                  )}
                 />
                 {showQuoted ? "Hide quoted thread history" : "Show quoted thread history"}
               </button>

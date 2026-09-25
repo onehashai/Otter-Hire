@@ -20,8 +20,16 @@ class Candidate(Base):
     email = Column(String, nullable=False)
     phone = Column(String)
     address = Column(String)
+    avatar_url = Column(String)
+    headline = Column(String)
     profile_links = Column(JSONB)
     parsed_resume = Column(JSONB)
+    is_enriched = Column(Boolean, nullable=False, server_default="false", default=False)
+    enriched_at = Column(DateTime(timezone=True), nullable=True)
+    avatar_enrichment_status = Column(String(32), nullable=True)
+    avatar_enrichment_error = Column(String(255), nullable=True)
+    avatar_retry_at = Column(DateTime(timezone=True), nullable=True)
+    avatar_source = Column(String(64), nullable=True)
     source = Column(String)
     tags = Column(JSONB)
     is_pending_duplicate_review = Column(
@@ -42,6 +50,7 @@ class Candidate(Base):
         Index("ix_candidates_org_job", "org_id", "job_id"),
         Index("ix_candidates_org_stage", "org_id", "stage_id"),
         Index("ix_candidates_org_email", "org_id", "email"),
+        Index("ix_candidates_avatar_retry", "avatar_enrichment_status", "avatar_retry_at"),
     )
 
     organization = relationship("Organization")

@@ -382,6 +382,8 @@ export function mapCandidateBase(
     email: candidate.email,
     phone: candidate.phone ?? "—",
     address: candidate.address ?? "—",
+    avatarUrl: candidate.avatar_url ?? null,
+    headline: candidate.headline ?? null,
     source: candidate.source ?? "job_portal",
     appliedDate: candidate.created_at,
     documents: mappedDocuments,

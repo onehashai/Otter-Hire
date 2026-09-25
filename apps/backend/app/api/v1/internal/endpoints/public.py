@@ -43,6 +43,10 @@ from app.core.config import settings
 from app.core.security import verify_access_token
 from app.db.session import get_db
 from app.integrations.app_store.email_integration import credential_store
+from app.integrations.app_store.email_integration.inbound_routing import (
+    ONEHASH_ORGANIZATION_ID,
+    is_onehash_careers_inbox,
+)
 from app.integrations.app_store.email_integration.provider_logic import (
     code_expiry_iso,
     hash_verification_code,
@@ -69,6 +73,7 @@ from app.schemas.public_jobs import (
     PublicJobsListResponse,
 )
 from app.services.automation import execute_automations_for_trigger
+from app.services.blocked_domains import get_blocked_sender_domain
 from app.services.email import send_email
 from app.services.resume.heuristics import should_replace_name
 from app.services.resume.pipeline import run_resume_pipeline
@@ -336,18 +341,89 @@ def _extract_profile_links_from_answers(
     return normalized
 
 
-def _is_resume_attachment(filename: str, content_type: str) -> bool:
-    lower_name = (filename or "").lower()
-    lower_type = (content_type or "").lower()
-    if lower_name.endswith(".pdf") or lower_type in {"application/pdf"}:
-        return True
-    if lower_name.endswith(".docx") or lower_type in {
+_RESUME_CONTENT_TYPES = {
+    "application/pdf": (".pdf", "application/pdf"),
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": (
+        ".docx",
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    }:
-        return True
-    if lower_name.endswith(".doc") or lower_type in {"application/msword"}:
-        return True
-    return False
+    ),
+    "application/msword": (".doc", "application/msword"),
+}
+_RESUME_EXTENSION_TYPES = {
+    ".pdf": "application/pdf",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".doc": "application/msword",
+}
+_GENERIC_ATTACHMENT_CONTENT_TYPES = {
+    "",
+    "application/octet-stream",
+    "application/binary",
+    "binary/octet-stream",
+}
+
+
+def _resume_attachment_metadata(
+    filename: str,
+    content_type: str,
+    content: bytes | None = None,
+) -> tuple[str, str] | None:
+    """Identify a supported resume, including files sent with generic MIME metadata."""
+    lower_name = (filename or "").strip().lower()
+    lower_type = (content_type or "").split(";", 1)[0].strip().lower()
+
+    # Message providers sometimes send PDFs and Office files as octet-stream.
+    # File signatures are authoritative when available and avoid relying on a
+    # candidate's filename alone.
+    if content:
+        if content.startswith(b"%PDF"):
+            return ".pdf", "application/pdf"
+        if content.startswith(b"PK\x03\x04"):
+            return (
+                ".docx",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+        if content.startswith(b"\xd0\xcf\x11\xe0"):
+            return ".doc", "application/msword"
+
+        # A filename is not enough when the sender explicitly identifies the
+        # content as unrelated, such as a CSS file called "resume.pdf".
+        # Generic MIME labels are intentionally accepted for real documents.
+        if (
+            lower_type not in _GENERIC_ATTACHMENT_CONTENT_TYPES
+            and lower_type not in _RESUME_CONTENT_TYPES
+        ):
+            return None
+
+    for extension, canonical_type in _RESUME_EXTENSION_TYPES.items():
+        if lower_name.endswith(extension):
+            return extension, canonical_type
+    return _RESUME_CONTENT_TYPES.get(lower_type)
+
+
+def _is_resume_attachment(
+    filename: str,
+    content_type: str,
+    content: bytes | None = None,
+) -> bool:
+    return _resume_attachment_metadata(filename, content_type, content) is not None
+
+
+def _normalize_resume_attachment_metadata(
+    filename: str,
+    content_type: str,
+    content: bytes,
+) -> tuple[str, str]:
+    """Repair generic attachment metadata while preserving a meaningful filename."""
+    detected = _resume_attachment_metadata(filename, content_type, content)
+    safe_name = _guess_file_name(filename, "resume")
+    if detected is None:
+        return safe_name, (content_type or "application/octet-stream")
+
+    extension, canonical_type = detected
+    if not safe_name.lower().endswith(extension):
+        stem = safe_name.rsplit(".", 1)[0] if "." in safe_name else safe_name
+        safe_name = f"{stem or 'resume'}{extension}"
+    return safe_name, canonical_type
 
 
 def _extract_email(text: str) -> Optional[str]:
@@ -989,6 +1065,34 @@ def _is_actionable_verification_email(
         if normalized_provider in {"google", "microsoft"} and action.get("type") == "link":
             return True
     return False
+
+
+def _should_capture_verification_email(
+    inbox_status: str | None,
+    from_email: str,
+    subject: str,
+    body_text: str,
+    *,
+    expected_provider: str | None = None,
+    expected_mode: str | None = None,
+    has_resume: bool = False,
+    is_candidate_application: bool = False,
+) -> bool:
+    """Only inspect setup mail while the inbox is pending and message is not an application."""
+    if (inbox_status or "").strip().lower() == "active":
+        return False
+    # A real resume or a clear candidate application must always take precedence
+    # over setup detection. Application text frequently contains numbers which
+    # otherwise resemble OTPs, especially while an inbox is still pending.
+    if has_resume or is_candidate_application:
+        return False
+    return _is_actionable_verification_email(
+        from_email,
+        subject,
+        body_text,
+        expected_provider=expected_provider,
+        expected_mode=expected_mode,
+    )
 
 
 def _is_verification_confirmation_email(
@@ -1673,6 +1777,21 @@ async def apply_public_job(
     await db.commit()
     await db.refresh(application)
 
+    # The public application may contain a dedicated photo field even when no
+    # resume was required. Queue enrichment only after all candidate documents
+    # have committed, and never let an unavailable resolver reject an applicant.
+    try:
+        from app.temporal.candidate_enrichment.queue import enqueue_candidate_enrichment
+        from app.temporal.candidate_enrichment.types import CandidateEnrichmentInput
+
+        await enqueue_candidate_enrichment(
+            input_data=CandidateEnrichmentInput(
+                org_id=str(org_uuid), candidate_id=str(candidate.id)
+            )
+        )
+    except Exception:
+        logger.exception("Unable to queue portal candidate enrichment candidate_id=%s", candidate.id)
+
     # Fetch stage name for automation metadata
     stage_name = None
     if candidate.stage_id:
@@ -1735,6 +1854,16 @@ _NO_REPLY_PATTERNS = frozenset(
     ]
 )
 
+# Job boards can send operational notifications to the careers inbox. These are
+# distinct from candidate applications and should be explained clearly in logs.
+_JOB_BOARD_NOTIFICATION_DOMAINS = frozenset(["internshala.com", "naukri.com"])
+_JOB_BOARD_NOTIFICATION_REASON = (
+    "Automated job-board notification - not a candidate application"
+)
+_NO_RESUME_REASON = (
+    "No resume attachment or link found - candidate creation requires resume"
+)
+
 # For new conversations only: require content to look like a real candidate / job inquiry
 _JOB_APPLICATION_SUBJECT_KEYWORDS = frozenset(
     [
@@ -1783,6 +1912,60 @@ _JOB_APPLICATION_BODY_KEYWORDS = frozenset(
         "to whom it may concern",
     ]
 )
+_JOB_SUBJECT_PREFIXES = (
+    "re:",
+    "fw:",
+    "fwd:",
+    "application for ",
+    "job application for ",
+    "applying for ",
+)
+_JOB_SUBJECT_SUFFIXES = (" role", " position")
+
+
+def _normalize_job_subject(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", (value or "").lower()).strip()
+
+
+def _subject_job_title_variants(subject: str) -> set[str]:
+    """Return strict job-title candidates from a candidate email subject."""
+    value = (subject or "").strip().lower()
+    if not value:
+        return set()
+
+    variants = {_normalize_job_subject(value)}
+    changed = True
+    while changed:
+        changed = False
+        for prefix in _JOB_SUBJECT_PREFIXES:
+            if value.startswith(prefix):
+                value = value[len(prefix) :].strip()
+                variants.add(_normalize_job_subject(value))
+                changed = True
+                break
+    for suffix in _JOB_SUBJECT_SUFFIXES:
+        if value.endswith(suffix):
+            variants.add(_normalize_job_subject(value[: -len(suffix)]))
+    return {variant for variant in variants if variant}
+
+
+async def _resolve_exact_subject_job(
+    db: AsyncSession,
+    *,
+    org_id: UUID,
+    subject: str | None,
+) -> Job | None:
+    """Match only one open job title; ambiguity deliberately remains unassigned."""
+    variants = _subject_job_title_variants(subject or "")
+    if not variants:
+        return None
+    jobs = (
+        await db.execute(
+            select(Job).where(Job.org_id == org_id, Job.status == "open")
+        )
+    ).scalars().all()
+    matches = [job for job in jobs if _normalize_job_subject(job.title) in variants]
+    return matches[0] if len(matches) == 1 else None
 
 
 def _looks_like_job_inquiry(payload: "InboundEmailPayload") -> bool:
@@ -1805,6 +1988,39 @@ def _has_candidate_application_signal(
 ) -> bool:
     """Accept a resume as a stronger application signal than free-form email text."""
     return has_resume or _looks_like_job_inquiry(payload)
+
+
+def _is_job_board_notification_sender(from_email: str | None) -> bool:
+    """Identify supported job-board sender domains, including subdomains."""
+    _, separator, domain = (from_email or "").strip().lower().rpartition("@")
+    if not separator or not domain:
+        return False
+    return any(
+        domain == job_board_domain or domain.endswith(f".{job_board_domain}")
+        for job_board_domain in _JOB_BOARD_NOTIFICATION_DOMAINS
+    )
+
+
+def _missing_resume_reason(from_email: str | None) -> str:
+    """Return the most specific log reason for a non-actionable inbound email."""
+    if _is_job_board_notification_sender(from_email):
+        return _JOB_BOARD_NOTIFICATION_REASON
+    return _NO_RESUME_REASON
+
+
+def _should_create_contact_only_candidate(
+    payload: "InboundEmailPayload",
+    *,
+    has_resume: bool,
+    has_application_document: bool,
+    matched_job: bool = False,
+) -> bool:
+    """Allow a real applicant email to create a resume-pending candidate."""
+    if has_resume or has_application_document or not (payload.from_email or "").strip():
+        return False
+    if _is_job_board_notification_sender(payload.from_email):
+        return False
+    return _has_candidate_application_signal(payload, has_resume=False) or matched_job
 
 
 def _is_automated_email(payload: "InboundEmailPayload") -> str | None:
@@ -1835,8 +2051,10 @@ async def _process_resume_link_fallback(
     org_id: UUID,
     inbound_email_id: UUID,
     db: "AsyncSession",
+    *,
+    allow_application_document: bool = False,
 ) -> tuple[dict, bytes] | None:
-    """Try to resolve and store resume from links in email body.
+    """Try to resolve and store a resume or application document from an email link.
 
     Returns (attachment_row, content) if successful, None otherwise.
     """
@@ -1855,26 +2073,16 @@ async def _process_resume_link_fallback(
     filename, content_type, content = link_result
     safe_name = _guess_file_name(filename, "resume_from_link.bin")
 
-    # Validate file extension (auto-fixing via magic bytes if missing or generic)
-    allowed_extensions = {".pdf", ".doc", ".docx"}
-    lower_name = safe_name.lower()
-    ext = ""
-    if "." in lower_name:
-        ext = "." + lower_name.rsplit(".", 1)[-1]
-    if ext not in allowed_extensions:
-        if content.startswith(b"%PDF"):
-            safe_name = (safe_name.rsplit(".", 1)[0] if "." in safe_name else safe_name) + ".pdf"
-            ext = ".pdf"
-        elif content.startswith(b"PK\x03\x04"):
-            safe_name = (safe_name.rsplit(".", 1)[0] if "." in safe_name else safe_name) + ".docx"
-            ext = ".docx"
-        else:
-            logger.warning(
-                "Resume link has invalid extension: %s (allowed: %s)",
-                ext,
-                allowed_extensions,
-            )
-            return None
+    detected = _resume_attachment_metadata(safe_name, content_type, content)
+    if detected is not None:
+        safe_name, content_type = _normalize_resume_attachment_metadata(
+            safe_name,
+            content_type,
+            content,
+        )
+    elif not allow_application_document or "text/html" in (content_type or "").lower():
+        logger.warning("Resume link did not resolve to a supported document: %s", safe_name)
+        return None
 
 
     # Store to S3
@@ -2228,8 +2436,8 @@ async def ingest_inbound_email(
     alias_org_id: UUID | None = None
     alias_direct_routing = False
 
-    if inbox_address and inbox_address.strip().lower() in {"careers@onehash.ai"}:
-        alias_org_id = UUID("019fdb7d-d868-7431-a62e-911fbb80ede6")
+    if is_onehash_careers_inbox(inbox_address):
+        alias_org_id = ONEHASH_ORGANIZATION_ID
         alias_direct_routing = True
 
     if job_inbox is None:
@@ -2355,6 +2563,11 @@ async def ingest_inbound_email(
     has_resume = any(
         _is_resume_attachment(att.filename, att.content_type) for att in (payload.attachments or [])
     )
+    blocked_sender_domain = await get_blocked_sender_domain(
+        db,
+        org_id=org_id,
+        sender_email=payload.from_email,
+    )
     inbound_email = InboundEmail(
         org_id=org_id,
         job_id=target_job_id,
@@ -2367,11 +2580,42 @@ async def ingest_inbound_email(
         raw_storage_key=(payload.raw_storage_key or "").strip() or None,
         email_kind="candidate",
         has_resume_attachment=has_resume,
+        attachment_count=len(payload.attachments or []),
+        attachment_primary_filename=(
+            (payload.attachments or [None])[0].filename
+            if payload.attachments
+            else None
+        ),
+        attachment_primary_content_type=(
+            (payload.attachments or [None])[0].content_type
+            if payload.attachments
+            else None
+        ),
         parse_status="ignored",
-        parse_error=None,
+        parse_error=(
+            f"Sender domain {blocked_sender_domain} is in organization blocked list"
+            if blocked_sender_domain
+            else None
+        ),
     )
     db.add(inbound_email)
     await db.flush()
+
+    # The SES/R2 bridge delivers through this endpoint. Stop before attachment
+    # writes, link downloads, candidate creation, or Temporal/OpenAI parsing.
+    if blocked_sender_domain:
+        await db.commit()
+        logger.info(
+            "Inbound email ignored: sender domain %s is blocked for org %s",
+            blocked_sender_domain,
+            org_id,
+        )
+        return {
+            "status": "ok",
+            "message": "Ignored: sender domain is blocked",
+            "inbound_email_id": str(inbound_email.id),
+            "org_id": str(org_id),
+        }
 
     body_text = "\n".join(
         [
@@ -2406,14 +2650,18 @@ async def ingest_inbound_email(
                 continue
         if len(content) > settings.inbound_max_attachment_bytes:
             continue
-        safe_name = _guess_file_name(att.filename, f"attachment_{idx + 1}.bin")
+        safe_name, normalized_content_type = _normalize_resume_attachment_metadata(
+            _guess_file_name(att.filename, f"attachment_{idx + 1}.bin"),
+            att.content_type or "application/octet-stream",
+            content,
+        )
         storage_key = f"orgs/{org_id}/inbox/attachments/{inbound_email.id}/{idx + 1}_{safe_name}"
         await storage_service.write_bytes(
-            storage_key, content, att.content_type or "application/octet-stream"
+            storage_key, content, normalized_content_type
         )
         attachment_row = {
             "filename": safe_name,
-            "content_type": att.content_type or "application/octet-stream",
+            "content_type": normalized_content_type,
             "storage_key": storage_key,
             "size_bytes": len(content),
             "sha256": hashlib.sha256(content).hexdigest(),
@@ -2424,7 +2672,7 @@ async def ingest_inbound_email(
             primary_attachment = attachment_row
 
         # Mark if resume attachment exists (but don't parse yet)
-        if _is_resume_attachment(safe_name, att.content_type):
+        if _is_resume_attachment(safe_name, normalized_content_type, content):
             has_resume = True
             if primary_resume_attachment is None:
                 primary_resume_attachment = attachment_row
@@ -2446,6 +2694,7 @@ async def ingest_inbound_email(
     inbound_email.attachment_primary_size_bytes = (
         selected_primary.get("size_bytes") if selected_primary else None
     )
+    inbound_email.has_resume_attachment = has_resume
 
     inbound_from_email = (inbound_email.from_email or "").strip()
     inbound_subject = (inbound_email.subject or "").strip()
@@ -2462,12 +2711,31 @@ async def ingest_inbound_email(
         or target_cfg.get("expected_verification_mode")
         or ""
     )
-    if _is_actionable_verification_email(
+    subject_matched_job = None
+    if target_job_id is None:
+        subject_matched_job = await _resolve_exact_subject_job(
+            db,
+            org_id=org_id,
+            subject=inbound_subject,
+        )
+        if subject_matched_job is not None:
+            target_job_id = subject_matched_job.id
+            conversation_job_id = subject_matched_job.id
+
+    candidate_application_signal = _has_candidate_application_signal(
+        payload,
+        has_resume=has_resume,
+    ) or subject_matched_job is not None
+    has_application_document = attachment_count > 0
+    if _should_capture_verification_email(
+        resolved_inbox_status,
         inbound_from_email,
         inbound_subject,
         body_text,
         expected_provider=expected_provider,
         expected_mode=expected_mode,
+        has_resume=has_resume,
+        is_candidate_application=candidate_application_signal,
     ):
         provider = _detect_verification_provider(
             inbound_from_email,
@@ -2642,8 +2910,51 @@ async def ingest_inbound_email(
                 "org_id": str(org_id),
             }
 
-    # If not an explicit reply+ address, check if sender is an existing candidate in this org
-    if inbound_email.from_email:
+    # Resolve a resume link before applying the fallback text filter. A valid
+    # resume attachment or link is stronger evidence of an application than a
+    # short subject such as the job title alone.
+    if not has_resume:
+        full_body_for_links = f"{payload.text_body or ''}\n{payload.html_body or ''}"
+        link_resume = await _process_resume_link_fallback(
+            full_body_for_links,
+            org_id,
+            inbound_email.id,
+            db,
+            allow_application_document=candidate_application_signal,
+        )
+
+        if link_resume is not None:
+            resume_attachment, content = link_resume
+            stored_attachments.append((resume_attachment, content))
+            linked_is_resume = _is_resume_attachment(
+                str(resume_attachment.get("filename") or ""),
+                str(resume_attachment.get("content_type") or ""),
+                content,
+            )
+            has_resume = has_resume or linked_is_resume
+            inbound_email.has_resume_attachment = has_resume
+            has_application_document = True
+            inbound_email.attachment_count = max(int(inbound_email.attachment_count or 0), 1)
+            inbound_email.attachment_primary_storage_key = str(
+                resume_attachment.get("storage_key") or ""
+            )
+            inbound_email.attachment_primary_sha256 = str(
+                resume_attachment.get("sha256") or ""
+            )
+            inbound_email.attachment_primary_filename = str(
+                resume_attachment.get("filename") or ""
+            )
+            inbound_email.attachment_primary_content_type = str(
+                resume_attachment.get("content_type") or "application/octet-stream"
+            )
+            inbound_email.attachment_primary_size_bytes = int(
+                resume_attachment.get("size_bytes") or 0
+            )
+
+    # Existing candidates can send normal replies without a resume. A valid
+    # attachment or link deliberately falls through to the parser so the
+    # candidate receives a new resume document rather than losing the update.
+    if inbound_email.from_email and not has_resume:
         existing_cand_result = await db.execute(
             select(Candidate)
             .where(
@@ -2682,42 +2993,38 @@ async def ingest_inbound_email(
                     "org_id": str(org_id),
                 }
 
-    # Resolve a resume link before applying the fallback text filter. A valid
-    # resume attachment or link is stronger evidence of an application than a
-    # short subject such as the job title alone.
-    if not has_resume:
-        full_body_for_links = f"{payload.text_body or ''}\n{payload.html_body or ''}"
-        link_resume = await _process_resume_link_fallback(
-            full_body_for_links,
-            org_id,
-            inbound_email.id,
-            db,
+    # Clear application emails can still enter as contact-only candidates. The
+    # resume parser marks these as resume-pending; board notifications and
+    # unrelated mail remain outside the candidate pipeline.
+    contact_only_application = _should_create_contact_only_candidate(
+        payload,
+        has_resume=has_resume,
+        has_application_document=has_application_document,
+        matched_job=subject_matched_job is not None,
+    )
+    if (
+        not has_resume
+        and not has_application_document
+        and not contact_only_application
+    ):
+        inbound_email.parse_status = "ignored"
+        inbound_email.parse_error = _missing_resume_reason(inbound_email.from_email)
+        await db.commit()
+        logger.info(
+            "Inbound email ignored (no resume): from=%s subject=%r",
+            inbound_email.from_email,
+            (inbound_email.subject or "")[:60],
         )
+        return {
+            "status": "ok",
+            "message": "Ignored: no resume attachment",
+            "inbound_email_id": str(inbound_email.id),
+            "org_id": str(org_id),
+        }
 
-        if link_resume is not None:
-            resume_attachment, content = link_resume
-            stored_attachments.append((resume_attachment, content))
-            has_resume = True
-            inbound_email.has_resume_attachment = True
-            inbound_email.attachment_count = max(int(inbound_email.attachment_count or 0), 1)
-            inbound_email.attachment_primary_storage_key = str(
-                resume_attachment.get("storage_key") or ""
-            )
-            inbound_email.attachment_primary_sha256 = str(
-                resume_attachment.get("sha256") or ""
-            )
-            inbound_email.attachment_primary_filename = str(
-                resume_attachment.get("filename") or ""
-            )
-            inbound_email.attachment_primary_content_type = str(
-                resume_attachment.get("content_type") or "application/octet-stream"
-            )
-            inbound_email.attachment_primary_size_bytes = int(
-                resume_attachment.get("size_bytes") or 0
-            )
-
-    # For new candidates without a resume, retain the narrow text-based filter
-    # so generic mail and unrelated enquiries do not create candidate records.
+    # For new candidates with neither a document nor an application signal,
+    # keep generic mail out of the talent pool. This is deliberately after the
+    # no-resume check above so the log explains the immediate, actionable cause.
     if not _has_candidate_application_signal(payload, has_resume=has_resume):
         inbound_email.parse_status = "ignored"
         inbound_email.parse_error = "Email does not match job application keywords"
@@ -2734,25 +3041,12 @@ async def ingest_inbound_email(
             "org_id": str(org_id),
         }
 
-    if not has_resume:
-        inbound_email.parse_status = "ignored"
-        inbound_email.parse_error = (
-            "No resume attachment or link found - candidate creation requires resume"
-        )
-        await db.commit()
-        logger.info(
-            "Inbound email ignored (no resume): from=%s subject=%r",
-            inbound_email.from_email,
-            (inbound_email.subject or "")[:60],
-        )
-        return {
-            "status": "ok",
-            "message": "Ignored: no resume attachment",
-            "inbound_email_id": str(inbound_email.id),
-            "org_id": str(org_id),
-        }
-
     # Enqueue background Temporal parse workflow instead of parsing synchronously
+    # Commit this before starting Temporal so a fast worker can always load the
+    # row and the email logs truthfully show work is in progress.
+    inbound_email.parse_status = "processing"
+    inbound_email.parse_error = None
+    await db.commit()
     try:
         from app.temporal.inbound_email.queue import enqueue_inbound_email_parse
         from app.temporal.inbound_email.types import InboundEmailParseInput
@@ -2765,10 +3059,17 @@ async def ingest_inbound_email(
                 target_job_id=str(target_job_id) if target_job_id else None,
             )
         )
-    except Exception:
+    except Exception as exc:
         logger.exception("Failed to enqueue inbound email parse workflow in Temporal")
-
-    await db.commit()
+        inbound_email.parse_status = "failed"
+        inbound_email.parse_error = f"Could not queue inbound email parsing: {exc}"
+        await db.commit()
+        return {
+            "status": "failed",
+            "message": "Inbound email could not be queued for processing",
+            "inbound_email_id": str(inbound_email.id),
+            "org_id": str(org_id),
+        }
 
     return {
         "status": "ok",

@@ -698,6 +698,8 @@ async def get_job_workspace(
                 id=candidate.id,
                 name=candidate.name,
                 email=candidate.email,
+                avatar_url=candidate.avatar_url,
+                headline=candidate.headline,
                 stage_id=(
                     (
                         assignment_by_candidate_id[candidate.id].stage_id

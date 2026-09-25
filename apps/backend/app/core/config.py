@@ -169,7 +169,7 @@ class Settings(BaseSettings):
         default=5 * 1024 * 1024, validation_alias="INBOUND_MAX_ATTACHMENT_BYTES"
     )
     inbound_resume_min_confidence: int = Field(
-        default=6, validation_alias="INBOUND_RESUME_MIN_CONFIDENCE"
+        default=3, validation_alias="INBOUND_RESUME_MIN_CONFIDENCE"
     )
     ses_raw_bridge_enabled: bool = Field(default=True, validation_alias="SES_RAW_BRIDGE_ENABLED")
     ses_raw_bridge_bucket: str | None = Field(

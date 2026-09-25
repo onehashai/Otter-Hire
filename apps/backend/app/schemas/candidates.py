@@ -15,6 +15,8 @@ class CandidateListItemResponse(BaseModel):
     email: str
     phone: Optional[str] = None
     address: Optional[str] = None
+    avatar_url: Optional[str] = None
+    headline: Optional[str] = None
     profile_links: Optional[dict[str, Any]] = None
     parsed_resume: Optional[dict[str, Any]] = None
     source: Optional[str] = None
@@ -26,6 +28,12 @@ class CandidateListItemResponse(BaseModel):
     stage_name: Optional[str] = None
     is_pending_duplicate_review: bool = False
     possible_duplicate_of_id: Optional[UUID] = None
+    is_enriched: bool = False
+    enriched_at: Optional[datetime] = None
+    avatar_enrichment_status: Optional[str] = None
+    avatar_enrichment_error: Optional[str] = None
+    avatar_retry_at: Optional[datetime] = None
+    avatar_source: Optional[str] = None
     assignments: list["CandidateAssignmentItemResponse"] = []
     created_at: datetime
     updated_at: datetime
@@ -33,6 +41,11 @@ class CandidateListItemResponse(BaseModel):
 
 class CandidateDetailResponse(CandidateListItemResponse):
     pass
+
+
+class CandidateEnrichmentResponse(BaseModel):
+    status: str
+    workflow_id: str
 
 
 class CandidateAssignmentItemResponse(BaseModel):

@@ -4,11 +4,13 @@ import { useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import { Badge } from "@onehash/ui/badge";
+import { Avatar } from "@onehash/ui/avatar";
 import { Checkbox } from "@onehash/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@onehash/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@onehash/ui/tooltip";
 import { formatTimestamp } from "@/lib/format-date";
 import { formatPhoneForDisplay } from "@/lib/phone";
+import { getInitialsFromName } from "@/lib/name-initials";
 import { type CandidateListItemResponse, type JobListItemResponse } from "@/api";
 import { TruncatedText } from "@/components/common/TruncatedText";
 
@@ -267,6 +269,14 @@ export function CandidatesTable({
       return (
         <TableCell key={column} className="py-2 align-middle min-w-0 max-w-[320px] text-center">
           <div className="flex items-center justify-center gap-2 min-w-0">
+            <Avatar
+              src={c.avatar_url}
+              alt={displayName}
+              className="h-7 w-7 shrink-0"
+              fallbackClassName="bg-muted text-[10px] font-medium"
+            >
+              {getInitialsFromName(displayName)}
+            </Avatar>
             <span className="text-sm font-medium truncate">{displayName || "—"}</span>
             {c.is_pending_duplicate_review && (
               <Badge

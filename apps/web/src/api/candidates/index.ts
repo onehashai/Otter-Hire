@@ -6,6 +6,8 @@ export type CandidateListItemResponse = {
   email: string;
   phone: string | null;
   address: string | null;
+  avatar_url: string | null;
+  headline: string | null;
   profile_links: Record<string, string>;
   parsed_resume?: Record<string, unknown> | null;
   source: string | null;
@@ -18,11 +20,18 @@ export type CandidateListItemResponse = {
   is_pending_duplicate_review?: boolean;
   possible_duplicate_of_id?: string | null;
   assignments: CandidateAssignmentItemResponse[];
+  is_enriched?: boolean;
+  enriched_at?: string | null;
   created_at: string;
   updated_at: string;
 };
 
 export type CandidateDetailResponse = CandidateListItemResponse & {};
+
+export type CandidateEnrichmentResponse = {
+  status: string;
+  workflow_id: string;
+};
 
 export type CandidateAssignmentItemResponse = {
   assigned_id: string;
@@ -199,6 +208,12 @@ export async function getCandidates(params?: {
 
 export async function getCandidateById(id: string): Promise<CandidateDetailResponse> {
   return apiFetch<CandidateDetailResponse>(`/candidates/${id}`, { method: "GET" });
+}
+
+export async function enrichCandidate(candidateId: string): Promise<CandidateEnrichmentResponse> {
+  return apiFetch<CandidateEnrichmentResponse>(`/candidates/${candidateId}/enrich`, {
+    method: "POST",
+  });
 }
 
 export async function getCandidateJobScore(
@@ -484,6 +499,28 @@ export async function uploadCandidateDocument(
 
   const doc = (await res.json()) as CandidateDocumentResponse;
   return { ...doc, url: normalizeApiUrl(doc.url) ?? doc.url };
+}
+
+export async function replaceCandidateAvatar(
+  id: string,
+  file: File,
+): Promise<CandidateDetailResponse> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await fetch(`${API_BASE_URL}/candidates/${id}/avatar`, {
+    method: "POST",
+    credentials: "include",
+    body: formData,
+  });
+  if (!res.ok) {
+    let message = `Request failed: ${res.status} ${res.statusText}`;
+    try {
+      const data = (await res.json()) as { detail?: string; error?: string };
+      message = data.detail || data.error || message;
+    } catch {}
+    throw new Error(message);
+  }
+  return (await res.json()) as CandidateDetailResponse;
 }
 
 export async function deleteCandidateDocument(

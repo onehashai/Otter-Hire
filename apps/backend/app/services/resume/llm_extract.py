@@ -31,6 +31,7 @@ Rules:
   identifying word boundaries — use the email address as a hint if available.
   Always return a properly spaced name like "Harsh Mishra", never "HARSHMISHRA" or "H A R S H M I S H R A".
 - personal.email and personal.phone must appear in the resume text when set.
+- personal.phone: If the number lacks an international country dial code, infer the calling code from the candidate's address/location (e.g. "Raleigh, NC" -> +1, "Bangalore" -> +91) and output in standard international format (e.g. "+1 555-512-8834").
 - personal.address is city/region/country when clearly stated near the name or header.
 - work_experience: most recent first. Include ALL jobs/roles mentioned. Each entry must have:
     company, title, start_date (e.g. "Jan 2018"), end_date ("Present" if current), location, highlights (bullet list).

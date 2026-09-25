@@ -36,6 +36,8 @@ from app.temporal.migration.activities import (
 from app.temporal.migration.workflows import AtsSyncWorkflow, CommitBatchWorkflow
 from app.temporal.resume_parsing.activities import parse_job_apply_resume_activity
 from app.temporal.resume_parsing.workflow import JobApplyResumeParseWorkflow
+from app.temporal.candidate_enrichment.activities import enrich_candidate_profile_activity
+from app.temporal.candidate_enrichment.workflow import CandidateEnrichmentWorkflow
 from app.temporal.resume_scoring.activities import score_candidate_job_activity
 from app.temporal.resume_scoring.workflow import ResumeScoreWorkflow
 from app.temporal.sentry_interceptor import SentryInterceptor
@@ -118,6 +120,15 @@ async def run_temporal_worker() -> None:
             max_concurrent_activities=10,
             max_concurrent_workflow_tasks=10,
         )
+        worker_candidate_enrichment = Worker(
+            client,
+            task_queue="candidate-enrichment",
+            workflows=[CandidateEnrichmentWorkflow],
+            activities=[enrich_candidate_profile_activity],
+            interceptors=_sentry_interceptors,
+            max_concurrent_activities=5,
+            max_concurrent_workflow_tasks=5,
+        )
         migration_workers = []
         if settings.feature_linkedin_applicant_ingestion:
             migration_workers.append(Worker(
@@ -144,7 +155,7 @@ async def run_temporal_worker() -> None:
                     max_concurrent_workflow_tasks=5,
                 )
             )
-        queues = "email-inbound,inbound-email-parse,email-outbound,careers-resume-parse,resume-scoring"
+        queues = "email-inbound,inbound-email-parse,email-outbound,careers-resume-parse,resume-scoring,candidate-enrichment"
         if settings.ats_auto_import_enabled:
             queues += ",ats-migration"
         if settings.feature_linkedin_applicant_ingestion:
@@ -163,6 +174,7 @@ async def run_temporal_worker() -> None:
             worker_outbound.run(),
             worker_careers_resume.run(),
             worker_resume_scoring.run(),
+            worker_candidate_enrichment.run(),
             *(worker.run() for worker in migration_workers),
             _keepalive(),
         )

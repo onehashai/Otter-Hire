@@ -83,6 +83,9 @@ from app.utils.uuid import uuid7
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
 logger = logging.getLogger(__name__)
+_NO_RESUME_APPLICATION_REASON = (
+    "No resume attachment or link found - candidate creation requires resume"
+)
 
 
 async def _upsert_candidate_job_assignment(
@@ -1796,6 +1799,27 @@ def _looks_like_job_inquiry(payload: "InboundEmailPayload") -> bool:
     return False
 
 
+def _is_job_board_notification_sender(from_email: str | None) -> bool:
+    """Exclude job-board notifications from contact-only candidate creation."""
+    _, separator, domain = (from_email or "").strip().lower().rpartition("@")
+    if not separator or not domain:
+        return False
+    return any(
+        domain == blocked or domain.endswith(f".{blocked}")
+        for blocked in ("internshala.com", "naukri.com")
+    )
+
+
+def _contact_only_candidate_name(from_name: str | None, from_email: str) -> str:
+    display_name = re.sub(r"\s+", " ", (from_name or "")).strip()
+    if display_name:
+        return display_name[:255]
+    local_part = from_email.rsplit("@", 1)[0]
+    local_part = re.sub(r"\d+$", "", local_part)
+    local_part = re.sub(r"[._+-]+", " ", local_part)
+    return (" ".join(local_part.split()).title() or "Applicant")[:255]
+
+
 def _is_automated_email(payload: "InboundEmailPayload") -> str | None:
     """Return a reason string if the email should be discarded, else None."""
     auto_submitted = (payload.auto_submitted or "no").lower()
@@ -2291,33 +2315,55 @@ async def ingest_inbound_email(
         )
         existing = existing_result.scalar_one_or_none()
         if existing is not None:
-            return {
-                "status": "ok",
-                "message": "Already processed",
-                "inbound_email_id": str(existing.id),
-                "org_id": str(org_id),
-            }
+            is_replayable_no_resume_application = (
+                existing.parse_status == "ignored"
+                and existing.parse_error == _NO_RESUME_APPLICATION_REASON
+                and not _is_job_board_notification_sender(existing.from_email)
+                and bool(existing.raw_storage_key)
+                and existing.raw_storage_key == (payload.raw_storage_key or "").strip()
+                and (existing.from_email or "").strip().lower()
+                == (payload.from_email or "").strip().lower()
+            )
+            if not is_replayable_no_resume_application:
+                return {
+                    "status": "ok",
+                    "message": "Already processed",
+                    "inbound_email_id": str(existing.id),
+                    "org_id": str(org_id),
+                }
+            inbound_email = existing
+            inbound_email.parse_error = None
+            inbound_email.job_id = target_job_id
+            inbound_email.subject = (payload.subject or "").strip() or None
+            inbound_email.from_name = (payload.from_name or "").strip() or None
+        else:
+            inbound_email = None
+    else:
+        inbound_email = None
 
     has_resume = any(
         _is_resume_attachment(att.filename, att.content_type) for att in (payload.attachments or [])
     )
-    inbound_email = InboundEmail(
-        org_id=org_id,
-        job_id=target_job_id,
-        inbox_address=inbox_address,
-        from_email=(payload.from_email or "").strip().lower() or None,
-        from_name=(payload.from_name or "").strip() or None,
-        subject=(payload.subject or "").strip() or None,
-        message_id=(payload.message_id or "").strip() or None,
-        received_at=payload.received_at or datetime.now(timezone.utc),
-        raw_storage_key=(payload.raw_storage_key or "").strip() or None,
-        email_kind="candidate",
-        has_resume_attachment=has_resume,
-        parse_status="ignored",
-        parse_error=None,
-    )
-    db.add(inbound_email)
-    await db.flush()
+    if inbound_email is None:
+        inbound_email = InboundEmail(
+            org_id=org_id,
+            job_id=target_job_id,
+            inbox_address=inbox_address,
+            from_email=(payload.from_email or "").strip().lower() or None,
+            from_name=(payload.from_name or "").strip() or None,
+            subject=(payload.subject or "").strip() or None,
+            message_id=(payload.message_id or "").strip() or None,
+            received_at=payload.received_at or datetime.now(timezone.utc),
+            raw_storage_key=(payload.raw_storage_key or "").strip() or None,
+            email_kind="candidate",
+            has_resume_attachment=has_resume,
+            parse_status="ignored",
+            parse_error=None,
+        )
+        db.add(inbound_email)
+        await db.flush()
+    else:
+        inbound_email.has_resume_attachment = has_resume
 
     body_text = "\n".join(
         [
@@ -2606,6 +2652,86 @@ async def ingest_inbound_email(
         )
 
         if link_resume is None:
+            sender_email = (inbound_email.from_email or "").strip().lower()
+            if sender_email and not _is_job_board_notification_sender(sender_email):
+                sender_name = _contact_only_candidate_name(
+                    inbound_email.from_name,
+                    sender_email,
+                )
+                existing_candidate_result = await db.execute(
+                    select(Candidate)
+                    .where(
+                        Candidate.org_id == org_id,
+                        func.lower(Candidate.email) == sender_email,
+                    )
+                    .order_by(Candidate.created_at.desc())
+                    .limit(1)
+                )
+                existing_candidate = existing_candidate_result.scalar_one_or_none()
+                candidate = Candidate(
+                    org_id=org_id,
+                    job_id=target_job_id,
+                    stage_id=None,
+                    status="active",
+                    name=sender_name,
+                    email=sender_email,
+                    source="Email",
+                    parsed_resume=None,
+                    tags=["resume_pending"],
+                    is_pending_duplicate_review=existing_candidate is not None,
+                    possible_duplicate_of_id=(
+                        existing_candidate.id if existing_candidate is not None else None
+                    ),
+                )
+                db.add(candidate)
+                await db.flush()
+
+                if target_job_id is not None:
+                    first_stage_result = await db.execute(
+                        select(Stage)
+                        .where(Stage.org_id == org_id, Stage.job_id == target_job_id)
+                        .order_by(Stage.position.asc())
+                        .limit(1)
+                    )
+                    first_stage = first_stage_result.scalar_one_or_none()
+                    applied_at = datetime.now(timezone.utc)
+                    await _upsert_candidate_job_assignment(
+                        db,
+                        org_id=org_id,
+                        candidate_id=candidate.id,
+                        job_id=target_job_id,
+                        stage_id=first_stage.id if first_stage else None,
+                        assignment_status="active",
+                        source="Email",
+                        applied_at=applied_at,
+                        assigned_at=applied_at,
+                    )
+
+                conversation_result = await _route_inbound_to_conversation(
+                    db,
+                    org_id,
+                    inbox_address,
+                    payload,
+                    candidate_override=candidate,
+                    conversation_job_id=conversation_job_id,
+                )
+                inbound_email.parsed_candidate_id = candidate.id
+                inbound_email.parse_status = "processed"
+                inbound_email.parse_error = None
+                await db.commit()
+                response = {
+                    "status": "ok",
+                    "message": "Application recorded; resume pending",
+                    "inbound_email_id": str(inbound_email.id),
+                    "candidate_id": str(candidate.id),
+                    "candidate_ids": [str(candidate.id)],
+                    "org_id": str(org_id),
+                }
+                if conversation_result is not None:
+                    response["conversation_id"] = conversation_result[0]
+                    response["message_id"] = conversation_result[1]
+                return response
+
             inbound_email.parse_status = "ignored"
             inbound_email.parse_error = (
                 "No resume attachment or link found - candidate creation requires resume"

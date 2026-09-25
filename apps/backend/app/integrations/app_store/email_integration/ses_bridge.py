@@ -32,6 +32,19 @@ logger = logging.getLogger(__name__)
 
 _PROCESS_KEY_TIMEOUT_SECONDS = 30
 _REDIS_SOCKET_TIMEOUT_SECONDS = 2
+_NO_RESUME_APPLICATION_REASON = (
+    "No resume attachment or link found - candidate creation requires resume"
+)
+
+
+def _is_reprocessable_no_resume_email(status: str, reason: str | None, sender: str | None) -> bool:
+    email = (sender or "").strip().lower()
+    domain = email.rpartition("@")[2]
+    is_job_board = any(
+        domain == blocked or domain.endswith(f".{blocked}")
+        for blocked in ("naukri.com", "internshala.com")
+    )
+    return status == "ignored" and reason == _NO_RESUME_APPLICATION_REASON and not is_job_board
 
 
 def _parse_references(references_raw: str) -> list[str]:
@@ -165,6 +178,46 @@ def _clear_key_enqueued_in_redis(raw_key: str) -> None:
         logger.exception("SES bridge redis delete failed key=%s", raw_key)
 
 
+def _clear_key_retry_markers(raw_key: str) -> None:
+    try:
+        _redis_client().delete(
+            f"inbound:enqueued:{raw_key}",
+            f"inbound:ignored:{raw_key}",
+        )
+    except Exception:
+        logger.exception("SES bridge redis retry-marker clear failed key=%s", raw_key)
+
+
+def _claim_no_resume_reprocess(raw_key: str) -> bool:
+    try:
+        return bool(
+            _redis_client().set(
+                f"inbound:reprocess:{raw_key}",
+                "1",
+                nx=True,
+                ex=max(180, _PROCESS_KEY_TIMEOUT_SECONDS * 6),
+            )
+        )
+    except Exception:
+        logger.exception("SES bridge reprocess claim failed key=%s", raw_key)
+        return False
+
+
+def _release_no_resume_reprocess(raw_key: str) -> None:
+    try:
+        _redis_client().delete(f"inbound:reprocess:{raw_key}")
+    except Exception:
+        logger.exception("SES bridge reprocess release failed key=%s", raw_key)
+
+
+def _is_no_resume_reprocess_in_progress(raw_key: str) -> bool:
+    try:
+        return bool(_redis_client().exists(f"inbound:reprocess:{raw_key}"))
+    except Exception:
+        logger.exception("SES bridge reprocess lock check failed key=%s", raw_key)
+        return False
+
+
 def _mark_key_ignored_in_redis(raw_key: str) -> None:
     """Permanently mark a key as ignored so the polling loop never re-enqueues it.
 
@@ -237,11 +290,38 @@ async def _is_key_already_processed(raw_key: str) -> bool:
     logger.info("SES bridge dedupe check start key=%s", raw_key)
     async with AsyncSessionLocal() as db:
         result = await db.execute(
-            select(InboundEmail.id).where(InboundEmail.raw_storage_key == raw_key).limit(1)
+            select(
+                InboundEmail.parse_status,
+                InboundEmail.parse_error,
+                InboundEmail.from_email,
+            )
+            .where(InboundEmail.raw_storage_key == raw_key)
+            .limit(1)
         )
-        found = result.scalar_one_or_none() is not None
+        row = result.first()
+        found = row is not None and not _is_reprocessable_no_resume_email(*row)
         logger.info("SES bridge dedupe db key=%s found=%s", raw_key, found)
         return found
+
+
+async def _list_reprocessable_no_resume_keys(limit: int) -> list[tuple[str, datetime | None]]:
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(InboundEmail.raw_storage_key, InboundEmail.received_at)
+            .where(
+                InboundEmail.parse_status == "ignored",
+                InboundEmail.parse_error == _NO_RESUME_APPLICATION_REASON,
+                InboundEmail.raw_storage_key.is_not(None),
+                InboundEmail.from_email.not_ilike("%@naukri.com"),
+                InboundEmail.from_email.not_ilike("%.naukri.com"),
+                InboundEmail.from_email.not_ilike("%@internshala.com"),
+                InboundEmail.from_email.not_ilike("%.internshala.com"),
+            )
+            .order_by(InboundEmail.received_at.desc())
+            .limit(max(1, limit))
+        )
+        rows = result.all()
+    return [(str(key), received_at) for key, received_at in rows if key]
 
 
 async def _find_inbox_secret(inbox_address: str) -> str | None:
@@ -449,21 +529,39 @@ def _post_to_inbound_api(payload: dict, secret: str) -> tuple[int, str]:
         return exc.code, exc.read().decode("utf-8", errors="ignore")
 
 
-async def _process_raw_key(s3_client, bucket: str, key: str) -> None:
+async def _process_raw_key(
+    s3_client,
+    bucket: str,
+    key: str,
+    *,
+    reprocess_ignored_no_resume: bool = False,
+) -> None:
     logger.info("SES bridge process start key=%s", key)
     if "AMAZON_SES_SETUP_NOTIFICATION" in key:
         logger.info("SES bridge skipped key=%s reason=ses_setup_notification", key)
         return
+    claimed_reprocess = False
+    if reprocess_ignored_no_resume:
+        if not _claim_no_resume_reprocess(key):
+            logger.info("SES bridge skipped key=%s reason=reprocess_already_claimed", key)
+            return
+        claimed_reprocess = True
+        _clear_key_retry_markers(key)
+    elif _is_no_resume_reprocess_in_progress(key):
+        logger.debug("SES bridge skipped key=%s reason=reprocess_in_progress", key)
+        return
+
     # Fast Redis guard: skip keys that are already enqueued (workflow running) or
     # permanently ignored (workflow completed without a DB record being created).
     # This check must come before the DB query to avoid hammering the DB every poll.
-    if _is_key_enqueued_in_redis(key):
+    if not reprocess_ignored_no_resume and _is_key_enqueued_in_redis(key):
         logger.debug("SES bridge skipped key=%s reason=redis_dedup", key)
         return
-    if await _is_key_already_processed(key):
+    if not reprocess_ignored_no_resume and await _is_key_already_processed(key):
         logger.info("SES bridge skipped key=%s reason=already_processed", key)
         return
-    _mark_key_enqueued_in_redis(key)
+    if not reprocess_ignored_no_resume:
+        _mark_key_enqueued_in_redis(key)
 
     try:
         logger.info("SES bridge processing key=%s bucket=%s", key, bucket)
@@ -531,6 +629,9 @@ async def _process_raw_key(s3_client, bucket: str, key: str) -> None:
     except Exception:
         _clear_key_enqueued_in_redis(key)
         raise
+    finally:
+        if claimed_reprocess:
+            _release_no_resume_reprocess(key)
 
 
 async def run_ses_raw_bridge_loop(stop_event: asyncio.Event) -> None:
@@ -563,6 +664,15 @@ async def run_ses_raw_bridge_loop(stop_event: asyncio.Event) -> None:
                 prefix,
                 settings.ses_raw_bridge_max_keys,
             )
+            reprocessable = await _list_reprocessable_no_resume_keys(
+                settings.ses_raw_bridge_max_keys
+            )
+            queued_keys = {key for key, _ in keys_with_mtime}
+            reprocess_keys = {key for key, _ in reprocessable}
+            for key, received_at in reprocessable:
+                if key not in queued_keys:
+                    keys_with_mtime.append((key, received_at))
+                    queued_keys.add(key)
 
             if keys_with_mtime:
                 logger.info(
@@ -574,15 +684,25 @@ async def run_ses_raw_bridge_loop(stop_event: asyncio.Event) -> None:
                     newest_seen.isoformat() if newest_seen else None,
                     len(keys_with_mtime),
                 )
+            if reprocess_keys:
+                logger.info(
+                    "SES bridge retrying ignored no-resume applications count=%s",
+                    len(reprocess_keys),
+                )
 
             semaphore = asyncio.Semaphore(max_parallel)
 
-            async def _process_with_limit(raw_key: str) -> None:
+            async def _process_with_limit(raw_key: str, reprocess: bool) -> None:
                 async with semaphore:
                     started = time.monotonic()
                     try:
                         await asyncio.wait_for(
-                            _process_raw_key(s3_client, bucket, raw_key),
+                            _process_raw_key(
+                                s3_client,
+                                bucket,
+                                raw_key,
+                                reprocess_ignored_no_resume=reprocess,
+                            ),
                             timeout=_PROCESS_KEY_TIMEOUT_SECONDS,
                         )
                         logger.info(
@@ -617,7 +737,9 @@ async def run_ses_raw_bridge_loop(stop_event: asyncio.Event) -> None:
                         fallback_grace_seconds,
                     )
                     continue
-                tasks.append(asyncio.create_task(_process_with_limit(key)))
+                tasks.append(
+                    asyncio.create_task(_process_with_limit(key, key in reprocess_keys))
+                )
 
             if tasks:
                 await asyncio.gather(*tasks, return_exceptions=True)

@@ -9,13 +9,15 @@ from typing import Any
 from uuid import UUID
 
 from mcp.server.auth.middleware.auth_context import AuthContextMiddleware, get_access_token
-from mcp.server.auth.middleware.bearer_auth import BearerAuthBackend
+from mcp.server.auth.middleware.bearer_auth import BearerAuthBackend, RequireAuthMiddleware
 from mcp.server.auth.provider import AccessToken, TokenVerifier
 from mcp.server.auth.routes import create_protected_resource_routes
 from mcp.server.fastmcp import FastMCP
 from sqlalchemy import or_, select
 from sqlalchemy.orm import selectinload
 from starlette.middleware.authentication import AuthenticationMiddleware
+from starlette.responses import JSONResponse
+from starlette.routing import Route
 
 from app.core.config import settings
 from app.db.session import AsyncSessionLocal
@@ -112,6 +114,53 @@ class OtterHireFastMCP(FastMCP):
                 authorization_servers=[self.oauth_issuer_url],
                 scopes_supported=["mcp:read", "mcp:write", "ats:all"],
                 resource_name="Otter Hire ATS MCP",
+            )
+        )
+        return app
+
+    def streamable_http_app(self):
+        app = super().streamable_http_app()
+        legacy_sse_app = super().sse_app()
+        app.router.routes.extend(legacy_sse_app.router.routes)
+
+        resource_metadata_url = (
+            f"{self.oauth_issuer_url.rstrip('/')}/.well-known/"
+            "oauth-protected-resource/mcp"
+        )
+        streamable_route = next(
+            route
+            for route in app.router.routes
+            if getattr(route, "path", None) == self.settings.streamable_http_path
+        )
+        streamable_route.app = RequireAuthMiddleware(
+            streamable_route.app, ["mcp:read"], resource_metadata_url
+        )
+
+        app.add_middleware(AuthContextMiddleware)
+        app.add_middleware(
+            AuthenticationMiddleware,
+            backend=BearerAuthBackend(
+                self.oauth_token_verifier,
+                resource_server_url=self.oauth_resource_url,
+            ),
+        )
+
+        async def protected_resource_metadata(_request):
+            return JSONResponse(
+                {
+                    "resource": self.oauth_resource_url,
+                    "authorization_servers": [self.oauth_issuer_url],
+                    "scopes_supported": ["mcp:read", "mcp:write", "ats:all"],
+                    "resource_name": "Otter Hire ATS MCP",
+                    "bearer_methods_supported": ["header"],
+                }
+            )
+
+        app.router.routes.append(
+            Route(
+                "/.well-known/oauth-protected-resource/mcp",
+                endpoint=protected_resource_metadata,
+                methods=["GET"],
             )
         )
         return app
@@ -589,7 +638,7 @@ def create_mcp_server() -> FastMCP:
 
 
 def main() -> None:
-    create_mcp_server().run(transport="sse")
+    create_mcp_server().run(transport="streamable-http")
 
 
 if __name__ == "__main__":

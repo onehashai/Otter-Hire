@@ -8,6 +8,7 @@ from urllib.parse import urlencode
 import pytest
 from fastapi import HTTPException
 from starlette.requests import Request
+from starlette.testclient import TestClient
 
 from app.api.v1.oauth import (
     ApprovalRequest,
@@ -174,3 +175,31 @@ def test_mcp_sse_bearer_validation_is_optional_for_legacy_api_key_tools():
     assert "/.well-known/oauth-protected-resource/mcp" in paths
     middleware = [item.cls.__name__ for item in app.user_middleware]
     assert middleware[:2] == ["AuthenticationMiddleware", "AuthContextMiddleware"]
+
+
+def test_mcp_streamable_http_requires_oauth_and_keeps_legacy_sse_routes():
+    server = create_mcp_server()
+    app = server.streamable_http_app()
+    routes = {getattr(route, "path", None): route for route in app.routes}
+
+    assert "/mcp" in routes
+    assert "/sse" in routes
+    assert "/messages" in routes
+    assert "/.well-known/oauth-protected-resource/mcp" in routes
+    assert routes["/mcp"].app.__class__.__name__ == "RequireAuthMiddleware"
+    middleware = [item.cls.__name__ for item in app.user_middleware]
+    assert middleware[:2] == ["AuthenticationMiddleware", "AuthContextMiddleware"]
+
+    client = TestClient(app)
+    response = client.post(
+        "/mcp",
+        json={"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
+    )
+    assert response.status_code == 401
+    assert "resource_metadata=" in response.headers["www-authenticate"]
+
+    metadata = client.get("/.well-known/oauth-protected-resource/mcp")
+    assert metadata.status_code == 200
+    body = metadata.json()
+    assert body["resource"].endswith("/mcp")
+    assert body["authorization_servers"] == [server.oauth_issuer_url]

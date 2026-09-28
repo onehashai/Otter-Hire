@@ -5,7 +5,13 @@ import { Check, Clipboard, KeyRound } from "lucide-react";
 import { Button } from "@onehash/ui/button";
 import { API_BASE_URL } from "@/api";
 
-const MCP_URL = process.env.NEXT_PUBLIC_MCP_SERVER_URL || "https://smartats.in/mcp/sse";
+const MCP_CONFIGURED_URL = (
+  process.env.NEXT_PUBLIC_MCP_SERVER_URL || "https://smartats.in/mcp/sse"
+).replace(/\/+$/, "");
+const MCP_OAUTH_URL = MCP_CONFIGURED_URL.replace(/\/sse$/, "");
+const MCP_API_KEY_URL = MCP_CONFIGURED_URL.endsWith("/sse")
+  ? MCP_CONFIGURED_URL
+  : `${MCP_OAUTH_URL}/sse`;
 
 export function McpSetupPanel({ canManage = true }: { canManage?: boolean }) {
   const [name, setName] = useState("Otter Hire AI Client");
@@ -50,7 +56,7 @@ export function McpSetupPanel({ canManage = true }: { canManage?: boolean }) {
   }
 
   async function copyOauthUrl() {
-    await navigator.clipboard.writeText(MCP_URL);
+    await navigator.clipboard.writeText(MCP_OAUTH_URL);
     setOauthUrlCopied(true);
     window.setTimeout(() => setOauthUrlCopied(false), 2000);
   }
@@ -84,7 +90,7 @@ export function McpSetupPanel({ canManage = true }: { canManage?: boolean }) {
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-md bg-muted/40 p-3">
           <div className="min-w-0">
             <p className="text-sm font-medium">Remote MCP server URL</p>
-            <code className="break-all text-xs text-muted-foreground">{MCP_URL}</code>
+            <code className="break-all text-xs text-muted-foreground">{MCP_OAUTH_URL}</code>
           </div>
           <Button variant="outline" size="sm" onClick={() => void copyOauthUrl()}>
             {oauthUrlCopied ? (
@@ -134,7 +140,7 @@ export function McpSetupPanel({ canManage = true }: { canManage?: boolean }) {
         </div>
         <div className="rounded-md bg-muted/40 p-3 text-sm">
           <p className="font-medium">Server URL</p>
-          <code className="break-all text-xs text-muted-foreground">{MCP_URL}</code>
+          <code className="break-all text-xs text-muted-foreground">{MCP_API_KEY_URL}</code>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button disabled={!canManage} onClick={() => void generateKey()}>

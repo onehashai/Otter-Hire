@@ -90,6 +90,58 @@ def _fallback_sender_name(inbound_email: InboundEmail) -> str:
     return cleaned.title() if cleaned else "Unknown Candidate"
 
 
+def _contact_from_email_body(
+    inbound_email: InboundEmail, text_body: str | None, html_body: str | None
+) -> tuple[str, str | None, str | None, str | None]:
+    from html import unescape
+
+    from app.services.resume.heuristics import (
+        extract_location,
+        extract_phone,
+        normalize_phone_with_country,
+    )
+
+    html_text = re.sub(r"(?i)<br\s*/?>|</(?:p|div|li)>", "\n", html_body or "")
+    body = text_body or unescape(re.sub(r"<[^>]+>", " ", html_text))
+    labeled_location = re.search(r"(?im)^\s*(?:location|address)\s*:\s*([^\n]+)", body)
+    location = (
+        extract_location(labeled_location.group(1)) if labeled_location else None
+    )
+    if not location:
+        for line in body.splitlines():
+            for segment in re.split(r"[|\u2022\u00b7]", line):
+                # State abbreviations such as IN and ME must not turn prose
+                # like "interested in this role" into an applicant address.
+                if re.search(
+                    r"\b(i|my|me|we|our|you|your|dear|regards|hello|hi|please|thank|apply|applying|interested)\b",
+                    segment,
+                    re.IGNORECASE,
+                ):
+                    continue
+                location = extract_location(segment)
+                if location:
+                    break
+            if location:
+                break
+    raw_phone = extract_phone(body)
+    phone = (
+        normalize_phone_with_country(raw_phone, location=location)
+        if raw_phone and location
+        else raw_phone
+    )
+    name = _fallback_sender_name(inbound_email)
+    if not (inbound_email.from_name or "").strip():
+        named = re.search(r"(?im)^\s*name\s*:\s*([A-Za-z][A-Za-z .'-]{1,79})\s*$", body)
+        signed = re.search(
+            r"(?im)^\s*(?:regards|sincerely|best(?: regards)?|thank you)[,!.]?\s*\n\s*([A-Za-z][A-Za-z .'-]{1,79})\s*$",
+            body,
+        )
+        candidate_name = named or signed
+        if candidate_name:
+            name = candidate_name.group(1).strip()
+    return name, inbound_email.from_email, phone, location
+
+
 def _is_placeholder_candidate_name(name: str | None) -> bool:
     """Identify names created only because the document text was unusable."""
     normalized = re.sub(r"\s+", " ", name or "").strip().lower()
@@ -126,7 +178,7 @@ async def parse_inbound_email_activity(input_data: InboundEmailParseInput) -> di
         _extract_location,
         _extract_name,
         _extract_phone,
-        _has_candidate_application_signal,
+        _is_automated_email,
         _is_job_board_notification_sender,
         _is_resume_attachment,
         _mark_assignment_score_pending,
@@ -170,6 +222,8 @@ async def parse_inbound_email_activity(input_data: InboundEmailParseInput) -> di
             if inbound_email.parse_status == "processed":
                 return {"status": "ok", "reason": "already_processed"}
 
+            target_job_id = target_job_id or inbound_email.job_id
+
             # The public receiver commits this state before starting Temporal;
             # set it again here for retries and manual reprocessing requests.
             inbound_email.parse_status = "processing"
@@ -211,21 +265,24 @@ async def parse_inbound_email_activity(input_data: InboundEmailParseInput) -> di
                     else:
                         raw_email = await storage_service.read_bytes(inbound_email.raw_storage_key)
                 except Exception:
-                    if not _has_stored_attachment_fallback(inbound_email):
+                    if not _has_stored_attachment_fallback(inbound_email) and not inbound_email.from_email:
                         logger.exception(
                             "Failed to read raw email key=%s", inbound_email.raw_storage_key
                         )
+                        inbound_email.parse_status = "failed"
+                        inbound_email.parse_error = "Raw email is unavailable for candidate extraction"
+                        await session.commit()
                         return {"status": "failed", "reason": "s3_read_failed"}
                     logger.warning(
-                        "Raw email unavailable; using stored resume fallback key=%s",
+                        "Raw email unavailable; using retained attachment/sender fallback key=%s",
                         inbound_email.raw_storage_key,
                         exc_info=True,
                     )
-            elif not _has_stored_attachment_fallback(inbound_email):
-                inbound_email.parse_status = "ignored"
+            elif not _has_stored_attachment_fallback(inbound_email) and not inbound_email.from_email:
+                inbound_email.parse_status = "failed"
                 inbound_email.parse_error = "InboundEmail raw_storage_key is missing"
                 await session.commit()
-                return {"status": "ignored", "reason": "missing_raw_storage_key"}
+                return {"status": "failed", "reason": "missing_raw_storage_key"}
 
             # 3. Parse raw email when present. The stored-resume fallback below
             # supplies the attachment for recovery records with no raw MIME data.
@@ -245,21 +302,27 @@ async def parse_inbound_email_activity(input_data: InboundEmailParseInput) -> di
                 raw_storage_key=inbound_email.raw_storage_key,
                 text_body=normalized.get("text_body"),
                 html_body=normalized.get("html_body"),
+                auto_submitted=normalized.get("auto_submitted"),
+                list_unsubscribe=bool(normalized.get("list_unsubscribe")),
+                precedence=normalized.get("precedence"),
+                x_auto_response_suppress=normalized.get("x_auto_response_suppress"),
                 attachments=[],
             )
             sender_is_job_board = _is_job_board_notification_sender(
                 inbound_email.from_email
             )
-            is_candidate_application = bool(inbound_email.has_resume_attachment) or (
-                not sender_is_job_board
-                and (
-                    _has_candidate_application_signal(
-                        application_payload,
-                        has_resume=False,
-                    )
-                    or target_job_id is not None
-                    or bool(getattr(input_data, "force_contact_only", False))
+            automated_reason = _is_automated_email(application_payload)
+            if automated_reason or (sender_is_job_board and not inbound_email.has_resume_attachment):
+                inbound_email.parse_status = "ignored"
+                inbound_email.parse_error = (
+                    f"Automated email skipped: {automated_reason}"
+                    if automated_reason
+                    else "Automated job-board notification - not a candidate application"
                 )
+                await session.commit()
+                return {"status": "ignored", "reason": "automated_non_candidate"}
+            is_candidate_application = bool(inbound_email.from_email) and not (
+                sender_is_job_board or automated_reason
             )
 
             # Gather all resume attachments along with their original indices
@@ -349,10 +412,10 @@ async def parse_inbound_email_activity(input_data: InboundEmailParseInput) -> di
                         )
                     )
                 else:
-                    inbound_email.parse_status = "ignored"
-                    inbound_email.parse_error = "No resume attachment found in parsed email"
+                    inbound_email.parse_status = "failed"
+                    inbound_email.parse_error = "No candidate sender or usable resume attachment found"
                     await session.commit()
-                    return {"status": "ignored", "reason": "no_resume_attachment"}
+                    return {"status": "failed", "reason": "no_candidate_identity"}
 
             created_candidate_ids = []
 
@@ -388,10 +451,14 @@ async def parse_inbound_email_activity(input_data: InboundEmailParseInput) -> di
                             ],
                         )
                     )
-                    extracted_email = inbound_email.from_email or _extract_email(resume_text)
-                    extracted_phone = _extract_phone(resume_text)
-                    extracted_name = _fallback_sender_name(inbound_email)
-                    extracted_location = _extract_location(resume_text)
+                    extracted_name, extracted_email, extracted_phone, extracted_location = (
+                        _contact_from_email_body(
+                            inbound_email,
+                            normalized.get("text_body"),
+                            normalized.get("html_body"),
+                        )
+                    )
+                    extracted_email = extracted_email or _extract_email(resume_text)
                     confidence = 0
                 else:
                     try:
@@ -415,10 +482,13 @@ async def parse_inbound_email_activity(input_data: InboundEmailParseInput) -> di
                                 ],
                             )
                         )
-                        extracted_email = inbound_email.from_email
-                        extracted_phone = _extract_phone(resume_text)
-                        extracted_name = _fallback_sender_name(inbound_email)
-                        extracted_location = _extract_location(resume_text)
+                        extracted_name, extracted_email, extracted_phone, extracted_location = (
+                            _contact_from_email_body(
+                                inbound_email,
+                                normalized.get("text_body"),
+                                normalized.get("html_body"),
+                            )
+                        )
                         confidence = 0
                     else:
                         extracted_email = _extract_email(resume_text)
@@ -437,14 +507,7 @@ async def parse_inbound_email_activity(input_data: InboundEmailParseInput) -> di
                     # Scan-only resumes can be valid documents even if OCR has
                     # no usable text. Retain the document and resolve the known
                     # email sender instead of losing the application.
-                    if not (
-                        inbound_email.from_email
-                        and _should_preserve_low_confidence_resume(
-                            content=content,
-                            is_candidate_application=is_candidate_application,
-                            resume_text=resume_text,
-                        )
-                    ):
+                    if not (inbound_email.from_email and is_candidate_application):
                         logger.warning(
                             "Low resume confidence for %s (%s<%s)",
                             resume_filename,
@@ -454,9 +517,13 @@ async def parse_inbound_email_activity(input_data: InboundEmailParseInput) -> di
                         continue
                     sender_identity_fallback = True
                     extracted_email = inbound_email.from_email
-                    extracted_phone = None
-                    extracted_location = None
-                    extracted_name = _fallback_sender_name(inbound_email)
+                    extracted_name, _, extracted_phone, extracted_location = (
+                        _contact_from_email_body(
+                            inbound_email,
+                            normalized.get("text_body"),
+                            normalized.get("html_body"),
+                        )
+                    )
                     logger.info(
                         "Creating sender-identified candidate for unreadable resume %s",
                         resume_filename,
@@ -514,10 +581,28 @@ async def parse_inbound_email_activity(input_data: InboundEmailParseInput) -> di
                 if not extracted_email:
                     extracted_email = inbound_email.from_email
 
+                resume_pending = no_document or (
+                    sender_identity_fallback and inbound_parsed_resume_profile is None
+                )
+
                 # 5. Resolve candidate
                 candidate_query = None
                 current_job_id = target_job_id
                 candidate = None
+
+                # Serialize parallel applications by sender, including replayed
+                # emails, before checking whether the candidate already exists.
+                identity_email = inbound_email.from_email or extracted_email
+                if identity_email:
+                    await session.execute(
+                        select(
+                            func.pg_advisory_xact_lock(
+                                func.hashtextextended(
+                                    f"inbound-candidate:{org_id}:{identity_email.lower()}", 0
+                                )
+                            )
+                        )
+                    )
 
                 # The sender address is the strongest idempotency key for an
                 # inbound resume update. Resume text can contain an older name
@@ -576,7 +661,7 @@ async def parse_inbound_email_activity(input_data: InboundEmailParseInput) -> di
                         profile_links=_inbound_profile_links if inbound_parsed_resume_profile else {},
                         parsed_resume=inbound_parsed_resume_profile,
                         source="Email",
-                        tags=["resume_pending"] if no_document else [],
+                        tags=["resume_pending"] if resume_pending else [],
                     )
                     session.add(candidate)
                     await session.flush()
@@ -596,7 +681,7 @@ async def parse_inbound_email_activity(input_data: InboundEmailParseInput) -> di
                         candidate.phone = extracted_phone
                     if not candidate.address and extracted_location:
                         candidate.address = extracted_location
-                    if no_document and "resume_pending" not in (candidate.tags or []):
+                    if resume_pending and "resume_pending" not in (candidate.tags or []):
                         candidate.tags = [*(candidate.tags or []), "resume_pending"]
                     if inbound_parsed_resume_profile:
                         candidate.parsed_resume = inbound_parsed_resume_profile
@@ -785,7 +870,7 @@ async def parse_inbound_email_activity(input_data: InboundEmailParseInput) -> di
 
                 # 8. Score actual resumes only. Contact-only candidates wait
                 # for an automation to request a resume instead.
-                if current_job_id is not None and not no_document:
+                if current_job_id is not None and not resume_pending and not input_data.force_contact_only:
                     pending_assignment = await _mark_assignment_score_pending(
                         session,
                         org_id=org_id,
@@ -805,19 +890,21 @@ async def parse_inbound_email_activity(input_data: InboundEmailParseInput) -> di
                     from app.services.automation import (
                         execute_automations_for_trigger,
                     )
-                    await execute_automations_for_trigger(
-                        db=session,
-                        trigger_key="candidate_email_received",
-                        org_id=org_id,
-                        candidate_id=candidate.id,
-                        job_id=current_job_id,
-                        metadata={
-                            "source": "email_inbound",
-                            "stage_name": None,
-                            "resume_pending": no_document,
-                            "contact_only": no_document,
-                        },
-                    )
+                    # Historical recovery must not resend acknowledgements.
+                    if not input_data.force_contact_only:
+                        await execute_automations_for_trigger(
+                            db=session,
+                            trigger_key="candidate_email_received",
+                            org_id=org_id,
+                            candidate_id=candidate.id,
+                            job_id=current_job_id,
+                            metadata={
+                                "source": "email_inbound",
+                                "stage_name": None,
+                                "resume_pending": resume_pending,
+                                "contact_only": no_document,
+                            },
+                        )
                 except Exception as e:
                     logger.error(f"Failed to trigger automation for email candidate {candidate.id}: {e}")
 
@@ -828,8 +915,8 @@ async def parse_inbound_email_activity(input_data: InboundEmailParseInput) -> di
                 inbound_email.parse_status = "processed"
                 inbound_email.parse_error = None
             else:
-                inbound_email.parse_status = "ignored"
-                inbound_email.parse_error = "No resumes successfully parsed"
+                inbound_email.parse_status = "failed"
+                inbound_email.parse_error = "Candidate extraction did not complete"
 
             await session.commit()
 
@@ -851,7 +938,7 @@ async def parse_inbound_email_activity(input_data: InboundEmailParseInput) -> di
                     )
 
             return {
-                "status": "ok" if created_candidate_ids else "ignored",
+                "status": "ok" if created_candidate_ids else "failed",
                 "candidate_id": created_candidate_ids[-1] if created_candidate_ids else None,
                 "inbound_email_id": str(inbound_email.id),
             }

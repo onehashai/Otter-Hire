@@ -2015,12 +2015,12 @@ def _should_create_contact_only_candidate(
     has_application_document: bool,
     matched_job: bool = False,
 ) -> bool:
-    """Allow a real applicant email to create a resume-pending candidate."""
+    """Keep human mail to an ATS inbox even when the resume is absent."""
     if has_resume or has_application_document or not (payload.from_email or "").strip():
         return False
-    if _is_job_board_notification_sender(payload.from_email):
+    if _is_job_board_notification_sender(payload.from_email) or _is_automated_email(payload):
         return False
-    return _has_candidate_application_signal(payload, has_resume=False) or matched_job
+    return True
 
 
 def _is_automated_email(payload: "InboundEmailPayload") -> str | None:
@@ -2029,15 +2029,15 @@ def _is_automated_email(payload: "InboundEmailPayload") -> str | None:
     if auto_submitted not in ("no", ""):
         return f"Auto-Submitted: {payload.auto_submitted}"
 
+    subject = (payload.subject or "").strip().lower()
+    if re.match(r"^(automatic reply|auto.?reply|out of (the )?office|delivery status notification|undeliverable)(:|\b)", subject):
+        return f"Automated reply or delivery notice: {payload.subject}"
+
     if payload.list_unsubscribe:
         return "Bulk / mailing-list email (List-Unsubscribe present)"
 
     if (payload.precedence or "").lower() in ("bulk", "junk", "list"):
         return f"Bulk mail (Precedence: {payload.precedence})"
-
-    suppress = (payload.x_auto_response_suppress or "").lower()
-    if suppress and suppress != "none":
-        return f"X-Auto-Response-Suppress: {payload.x_auto_response_suppress}"
 
     from_addr = (payload.from_email or "").lower()
     if any(p in from_addr for p in _NO_REPLY_PATTERNS):
@@ -2591,7 +2591,7 @@ async def ingest_inbound_email(
             if payload.attachments
             else None
         ),
-        parse_status="ignored",
+        parse_status="processing",
         parse_error=(
             f"Sender domain {blocked_sender_domain} is in organization blocked list"
             if blocked_sender_domain
@@ -2604,6 +2604,7 @@ async def ingest_inbound_email(
     # The SES/R2 bridge delivers through this endpoint. Stop before attachment
     # writes, link downloads, candidate creation, or Temporal/OpenAI parsing.
     if blocked_sender_domain:
+        inbound_email.parse_status = "ignored"
         await db.commit()
         logger.info(
             "Inbound email ignored: sender domain %s is blocked for org %s",
@@ -2721,6 +2722,7 @@ async def ingest_inbound_email(
         if subject_matched_job is not None:
             target_job_id = subject_matched_job.id
             conversation_job_id = subject_matched_job.id
+            inbound_email.job_id = target_job_id
 
     candidate_application_signal = _has_candidate_application_signal(
         payload,
@@ -2879,6 +2881,17 @@ async def ingest_inbound_email(
             "org_id": str(org_id),
         }
 
+    if _is_job_board_notification_sender(inbound_email.from_email) and not has_resume:
+        inbound_email.parse_status = "ignored"
+        inbound_email.parse_error = _JOB_BOARD_NOTIFICATION_REASON
+        await db.commit()
+        return {
+            "status": "ok",
+            "message": "Ignored: automated job-board notification",
+            "inbound_email_id": str(inbound_email.id),
+            "org_id": str(org_id),
+        }
+
     # Handle reply to existing conversation (no resume required for replies)
     if reply_to_conv_id is not None:
         conversation_result = await _route_inbound_to_conversation(
@@ -2964,7 +2977,7 @@ async def ingest_inbound_email(
             .order_by(Candidate.created_at.desc())
         )
         existing_cand = existing_cand_result.scalars().first()
-        if existing_cand is not None:
+        if existing_cand is not None and target_job_id is None:
             conversation_result = await _route_inbound_to_conversation(
                 db,
                 org_id,
@@ -2977,6 +2990,7 @@ async def ingest_inbound_email(
                 conv_id, msg_id, _, _ = conversation_result
                 inbound_email.parse_status = "processed"
                 inbound_email.parse_error = None
+                inbound_email.parsed_candidate_id = existing_cand.id
                 await db.commit()
                 logger.info(
                     "Inbound email from existing candidate routed to conversation_id=%s message_id=%s from=%s",
@@ -2993,9 +3007,8 @@ async def ingest_inbound_email(
                     "org_id": str(org_id),
                 }
 
-    # Clear application emails can still enter as contact-only candidates. The
-    # resume parser marks these as resume-pending; board notifications and
-    # unrelated mail remain outside the candidate pipeline.
+    # Human mail to a dedicated ATS inbox enters as a resume-pending candidate
+    # even when the sender did not use application keywords.
     contact_only_application = _should_create_contact_only_candidate(
         payload,
         has_resume=has_resume,
@@ -3007,36 +3020,17 @@ async def ingest_inbound_email(
         and not has_application_document
         and not contact_only_application
     ):
-        inbound_email.parse_status = "ignored"
-        inbound_email.parse_error = _missing_resume_reason(inbound_email.from_email)
+        inbound_email.parse_status = "failed"
+        inbound_email.parse_error = "Candidate sender email is missing"
         await db.commit()
         logger.info(
-            "Inbound email ignored (no resume): from=%s subject=%r",
+            "Inbound email failed (missing sender): from=%s subject=%r",
             inbound_email.from_email,
             (inbound_email.subject or "")[:60],
         )
         return {
             "status": "ok",
-            "message": "Ignored: no resume attachment",
-            "inbound_email_id": str(inbound_email.id),
-            "org_id": str(org_id),
-        }
-
-    # For new candidates with neither a document nor an application signal,
-    # keep generic mail out of the talent pool. This is deliberately after the
-    # no-resume check above so the log explains the immediate, actionable cause.
-    if not _has_candidate_application_signal(payload, has_resume=has_resume):
-        inbound_email.parse_status = "ignored"
-        inbound_email.parse_error = "Email does not match job application keywords"
-        await db.commit()
-        logger.info(
-            "Inbound email ignored (not job-related): from=%s subject=%r",
-            inbound_email.from_email,
-            (inbound_email.subject or "")[:60],
-        )
-        return {
-            "status": "ok",
-            "message": "Ignored: not job-related",
+            "message": "Failed: candidate sender email is missing",
             "inbound_email_id": str(inbound_email.id),
             "org_id": str(org_id),
         }

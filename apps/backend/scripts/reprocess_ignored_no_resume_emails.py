@@ -1,9 +1,9 @@
 """Safely retry retained inbound applications that were ignored for missing resumes.
 
-Run without ``--apply`` first. Applying only requeues records whose raw email is
-still available and whose sender/content or job association identifies an
-application. Existing inbound rows and their original received timestamps stay
-intact.
+Run without ``--apply`` first. Applying only requeues records with a retained,
+non-automated, non-blocked sender. Raw email and attachments are reused when
+available; missing documents leave the candidate resume-pending. Existing
+inbound rows and their original received timestamps stay intact.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ import binascii
 import logging
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
 from app.core.config import settings
 from app.db.session import AsyncSessionLocal
@@ -25,15 +25,29 @@ from app.services.storage import storage_service
 from app.temporal.inbound_email.queue import enqueue_inbound_email_parse
 from app.temporal.inbound_email.types import InboundEmailParseInput
 
-_NO_RESUME_REASON = "No resume attachment or link found - candidate creation requires resume"
+_RECOVERABLE_REASONS = frozenset(
+    {
+        "No resume attachment or link found - candidate creation requires resume",
+        "Email does not match job application keywords",
+        "No resume attachment found in parsed email",
+        "No resumes successfully parsed",
+    }
+)
+_AUTO_SUPPRESS_REASON_PREFIX = "Automated email skipped: X-Auto-Response-Suppress:"
 logger = logging.getLogger("reprocess_ignored_no_resume_emails")
+
+
+def _is_recoverable_reason(reason: str | None) -> bool:
+    return bool(
+        reason in _RECOVERABLE_REASONS
+        or (reason or "").startswith(_AUTO_SUPPRESS_REASON_PREFIX)
+    )
 
 
 def _payload_from_raw(
     row: InboundEmail, raw_email: bytes
 ) -> tuple[InboundEmailPayload, bool, bool]:
     from app.api.v1.internal.endpoints.public import (
-        _has_candidate_application_signal,
         _is_automated_email,
         _is_job_board_notification_sender,
         _is_resume_attachment,
@@ -83,13 +97,11 @@ def _is_recoverable_application(
     payload: InboundEmailPayload,
     has_resume: bool,
     sender_is_candidate: bool,
+    matched_job: bool = False,
 ) -> bool:
-    from app.api.v1.internal.endpoints.public import _has_candidate_application_signal
-
-    return sender_is_candidate and (
-        bool(row.job_id)
-        or _has_candidate_application_signal(payload, has_resume=has_resume)
-    )
+    # The same policy applies to historical mail as to the live ATS inbox:
+    # human senders need not use keywords or supply a readable resume.
+    return sender_is_candidate and bool((payload.from_email or "").strip())
 
 
 async def _read_raw_email(row: InboundEmail) -> bytes:
@@ -108,6 +120,44 @@ async def _read_raw_email(row: InboundEmail) -> bytes:
     return await storage_service.read_bytes(row.raw_storage_key)
 
 
+async def _recovery_payload(
+    row: InboundEmail,
+) -> tuple[InboundEmailPayload, bool, bool]:
+    from app.api.v1.internal.endpoints.public import (
+        _is_automated_email,
+        _is_job_board_notification_sender,
+        _is_resume_attachment,
+    )
+
+    if row.raw_storage_key:
+        try:
+            return _payload_from_raw(row, await _read_raw_email(row))
+        except Exception:
+            logger.warning("Raw email unavailable; using retained attachment/sender metadata id=%s", row.id)
+
+    content = b""
+    if row.attachment_primary_storage_key:
+        try:
+            content = await storage_service.read_bytes(row.attachment_primary_storage_key)
+        except Exception:
+            logger.warning("Attachment unavailable; using retained sender metadata id=%s", row.id)
+    payload = InboundEmailPayload(
+        inbox_address=row.inbox_address,
+        from_email=row.from_email,
+        from_name=row.from_name,
+        subject=row.subject,
+    )
+    has_resume = bool(content) and _is_resume_attachment(
+        row.attachment_primary_filename or "attachment.bin",
+        row.attachment_primary_content_type or "application/octet-stream",
+        content,
+    )
+    sender_is_candidate = not (
+        _is_job_board_notification_sender(row.from_email) or _is_automated_email(payload)
+    )
+    return payload, has_resume, sender_is_candidate
+
+
 async def _mark_processing_and_enqueue(
     row_id: UUID, org_id: UUID, job_id: UUID | None
 ) -> bool:
@@ -121,7 +171,8 @@ async def _mark_processing_and_enqueue(
         if (
             row is None
             or row.parse_status != "ignored"
-            or row.parse_error != _NO_RESUME_REASON
+            or not _is_recoverable_reason(row.parse_error)
+            or row.parsed_candidate_id is not None
         ):
             return False
         row.parse_status = "processing"
@@ -158,9 +209,12 @@ async def reprocess(limit: int, apply: bool) -> None:
             select(InboundEmail)
             .where(
                 InboundEmail.parse_status == "ignored",
-                InboundEmail.parse_error == _NO_RESUME_REASON,
-                InboundEmail.raw_storage_key.is_not(None),
+                or_(
+                    InboundEmail.parse_error.in_(_RECOVERABLE_REASONS),
+                    InboundEmail.parse_error.like(f"{_AUTO_SUPPRESS_REASON_PREFIX}%"),
+                ),
                 InboundEmail.from_email.is_not(None),
+                InboundEmail.parsed_candidate_id.is_(None),
             )
             .order_by(InboundEmail.received_at.asc())
             .limit(limit)
@@ -173,15 +227,29 @@ async def reprocess(limit: int, apply: bool) -> None:
     queued = 0
     for row in rows:
         try:
-            payload, has_resume, sender_is_candidate = await _payload_from_raw(
-                row, await _read_raw_email(row)
-            )
+            payload, has_resume, sender_is_candidate = await _recovery_payload(row)
         except Exception:
             unavailable += 1
-            logger.exception("Raw email unavailable; leaving inbound row unchanged id=%s", row.id)
+            logger.exception("Candidate contact unavailable; leaving inbound row unchanged id=%s", row.id)
             continue
 
-        if not _is_recoverable_application(row, payload, has_resume, sender_is_candidate):
+        from app.api.v1.internal.endpoints.public import _resolve_exact_subject_job
+        from app.services.blocked_domains import get_blocked_sender_domain
+
+        async with AsyncSessionLocal() as db:
+            blocked_domain = await get_blocked_sender_domain(
+                db, org_id=row.org_id, sender_email=row.from_email
+            )
+            matched_job = (
+                await _resolve_exact_subject_job(
+                    db, org_id=row.org_id, subject=row.subject
+                )
+                if not row.job_id
+                else None
+            )
+        if blocked_domain or not _is_recoverable_application(
+            row, payload, has_resume, sender_is_candidate, matched_job=matched_job is not None
+        ):
             skipped += 1
             continue
 
@@ -194,13 +262,13 @@ async def reprocess(limit: int, apply: bool) -> None:
             (row.from_email or "").rsplit("@", 1)[-1].lower(),
         )
         if apply and await _mark_processing_and_enqueue(
-            row.id, row.org_id, row.job_id
+            row.id, row.org_id, row.job_id or (matched_job.id if matched_job else None)
         ):
             queued += 1
 
     print(
         f"scanned={len(rows)} eligible={eligible} queued={queued} "
-        f"skipped_non_application={skipped} raw_unavailable={unavailable} apply={apply}"
+        f"skipped_non_application={skipped} unrecoverable={unavailable} apply={apply}"
     )
 
 

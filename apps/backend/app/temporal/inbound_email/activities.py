@@ -199,11 +199,11 @@ async def parse_inbound_email_activity(input_data: InboundEmailParseInput) -> di
     # Spam Control is intentionally staged separately. Do not make inbound
     # parsing unavailable on installations where that optional module is absent.
     try:
-        from app.services.blocked_domains import get_blocked_sender_domain
+        from app.services.blocked_domains import get_blocked_sender_reason
     except ModuleNotFoundError as exc:
         if exc.name != "app.services.blocked_domains":
             raise
-        get_blocked_sender_domain = None
+        get_blocked_sender_reason = None
 
     inbound_email_id = UUID(input_data.inbound_email_id)
     org_id = UUID(input_data.org_id)
@@ -232,20 +232,18 @@ async def parse_inbound_email_activity(input_data: InboundEmailParseInput) -> di
 
             # A domain may have been blocked after the inbound record was
             # accepted but before its Temporal workflow executes.
-            blocked_sender_domain = None
-            if get_blocked_sender_domain is not None:
-                blocked_sender_domain = await get_blocked_sender_domain(
+            blocked_sender_reason = None
+            if get_blocked_sender_reason is not None:
+                blocked_sender_reason = await get_blocked_sender_reason(
                     session,
                     org_id=org_id,
                     sender_email=inbound_email.from_email,
                 )
-            if blocked_sender_domain:
+            if blocked_sender_reason:
                 inbound_email.parse_status = "ignored"
-                inbound_email.parse_error = (
-                    f"Sender domain {blocked_sender_domain} is in organization blocked list"
-                )
+                inbound_email.parse_error = blocked_sender_reason
                 await session.commit()
-                return {"status": "ignored", "reason": "blocked_sender_domain"}
+                return {"status": "ignored", "reason": "blocked_sender"}
 
             # 2. Fetch raw email when available. The receiver separately stores
             # resume attachments, so an expired raw MIME object must not discard

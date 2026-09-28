@@ -150,7 +150,8 @@ async def test_recovery_marks_processing_and_queues_without_deleting(monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_dry_run_inspects_raw_email_without_enqueuing(monkeypatch, capsys) -> None:
+@pytest.mark.parametrize("blocked,apply", [(False, False), (True, False), (True, True)])
+async def test_recovery_respects_blocks_and_dry_run(monkeypatch, capsys, blocked, apply) -> None:
     from app.services import blocked_domains
 
     row = InboundEmail(
@@ -185,7 +186,7 @@ async def test_dry_run_inspects_raw_email_without_enqueuing(monkeypatch, capsys)
         return b"raw MIME data"
 
     async def not_blocked(*args, **kwargs):
-        return None
+        return "Sender email candidate@example.com is in organization blocked list" if blocked else None
 
     async def must_not_enqueue(*args, **kwargs):
         raise AssertionError("dry run must not enqueue")
@@ -205,11 +206,11 @@ async def test_dry_run_inspects_raw_email_without_enqueuing(monkeypatch, capsys)
             True,
         ),
     )
-    monkeypatch.setattr(blocked_domains, "get_blocked_sender_domain", not_blocked)
+    monkeypatch.setattr(blocked_domains, "get_blocked_sender_reason", not_blocked)
     monkeypatch.setattr(recovery, "_mark_processing_and_enqueue", must_not_enqueue)
 
-    await recovery.reprocess(limit=1, apply=False)
-    assert "scanned=1 eligible=1 queued=0" in capsys.readouterr().out
+    await recovery.reprocess(limit=1, apply=apply)
+    assert f"scanned=1 eligible={0 if blocked else 1} queued=0" in capsys.readouterr().out
 
 
 def test_automated_or_job_board_sender_cannot_be_marked_recoverable() -> None:

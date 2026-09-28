@@ -368,7 +368,7 @@ async def test_application_fallback_creates_active_candidate_and_processed_log(m
     monkeypatch.setattr(storage_service, "resolve_url", resolve_url)
     monkeypatch.setattr(public, "_parse_resume_bytes", unreadable)
     monkeypatch.setattr(pipeline, "run_resume_pipeline", lambda *args, **kwargs: None)
-    monkeypatch.setattr(blocked_domains, "get_blocked_sender_domain", noop)
+    monkeypatch.setattr(blocked_domains, "get_blocked_sender_reason", noop)
     monkeypatch.setattr(public, "_upsert_candidate_job_assignment", assign)
     monkeypatch.setattr(public, "_route_inbound_to_conversation", noop)
     monkeypatch.setattr(automation, "execute_automations_for_trigger", automate)

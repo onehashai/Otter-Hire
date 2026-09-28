@@ -8,3 +8,4 @@ export * from "./create";
 export * from "./avatar";
 export * from "./me";
 export * from "./blocked-domains";
+export * from "./blocked-email-addresses";

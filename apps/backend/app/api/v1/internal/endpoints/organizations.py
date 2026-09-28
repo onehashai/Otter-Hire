@@ -5,6 +5,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -12,6 +13,7 @@ from app.core.security import create_access_token
 from app.db.session import get_db
 from app.deps.auth import get_current_user, require_active_user
 from app.models.blocked_domain import BlockedDomain
+from app.models.blocked_email_address import BlockedEmailAddress
 from app.models.email import InboundEmail
 from app.models.org_membership import OrgMembership
 from app.models.organization import Organization
@@ -19,7 +21,9 @@ from app.models.user import User
 from app.schemas.email_logs import EmailLogRow
 from app.schemas.organization import (
     BlockedDomainResponse,
+    BlockedEmailAddressResponse,
     CreateBlockedDomainsRequest,
+    CreateBlockedEmailAddressesRequest,
     CreateOrganizationRequest,
     OrganizationMembershipResponse,
     OrganizationResponse,
@@ -145,6 +149,80 @@ async def delete_blocked_domain(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Blocked domain not found")
 
     await db.delete(blocked_domain)
+    await db.commit()
+
+
+@router.get("/blocked-email-addresses", response_model=list[BlockedEmailAddressResponse])
+async def list_blocked_email_addresses(
+    current_user: User = Depends(require_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    _require_domain_management_role(current_user)
+    result = await db.execute(
+        select(BlockedEmailAddress)
+        .where(BlockedEmailAddress.org_id == current_user.org_id)
+        .order_by(BlockedEmailAddress.created_at.desc(), BlockedEmailAddress.email.asc())
+    )
+    return [
+        BlockedEmailAddressResponse(
+            id=row.id, email=row.email, created_at=row.created_at,
+            created_by_user_id=row.created_by_user_id,
+        )
+        for row in result.scalars().all()
+    ]
+
+
+@router.post(
+    "/blocked-email-addresses",
+    response_model=list[BlockedEmailAddressResponse],
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_blocked_email_addresses(
+    body: CreateBlockedEmailAddressesRequest,
+    current_user: User = Depends(require_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    _require_domain_management_role(current_user)
+    await db.execute(
+        insert(BlockedEmailAddress).values([
+            {"id": uuid7(), "org_id": current_user.org_id, "email": email,
+             "created_by_user_id": current_user.id}
+            for email in body.emails
+        ]).on_conflict_do_nothing(index_elements=["org_id", "email"])
+    )
+    await db.commit()
+    result = await db.execute(
+        select(BlockedEmailAddress).where(
+            BlockedEmailAddress.org_id == current_user.org_id,
+            BlockedEmailAddress.email.in_(body.emails),
+        ).order_by(BlockedEmailAddress.email.asc())
+    )
+    return [
+        BlockedEmailAddressResponse(
+            id=row.id, email=row.email, created_at=row.created_at,
+            created_by_user_id=row.created_by_user_id,
+        )
+        for row in result.scalars().all()
+    ]
+
+
+@router.delete("/blocked-email-addresses/{blocked_email_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_blocked_email_address(
+    blocked_email_id: UUID,
+    current_user: User = Depends(require_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    _require_domain_management_role(current_user)
+    result = await db.execute(
+        select(BlockedEmailAddress).where(
+            BlockedEmailAddress.id == blocked_email_id,
+            BlockedEmailAddress.org_id == current_user.org_id,
+        )
+    )
+    row = result.scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Blocked email address not found")
+    await db.delete(row)
     await db.commit()
 
 
@@ -694,7 +772,6 @@ async def download_org_email_log_attachment(
         )
     except Exception as e:
         raise HTTPException(status_code=404, detail=f"Could not load attachment: {e}")
-
 
 
 

@@ -73,7 +73,7 @@ from app.schemas.public_jobs import (
     PublicJobsListResponse,
 )
 from app.services.automation import execute_automations_for_trigger
-from app.services.blocked_domains import get_blocked_sender_domain
+from app.services.blocked_domains import get_blocked_sender_reason
 from app.services.email import send_email
 from app.services.resume.heuristics import should_replace_name
 from app.services.resume.pipeline import run_resume_pipeline
@@ -2563,7 +2563,7 @@ async def ingest_inbound_email(
     has_resume = any(
         _is_resume_attachment(att.filename, att.content_type) for att in (payload.attachments or [])
     )
-    blocked_sender_domain = await get_blocked_sender_domain(
+    blocked_sender_reason = await get_blocked_sender_reason(
         db,
         org_id=org_id,
         sender_email=payload.from_email,
@@ -2592,28 +2592,24 @@ async def ingest_inbound_email(
             else None
         ),
         parse_status="processing",
-        parse_error=(
-            f"Sender domain {blocked_sender_domain} is in organization blocked list"
-            if blocked_sender_domain
-            else None
-        ),
+        parse_error=blocked_sender_reason,
     )
     db.add(inbound_email)
     await db.flush()
 
     # The SES/R2 bridge delivers through this endpoint. Stop before attachment
     # writes, link downloads, candidate creation, or Temporal/OpenAI parsing.
-    if blocked_sender_domain:
+    if blocked_sender_reason:
         inbound_email.parse_status = "ignored"
         await db.commit()
         logger.info(
-            "Inbound email ignored: sender domain %s is blocked for org %s",
-            blocked_sender_domain,
+            "Inbound email ignored: %s for org %s",
+            blocked_sender_reason,
             org_id,
         )
         return {
             "status": "ok",
-            "message": "Ignored: sender domain is blocked",
+            "message": "Ignored: sender is blocked",
             "inbound_email_id": str(inbound_email.id),
             "org_id": str(org_id),
         }

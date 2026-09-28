@@ -76,6 +76,24 @@ class CreateBlockedDomainsRequest(BaseModel):
         return normalized
 
 
+class BlockedEmailAddressResponse(BaseModel):
+    id: UUID
+    email: str
+    created_at: datetime
+    created_by_user_id: UUID | None = None
+
+
+class CreateBlockedEmailAddressesRequest(BaseModel):
+    emails: list[str] = Field(min_length=1, max_length=100)
+
+    @field_validator("emails")
+    @classmethod
+    def normalize_emails(cls, values: list[str]) -> list[str]:
+        from app.services.blocked_domains import normalize_blocked_email_address
+
+        return list(dict.fromkeys(normalize_blocked_email_address(value) for value in values))
+
+
 class OrgInboxResponse(BaseModel):
     id: UUID
     org_id: UUID

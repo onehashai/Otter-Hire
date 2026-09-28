@@ -234,10 +234,10 @@ async def reprocess(limit: int, apply: bool) -> None:
             continue
 
         from app.api.v1.internal.endpoints.public import _resolve_exact_subject_job
-        from app.services.blocked_domains import get_blocked_sender_domain
+        from app.services.blocked_domains import get_blocked_sender_reason
 
         async with AsyncSessionLocal() as db:
-            blocked_domain = await get_blocked_sender_domain(
+            blocked_reason = await get_blocked_sender_reason(
                 db, org_id=row.org_id, sender_email=row.from_email
             )
             matched_job = (
@@ -247,7 +247,7 @@ async def reprocess(limit: int, apply: bool) -> None:
                 if not row.job_id
                 else None
             )
-        if blocked_domain or not _is_recoverable_application(
+        if blocked_reason or not _is_recoverable_application(
             row, payload, has_resume, sender_is_candidate, matched_job=matched_job is not None
         ):
             skipped += 1

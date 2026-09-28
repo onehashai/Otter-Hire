@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Clipboard, KeyRound } from "lucide-react";
+import { Check, Clipboard, KeyRound } from "lucide-react";
 import { Button } from "@onehash/ui/button";
 import { API_BASE_URL } from "@/api";
 
@@ -12,6 +12,7 @@ export function McpSetupPanel({ canManage = true }: { canManage?: boolean }) {
   const [scope, setScope] = useState<"read_only" | "read_write">("read_only");
   const [key, setKey] = useState("");
   const [message, setMessage] = useState("");
+  const [oauthUrlCopied, setOauthUrlCopied] = useState(false);
   const genericPrompt = `You are connected to Otter Hire. Help me migrate candidates safely.
 
 1. List the connected ATS integrations.
@@ -48,6 +49,12 @@ export function McpSetupPanel({ canManage = true }: { canManage?: boolean }) {
     setMessage("Prompt copied.");
   }
 
+  async function copyOauthUrl() {
+    await navigator.clipboard.writeText(MCP_URL);
+    setOauthUrlCopied(true);
+    window.setTimeout(() => setOauthUrlCopied(false), 2000);
+  }
+
   return (
     <section className="space-y-5" aria-labelledby="mcp-title">
       <div className="flex flex-wrap items-start justify-between gap-3 border-b pb-4">
@@ -63,100 +70,142 @@ export function McpSetupPanel({ canManage = true }: { canManage?: boolean }) {
           Admin setup
         </span>
       </div>
-      <div className="grid gap-3 md:grid-cols-2">
-        <label className="grid gap-1 text-sm">
-          <span>Key name</span>
-          <input
-            className="h-9 rounded-md border bg-background px-2"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-          />
-        </label>
-        <label className="grid gap-1 text-sm">
-          <span>Permission</span>
-          <select
-            className="h-9 rounded-md border bg-background px-2"
-            value={scope}
-            onChange={(event) => setScope(event.target.value as typeof scope)}
-          >
-            <option value="read_only">Read only</option>
-            <option value="read_write">Read and write</option>
-          </select>
-        </label>
-      </div>
-      <div className="rounded-md bg-muted/40 p-3 text-sm">
-        <p className="font-medium">Server URL</p>
-        <code className="break-all text-xs text-muted-foreground">{MCP_URL}</code>
-      </div>
-      <div className="flex flex-wrap gap-2">
-        <Button disabled={!canManage} onClick={() => void generateKey()}>
-          <KeyRound className="mr-2 h-4 w-4" />
-          Generate MCP key
-        </Button>
-        {key && (
-          <Button variant="outline" onClick={() => void copyKey()}>
-            <Clipboard className="mr-2 h-4 w-4" />
-            Copy key
-          </Button>
-        )}
-      </div>
-      {!canManage && (
-        <p className="text-sm text-muted-foreground">
-          Only organization owners and administrators can generate connection keys.
-        </p>
-      )}
-      {key && (
-        <div className="space-y-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-900 dark:bg-amber-950/30">
-          <p className="font-medium">Copy this key now</p>
-          <code className="block break-all text-xs">{key}</code>
-          <p className="text-xs text-muted-foreground">
-            It will not be shown again after you leave this page.
+
+      <section className="space-y-4 border-b pb-5" aria-labelledby="mcp-oauth-title">
+        <div>
+          <h3 id="mcp-oauth-title" className="text-sm font-semibold">
+            OAuth (Recommended)
+          </h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Connect without creating or sharing an MCP key. Sign in to Otter Hire and approve access
+            when your client prompts you.
           </p>
         </div>
-      )}
-      {message && <p className="text-sm text-muted-foreground">{message}</p>}
-      <ol className="grid gap-3 border-t pt-4 text-sm md:grid-cols-3">
-        <li className="flex gap-2">
-          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted font-medium">
-            1
-          </span>
-          <span className="text-muted-foreground">
-            Generate a read-only key for searching, or a read/write key for actions.
-          </span>
-        </li>
-        <li className="flex gap-2">
-          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted font-medium">
-            2
-          </span>
-          <span className="text-muted-foreground">
-            Add the server URL and key to your MCP-compatible AI client.
-          </span>
-        </li>
-        <li className="flex gap-2">
-          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted font-medium">
-            3
-          </span>
-          <span className="text-muted-foreground">
-            Ask the client to preview first. Approval is required before changes.
-          </span>
-        </li>
-      </ol>
-      <details className="border-t pt-4">
-        <summary className="cursor-pointer text-sm font-medium">
-          Show starter prompt for your AI client
-        </summary>
-        <div className="mt-3 space-y-2">
-          <textarea
-            readOnly
-            className="min-h-36 w-full rounded-md border bg-background p-3 text-xs"
-            value={genericPrompt}
-          />
-          <Button variant="outline" size="sm" onClick={() => void copyPrompt()}>
-            <Clipboard className="mr-2 h-4 w-4" />
-            Copy prompt
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-md bg-muted/40 p-3">
+          <div className="min-w-0">
+            <p className="text-sm font-medium">Remote MCP server URL</p>
+            <code className="break-all text-xs text-muted-foreground">{MCP_URL}</code>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => void copyOauthUrl()}>
+            {oauthUrlCopied ? (
+              <Check className="mr-2 h-4 w-4" />
+            ) : (
+              <Clipboard className="mr-2 h-4 w-4" />
+            )}
+            {oauthUrlCopied ? "Copied" : "Copy URL"}
           </Button>
         </div>
-      </details>
+        <ol className="grid gap-2 text-sm text-muted-foreground md:grid-cols-3">
+          <li>1. Add a remote or custom MCP connector in your AI client.</li>
+          <li>2. Paste the server URL above and choose Connect.</li>
+          <li>3. Sign in and approve the requested Otter Hire access.</li>
+        </ol>
+      </section>
+
+      <section className="space-y-4" aria-labelledby="mcp-key-title">
+        <div>
+          <h3 id="mcp-key-title" className="text-sm font-semibold">
+            Connect with an MCP key
+          </h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Use this alternative for clients that require a manually supplied bearer key.
+          </p>
+        </div>
+        <div className="grid gap-3 md:grid-cols-2">
+          <label className="grid gap-1 text-sm">
+            <span>Key name</span>
+            <input
+              className="h-9 rounded-md border bg-background px-2"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+            />
+          </label>
+          <label className="grid gap-1 text-sm">
+            <span>Permission</span>
+            <select
+              className="h-9 rounded-md border bg-background px-2"
+              value={scope}
+              onChange={(event) => setScope(event.target.value as typeof scope)}
+            >
+              <option value="read_only">Read only</option>
+              <option value="read_write">Read and write</option>
+            </select>
+          </label>
+        </div>
+        <div className="rounded-md bg-muted/40 p-3 text-sm">
+          <p className="font-medium">Server URL</p>
+          <code className="break-all text-xs text-muted-foreground">{MCP_URL}</code>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button disabled={!canManage} onClick={() => void generateKey()}>
+            <KeyRound className="mr-2 h-4 w-4" />
+            Generate MCP key
+          </Button>
+          {key && (
+            <Button variant="outline" onClick={() => void copyKey()}>
+              <Clipboard className="mr-2 h-4 w-4" />
+              Copy key
+            </Button>
+          )}
+        </div>
+        {!canManage && (
+          <p className="text-sm text-muted-foreground">
+            Only organization owners and administrators can generate connection keys.
+          </p>
+        )}
+        {key && (
+          <div className="space-y-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-900 dark:bg-amber-950/30">
+            <p className="font-medium">Copy this key now</p>
+            <code className="block break-all text-xs">{key}</code>
+            <p className="text-xs text-muted-foreground">
+              It will not be shown again after you leave this page.
+            </p>
+          </div>
+        )}
+        {message && <p className="text-sm text-muted-foreground">{message}</p>}
+        <ol className="grid gap-3 border-t pt-4 text-sm md:grid-cols-3">
+          <li className="flex gap-2">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted font-medium">
+              1
+            </span>
+            <span className="text-muted-foreground">
+              Generate a read-only key for searching, or a read/write key for actions.
+            </span>
+          </li>
+          <li className="flex gap-2">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted font-medium">
+              2
+            </span>
+            <span className="text-muted-foreground">
+              Add the server URL and key to your MCP-compatible AI client.
+            </span>
+          </li>
+          <li className="flex gap-2">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted font-medium">
+              3
+            </span>
+            <span className="text-muted-foreground">
+              Ask the client to preview first. Approval is required before changes.
+            </span>
+          </li>
+        </ol>
+        <details className="border-t pt-4">
+          <summary className="cursor-pointer text-sm font-medium">
+            Show starter prompt for your AI client
+          </summary>
+          <div className="mt-3 space-y-2">
+            <textarea
+              readOnly
+              className="min-h-36 w-full rounded-md border bg-background p-3 text-xs"
+              value={genericPrompt}
+            />
+            <Button variant="outline" size="sm" onClick={() => void copyPrompt()}>
+              <Clipboard className="mr-2 h-4 w-4" />
+              Copy prompt
+            </Button>
+          </div>
+        </details>
+      </section>
     </section>
   );
 }

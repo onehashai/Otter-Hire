@@ -3,19 +3,28 @@
 from __future__ import annotations
 
 import hashlib
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
+from mcp.server.auth.middleware.auth_context import AuthContextMiddleware, get_access_token
+from mcp.server.auth.middleware.bearer_auth import BearerAuthBackend
+from mcp.server.auth.provider import AccessToken, TokenVerifier
+from mcp.server.auth.routes import create_protected_resource_routes
 from mcp.server.fastmcp import FastMCP
 from sqlalchemy import or_, select
 from sqlalchemy.orm import selectinload
+from starlette.middleware.authentication import AuthenticationMiddleware
 
 from app.core.config import settings
 from app.db.session import AsyncSessionLocal
 from app.models.ats_migration import AtsIntegration, ImportAuditLog, ImportBatch
 from app.models.candidate import Candidate
 from app.models.mcp_api_key import McpApiKey
+from app.models.oauth import OAuthToken
+from app.models.org_membership import OrgMembership
+from app.models.user import User
 from app.schemas.canonical import CanonicalCandidate
 from app.services.import_export_service import upsert_canonical_candidate
 from app.services.migration.batch_service import commit_batch
@@ -24,11 +33,114 @@ from app.temporal.migration.types import AtsSyncInput
 from app.temporal.migration.workflows import AtsSyncWorkflow
 
 PREVIEW = "Call with confirm: false or omit it first to preview. This tool only commits data when called with confirm: true."
+READ_AUTH = "Requires mcp:read OAuth permission or a valid MCP API key."
+WRITE_AUTH = "Requires mcp:write OAuth permission or a read_write MCP API key."
 
 
-async def _authenticate(api_key: str, write: bool = False) -> McpApiKey:
+@dataclass(frozen=True)
+class McpPrincipal:
+    id: UUID
+    org_id: UUID
+    created_by: UUID | None
+    scope: str
+
+
+class DatabaseTokenVerifier(TokenVerifier):
+    async def verify_token(self, token: str) -> AccessToken | None:
+        token_hash = hashlib.sha256(token.encode()).hexdigest()
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                select(OAuthToken, OrgMembership, User)
+                .join(OrgMembership, OrgMembership.user_id == OAuthToken.user_id)
+                .join(User, User.id == OAuthToken.user_id)
+                .where(
+                    OAuthToken.access_token_hash == token_hash,
+                    OAuthToken.revoked.is_(False),
+                    OAuthToken.expires_at > datetime.now(timezone.utc),
+                    OrgMembership.org_id == OAuthToken.organization_id,
+                    OrgMembership.status == "active",
+                    User.status == "active",
+                    User.is_verified.is_(True),
+                    User.is_onboarded.is_(True),
+                )
+            )
+            row = result.first()
+            if row is None:
+                return None
+            oauth_token, _membership, _user = row
+            scopes = oauth_token.scope.split()
+            if "ats:all" in scopes:
+                scopes = sorted(set(scopes) | {"mcp:read", "mcp:write"})
+            elif "mcp:write" in scopes:
+                scopes = sorted(set(scopes) | {"mcp:read"})
+            issuer = settings.oauth_issuer_url or settings.external_api_base_url
+            resource = f"{issuer.rstrip('/')}/mcp" if issuer else "http://localhost:8000/mcp"
+            return AccessToken(
+                token=token,
+                client_id=oauth_token.client_id,
+                scopes=scopes,
+                expires_at=int(oauth_token.expires_at.timestamp()),
+                resource=oauth_token.resource or resource,
+                subject=str(oauth_token.user_id),
+                claims={
+                    "org_id": str(oauth_token.organization_id),
+                    "token_id": str(oauth_token.id),
+                },
+            )
+
+
+class OtterHireFastMCP(FastMCP):
+    def __init__(self, *, issuer_url: str, resource_url: str, **kwargs: Any):
+        super().__init__(**kwargs)
+        self.oauth_issuer_url = issuer_url
+        self.oauth_resource_url = resource_url
+        self.oauth_token_verifier = DatabaseTokenVerifier()
+
+    def sse_app(self, mount_path: str | None = None):
+        app = super().sse_app(mount_path)
+        app.add_middleware(AuthContextMiddleware)
+        app.add_middleware(
+            AuthenticationMiddleware,
+            backend=BearerAuthBackend(
+                self.oauth_token_verifier,
+                resource_server_url=self.oauth_resource_url,
+            ),
+        )
+        app.router.routes.extend(
+            create_protected_resource_routes(
+                resource_url=self.oauth_resource_url,
+                authorization_servers=[self.oauth_issuer_url],
+                scopes_supported=["mcp:read", "mcp:write", "ats:all"],
+                resource_name="Otter Hire ATS MCP",
+            )
+        )
+        return app
+
+
+async def _authenticate(api_key: str | None = None, write: bool = False) -> McpPrincipal:
+    access_token = get_access_token()
+    if access_token is not None:
+        scopes = set(access_token.scopes)
+        if "ats:all" in scopes:
+            scopes.update({"mcp:read", "mcp:write"})
+        elif "mcp:write" in scopes:
+            scopes.add("mcp:read")
+        if "mcp:read" not in scopes:
+            raise PermissionError("OAuth token does not grant mcp:read")
+        if write and "mcp:write" not in scopes:
+            raise PermissionError("OAuth token does not grant mcp:write")
+        claims = access_token.claims or {}
+        try:
+            return McpPrincipal(
+                id=UUID(str(claims["token_id"])),
+                org_id=UUID(str(claims["org_id"])),
+                created_by=UUID(str(access_token.subject)) if access_token.subject else None,
+                scope="oauth:" + " ".join(sorted(scopes)),
+            )
+        except (KeyError, ValueError) as exc:
+            raise ValueError("Invalid OAuth token context") from exc
     if not api_key or not api_key.startswith("mcp_live_"):
-        raise ValueError("Valid MCP API key required")
+        raise ValueError("Valid MCP API key or OAuth bearer token required")
     async with AsyncSessionLocal() as db:
         key = (
             await db.execute(
@@ -42,21 +154,28 @@ async def _authenticate(api_key: str, write: bool = False) -> McpApiKey:
             raise ValueError("Invalid or revoked MCP API key")
         if write and key.scope != "read_write":
             raise PermissionError("This MCP key is read_only; a read_write key is required")
-        return key
+        return McpPrincipal(
+            id=key.id, org_id=key.org_id, created_by=key.created_by, scope=key.scope
+        )
 
 
-async def _audit(db, key: McpApiKey, action: str, metadata: dict[str, Any]) -> None:
+async def _audit(db, key: McpPrincipal, action: str, metadata: dict[str, Any]) -> None:
     db.add(
         ImportAuditLog(
             batch_id=None,
             actor_id=key.created_by,
             action=f"mcp_{action}",
-            metadata_json={**metadata, "mcp_key_id": str(key.id), "mcp_key_scope": key.scope},
+            metadata_json={
+                **metadata,
+                "mcp_key_id": str(key.id),
+                "mcp_key_scope": key.scope,
+                "auth_type": "oauth" if key.scope.startswith("oauth:") else "api_key",
+            },
         )
     )
 
 
-async def _batch(db, key: McpApiKey, batch_id: UUID) -> ImportBatch:
+async def _batch(db, key: McpPrincipal, batch_id: UUID) -> ImportBatch:
     batch = (
         await db.execute(
             select(ImportBatch)
@@ -93,8 +212,16 @@ def _batch_preview(batch: ImportBatch) -> dict[str, Any]:
 def create_mcp_server() -> FastMCP:
     if not settings.mcp_server_enabled:
         raise RuntimeError("MCP_SERVER_ENABLED is false; MCP server will not start")
-    mcp = FastMCP(
-        "Otter Hire ATS",
+    issuer_url = settings.oauth_issuer_url or settings.external_api_base_url
+    if not issuer_url:
+        if settings.is_production:
+            raise RuntimeError("Set OAUTH_ISSUER_URL before enabling MCP OAuth in production")
+        issuer_url = "http://localhost:8000"
+    resource_url = f"{issuer_url.rstrip('/')}/mcp"
+    mcp = OtterHireFastMCP(
+        issuer_url=issuer_url,
+        resource_url=resource_url,
+        name="Otter Hire ATS",
         host=settings.mcp_server_host,
         port=settings.mcp_server_port,
         mount_path="/mcp",
@@ -102,10 +229,10 @@ def create_mcp_server() -> FastMCP:
     )
 
     @mcp.tool(
-        description="Search candidates by name, status, potential duplicate flag, or source ATS. Requires an MCP API key."
+        description="Search candidates by name, status, potential duplicate flag, or source ATS. Requires MCP read access."
     )
     async def search_candidates(
-        api_key: str,
+        api_key: str | None = None,
         name: str | None = None,
         status: str | None = None,
         potential_duplicate: bool | None = None,
@@ -144,9 +271,9 @@ def create_mcp_server() -> FastMCP:
             ]
 
     @mcp.tool(
-        description="Get a candidate and duplicate-match information. Requires an MCP API key."
+        description="Get a candidate and duplicate-match information. Requires MCP read access."
     )
-    async def get_candidate(api_key: str, candidate_id: str) -> dict[str, Any]:
+    async def get_candidate(candidate_id: str, api_key: str | None = None) -> dict[str, Any]:
         key = await _authenticate(api_key)
         async with AsyncSessionLocal() as db:
             candidate = (
@@ -186,8 +313,8 @@ def create_mcp_server() -> FastMCP:
                 else None,
             }
 
-    @mcp.tool(description="Get candidates grouped by stage for a job. Requires an MCP API key.")
-    async def get_job_pipeline(api_key: str, job_id: str) -> dict[str, Any]:
+    @mcp.tool(description=f"Get candidates grouped by stage for a job. {READ_AUTH}")
+    async def get_job_pipeline(job_id: str, api_key: str | None = None) -> dict[str, Any]:
         key = await _authenticate(api_key)
         async with AsyncSessionLocal() as db:
             candidates = (
@@ -210,8 +337,8 @@ def create_mcp_server() -> FastMCP:
                 )
             return {"job_id": job_id, "stages": pipeline}
 
-    @mcp.tool(description="List import batches and their statuses. Requires an MCP API key.")
-    async def import_batches(api_key: str) -> list[dict[str, Any]]:
+    @mcp.tool(description=f"List import batches and their statuses. {READ_AUTH}")
+    async def import_batches(api_key: str | None = None) -> list[dict[str, Any]]:
         key = await _authenticate(api_key)
         async with AsyncSessionLocal() as db:
             batches = (
@@ -242,9 +369,9 @@ def create_mcp_server() -> FastMCP:
             ]
 
     @mcp.tool(
-        description="Get an import batch with valid, duplicate, and error row counts. Requires an MCP API key."
+        description=f"Get an import batch with valid, duplicate, and error row counts. {READ_AUTH}"
     )
-    async def get_batch(api_key: str, batch_id: str) -> dict[str, Any]:
+    async def get_batch(batch_id: str, api_key: str | None = None) -> dict[str, Any]:
         key = await _authenticate(api_key)
         async with AsyncSessionLocal() as db:
             batch = await _batch(db, key, UUID(batch_id))
@@ -259,17 +386,17 @@ def create_mcp_server() -> FastMCP:
             }
 
     @mcp.tool(
-        description="Preview what approving a pending import batch would do. Read-only; never writes data."
+        description=f"Preview what approving a pending import batch would do. Read-only; never writes data. {READ_AUTH}"
     )
-    async def preview_import_batch(api_key: str, batch_id: str) -> dict[str, Any]:
+    async def preview_import_batch(batch_id: str, api_key: str | None = None) -> dict[str, Any]:
         key = await _authenticate(api_key)
         async with AsyncSessionLocal() as db:
             return _batch_preview(await _batch(db, key, UUID(batch_id)))
 
     @mcp.tool(
-        description="List connected ATS integrations and sync status without credentials. Requires an MCP API key."
+        description=f"List connected ATS integrations and sync status without credentials. {READ_AUTH}"
     )
-    async def ats_integrations(api_key: str) -> list[dict[str, Any]]:
+    async def ats_integrations(api_key: str | None = None) -> list[dict[str, Any]]:
         key = await _authenticate(api_key)
         async with AsyncSessionLocal() as db:
             items = (
@@ -293,9 +420,9 @@ def create_mcp_server() -> FastMCP:
                 for i in items
             ]
 
-    @mcp.tool(description=f"Approve an import batch. {PREVIEW}")
+    @mcp.tool(description=f"Approve an import batch. {WRITE_AUTH} {PREVIEW}")
     async def approve_import_batch(
-        api_key: str, batch_id: str, confirm: bool = False
+        batch_id: str, confirm: bool = False, api_key: str | None = None
     ) -> dict[str, Any]:
         key = await _authenticate(api_key, write=True)
         async with AsyncSessionLocal() as db:
@@ -305,14 +432,16 @@ def create_mcp_server() -> FastMCP:
             if batch.status != "pending_approval":
                 raise ValueError(f"Batch is already handled: {batch.status}")
             result = await commit_batch(
-                db, batch, key.created_by,
+                db,
+                batch,
+                key.created_by,
                 {"mcp_key_id": str(key.id), "mcp_key_scope": key.scope},
             )
             return {"batch_id": batch_id, "status": batch.status, **result}
 
-    @mcp.tool(description=f"Import one candidate. {PREVIEW}")
+    @mcp.tool(description=f"Import one candidate. {WRITE_AUTH} {PREVIEW}")
     async def import_candidate(
-        api_key: str, candidate: dict[str, Any], confirm: bool = False
+        candidate: dict[str, Any], confirm: bool = False, api_key: str | None = None
     ) -> dict[str, Any]:
         key = await _authenticate(api_key, write=True)
         payload = CanonicalCandidate.model_validate(candidate)
@@ -344,9 +473,9 @@ def create_mcp_server() -> FastMCP:
             await db.commit()
             return {"candidate_id": str(saved.id), "status": "committed"}
 
-    @mcp.tool(description=f"Trigger an ATS sync. {PREVIEW}")
+    @mcp.tool(description=f"Trigger an ATS sync. {WRITE_AUTH} {PREVIEW}")
     async def trigger_sync(
-        api_key: str, integration_id: str, confirm: bool = False
+        integration_id: str, confirm: bool = False, api_key: str | None = None
     ) -> dict[str, Any]:
         key = await _authenticate(api_key, write=True)
         async with AsyncSessionLocal() as db:
@@ -399,9 +528,9 @@ def create_mcp_server() -> FastMCP:
             await db.commit()
             return {"workflow_id": workflow_id, "status": "queued"}
 
-    @mcp.tool(description=f"Disconnect an ATS integration. {PREVIEW}")
+    @mcp.tool(description=f"Disconnect an ATS integration. {WRITE_AUTH} {PREVIEW}")
     async def disconnect_ats(
-        api_key: str, integration_id: str, confirm: bool = False
+        integration_id: str, confirm: bool = False, api_key: str | None = None
     ) -> dict[str, Any]:
         key = await _authenticate(api_key, write=True)
         async with AsyncSessionLocal() as db:
@@ -444,8 +573,7 @@ def create_mcp_server() -> FastMCP:
             integration.provider_details = {
                 field: value
                 for field, value in (integration.provider_details or {}).items()
-                if not str(field).startswith("mcp_")
-                and not str(field).startswith("_mcp_")
+                if not str(field).startswith("mcp_") and not str(field).startswith("_mcp_")
             }
             integration.status = "disconnected"
             await _audit(

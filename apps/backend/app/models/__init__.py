@@ -27,6 +27,7 @@ from app.models.job_team_member import JobTeamMember
 from app.models.mcp_api_key import McpApiKey
 from app.models.message import Message
 from app.models.note import Note
+from app.models.oauth import OAuthAuthorizationCode, OAuthClient, OAuthToken
 from app.models.org_membership import OrgMembership
 from app.models.organization import Organization
 from app.models.stage import Stage
@@ -67,4 +68,7 @@ __all__ = [
     "AutomationExecution",
     "BlockedDomain",
     "BlockedEmailAddress",
+    "OAuthClient",
+    "OAuthAuthorizationCode",
+    "OAuthToken",
 ]

@@ -59,6 +59,8 @@ class Settings(BaseSettings):
     # Public API base URL (OAuth callbacks, etc.). If API_BASE_URL is unset/empty, derived at
     # load time from APP_SUBDOMAIN, APP_DOMAIN, and IS_PRODUCTION (port :8000 in non-prod).
     api_base_url: str = Field(default="", validation_alias="API_BASE_URL")
+    oauth_issuer_url: str = Field(default="", validation_alias="OAUTH_ISSUER_URL")
+    oauth_web_base_url: str = Field(default="", validation_alias="OAUTH_WEB_BASE_URL")
 
     # Google OAuth
     google_client_id: str | None = Field(default=None, validation_alias="GOOGLE_CLIENT_ID")

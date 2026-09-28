@@ -22,6 +22,10 @@ function isSafeRedirect(path: string): boolean {
   return path.startsWith("/invite/") && path.length > 8;
 }
 
+function isSafeAppRedirect(path: string | null): path is string {
+  return Boolean(path && path.startsWith("/") && !path.startsWith("//") && !path.includes("\\"));
+}
+
 function getInviteTokenFromRedirect(path: string | null): string | null {
   if (!path || !isSafeRedirect(path)) return null;
   return path.replace(/^\/invite\//, "");
@@ -71,7 +75,13 @@ export default function Login() {
       await refreshSession(true);
       // Avoid cross-subdomain cookie propagation race between api.* and app.*.
       await new Promise((resolve) => setTimeout(resolve, 200));
-      window.location.assign(inviteToken ? `/invite/${encodeURIComponent(inviteToken)}` : "/");
+      window.location.assign(
+        inviteToken
+          ? `/invite/${encodeURIComponent(inviteToken)}`
+          : isSafeAppRedirect(redirectTo)
+            ? redirectTo
+            : "/",
+      );
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to sign in";
       form.setError("root", { message });

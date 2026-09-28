@@ -15,6 +15,7 @@ from slowapi.util import get_remote_address
 
 from app.admin import setup_admin
 from app.api.v1.router import api_router
+from app.api.v1.oauth import oauth_router, router as oauth_root_router
 from app.core.config import settings
 from app.core.errors import make_error_payload
 from app.integrations.app_store.email_integration.ses_bridge import run_ses_raw_bridge_loop
@@ -49,6 +50,8 @@ app.add_middleware(
 )
 
 app.include_router(api_router)
+app.include_router(oauth_root_router)
+app.include_router(oauth_router, prefix="/api/v1")
 
 
 @app.middleware("http")

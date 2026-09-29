@@ -78,6 +78,7 @@ NAMED_PROVIDERS = {
 PENDING_PROVIDERS = {"workday", "icims"}
 MCP_OAUTH_STATE_TTL = timedelta(minutes=10)
 MCP_MIGRATION_READY_PROVIDERS = MCP_MAPPED_PROVIDERS
+DISABLED_NATIVE_MCP_PROVIDERS = {"workable"}
 
 
 def _enabled() -> None:
@@ -445,6 +446,7 @@ async def list_mcp_providers(
             await db.execute(
                 select(AtsMcpRegistry)
                 .where(AtsMcpRegistry.mcp_status.in_(["native_ga", "native_beta"]))
+                .where(AtsMcpRegistry.ats_name.not_in(DISABLED_NATIVE_MCP_PROVIDERS))
                 .order_by(AtsMcpRegistry.ats_name)
             )
         )
@@ -490,6 +492,8 @@ async def start_mcp_oauth(
     db: AsyncSession = Depends(get_db),
 ):
     _enabled()
+    if ats_name.lower() in DISABLED_NATIVE_MCP_PROVIDERS:
+        raise HTTPException(status_code=404, detail="This native MCP provider is disabled")
     if not settings.encryption_key:
         raise HTTPException(status_code=500, detail="Credential encryption is not configured")
     registry = (
@@ -677,6 +681,8 @@ async def connect_mcp_provider(
     db: AsyncSession = Depends(get_db),
 ):
     _enabled()
+    if ats_name.lower() in DISABLED_NATIVE_MCP_PROVIDERS:
+        raise HTTPException(status_code=404, detail="This native MCP provider is disabled")
     registry = (
         await db.execute(
             select(AtsMcpRegistry).where(

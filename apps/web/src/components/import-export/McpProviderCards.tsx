@@ -58,11 +58,6 @@ const accessGuidance: Record<
     credential: "Use the API key plus your company.pinpointhq.com host.",
     permissions: "Use a read-only key because the MCP execute-request tool can call live APIs.",
   },
-  workable: {
-    location: "Open Workable integrations or developer settings and authorize an MCP connection.",
-    credential: "No token copy is needed; sign in to Workable in the OAuth window.",
-    permissions: "Allow access to the recruiting data that should be imported.",
-  },
   "zoho recruit": {
     location: "Open the Zoho Recruit MCP console and create or authorize an MCP connection.",
     credential: "No token copy is needed; sign in through the generated Zoho MCP endpoint.",
@@ -88,7 +83,12 @@ export function McpProviderCards({
       fetch(`${API_BASE_URL}/ats-migrations/mcp/providers`, { credentials: "include" }),
       fetch(`${API_BASE_URL}/ats-migrations/integrations`, { credentials: "include" }),
     ]);
-    if (providerResponse.ok) setProviders(await providerResponse.json());
+    if (providerResponse.ok) {
+      const availableProviders: Provider[] = await providerResponse.json();
+      setProviders(
+        availableProviders.filter((provider) => provider.ats_name.toLowerCase() !== "workable"),
+      );
+    }
     if (integrationResponse.ok) setIntegrations(await integrationResponse.json());
   }
 

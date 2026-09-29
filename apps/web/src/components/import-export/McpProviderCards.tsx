@@ -309,7 +309,7 @@ export function McpProviderCards({
                       ? provider.ats_name === "pinpoint"
                         ? "Enter a read-only Pinpoint API key and your Pinpoint company host."
                         : "Paste the provider-issued MCP bearer key."
-                      : "Continue to the provider, sign in, and approve read access. SmartATS handles OAuth automatically."}
+                      : "Continue to the provider, sign in, and approve read access. OAuth is handled automatically."}
                   </p>
                   {!provider.mcp_server_url && (
                     <input

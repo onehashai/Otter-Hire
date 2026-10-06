@@ -3,11 +3,12 @@ from __future__ import annotations
 from pathlib import Path
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.v1.internal.endpoints.file_responses import file_not_found_response
 from app.core.config import settings
 from app.db.session import get_db
 from app.deps.auth import require_active_user
@@ -59,37 +60,39 @@ def _object_key_from_stored_file_url(url: str) -> str | None:
     return None
 
 
-async def _stream_stored_object(normalized_key: str) -> Response | FileResponse:
+async def _stream_stored_object(normalized_key: str, request: Request) -> Response | FileResponse:
     if settings.s3_enabled and storage_service.use_s3 and storage_service.s3_client:
         try:
             content = await storage_service.read_bytes(normalized_key)
             mime = "application/pdf" if normalized_key.lower().endswith(".pdf") else ("application/vnd.openxmlformats-officedocument.wordprocessingml.document" if normalized_key.lower().endswith(".docx") else "application/octet-stream")
             return Response(content=content, media_type=mime)
         except Exception:
-            raise HTTPException(status_code=404, detail="File not found")
+            return file_not_found_response(request)
 
     root = Path(settings.local_storage_root).resolve()
     full_path = (root / normalized_key).resolve()
     if not str(full_path).startswith(str(root)) or not full_path.exists():
-        raise HTTPException(status_code=404, detail="File not found")
+        return file_not_found_response(request)
     return FileResponse(full_path)
 
 
 @router.get("/local/{object_key:path}")
 async def serve_local_file(
     object_key: str,
+    request: Request,
     current_user: User = Depends(require_active_user),
 ):
     normalized_key = object_key.lstrip("/")
     if not user_may_access_local_object_key(normalized_key, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
 
-    return await _stream_stored_object(normalized_key)
+    return await _stream_stored_object(normalized_key, request)
 
 
 @router.get("/public/org/{org_id}/avatar")
 async def serve_public_org_avatar(
     org_id: UUID,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ):
     """Serve organization logo for public careers pages (no auth)."""
@@ -102,4 +105,4 @@ async def serve_public_org_avatar(
     if not normalized_key or not normalized_key.startswith(f"orgs/{org_id}/"):
         raise HTTPException(status_code=404, detail="Avatar not found")
 
-    return await _stream_stored_object(normalized_key)
+    return await _stream_stored_object(normalized_key, request)

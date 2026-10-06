@@ -6,7 +6,7 @@ import { isCareersUuidSegment, parseLegacyCareersOrgSlug } from "@/lib/public-ca
 
 const AUTH_ROUTES = new Set(["/login", "/signup"]);
 const LIFECYCLE_ROUTES = new Set(["/verify", "/onboarding", "/forgot", "/reset"]);
-const PUBLIC_ROUTES = new Set(["/health", "/favicon.ico"]);
+const PUBLIC_ROUTES = new Set(["/health", "/favicon.ico", "/file-not-found"]);
 const MARKETING_ROUTES = new Set(["/privacy-policy", "/terms"]);
 
 function getApiBaseUrl(): string {

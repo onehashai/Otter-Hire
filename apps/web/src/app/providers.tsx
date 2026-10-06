@@ -43,10 +43,15 @@ export function useAuthSession(): AuthSessionContextValue {
 
 const AUTH_ROUTES = ["/login", "/signup"];
 const LIFECYCLE_ROUTES = ["/verify", "/onboarding", "/forgot", "/reset"];
+const PUBLIC_UTILITY_ROUTES = ["/file-not-found"];
 const EXPLICIT_LOGOUT_KEY = "explicit_logout";
 
 function isInvitePath(pathname: string): boolean {
   return pathname.startsWith("/invite/");
+}
+
+function isPublicUtilityPath(pathname: string): boolean {
+  return PUBLIC_UTILITY_ROUTES.includes(pathname);
 }
 
 export function Providers({ children }: { children: React.ReactNode }) {
@@ -107,7 +112,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
             if (
               !AUTH_ROUTES.includes(currentPathname) &&
               !LIFECYCLE_ROUTES.includes(currentPathname) &&
-              !isInvitePath(currentPathname)
+              !isInvitePath(currentPathname) &&
+              !isPublicUtilityPath(currentPathname)
             ) {
               router.replace(
                 buildLoginHref(currentPathname, window.location.search, sessionInvalidated),
@@ -131,7 +137,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
           if (
             !AUTH_ROUTES.includes(currentPathname) &&
             !LIFECYCLE_ROUTES.includes(currentPathname) &&
-            !isInvitePath(currentPathname)
+            !isInvitePath(currentPathname) &&
+            !isPublicUtilityPath(currentPathname)
           ) {
             router.replace(buildLoginHref(currentPathname, window.location.search, false));
           }
@@ -183,7 +190,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     if (!user) {
       // Only redirect if loading is complete — refreshSession already attempted
       // getAuthSession + refreshSessionDetailed before setting user=null.
-      if (!isAuthRoute && !isLifecycleRoute && !onInvitePage) {
+      if (!isAuthRoute && !isLifecycleRoute && !onInvitePage && !isPublicUtilityPath(pathname)) {
         if (explicitLogout) {
           router.replace("/login");
           return;
@@ -238,7 +245,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   // While auth is resolving on a protected route, render nothing to prevent
   // the flash of login page or protected content before session is known.
-  const showLoadingGate = loading && !isAuthRoute && !isLifecycleRoute && !onInvitePage;
+  const showLoadingGate =
+    loading && !isAuthRoute && !isLifecycleRoute && !onInvitePage && !isPublicUtilityPath(pathname);
 
   return (
     <QueryClientProvider client={queryClient}>

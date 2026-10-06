@@ -7,12 +7,13 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import FileResponse, Response
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
+from app.api.v1.internal.endpoints.file_responses import file_not_found_response
 from app.core.config import settings
 from app.core.logging import logger
 from app.core.permissions import require_permission
@@ -106,7 +107,7 @@ def _object_key_from_stored_file_url(url: str) -> str | None:
 
 
 async def _stream_candidate_pdf_inline(
-    *, normalized_key: str, filename: str
+    *, normalized_key: str, filename: str, request: Request
 ) -> Response | FileResponse:
     headers = {"Content-Disposition": f'inline; filename="{(filename or "document.pdf").strip()}"'}
 
@@ -117,7 +118,7 @@ async def _stream_candidate_pdf_inline(
                 Key=storage_service._s3_key(normalized_key),
             )
         except Exception:
-            raise HTTPException(status_code=404, detail="File not found")
+            return file_not_found_response(request)
 
         content = s3_response["Body"].read()
         return Response(content=content, media_type="application/pdf", headers=headers)
@@ -125,12 +126,14 @@ async def _stream_candidate_pdf_inline(
     root = Path(settings.local_storage_root).resolve()
     full_path = (root / normalized_key).resolve()
     if not str(full_path).startswith(str(root)) or not full_path.exists():
-        raise HTTPException(status_code=404, detail="File not found")
+        return file_not_found_response(request)
 
     return FileResponse(full_path, media_type="application/pdf", headers=headers)
 
 
-async def _stream_candidate_docx_as_html(*, normalized_key: str, filename: str) -> Response:
+async def _stream_candidate_docx_as_html(
+    *, normalized_key: str, filename: str, request: Request
+) -> Response:
     """Convert a DOCX/DOC file to HTML and return it inline for browser rendering."""
     import io
 
@@ -144,12 +147,12 @@ async def _stream_candidate_docx_as_html(*, normalized_key: str, filename: str) 
             )
             content = s3_obj["Body"].read()
         except Exception:
-            raise HTTPException(status_code=404, detail="File not found")
+            return file_not_found_response(request)
     else:
         root = Path(settings.local_storage_root).resolve()
         full_path = (root / normalized_key).resolve()
         if not str(full_path).startswith(str(root)) or not full_path.exists():
-            raise HTTPException(status_code=404, detail="File not found")
+            return file_not_found_response(request)
         content = full_path.read_bytes()
 
     result = mammoth.convert_to_html(io.BytesIO(content))
@@ -2701,6 +2704,7 @@ async def list_candidate_documents(
 async def preview_candidate_document_inline(
     candidate_id: UUID,
     document_id: UUID,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("candidates:read")),
 ):
@@ -2722,7 +2726,7 @@ async def preview_candidate_document_inline(
     )
     doc = doc_result.scalar_one_or_none()
     if doc is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+        return file_not_found_response(request)
 
     # Detect file type for inline preview. Filename extension takes priority over stored
     # MIME type because older uploads incorrectly stored "application/pdf" for all files.
@@ -2744,7 +2748,7 @@ async def preview_candidate_document_inline(
 
     normalized_key = (doc.object_key or "").strip() or _object_key_from_stored_file_url(doc.url)
     if not normalized_key:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
+        return file_not_found_response(request)
 
     normalized_key = normalized_key.lstrip("/")
     org_prefix = f"orgs/{current_user.org_id}/"
@@ -2752,8 +2756,12 @@ async def preview_candidate_document_inline(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
 
     if is_pdf:
-        return await _stream_candidate_pdf_inline(normalized_key=normalized_key, filename=doc.name)
-    return await _stream_candidate_docx_as_html(normalized_key=normalized_key, filename=doc.name)
+        return await _stream_candidate_pdf_inline(
+            normalized_key=normalized_key, filename=doc.name, request=request
+        )
+    return await _stream_candidate_docx_as_html(
+        normalized_key=normalized_key, filename=doc.name, request=request
+    )
 
 
 @router.post(

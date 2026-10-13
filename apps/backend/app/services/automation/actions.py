@@ -4,6 +4,7 @@ Action handlers for automation execution.
 Each action type has a dedicated handler function.
 """
 
+from html import escape
 from uuid import UUID
 
 from sqlalchemy import select
@@ -53,26 +54,6 @@ async def handle_send_email_action(
         from app.temporal.email.types import OutboundWorkflowInput
         from app.utils.uuid import uuid7
 
-        # Extract template ID from config
-        template_id_str = action_config.get("template")
-        if not template_id_str:
-            return False, "No template specified in action config"
-
-        # Fetch template
-        try:
-            template_id = UUID(template_id_str)
-        except (ValueError, TypeError):
-            return False, f"Invalid template ID: {template_id_str}"
-
-        template_stmt = select(Template).where(
-            Template.id == template_id, Template.org_id == org_id
-        )
-        template_result = await db.execute(template_stmt)
-        template = template_result.scalar_one_or_none()
-
-        if not template:
-            return False, f"Template {template_id} not found"
-
         # Build template context
         context = await build_template_context(
             db=db,
@@ -94,9 +75,39 @@ async def handle_send_email_action(
         if not candidate:
             return False, "Candidate not found"
 
-        # Render template
-        rendered_subject = render_template(template.subject or "", context)
-        rendered_body = render_template(template.body or "", context)
+        if action_config.get("mode") == "custom":
+            custom_subject = action_config.get("subject")
+            custom_body = action_config.get("body")
+            if not isinstance(custom_subject, str) or not custom_subject.strip():
+                return False, "Custom email requires a subject"
+            if not isinstance(custom_body, str) or not custom_body.strip():
+                return False, "Custom email requires a message"
+
+            rendered_subject = render_template(custom_subject.strip(), context)
+            rendered_body = render_template(custom_body.strip(), context)
+            # Custom messages are plain text. Escape before producing the HTML alternative.
+            rendered_html_body = escape(rendered_body).replace("\n", "<br />\n")
+        else:
+            template_id_str = action_config.get("template")
+            if not template_id_str:
+                return False, "No template specified in action config"
+
+            try:
+                template_id = UUID(template_id_str)
+            except (ValueError, TypeError):
+                return False, f"Invalid template ID: {template_id_str}"
+
+            template_stmt = select(Template).where(
+                Template.id == template_id, Template.org_id == org_id
+            )
+            template_result = await db.execute(template_stmt)
+            template = template_result.scalar_one_or_none()
+            if not template:
+                return False, f"Template {template_id} not found"
+
+            rendered_subject = render_template(template.subject or "", context)
+            rendered_body = render_template(template.body or "", context)
+            rendered_html_body = rendered_body
 
         # One canonical conversation per candidate (org-scoped); limit(1) safe before dedupe migration
         conv_stmt = (
@@ -181,7 +192,7 @@ async def handle_send_email_action(
             from_email=reply_to_address,
             to_email=recipient_email,
             body=rendered_body,
-            html_body=rendered_body,
+            html_body=rendered_html_body,
             status="queued",
             created_at=now,
         )
@@ -197,7 +208,7 @@ async def handle_send_email_action(
                     to_email=recipient_email,
                     subject=rendered_subject,
                     body=rendered_body,
-                    html_body=rendered_body,
+                    html_body=rendered_html_body,
                     from_name="Otter Hire",
                     org_name=org_name,
                     reply_to=reply_to_address,

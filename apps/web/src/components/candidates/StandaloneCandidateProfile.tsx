@@ -24,6 +24,7 @@ import {
 } from "@/components/candidates/shared/tabs";
 import { SummaryPanel } from "@/components/candidates/shared/summary/SummaryPanel";
 import { DocumentUploadDialog } from "@/components/candidates/shared/dialogs/DocumentUploadDialog";
+import { CandidateProfileNavigation } from "@/components/candidates/shared/CandidateProfileNavigation";
 import { useTranslation } from "react-i18next";
 import { useSetPageMetadata } from "@/hooks/useSetPageMetadata";
 import {
@@ -300,10 +301,10 @@ export function StandaloneCandidateProfile({
     try {
       setEnriching(true);
       await enrichCandidate(id);
-      toast.success("Profile enrichment started");
+      toast.success("Updating candidate details...");
       window.setTimeout(() => void loadCore(id), 1800);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to start profile enrichment");
+      toast.error(err instanceof Error ? err.message : "Failed to update candidate details");
     } finally {
       setEnriching(false);
     }
@@ -358,20 +359,23 @@ export function StandaloneCandidateProfile({
                 <Icon name="ChevronLeft" className="h-3.5 w-3.5" /> {t("candidates_title")}
               </Link>
             </Button>
-            {assignableJobs.length > 0 ? (
-              <Button
-                type="button"
-                size="sm"
-                className="h-9 md:h-8 shrink-0 gap-2 rounded-md px-4 text-xs font-medium"
-                onClick={() => {
-                  setAssignJobId(assignableJobs[0]?.id ?? "");
-                  setAssignOpen(true);
-                }}
-              >
-                <Icon name="UserCheck" className="h-4 w-4" />
-                {t("assign_job")}
-              </Button>
-            ) : null}
+            <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+              <CandidateProfileNavigation candidateId={id} />
+              {assignableJobs.length > 0 ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-9 md:h-8 shrink-0 gap-2 rounded-md px-4 text-xs font-medium"
+                  onClick={() => {
+                    setAssignJobId(assignableJobs[0]?.id ?? "");
+                    setAssignOpen(true);
+                  }}
+                >
+                  <Icon name="UserCheck" className="h-4 w-4" />
+                  {t("assign_job")}
+                </Button>
+              ) : null}
+            </div>
           </div>
 
           <TabsList className="h-9 w-full justify-start bg-transparent border-b rounded-none p-0 gap-0">

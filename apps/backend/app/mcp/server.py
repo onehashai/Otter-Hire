@@ -67,26 +67,51 @@ class DatabaseTokenVerifier(TokenVerifier):
                 )
             )
             row = result.first()
-            if row is None:
-                return None
-            oauth_token, _membership, _user = row
-            scopes = oauth_token.scope.split()
-            if "ats:all" in scopes:
-                scopes = sorted(set(scopes) | {"mcp:read", "mcp:write"})
-            elif "mcp:write" in scopes:
-                scopes = sorted(set(scopes) | {"mcp:read"})
             issuer = settings.oauth_issuer_url or settings.external_api_base_url
             resource = f"{issuer.rstrip('/')}/mcp" if issuer else "http://localhost:8000/mcp"
+            if row is not None:
+                oauth_token, _membership, _user = row
+                scopes = oauth_token.scope.split()
+                if "ats:all" in scopes:
+                    scopes = sorted(set(scopes) | {"mcp:read", "mcp:write"})
+                elif "mcp:write" in scopes:
+                    scopes = sorted(set(scopes) | {"mcp:read"})
+                return AccessToken(
+                    token=token,
+                    client_id=oauth_token.client_id,
+                    scopes=scopes,
+                    expires_at=int(oauth_token.expires_at.timestamp()),
+                    resource=oauth_token.resource or resource,
+                    subject=str(oauth_token.user_id),
+                    claims={
+                        "org_id": str(oauth_token.organization_id),
+                        "token_id": str(oauth_token.id),
+                        "auth_type": "oauth",
+                    },
+                )
+
+            key_result = await db.execute(
+                select(McpApiKey).where(
+                    McpApiKey.key_hash == token_hash,
+                    McpApiKey.is_active.is_(True),
+                )
+            )
+            key = key_result.scalar_one_or_none()
+            if key is None:
+                return None
+            scopes = ["mcp:read"]
+            if key.scope == "read_write":
+                scopes.append("mcp:write")
             return AccessToken(
                 token=token,
-                client_id=oauth_token.client_id,
+                client_id="mcp-api-key",
                 scopes=scopes,
-                expires_at=int(oauth_token.expires_at.timestamp()),
-                resource=oauth_token.resource or resource,
-                subject=str(oauth_token.user_id),
+                resource=resource,
+                subject=str(key.created_by) if key.created_by else None,
                 claims={
-                    "org_id": str(oauth_token.organization_id),
-                    "token_id": str(oauth_token.id),
+                    "org_id": str(key.org_id),
+                    "token_id": str(key.id),
+                    "auth_type": "api_key",
                 },
             )
 
@@ -184,7 +209,7 @@ async def _authenticate(api_key: str | None = None, write: bool = False) -> McpP
                 id=UUID(str(claims["token_id"])),
                 org_id=UUID(str(claims["org_id"])),
                 created_by=UUID(str(access_token.subject)) if access_token.subject else None,
-                scope="oauth:" + " ".join(sorted(scopes)),
+                scope=f"{claims.get('auth_type', 'oauth')}:" + " ".join(sorted(scopes)),
             )
         except (KeyError, ValueError) as exc:
             raise ValueError("Invalid OAuth token context") from exc

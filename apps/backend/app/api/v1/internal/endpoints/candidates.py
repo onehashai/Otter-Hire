@@ -9,7 +9,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import FileResponse, Response
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
@@ -18,10 +18,12 @@ from app.core.config import settings
 from app.core.logging import logger
 from app.core.permissions import require_permission
 from app.db.session import get_db
+from app.api.v1.internal.endpoints.file_responses import file_not_found_response
 from app.models.activity import Activity
 from app.models.automation import AutomationExecution
 from app.models.candidate import Candidate
 from app.models.candidate_jobs import CandidateJobs
+from app.models.conversation import Conversation
 from app.models.document import CandidateDocument
 from app.models.feedback import Feedback
 from app.models.interview import Interview
@@ -47,6 +49,7 @@ from app.schemas.candidates import (
     CandidateDetailResponse,
     CandidateDocumentResponse,
     CandidateEnrichmentResponse,
+    CandidateFilterOptionsResponse,
     CandidateEvaluationResponse,
     CandidateFeedbackCreateRequest,
     CandidateFeedbackResponse,
@@ -401,6 +404,28 @@ async def _load_candidate_assignments(
             )
         )
     return grouped
+
+
+async def _load_candidates_with_resume_document(
+    db: AsyncSession, *, org_id: UUID, candidate_ids: list[UUID]
+) -> set[UUID]:
+    if not candidate_ids:
+        return set()
+    rows_result = await db.execute(
+        select(CandidateDocument.candidate_id)
+        .where(
+            CandidateDocument.org_id == org_id,
+            CandidateDocument.candidate_id.in_(candidate_ids),
+            CandidateDocument.is_deleted.is_(False),
+            or_(
+                CandidateDocument.doc_type == "resume",
+                CandidateDocument.field_key == "resume",
+                CandidateDocument.name.ilike("%resume%"),
+            ),
+        )
+        .distinct()
+    )
+    return set(rows_result.scalars().all())
 
 
 def _serialize_note_mentions(raw_mentions: list[dict] | None) -> list[CandidateNoteMentionResponse]:
@@ -1135,10 +1160,16 @@ async def list_candidates(
 
     result = await db.execute(stmt)
     rows = result.all()
+    candidate_ids = [c.id for c, _, _ in rows]
     assignment_map = await _load_candidate_assignments(
         db,
         org_id=current_user.org_id,
-        candidate_ids=[c.id for c, _, _ in rows],
+        candidate_ids=candidate_ids,
+    )
+    resume_candidate_ids = await _load_candidates_with_resume_document(
+        db,
+        org_id=current_user.org_id,
+        candidate_ids=candidate_ids,
     )
 
     return [
@@ -1152,6 +1183,7 @@ async def list_candidates(
             headline=c.headline,
             profile_links=dict(c.profile_links or {}),
             parsed_resume=c.parsed_resume if isinstance(c.parsed_resume, dict) else None,
+            has_resume=c.id in resume_candidate_ids,
             source=c.source,
             tags=list(c.tags or []),
             status=c.status,
@@ -1173,28 +1205,79 @@ async def list_candidates(
     ]
 
 
+@router.get("/filter-options", response_model=CandidateFilterOptionsResponse)
+async def list_candidate_filter_options(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("candidates:read")),
+):
+    result = await db.execute(
+        select(Candidate.source)
+        .where(
+            Candidate.org_id == current_user.org_id,
+            Candidate.source.is_not(None),
+            Candidate.source != "",
+        )
+        .distinct()
+        .order_by(Candidate.source.asc())
+    )
+    email_domain_expr = func.split_part(func.lower(Candidate.email), "@", 2).label("email_domain")
+    email_domain_count_expr = func.count(Candidate.id).label("email_domain_count")
+    domains_result = await db.execute(
+        select(email_domain_expr)
+        .where(
+            Candidate.org_id == current_user.org_id,
+            Candidate.email.like("%@%"),
+        )
+        .group_by(email_domain_expr)
+        .order_by(email_domain_count_expr.desc(), email_domain_expr.asc())
+        .limit(5)
+    )
+    return CandidateFilterOptionsResponse(
+        sources=[str(source) for source in result.scalars().all()],
+        email_domains=[str(domain) for domain in domains_result.scalars().all() if domain],
+    )
+
+
 @router.get("/paginated", response_model=CandidateListResponse)
 async def list_candidates_paginated(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("candidates:read")),
     search: str | None = Query(default=None, max_length=200),
     job_id: UUID | None = None,
+    assignment_job_id: UUID | None = None,
+    assignment_stage_id: UUID | None = None,
     stage_id: UUID | None = None,
     status_filter: str | None = Query(default=None, alias="status"),
     source: str | None = Query(default=None, max_length=100),
+    email_domain: str | None = Query(default=None, max_length=253),
     talent_pool_only: bool = Query(default=False),
     assigned_only: bool = Query(default=False),
     tag: str | None = Query(default=None, max_length=100),
+    location: str | None = Query(default=None, max_length=200),
+    score_min: int | None = Query(default=None, ge=0, le=100),
+    score_max: int | None = Query(default=None, ge=0, le=100),
     updated_from: str | None = Query(
         default=None,
-        description="Inclusive lower bound on candidate updated_at (last activity), ISO 8601.",
+        description="Inclusive lower bound on candidate last activity, ISO 8601.",
     ),
     updated_to: str | None = Query(
         default=None,
-        description="Inclusive upper bound on candidate updated_at (last activity), ISO 8601.",
+        description="Inclusive upper bound on candidate last activity, ISO 8601.",
+    ),
+    created_from: str | None = Query(
+        default=None,
+        description="Inclusive lower bound on candidate creation time, ISO 8601.",
+    ),
+    created_to: str | None = Query(
+        default=None,
+        description="Inclusive upper bound on candidate creation time, ISO 8601.",
     ),
     sort_by: str = Query(
-        default="updated_at", pattern=r"^(updated_at|created_at|name|status|job_title|stage_name)$"
+        default="updated_at",
+        pattern=(
+            r"^(updated_at|created_at|name|email|phone|status|source|address|score|"
+            r"assigned_jobs|job_title|stage_name)$"
+        ),
     ),
     sort_order: str = Query(default="desc", pattern=r"^(asc|desc)$"),
     limit: int = Query(default=50, ge=1, le=200),
@@ -1202,20 +1285,69 @@ async def list_candidates_paginated(
 ):
     updated_from_dt = _parse_optional_iso_datetime_query(updated_from)
     updated_to_dt = _parse_optional_iso_datetime_query(updated_to)
+    created_from_dt = _parse_optional_iso_datetime_query(created_from)
+    created_to_dt = _parse_optional_iso_datetime_query(created_to)
+    if score_min is not None and score_max is not None and score_min > score_max:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="score_min cannot be greater than score_max",
+        )
 
+    active_assignment_filters = (
+        CandidateJobs.org_id == current_user.org_id,
+        CandidateJobs.candidate_id == Candidate.id,
+        CandidateJobs.assignment_status == "active",
+    )
+    active_score_expr = (
+        select(func.max(CandidateJobs.resume_score))
+        .where(*active_assignment_filters)
+        .scalar_subquery()
+    )
+    active_assignment_count_expr = (
+        select(func.count(CandidateJobs.assigned_id))
+        .where(*active_assignment_filters)
+        .scalar_subquery()
+    )
+    latest_timeline_activity_expr = (
+        select(func.max(Activity.created_at))
+        .where(
+            Activity.org_id == current_user.org_id,
+            Activity.candidate_id == Candidate.id,
+        )
+        .scalar_subquery()
+    )
+    latest_message_activity_expr = (
+        select(func.max(Conversation.last_message_at))
+        .where(
+            Conversation.org_id == current_user.org_id,
+            Conversation.candidate_id == Candidate.id,
+        )
+        .scalar_subquery()
+    )
+    last_activity_expr = func.greatest(
+        Candidate.updated_at,
+        latest_timeline_activity_expr,
+        latest_message_activity_expr,
+    )
     sort_expr_map = {
-        "updated_at": Candidate.updated_at,
+        "updated_at": last_activity_expr,
         "created_at": Candidate.created_at,
         "name": Candidate.name,
+        "email": func.lower(Candidate.email),
+        "phone": Candidate.phone,
         "status": Candidate.status,
+        "source": Candidate.source,
+        "address": Candidate.address,
+        "score": active_score_expr,
+        "assigned_jobs": active_assignment_count_expr,
         "job_title": Job.title,
         "stage_name": Stage.name,
     }
     sort_expr = sort_expr_map[sort_by]
-    sort_expr = sort_expr.desc() if sort_order == "desc" else sort_expr.asc()
+    sort_expr = sort_expr.desc().nullslast() if sort_order == "desc" else sort_expr.asc().nullslast()
 
     stmt = (
-        select(Candidate, Job.title, Stage.name)
+        select(Candidate, Job.title, Stage.name, last_activity_expr.label("last_activity_at"))
         .outerjoin(Job, Job.id == Candidate.job_id)
         .outerjoin(Stage, Stage.id == Candidate.stage_id)
         .where(Candidate.org_id == current_user.org_id)
@@ -1235,6 +1367,7 @@ async def list_candidates_paginated(
         predicate = (
             Candidate.name.ilike(pattern)
             | Candidate.email.ilike(pattern)
+            | Candidate.phone.ilike(pattern)
             | Job.title.ilike(pattern)
         )
         stmt = stmt.where(predicate)
@@ -1242,6 +1375,29 @@ async def list_candidates_paginated(
     if job_id:
         stmt = stmt.where(Candidate.job_id == job_id)
         count_stmt = count_stmt.where(Candidate.job_id == job_id)
+    if assignment_job_id or assignment_stage_id or score_min is not None or score_max is not None:
+        assignment_filters = [
+            CandidateJobs.org_id == current_user.org_id,
+            CandidateJobs.candidate_id == Candidate.id,
+            CandidateJobs.assignment_status == "active",
+        ]
+        if assignment_job_id:
+            assignment_filters.append(CandidateJobs.job_id == assignment_job_id)
+        if assignment_stage_id:
+            assignment_filters.append(CandidateJobs.stage_id == assignment_stage_id)
+        if score_min is not None:
+            assignment_filters.append(CandidateJobs.resume_score >= score_min)
+        if score_max is not None:
+            assignment_filters.append(CandidateJobs.resume_score <= score_max)
+
+        assignment_exists = select(CandidateJobs.assigned_id).where(*assignment_filters).exists()
+        if assignment_job_id and not assignment_stage_id and score_min is None and score_max is None:
+            # Include older records which predate Candidate_jobs reconciliation.
+            assignment_predicate = (Candidate.job_id == assignment_job_id) | assignment_exists
+        else:
+            assignment_predicate = assignment_exists
+        stmt = stmt.where(assignment_predicate)
+        count_stmt = count_stmt.where(assignment_predicate)
     if stage_id:
         stmt = stmt.where(Candidate.stage_id == stage_id)
         count_stmt = count_stmt.where(Candidate.stage_id == stage_id)
@@ -1251,6 +1407,16 @@ async def list_candidates_paginated(
     if source:
         stmt = stmt.where(Candidate.source == source)
         count_stmt = count_stmt.where(Candidate.source == source)
+    if email_domain:
+        normalized_domain = email_domain.strip().lower().lstrip("@")
+        if not normalized_domain or any(char in normalized_domain for char in ("%", "_", " ")):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Invalid email_domain",
+            )
+        email_predicate = func.lower(Candidate.email).like(f"%@{normalized_domain}")
+        stmt = stmt.where(email_predicate)
+        count_stmt = count_stmt.where(email_predicate)
     if talent_pool_only:
         stmt = stmt.where(Candidate.job_id.is_(None))
         count_stmt = count_stmt.where(Candidate.job_id.is_(None))
@@ -1260,20 +1426,36 @@ async def list_candidates_paginated(
     if tag:
         stmt = stmt.where(Candidate.tags.contains([tag]))
         count_stmt = count_stmt.where(Candidate.tags.contains([tag]))
+    if location:
+        pattern = f"%{location.strip()}%"
+        stmt = stmt.where(Candidate.address.ilike(pattern))
+        count_stmt = count_stmt.where(Candidate.address.ilike(pattern))
     if updated_from_dt is not None:
-        stmt = stmt.where(Candidate.updated_at >= updated_from_dt)
-        count_stmt = count_stmt.where(Candidate.updated_at >= updated_from_dt)
+        stmt = stmt.where(last_activity_expr >= updated_from_dt)
+        count_stmt = count_stmt.where(last_activity_expr >= updated_from_dt)
     if updated_to_dt is not None:
-        stmt = stmt.where(Candidate.updated_at <= updated_to_dt)
-        count_stmt = count_stmt.where(Candidate.updated_at <= updated_to_dt)
+        stmt = stmt.where(last_activity_expr <= updated_to_dt)
+        count_stmt = count_stmt.where(last_activity_expr <= updated_to_dt)
+    if created_from_dt is not None:
+        stmt = stmt.where(Candidate.created_at >= created_from_dt)
+        count_stmt = count_stmt.where(Candidate.created_at >= created_from_dt)
+    if created_to_dt is not None:
+        stmt = stmt.where(Candidate.created_at <= created_to_dt)
+        count_stmt = count_stmt.where(Candidate.created_at <= created_to_dt)
 
     result = await db.execute(stmt)
     rows = result.all()
     total = int((await db.execute(count_stmt)).scalar_one() or 0)
+    candidate_ids = [c.id for c, _, _, _ in rows]
     assignment_map = await _load_candidate_assignments(
         db,
         org_id=current_user.org_id,
-        candidate_ids=[c.id for c, _, _ in rows],
+        candidate_ids=candidate_ids,
+    )
+    resume_candidate_ids = await _load_candidates_with_resume_document(
+        db,
+        org_id=current_user.org_id,
+        candidate_ids=candidate_ids,
     )
 
     return CandidateListResponse(
@@ -1288,6 +1470,7 @@ async def list_candidates_paginated(
                 headline=c.headline,
                 profile_links=c.profile_links,
                 parsed_resume=c.parsed_resume if isinstance(c.parsed_resume, dict) else None,
+                has_resume=c.id in resume_candidate_ids,
                 source=c.source,
                 tags=list(c.tags or []),
                 status=c.status,
@@ -1305,9 +1488,9 @@ async def list_candidates_paginated(
                 avatar_source=c.avatar_source,
                 assignments=assignment_map.get(c.id, []),
                 created_at=c.created_at,
-                updated_at=c.updated_at,
-            )
-            for c, job_title, stage_name in rows
+            updated_at=last_activity_at or c.updated_at,
+        )
+        for c, job_title, stage_name, last_activity_at in rows
         ],
         total=total,
         limit=limit,
@@ -1483,6 +1666,12 @@ async def get_candidate(
             profile_links = _extract_profile_links_from_application(
                 application.schema_snapshot, application.answers
             )
+    resume_candidate_ids = await _load_candidates_with_resume_document(
+        db,
+        org_id=current_user.org_id,
+        candidate_ids=[c.id],
+    )
+
     return CandidateDetailResponse(
         id=c.id,
         name=c.name,
@@ -1493,6 +1682,7 @@ async def get_candidate(
         headline=c.headline,
         profile_links=profile_links,
         parsed_resume=c.parsed_resume if isinstance(c.parsed_resume, dict) else None,
+        has_resume=c.id in resume_candidate_ids,
         source=c.source,
         tags=list(c.tags or []),
         status=c.status,

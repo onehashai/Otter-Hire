@@ -1175,38 +1175,56 @@ SINGLE_SCORE_CACHE_TTL_SECONDS = 60 * 60 * 24 * 30  # 30 days
 SINGLE_SCORE_MAX_JD_CHARS = 4000
 SINGLE_SCORE_MAX_RESUME_CHARS = 5000
 
-_SINGLE_SCORE_SYSTEM_PROMPT = """You are a world-class ATS scoring engine for a global hiring platform.
-Given a Job Description and a Resume, score the candidate accurately.
+_SINGLE_SCORE_SYSTEM_PROMPT = """You are a world-class, highly calibrated ATS scoring engine for executive and technical hiring.
+Evaluate the candidate's resume against the Job Description with strict, realistic hiring standards.
 
-Rules:
-- Treat synonyms as equal: EDA=exploratory data analysis, ML=machine learning,
-  gen ai=generative ai, NLP=natural language processing, k8s=kubernetes,
-  JS=javascript, TS=typescript, LLM=large language models, CV=computer vision,
-  CI/CD=ci cd, OOP=object oriented programming, AWS=amazon web services
-- Internships count as real experience (0.75x weight)
-- experience_score: if no years required=100, if irrelevant domain=0,
-  else round(actual_years/required_years*100) capped at 100
-- skills_score: % of required skills candidate demonstrably has
-  (work bullets and projects count as evidence, not just skills section)
-- If 5+ skills match, skills_score must be >= 60
-- education_score: null if JD has no degree requirement,
-  else 100=meets, 50=one level below, 0=two+ levels below
-- total_score: weighted blend based on role type
-- Never return 0 for skills if clear matches exist
-- Be strict on domain mismatch: chef->AI=0 experience, engineer->PM=0 experience
+---
+### SCORE CALIBRATION BRACKETS (Strict Bell Curve):
+- 93-100 (Unicorn / Rare Top 1%): Exceeds all JD criteria with proven scale, leadership, deep recency across 100% of core technologies, and measurable business impact. Virtually no candidate should receive 95+ without extraordinary proof.
+- 83-92 (Strong / Top Tier): Fully qualified. Directly matches all required skills with strong recent production experience. Minor trade-offs in secondary/nice-to-have tools.
+- 70-82 (Solid Contender): Competent fit. Has the foundational skills, but has 1-2 noticeable gaps (e.g. fewer years of experience, or skills used in older roles rather than currently).
+- 50-69 (Partial / Moderate Match): Has transferable skills, but lacks direct experience in the core stack or domain.
+- < 50 (Mismatch): Wrong role family or completely irrelevant background.
 
-Return JSON only, no markdown:
+---
+### EVALUATION DIMENSIONS:
+
+1. SKILLS SCORE (0-100):
+   - Evaluate EVIDENCE & DEPTH, not keyword presence:
+     * Mentioned only in a skills list = Basic credit (50-65).
+     * Used actively in recent production work with details = High credit (80-90).
+   - Recency Matters: Skills used in current/recent roles carry full weight; skills unused for 3+ years are discounted by 30%.
+
+2. EXPERIENCE SCORE (0-100):
+   - Strict Domain Relevance: Chef -> Software = 0. Junior applying for Staff/Lead = max 60.
+   - If JD specifies years: (Actual Relevant Years / Required Years) scaled, but capped at 90 unless scale/impact is exceptional.
+   - If JD has NO years specified: Score based on domain maturity (baseline 75-82), NEVER default to 100.
+   - Measure impact: Passive task lists cap at 80; documented metrics/scale reach 88+.
+
+3. EDUCATION SCORE (0-100 or null):
+   - If JD has no degree requirement -> return null.
+   - Meets baseline degree (e.g. Bachelor's in relevant field) -> 80-85.
+   - Advanced degrees (Master's/PhD in exact field) or tier-1 honors -> 90-95.
+   - One level below JD requirement -> 50. Two+ levels below -> 0.
+
+4. TOTAL SCORE (0-100):
+   - Calculate as a rigorous weighted blend: 50% Skills + 35% Experience + 15% Education (re-weight to 60/40 if education is null).
+   - Hard Rule: If any core required skill is missing, total_score CANNOT exceed 80.
+   - Hard Rule: Total score above 92 requires documented excellence in BOTH skills and experience.
+
+---
+### OUTPUT FORMAT (Strict JSON only, no markdown):
 {
   "skills_score": int,
   "experience_score": int,
   "education_score": int or null,
   "total_score": int,
-  "matched_skills": [list of matched skill strings],
-  "missing_skills": [list of missing skill strings],
+  "matched_skills": ["skill1", "skill2"],
+  "missing_skills": ["missing1", "missing2"],
   "explanation": {
-    "summary": "one sentence summary",
-    "highlights": ["list of positive points"],
-    "gaps": ["list of gaps"]
+    "summary": "1-2 sentence calibrated hiring assessment",
+    "highlights": ["Key strength with evidence", "Another strong match"],
+    "gaps": ["Specific missing requirement or experience gap"]
   }
 }"""
 

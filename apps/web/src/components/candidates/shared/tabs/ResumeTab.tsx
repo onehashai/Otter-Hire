@@ -1,10 +1,26 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { ArrowLeft } from "lucide-react";
+import dynamic from "next/dynamic";
 import { Card, CardContent } from "@onehash/ui/card";
 import { Icon } from "@onehash/ui/icon";
 import { Button } from "@onehash/ui/button";
 import { useIsMobile } from "@/hooks/use-mobile";
+
+const PdfResumeViewer = dynamic(
+  () => import("./PdfResumeViewer").then((mod) => mod.PdfResumeViewer),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex flex-col items-center justify-center gap-2 h-[70vh] min-h-[300px] w-full rounded-md border border-border bg-muted/20">
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+        <p className="text-xs text-muted-foreground">Loading PDF viewer...</p>
+      </div>
+    ),
+  }
+);
 
 type ResumeTabProps = {
   resumeUrl?: string | null;
@@ -21,55 +37,72 @@ export function ResumeTab({
   onUploadDocument,
   onUploadResumeFile,
 }: ResumeTabProps) {
+  const router = useRouter();
   const resumeInputRef = useRef<HTMLInputElement | null>(null);
   const isMobile = useIsMobile();
 
+  const goBack = useCallback(() => {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      window.history.back();
+    } else {
+      router.replace("/candidates");
+    }
+  }, [router]);
+
+  /*
   if (!resumeUrl) {
     return (
-      <Card>
-        <CardContent className="py-12 flex flex-col items-center gap-3 text-center">
-          <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
-            <Icon name="ScrollText" className="h-4 w-4 text-muted-foreground" />
-          </div>
-          <p className="text-xs text-muted-foreground">No resume available to preview</p>
-          {onUploadDocument || onUploadResumeFile ? (
-            <>
-              {onUploadResumeFile ? (
-                <input
-                  ref={resumeInputRef}
-                  type="file"
-                  accept="application/pdf,.pdf,.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                  className="hidden"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    void onUploadResumeFile(file);
-                    e.currentTarget.value = "";
-                  }}
-                />
-              ) : null}
-              <Button
-                size="sm"
-                className="h-7 text-xs gap-1.5"
-                onClick={() => {
-                  if (onUploadResumeFile) {
-                    resumeInputRef.current?.click();
-                    return;
-                  }
-                  onUploadDocument?.();
-                }}
-              >
-                <Icon name="Upload" className="h-3 w-3" /> Upload Resume
+      <Card className="min-h-[380px] md:h-[65vh] flex items-center justify-center p-6 sm:p-12">
+        <section className="w-full max-w-xl">
+          <div>
+            <p className="max-w-md text-sm leading-6 text-muted-foreground sm:text-base">
+              This document or attachment is unavailable.
+              <br className="hidden sm:inline" />
+              {" "}It may have expired or use an unsupported file format.
+            </p>
+
+            <div className="mt-8 flex flex-wrap items-center gap-5">
+              <Button onClick={goBack} className="h-10 rounded-full px-5">
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Return to App
               </Button>
-            </>
-          ) : null}
-        </CardContent>
+            </div>
+          </div>
+        </section>
       </Card>
+    );
+  }
+  */
+
+  if (!resumeUrl) {
+    return (
+      <div className="flex min-h-[380px] md:h-[65vh] items-center justify-center rounded-lg bg-[#0b0b0b] px-6 py-10 text-white border border-border">
+        <section className="w-full max-w-[620px] -translate-y-2 md:-translate-y-4">
+          <h1 className="text-2xl font-semibold tracking-normal sm:text-3xl">
+            Resume unavailable
+          </h1>
+
+          <p className="mt-4 text-sm leading-relaxed text-[#929292] sm:text-base">
+            A resume isn&apos;t available to review for this candidate.
+            <br className="hidden sm:block" /> It may not have been attached or
+            could not be opened. You can continue reviewing the candidate&apos;s
+            profile or request an updated copy.
+          </p>
+
+          <button
+            type="button"
+            onClick={goBack}
+            className="mt-7 inline-flex h-10 items-center gap-2.5 rounded-full bg-[#f5f5f5] px-5 text-sm font-medium text-[#111] transition-colors hover:bg-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white"
+          >
+            <ArrowLeft aria-hidden="true" className="h-4 w-4" />
+            Return to App
+          </button>
+        </section>
+      </div>
     );
   }
 
   const previewSrc = previewUrl ?? resumeUrl;
-  const iframeSrc = `${previewSrc}${previewSrc.includes("#") ? "&" : "#"}zoom=100`;
   const isPdf =
     !!previewUrl ||
     resumeUrl.toLowerCase().includes(".pdf") ||
@@ -85,10 +118,9 @@ export function ResumeTab({
         <CardContent className="p-0 min-w-0 max-w-full overflow-hidden">
           {isPdf ? (
             <div className="min-w-0 max-w-full overflow-hidden px-2 py-2 sm:px-0 sm:py-0">
-              <iframe
-                title="Resume preview"
-                src={iframeSrc}
-                className={`block w-full max-w-full rounded-md border border-border ${viewerHeightClass}`}
+              <PdfResumeViewer
+                url={previewSrc}
+                className={`block w-full max-w-full ${viewerHeightClass}`}
               />
             </div>
           ) : (

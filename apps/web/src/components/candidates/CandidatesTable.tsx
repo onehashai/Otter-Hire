@@ -5,19 +5,45 @@ import { useRouter } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import { Badge } from "@onehash/ui/badge";
 import { Avatar } from "@onehash/ui/avatar";
+import { Button } from "@onehash/ui/button";
+import { Calendar } from "@onehash/ui/calendar";
 import { Checkbox } from "@onehash/ui/checkbox";
+import { Popover, PopoverContent, PopoverTrigger } from "@onehash/ui/popover";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@onehash/ui/dropdown-menu";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@onehash/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@onehash/ui/tooltip";
+import { ArrowDownAZ, ArrowDownUp, ArrowUpAZ, FileMinus2 as FileMinusCorner, SquareStack } from "lucide-react";
 import { formatTimestamp } from "@/lib/format-date";
 import { formatPhoneForDisplay } from "@/lib/phone";
 import { getInitialsFromName } from "@/lib/name-initials";
-import { type CandidateListItemResponse, type JobListItemResponse } from "@/api";
+import { formatCandidateSource, formatEmailDomain } from "@/lib/candidate-source";
+import { type CandidateListItemResponse, type CandidateSortBy, type JobListItemResponse } from "@/api";
 import { TruncatedText } from "@/components/common/TruncatedText";
+import { setCandidateNavigationContext } from "@/lib/candidate-navigation";
+
+const CANDIDATE_DATE_CALENDAR_CLASS_NAMES = {
+  months: "relative flex w-full flex-col",
+  month: "w-full space-y-3",
+  month_caption: "relative flex h-10 items-center justify-center px-12",
+  caption_label: "text-center text-sm font-semibold leading-none text-foreground",
+  nav: "pointer-events-none absolute inset-x-0 top-0 z-10 flex h-10 w-full items-center justify-between px-1",
+  button_previous:
+    "pointer-events-auto !size-8 shrink-0 rounded-md border border-input bg-background p-0 opacity-75 shadow-sm transition-colors hover:bg-accent hover:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+  button_next:
+    "pointer-events-auto !size-8 shrink-0 rounded-md border border-input bg-background p-0 opacity-75 shadow-sm transition-colors hover:bg-accent hover:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+  month_grid: "w-full table-fixed border-collapse border-spacing-0",
+};
 
 export const CANDIDATE_COLUMN_DEFS = {
   name: { label: "Candidate", fixed: true, defaultVisible: true },
   email: { label: "Email", fixed: true, defaultVisible: true },
-  score: { label: "Score", fixed: false, defaultVisible: true },
+  score: { label: "Resume score", fixed: false, defaultVisible: true },
   phone: { label: "Phone", fixed: false, defaultVisible: true },
   assigned_jobs: { label: "Assigned Jobs", fixed: false, defaultVisible: true },
   created_at: { label: "Created", fixed: false, defaultVisible: true },
@@ -25,11 +51,41 @@ export const CANDIDATE_COLUMN_DEFS = {
   status: { label: "Status", fixed: false, defaultVisible: false },
   location: { label: "Location", fixed: false, defaultVisible: false },
   updated_at: { label: "Updated", fixed: false, defaultVisible: false },
-  tags: { label: "Tags", fixed: false, defaultVisible: false },
   stage_name: { label: "Stage", fixed: false, defaultVisible: false },
 } as const;
 
 export type CandidateColumnKey = keyof typeof CANDIDATE_COLUMN_DEFS;
+export type CandidateDatePeriod = "all" | "today" | "yesterday" | "7d" | "30d" | "custom";
+
+type CandidateDateRange = {
+  from?: Date;
+  to?: Date;
+};
+
+export type CandidateTableHeaderControls = {
+  sortBy: CandidateSortBy;
+  sortOrder: "asc" | "desc";
+  onSortChange: (sortBy: CandidateSortBy, sortOrder: "asc" | "desc") => void;
+  emailDomain: string;
+  emailDomains: string[];
+  onEmailDomainChange: (emailDomain: string) => void;
+  assignedJobId: string;
+  assignedJobOptions: Array<{ value: string; label: string }>;
+  onAssignedJobChange: (jobId: string) => void;
+  source: string;
+  sourceOptions: Array<{ value: string; label: string }>;
+  onSourceChange: (source: string) => void;
+  status: string;
+  onStatusChange: (status: string) => void;
+  createdPeriod: CandidateDatePeriod;
+  createdRange: CandidateDateRange;
+  onCreatedPeriodChange: (period: CandidateDatePeriod) => void;
+  onCreatedRangeChange: (range: CandidateDateRange) => void;
+  updatedPeriod: CandidateDatePeriod;
+  updatedRange: CandidateDateRange;
+  onUpdatedPeriodChange: (period: CandidateDatePeriod) => void;
+  onUpdatedRangeChange: (range: CandidateDateRange) => void;
+};
 
 export const CANDIDATE_ALL_COLUMNS = Object.keys(CANDIDATE_COLUMN_DEFS) as CandidateColumnKey[];
 export const CANDIDATE_FIXED_COLUMNS = CANDIDATE_ALL_COLUMNS.filter(
@@ -79,6 +135,11 @@ export function normalizeVisibleCandidateColumns(
 
 type Props = {
   items: CandidateListItemResponse[];
+  total?: number;
+  emptyState?: {
+    title: string;
+    description: string;
+  };
   jobs?: JobListItemResponse[];
   selectedIds?: Set<string>;
   visibleColumns?: CandidateColumnKey[];
@@ -87,28 +148,20 @@ type Props = {
   onToggleAllVisible?: (nextSelected: boolean) => void;
   onListChange?: () => void | Promise<void>;
   onResolveDuplicate?: (candidate: CandidateListItemResponse) => void;
+  headerControls?: CandidateTableHeaderControls;
 };
-
-function formatSourceLabel(source: string | null | undefined, t: (key: string) => string): string {
-  if (!source) return "—";
-  const displaySource = source.replace(/^migration:/i, "");
-  if (displaySource === "job_portal") return t("candidates_source_job_portal");
-  if (displaySource === "email_automation") return t("source_email") ?? "Email";
-  if (displaySource === "Manual" || displaySource === "manual") return t("source_manual");
-  return displaySource
-    .split("_")
-    .map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1) : ""))
-    .join(" ");
-}
 
 export function CandidatesTable({
   items,
+  total,
+  emptyState,
   selectedIds,
   visibleColumns,
   columnOrder,
   onToggleSelected,
   onToggleAllVisible,
   onResolveDuplicate,
+  headerControls,
 }: Props) {
   const router = useRouter();
   const { t } = useTranslation();
@@ -136,116 +189,286 @@ export function CandidatesTable({
   }, [items, selectedIds, allVisibleSelected]);
 
   const renderHeader = (column: CandidateColumnKey) => {
-    if (column === "name") {
-      return (
-        <TableHead
-          key={column}
-          className="text-xs font-medium h-9 min-w-[140px] max-w-[220px] text-center"
-        >
-          {t("col_candidate")}
-        </TableHead>
-      );
-    }
-    if (column === "email") {
-      return (
-        <TableHead
-          key={column}
-          className="text-xs font-medium h-9 min-w-[160px] max-w-[240px] text-center"
-        >
-          {t("email")}
-        </TableHead>
-      );
-    }
-    if (column === "score") {
-      return (
-        <TableHead
-          key={column}
-          className="text-xs font-medium h-9 min-w-[80px] text-center"
-        >
-          Score
-        </TableHead>
-      );
-    }
-    if (column === "phone") {
-      return (
-        <TableHead
-          key={column}
-          className="text-xs font-medium h-9 min-w-[120px] max-w-[160px] text-center"
-        >
-          {t("col_phone")}
-        </TableHead>
-      );
-    }
-    if (column === "assigned_jobs") {
-      return (
-        <TableHead
-          key={column}
-          className="text-xs font-medium h-9 min-w-[160px] max-w-[280px] text-center"
-        >
-          {t("candidates_assigned_jobs")}
-        </TableHead>
-      );
-    }
-    if (column === "created_at") {
-      return (
-        <TableHead
-          key={column}
-          className="text-xs font-medium h-9 min-w-[150px] whitespace-nowrap text-center"
-        >
-          {t("candidates_table_created")}
-        </TableHead>
-      );
-    }
-    if (column === "source") {
-      return (
-        <TableHead key={column} className="text-xs font-medium h-9 min-w-[100px] text-center">
-          {t("col_source")}
-        </TableHead>
-      );
-    }
-    if (column === "status") {
-      return (
-        <TableHead key={column} className="text-xs font-medium h-9 min-w-[100px] text-center">
-          {t("status")}
-        </TableHead>
-      );
-    }
-    if (column === "location") {
-      return (
-        <TableHead
-          key={column}
-          className="text-xs font-medium h-9 min-w-[160px] max-w-[220px] text-center"
-        >
-          {t("col_location")}
-        </TableHead>
-      );
-    }
-    if (column === "updated_at") {
-      return (
-        <TableHead
-          key={column}
-          className="text-xs font-medium h-9 min-w-[150px] whitespace-nowrap text-center"
-        >
-          {t("col_updated")}
-        </TableHead>
-      );
-    }
-    if (column === "tags") {
-      return (
-        <TableHead
-          key={column}
-          className="text-xs font-medium h-9 min-w-[180px] max-w-[260px] text-center"
-        >
-          {t("tags")}
-        </TableHead>
-      );
-    }
+    const metadata: Record<
+      CandidateColumnKey,
+      { label: string; className: string; sortBy?: CandidateSortBy }
+    > = {
+      name: {
+        label: t("col_candidate"),
+        className: "min-w-[140px] max-w-[220px]",
+        sortBy: "name",
+      },
+      email: { label: t("email"), className: "min-w-[160px] max-w-[240px]" },
+      score: { label: "Resume score", className: "min-w-[110px]", sortBy: "score" },
+      phone: { label: t("col_phone"), className: "min-w-[120px] max-w-[160px]" },
+      assigned_jobs: {
+        label: t("candidates_assigned_jobs"),
+        className: "min-w-[160px] max-w-[280px]",
+      },
+      created_at: {
+        label: t("candidates_table_created"),
+        className: "min-w-[150px] whitespace-nowrap",
+        sortBy: "created_at",
+      },
+      source: { label: t("col_source"), className: "min-w-[100px]" },
+      status: { label: t("status"), className: "min-w-[100px]" },
+      location: {
+        label: t("col_location"),
+        className: "min-w-[160px] max-w-[220px]",
+      },
+      updated_at: {
+        label: t("col_updated"),
+        className: "min-w-[150px] whitespace-nowrap",
+      },
+      stage_name: { label: t("stage"), className: "min-w-[140px] max-w-[200px]" },
+    };
+    const meta = metadata[column];
+    const menuColumns: CandidateColumnKey[] = [
+      "name",
+      "email",
+      "score",
+      "assigned_jobs",
+      "created_at",
+      "source",
+      "status",
+      "updated_at",
+    ];
+    const showMenu = Boolean(headerControls && menuColumns.includes(column));
+    const isSorted = Boolean(meta.sortBy && headerControls?.sortBy === meta.sortBy);
+    const showSort = column === "name" || column === "score" || column === "created_at";
+    const sortLabels =
+      column === "name"
+        ? { ascending: "A to Z", descending: "Z to A" }
+        : column === "score"
+          ? { ascending: "Lowest first", descending: "Highest first" }
+          : { ascending: "Oldest first", descending: "Newest first" };
+    const dateOptions = [
+      { value: "all" as const, label: "Any time" },
+      { value: "today" as const, label: "Today" },
+      { value: "yesterday" as const, label: "Yesterday" },
+      { value: "7d" as const, label: "Last 7 days" },
+      { value: "30d" as const, label: "Last 30 days" },
+      { value: "custom" as const, label: "Custom date" },
+    ];
+    const isDateColumn = column === "created_at" || column === "updated_at";
+    const datePeriod = column === "created_at" ? headerControls?.createdPeriod : headerControls?.updatedPeriod;
+    const dateRange = column === "created_at" ? headerControls?.createdRange : headerControls?.updatedRange;
+    const onDatePeriodChange =
+      column === "created_at"
+        ? headerControls?.onCreatedPeriodChange
+        : headerControls?.onUpdatedPeriodChange;
+    const onDateRangeChange =
+      column === "created_at"
+        ? headerControls?.onCreatedRangeChange
+        : headerControls?.onUpdatedRangeChange;
+
+    const isDateFilterActive = Boolean(datePeriod && datePeriod !== "all");
+    const isAscSorted = Boolean(isSorted && headerControls?.sortOrder === "asc" && !isDateFilterActive);
+    const isDescSorted = Boolean(isSorted && headerControls?.sortOrder === "desc" && !isDateFilterActive);
+    const isAnyTimeActive = Boolean(datePeriod === "all" && !isSorted);
+
     return (
-      <TableHead
-        key={column}
-        className="text-xs font-medium h-9 min-w-[140px] max-w-[200px] text-center"
-      >
-        {t("stage")}
+      <TableHead key={column} className={`h-9 text-center text-xs font-medium ${meta.className}`}>
+        <div className="flex items-center justify-center gap-0.5">
+          <span className="truncate">{meta.label}</span>
+          {showMenu && headerControls && isDateColumn ? (
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 shrink-0"
+                  tooltip={`${meta.label} options`}
+                  aria-label={`${meta.label} options`}
+                >
+                  <ArrowDownUp className="h-3.5 w-3.5" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent
+                align="end"
+                className={`w-72 max-w-[calc(100vw-1.5rem)] p-2 ${datePeriod === "custom" ? "max-h-[min(80vh,42rem)] overflow-y-auto" : ""}`}
+              >
+                {showSort && meta.sortBy ? (
+                  <div className="pb-2">
+                    <p className="px-2 py-1.5 text-sm font-semibold">Sort</p>
+                    <button
+                      type="button"
+                      className={`flex w-full items-center rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent ${isAscSorted ? "bg-accent/60 font-medium" : ""}`}
+                      onClick={() => {
+                        onDatePeriodChange?.("all");
+                        headerControls.onSortChange(meta.sortBy as CandidateSortBy, "asc");
+                      }}
+                    >
+                      <span className="w-5 text-xs">{isAscSorted ? "✓" : ""}</span>
+                      {sortLabels.ascending}
+                    </button>
+                    <button
+                      type="button"
+                      className={`flex w-full items-center rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent ${isDescSorted ? "bg-accent/60 font-medium" : ""}`}
+                      onClick={() => {
+                        onDatePeriodChange?.("all");
+                        headerControls.onSortChange(meta.sortBy as CandidateSortBy, "desc");
+                      }}
+                    >
+                      <span className="w-5 text-xs">{isDescSorted ? "✓" : ""}</span>
+                      {sortLabels.descending}
+                    </button>
+                    <div className="mx-1 my-1 border-t border-border" />
+                  </div>
+                ) : null}
+                <p className="px-2 py-1.5 text-sm font-semibold">
+                  {column === "created_at" ? "Created date" : "Activity time"}
+                </p>
+                <div className="space-y-0.5">
+                  {dateOptions.map((option) => {
+                    const isOptionSelected =
+                      option.value === "all" ? isAnyTimeActive : datePeriod === option.value;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        className={`flex w-full items-center rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent ${isOptionSelected ? "bg-accent/60 font-medium" : ""}`}
+                        onClick={() => {
+                          if (option.value === "all") {
+                            headerControls.onSortChange("updated_at", "desc");
+                          }
+                          onDatePeriodChange?.(option.value);
+                        }}
+                      >
+                        <span className="w-5 text-xs">{isOptionSelected ? "✓" : ""}</span>
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                {datePeriod === "custom" ? (
+                  <Calendar
+                    mode="range"
+                    selected={dateRange?.from ? { from: dateRange.from, to: dateRange.to } : undefined}
+                    onSelect={(range) => onDateRangeChange?.(range ? { from: range.from, to: range.to } : {})}
+                    numberOfMonths={1}
+                    className="mt-2 w-full rounded-md border bg-card p-3 text-foreground shadow-none"
+                    classNames={CANDIDATE_DATE_CALENDAR_CLASS_NAMES}
+                  />
+                ) : null}
+              </PopoverContent>
+            </Popover>
+          ) : showMenu && headerControls ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 shrink-0"
+                  tooltip={`${meta.label} options`}
+                  aria-label={`${meta.label} options`}
+                >
+                  {column === "name" && isSorted && headerControls.sortOrder === "asc" ? (
+                    <ArrowUpAZ className="h-3.5 w-3.5" />
+                  ) : column === "name" && isSorted && headerControls.sortOrder === "desc" ? (
+                    <ArrowDownAZ className="h-3.5 w-3.5" />
+                  ) : (
+                    <ArrowDownUp className="h-3.5 w-3.5" />
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                className={
+                  (column === "created_at" && headerControls.createdPeriod === "custom") ||
+                  (column === "updated_at" && headerControls.updatedPeriod === "custom")
+                    ? "w-[22rem] max-w-[calc(100vw-2rem)]"
+                    : "w-52"
+                }
+              >
+                {showSort && meta.sortBy ? (
+                  <>
+                    <DropdownMenuLabel>Sort</DropdownMenuLabel>
+                    <DropdownMenuCheckboxItem
+                      checked={isSorted && headerControls.sortOrder === "asc"}
+                      onSelect={() => headerControls.onSortChange(meta.sortBy as CandidateSortBy, "asc")}
+                    >
+                      {sortLabels.ascending}
+                    </DropdownMenuCheckboxItem>
+                    <DropdownMenuCheckboxItem
+                      checked={isSorted && headerControls.sortOrder === "desc"}
+                      onSelect={() => headerControls.onSortChange(meta.sortBy as CandidateSortBy, "desc")}
+                    >
+                      {sortLabels.descending}
+                    </DropdownMenuCheckboxItem>
+                  </>
+                ) : null}
+                {column === "email" ? (
+                  <>
+                    <DropdownMenuLabel>Email domain</DropdownMenuLabel>
+                    <DropdownMenuCheckboxItem
+                      checked={!headerControls.emailDomain}
+                      onSelect={() => headerControls.onEmailDomainChange("")}
+                    >
+                      All domains
+                    </DropdownMenuCheckboxItem>
+                    {headerControls.emailDomains.map((domain) => (
+                      <DropdownMenuCheckboxItem
+                        key={domain}
+                        checked={headerControls.emailDomain === domain}
+                        onSelect={() => headerControls.onEmailDomainChange(domain)}
+                      >
+                        {formatEmailDomain(domain)} ({`@${domain}`})
+                      </DropdownMenuCheckboxItem>
+                    ))}
+                  </>
+                ) : null}
+                {column === "assigned_jobs" ? (
+                  <>
+                    <DropdownMenuLabel>Assigned job</DropdownMenuLabel>
+                    {headerControls.assignedJobOptions.map((option) => (
+                      <DropdownMenuCheckboxItem
+                        key={option.value}
+                        checked={headerControls.assignedJobId === option.value}
+                        onSelect={() => headerControls.onAssignedJobChange(option.value)}
+                      >
+                        {option.label}
+                      </DropdownMenuCheckboxItem>
+                    ))}
+                  </>
+                ) : null}
+                {column === "source" ? (
+                  <>
+                    <DropdownMenuLabel>Source</DropdownMenuLabel>
+                    {headerControls.sourceOptions.map((option) => (
+                      <DropdownMenuCheckboxItem
+                        key={option.value}
+                        checked={headerControls.source === option.value}
+                        onSelect={() => headerControls.onSourceChange(option.value)}
+                      >
+                        {option.label}
+                      </DropdownMenuCheckboxItem>
+                    ))}
+                  </>
+                ) : null}
+                {column === "status" ? (
+                  <>
+                    <DropdownMenuLabel>Status</DropdownMenuLabel>
+                    {[
+                      { value: "", label: "All statuses" },
+                      { value: "active", label: "Active" },
+                      { value: "rejected", label: "Rejected" },
+                      { value: "hired", label: "Hired" },
+                    ].map((option) => (
+                      <DropdownMenuCheckboxItem
+                        key={option.value || "all"}
+                        checked={headerControls.status === option.value}
+                        onSelect={() => headerControls.onStatusChange(option.value)}
+                      >
+                        {option.label}
+                      </DropdownMenuCheckboxItem>
+                    ))}
+                  </>
+                ) : null}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : null}
+        </div>
       </TableHead>
     );
   };
@@ -266,6 +489,7 @@ export function CandidatesTable({
         .trim()
         .toLowerCase()
         .replace(/\b\w/g, (ch) => ch.toUpperCase());
+      const hasResume = Boolean(c.has_resume);
       return (
         <TableCell key={column} className="py-2 align-middle min-w-0 max-w-[320px] text-center">
           <div className="flex items-center justify-center gap-2 min-w-0">
@@ -278,13 +502,41 @@ export function CandidatesTable({
               {getInitialsFromName(displayName)}
             </Avatar>
             <span className="text-sm font-medium truncate">{displayName || "—"}</span>
+            {!hasResume && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span
+                    tabIndex={0}
+                    role="img"
+                    aria-label="No resume attached with candidate"
+                    className="inline-flex items-center justify-center text-slate-400 hover:text-slate-600 dark:text-slate-300 dark:hover:text-white shrink-0 cursor-help transition-colors rounded-sm focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  >
+                    <FileMinusCorner className="h-[18px] w-[18px]" aria-hidden="true" />
+                    <span className="sr-only">No resume attached with candidate</span>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs">
+                  No resume attached with candidate
+                </TooltipContent>
+              </Tooltip>
+            )}
             {c.is_pending_duplicate_review && (
-              <Badge
-                variant="outline"
-                className="bg-amber-500/10 text-amber-600 hover:bg-amber-500/20 border-amber-500/20 text-[10px] font-semibold tracking-wide rounded-full px-2 py-0.5 whitespace-nowrap shrink-0"
-              >
-                Potential Duplicate
-              </Badge>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span
+                    tabIndex={0}
+                    role="img"
+                    aria-label="This candidate may already be in your records."
+                    className="inline-flex items-center justify-center text-amber-500 hover:text-amber-600 dark:text-amber-400 dark:hover:text-amber-300 shrink-0 cursor-help transition-colors rounded-sm focus:outline-none focus-visible:ring-1 focus-visible:ring-amber-500"
+                  >
+                    <SquareStack className="h-[18px] w-[18px]" aria-hidden="true" />
+                    <span className="sr-only">This candidate may already be in your records.</span>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs">
+                  This candidate may already be in your records.
+                </TooltipContent>
+              </Tooltip>
             )}
           </div>
         </TableCell>
@@ -414,7 +666,7 @@ export function CandidatesTable({
       return (
         <TableCell key={column} className="py-2 align-middle text-center">
           <Badge variant="outline" className="text-[10px] font-normal whitespace-nowrap mx-auto">
-            {formatSourceLabel(c.source, t)}
+            {formatCandidateSource(c.source)}
           </Badge>
         </TableCell>
       );
@@ -441,23 +693,6 @@ export function CandidatesTable({
           <span className="text-xs text-muted-foreground">
             {formatTimestamp(c.updated_at, "en-GB", { showRelative: true })}
           </span>
-        </TableCell>
-      );
-    }
-    if (column === "tags") {
-      return (
-        <TableCell key={column} className="py-2 align-middle min-w-0 max-w-[260px] text-center">
-          <div className="flex flex-wrap justify-center gap-1">
-            {(c.tags ?? []).length > 0 ? (
-              (c.tags ?? []).slice(0, 3).map((tag) => (
-                <Badge key={tag} variant="outline" className="text-[10px] font-normal">
-                  {tag}
-                </Badge>
-              ))
-            ) : (
-              <span className="text-xs text-muted-foreground">—</span>
-            )}
-          </div>
         </TableCell>
       );
     }
@@ -511,6 +746,21 @@ export function CandidatesTable({
             </TableRow>
           </TableHeader>
           <TableBody>
+            {items.length === 0 && emptyState ? (
+              <TableRow className="hover:bg-transparent">
+                <TableCell
+                  colSpan={
+                    orderedVisibleColumns.length + (selectedIds && onToggleAllVisible ? 1 : 0)
+                  }
+                  className="h-48 text-center"
+                >
+                  <div className="flex flex-col items-center justify-center gap-2 text-sm">
+                    <p className="font-medium text-foreground">{emptyState.title}</p>
+                    <p className="text-muted-foreground">{emptyState.description}</p>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ) : null}
             {items.map((c) => {
               const href = `/candidates/${encodeURIComponent(c.id)}`;
               const isSelected = selectedIds ? selectedIds.has(c.id) : false;
@@ -522,6 +772,12 @@ export function CandidatesTable({
                     if (c.is_pending_duplicate_review && onResolveDuplicate) {
                       onResolveDuplicate(c);
                     } else {
+                      setCandidateNavigationContext({
+                        ids: items.map((item) => item.id),
+                        total: total ?? items.length,
+                        sourceUrl: typeof window !== "undefined" ? window.location.pathname + window.location.search : "/candidates",
+                        sourceName: "Candidates",
+                      });
                       router.push(href);
                     }
                   }}

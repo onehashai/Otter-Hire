@@ -1,11 +1,19 @@
 "use client";
 
+import { useState } from "react";
+import { ArrowLeft, Check, ChevronDown } from "lucide-react";
 import { Button } from "@onehash/ui/button";
+import { InputField } from "@onehash/ui/input";
 import { Label } from "@onehash/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@onehash/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@onehash/ui/popover";
 
-export const TABLE_PAGE_SIZE_OPTIONS = Array.from({ length: 20 }, (_, index) => (index + 1) * 10);
+export const TABLE_PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 export const DEFAULT_TABLE_PAGE_SIZE = 20;
+export const MAX_TABLE_PAGE_SIZE = 200;
+
+export function isValidTablePageSize(pageSize: number): boolean {
+  return Number.isInteger(pageSize) && pageSize >= 1 && pageSize <= MAX_TABLE_PAGE_SIZE;
+}
 
 type PageItem = number | "ellipsis";
 
@@ -54,9 +62,15 @@ export function TablePagination({
   onPageChange,
   onPageSizeChange,
 }: TablePaginationProps) {
+  const [customOpen, setCustomOpen] = useState(false);
+  const [showCustomEditor, setShowCustomEditor] = useState(false);
+  const [customPageSize, setCustomPageSize] = useState(String(pageSize));
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const startRow = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const endRow = total === 0 ? 0 : Math.min(startRow + itemsOnPage - 1, total);
+  const parsedCustomPageSize = Number(customPageSize);
+  const canApplyCustomPageSize =
+    isValidTablePageSize(parsedCustomPageSize) && parsedCustomPageSize !== pageSize;
 
   return (
     <div className="flex flex-col gap-3 pt-4 lg:flex-row lg:items-center lg:justify-between">
@@ -66,21 +80,120 @@ export function TablePagination({
       <div className="flex flex-wrap items-center gap-2 lg:justify-end">
         <div className="flex items-center gap-2">
           <Label className="whitespace-nowrap text-xs text-muted-foreground">Rows per page:</Label>
-          <Select
-            value={String(pageSize)}
-            onValueChange={(value) => onPageSizeChange(Number(value))}
+          <Popover
+            open={customOpen}
+            onOpenChange={(nextOpen) => {
+              setCustomOpen(nextOpen);
+              if (nextOpen) {
+                setShowCustomEditor(false);
+                setCustomPageSize(String(pageSize));
+              }
+            }}
           >
-            <SelectTrigger className="h-8 w-[72px] text-xs" aria-label="Rows per page">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {TABLE_PAGE_SIZE_OPTIONS.map((option) => (
-                <SelectItem key={option} value={String(option)} className="text-xs">
-                  {option}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            <PopoverTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 w-[72px] justify-between px-2 text-xs"
+                aria-label="Rows per page"
+                disabled={disabled}
+              >
+                {pageSize}
+                <ChevronDown className="h-3.5 w-3.5 opacity-60" aria-hidden="true" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-48 space-y-1 p-1">
+              {showCustomEditor ? (
+                <div className="space-y-3 p-2">
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      aria-label="Back to page sizes"
+                      onClick={() => setShowCustomEditor(false)}
+                    >
+                      <ArrowLeft className="h-4 w-4" />
+                    </Button>
+                    <Label htmlFor="custom-page-size" className="text-xs">
+                      Custom page size
+                    </Label>
+                  </div>
+                  <InputField
+                    id="custom-page-size"
+                    type="number"
+                    min={1}
+                    max={MAX_TABLE_PAGE_SIZE}
+                    step={1}
+                    value={customPageSize}
+                    onChange={(event) => setCustomPageSize(event.target.value)}
+                    className="h-8 text-sm"
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="w-full"
+                    disabled={!canApplyCustomPageSize || disabled}
+                    onClick={() => {
+                      onPageSizeChange(parsedCustomPageSize);
+                      setCustomOpen(false);
+                    }}
+                  >
+                    Apply
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  {TABLE_PAGE_SIZE_OPTIONS.map((option) => (
+                    <Button
+                      key={option}
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-full justify-between px-2 text-xs font-normal"
+                      disabled={disabled}
+                      onClick={() => {
+                        onPageSizeChange(option);
+                        setCustomOpen(false);
+                      }}
+                    >
+                      {option}
+                      {pageSize === option && <Check className="h-4 w-4" aria-hidden="true" />}
+                    </Button>
+                  ))}
+                  {!TABLE_PAGE_SIZE_OPTIONS.includes(pageSize) && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-full justify-between px-2 text-xs font-normal"
+                      disabled={disabled}
+                      onClick={() => setShowCustomEditor(true)}
+                    >
+                      Custom ({pageSize})
+                      <Check className="h-4 w-4" aria-hidden="true" />
+                    </Button>
+                  )}
+                  <div className="my-1 border-t border-border" />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-full justify-start px-2 text-xs font-normal"
+                    disabled={disabled}
+                    onClick={() => {
+                      setCustomPageSize(String(pageSize));
+                      setShowCustomEditor(true);
+                    }}
+                  >
+                    Custom
+                  </Button>
+                </>
+              )}
+            </PopoverContent>
+          </Popover>
         </div>
         <Button
           type="button"

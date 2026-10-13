@@ -1,5 +1,6 @@
 import json
 from typing import Literal
+from urllib.parse import urlsplit
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -65,6 +66,9 @@ class Settings(BaseSettings):
     # Google OAuth
     google_client_id: str | None = Field(default=None, validation_alias="GOOGLE_CLIENT_ID")
     google_client_secret: str | None = Field(default=None, validation_alias="GOOGLE_CLIENT_SECRET")
+    google_oauth_post_login_path: str = Field(
+        default="", validation_alias="GOOGLE_OAUTH_POST_LOGIN_PATH"
+    )
 
     # LinkedIn OAuth
     linkedin_client_id: str | None = Field(default=None, validation_alias="LINKEDIN_CLIENT_ID")
@@ -254,8 +258,12 @@ class Settings(BaseSettings):
     local_smtp_host: str = Field(default="localhost", validation_alias="LOCAL_SMTP_HOST")
     local_smtp_port: int = Field(default=1025, validation_alias="LOCAL_SMTP_PORT")
     local_smtp_from: str = Field(default="no-reply@localhost", validation_alias="LOCAL_SMTP_FROM")
-    local_mailpit_url: str = Field(default="http://localhost:8025", validation_alias="LOCAL_MAILPIT_URL")
-    local_mailpit_poll_seconds: int = Field(default=2, validation_alias="LOCAL_MAILPIT_POLL_SECONDS")
+    local_mailpit_url: str = Field(
+        default="http://localhost:8025", validation_alias="LOCAL_MAILPIT_URL"
+    )
+    local_mailpit_poll_seconds: int = Field(
+        default=2, validation_alias="LOCAL_MAILPIT_POLL_SECONDS"
+    )
     local_mailpit_enabled: bool = Field(default=True, validation_alias="LOCAL_MAILPIT_ENABLED")
     ats_auto_import_enabled: bool = Field(default=True, validation_alias="ATS_AUTO_IMPORT_ENABLED")
     ats_migration_checkpoint_dir: str = Field(
@@ -285,16 +293,63 @@ class Settings(BaseSettings):
 
     @property
     def external_api_base_url(self) -> str:
-        """Public API origin, tolerant of legacy env values that include the API prefix."""
-        base_url = (self.api_base_url or "").rstrip("/")
-        for suffix in ("/v1/internal", "/v1"):
-            if base_url.endswith(suffix):
-                return base_url.removesuffix(suffix)
-        return base_url
+        """Resolve a public callback origin without leaking localhost into production."""
+
+        def normalize(value: str | None) -> str:
+            base_url = (value or "").strip().rstrip("/")
+            for suffix in ("/v1/internal", "/v1"):
+                if base_url.endswith(suffix):
+                    return base_url.removesuffix(suffix)
+            return base_url
+
+        def is_public_origin(value: str) -> bool:
+            parsed = urlsplit(value)
+            host = (parsed.hostname or "").lower()
+            return (
+                parsed.scheme in {"http", "https"}
+                and bool(host)
+                and host != "localhost"
+                and not host.endswith(".localhost")
+                and host != "127.0.0.1"
+                and host != "::1"
+            )
+
+        api_url = normalize(self.api_base_url)
+        issuer_url = normalize(self.oauth_issuer_url)
+        if api_url and is_public_origin(api_url):
+            return api_url
+        if issuer_url and is_public_origin(issuer_url):
+            return issuer_url
+
+        domain = (self.app_domain or "").strip().strip(".")
+        if domain and domain.lower() not in {"localhost", "localhost.com"}:
+            host = f"{self.app_subdomain}.{domain}" if self.app_subdomain else domain
+            scheme = "https" if self.is_production else self._scheme
+            port = "" if self.is_production else ":8000"
+            return f"{scheme}://{host}{port}"
+
+        if self.is_production:
+            raise ValueError(
+                "Cannot resolve a public API URL in production. Set API_BASE_URL, "
+                "OAUTH_ISSUER_URL, or APP_DOMAIN to a public hostname."
+            )
+
+        return api_url or "http://localhost:8000"
 
     @property
     def google_oauth_enabled(self) -> bool:
         return bool(self.google_client_id and self.google_client_secret)
+
+    @property
+    def google_oauth_post_login_url(self) -> str:
+        """Return a safe, optional post-login destination for Google OAuth users."""
+        path = self.google_oauth_post_login_path.strip()
+        base_url = self.frontend_base_url.rstrip("/")
+        if not path:
+            return base_url
+        if not path.startswith("/") or path.startswith("//"):
+            raise ValueError("GOOGLE_OAUTH_POST_LOGIN_PATH must be a relative path")
+        return f"{base_url}{path}"
 
     @property
     def linkedin_oauth_enabled(self) -> bool:

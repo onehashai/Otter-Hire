@@ -10,6 +10,7 @@ export type CandidateListItemResponse = {
   headline: string | null;
   profile_links: Record<string, string>;
   parsed_resume?: Record<string, unknown> | null;
+  has_resume?: boolean;
   source: string | null;
   tags: string[];
   status: "active" | "rejected" | "hired";
@@ -65,6 +66,25 @@ export type CandidatesPaginatedResponse = {
 export type CandidateStageFilterOptionsResponse = {
   names: string[];
 };
+
+export type CandidateFilterOptionsResponse = {
+  sources: string[];
+  email_domains: string[];
+};
+
+export type CandidateSortBy =
+  | "updated_at"
+  | "created_at"
+  | "name"
+  | "email"
+  | "phone"
+  | "status"
+  | "source"
+  | "address"
+  | "score"
+  | "assigned_jobs"
+  | "job_title"
+  | "stage_name";
 
 export type CandidateBulkUpdateResponse = {
   updated_count: number;
@@ -260,12 +280,27 @@ export async function getCandidateStageFilterOptions(): Promise<CandidateStageFi
   });
 }
 
+export async function getCandidateFilterOptions(): Promise<CandidateFilterOptionsResponse> {
+  return apiFetch<CandidateFilterOptionsResponse>("/candidates/filter-options", {
+    method: "GET",
+  });
+}
+
 export async function getCandidatesPaginated(params?: {
   search?: string;
   job_id?: string;
+  assignment_job_id?: string;
+  assignment_stage_id?: string;
   stage_id?: string;
   status?: string;
   source?: string;
+  email_domain?: string;
+  location?: string;
+  tag?: string;
+  score_min?: number;
+  score_max?: number;
+  sort_by?: CandidateSortBy;
+  sort_order?: "asc" | "desc";
   /** Unassigned only (maps to API `talent_pool_only`). */
   unassignedOnly?: boolean;
   assigned_only?: boolean;
@@ -273,19 +308,36 @@ export async function getCandidatesPaginated(params?: {
   updated_from?: string;
   /** ISO 8601: filter by candidate `updated_at` (last activity), inclusive upper bound. */
   updated_to?: string;
+  /** ISO 8601: filter by candidate creation time, inclusive lower bound. */
+  created_from?: string;
+  /** ISO 8601: filter by candidate creation time, inclusive upper bound. */
+  created_to?: string;
   limit?: number;
   offset?: number;
 }): Promise<CandidatesPaginatedResponse> {
   const searchParams = new URLSearchParams();
   if (params?.search) searchParams.set("search", params.search);
   if (params?.job_id) searchParams.set("job_id", params.job_id);
+  if (params?.assignment_job_id) searchParams.set("assignment_job_id", params.assignment_job_id);
+  if (params?.assignment_stage_id) {
+    searchParams.set("assignment_stage_id", params.assignment_stage_id);
+  }
   if (params?.stage_id) searchParams.set("stage_id", params.stage_id);
   if (params?.status) searchParams.set("status", params.status);
   if (params?.source) searchParams.set("source", params.source);
+  if (params?.email_domain) searchParams.set("email_domain", params.email_domain);
+  if (params?.location) searchParams.set("location", params.location);
+  if (params?.tag) searchParams.set("tag", params.tag);
+  if (params?.score_min !== undefined) searchParams.set("score_min", String(params.score_min));
+  if (params?.score_max !== undefined) searchParams.set("score_max", String(params.score_max));
+  if (params?.sort_by) searchParams.set("sort_by", params.sort_by);
+  if (params?.sort_order) searchParams.set("sort_order", params.sort_order);
   if (params?.unassignedOnly) searchParams.set("talent_pool_only", "true");
   if (params?.assigned_only) searchParams.set("assigned_only", "true");
   if (params?.updated_from) searchParams.set("updated_from", params.updated_from);
   if (params?.updated_to) searchParams.set("updated_to", params.updated_to);
+  if (params?.created_from) searchParams.set("created_from", params.created_from);
+  if (params?.created_to) searchParams.set("created_to", params.created_to);
   if (params?.limit !== undefined) searchParams.set("limit", String(params.limit));
   if (params?.offset !== undefined) searchParams.set("offset", String(params.offset));
   const query = searchParams.toString();

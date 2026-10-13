@@ -19,6 +19,7 @@ import {
 } from "@/components/candidates/shared/tabs";
 import { SummaryPanel } from "@/components/candidates/shared/summary/SummaryPanel";
 import { ActionButtons } from "@/components/candidates/job_candidates/ActionButtons";
+import { CandidateProfileNavigation } from "@/components/candidates/shared/CandidateProfileNavigation";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
 import {
@@ -462,10 +463,10 @@ export function JobCandidateProfile({
     try {
       setEnriching(true);
       await enrichCandidate(id);
-      toast.success("Profile enrichment started");
+      toast.success("Updating candidate details...");
       window.setTimeout(() => void loadAll(id), 1800);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to start profile enrichment");
+      toast.error(err instanceof Error ? err.message : "Failed to update candidate details");
     } finally {
       setEnriching(false);
     }
@@ -599,34 +600,43 @@ export function JobCandidateProfile({
               <p className="text-sm font-medium truncate">{uiCandidate.name}</p>
             </div>
           ) : (
-            <Button variant="ghost" size="sm" className="h-8 text-xs gap-1.5" asChild>
-              <Link
-                href={
-                  jobRouteJobId && (currentAssignment?.stage_id ?? candidate?.stage_id)
-                    ? `/jobs/${encodeURIComponent(jobRouteJobId)}/stage/${encodeURIComponent(currentAssignment?.stage_id ?? candidate?.stage_id ?? "")}`
-                    : jobRouteJobId
-                      ? `/jobs/${encodeURIComponent(jobRouteJobId)}`
-                      : "/candidates"
-                }
-              >
-                <Icon name="ChevronLeft" className="h-3.5 w-3.5" />{" "}
-                {jobRouteJobId ? "Job" : t("candidates_title")}
-              </Link>
-            </Button>
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+              <Button variant="ghost" size="sm" className="h-8 text-xs gap-1.5" asChild>
+                <Link
+                  href={
+                    jobRouteJobId && (currentAssignment?.stage_id ?? candidate?.stage_id)
+                      ? `/jobs/${encodeURIComponent(jobRouteJobId)}/stage/${encodeURIComponent(currentAssignment?.stage_id ?? candidate?.stage_id ?? "")}`
+                      : jobRouteJobId
+                        ? `/jobs/${encodeURIComponent(jobRouteJobId)}`
+                        : "/candidates"
+                  }
+                >
+                  <Icon name="ChevronLeft" className="h-3.5 w-3.5" />{" "}
+                  {jobRouteJobId ? "Job" : t("candidates_title")}
+                </Link>
+              </Button>
+            </div>
           )}
-          <ActionButtons
-            candidateName={uiCandidate.name}
-            candidateId={candidate?.id ?? id ?? ""}
-            jobId={jobRouteJobId ?? candidate?.job_id ?? undefined}
-            currentStageId={currentAssignment?.stage_id ?? candidate?.stage_id}
-            stages={jobStages}
-            onCandidateUpdated={async () => {
-              if (id) await loadAll(id);
-              await loadScore();
-              if (onCandidateUpdated) await onCandidateUpdated();
-            }}
-            onStageMoved={onStageMoved}
-          />
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+            <CandidateProfileNavigation
+              candidateId={candidate?.id ?? id}
+              jobRouteJobId={jobRouteJobId}
+              stageId={currentAssignment?.stage_id ?? candidate?.stage_id}
+            />
+            <ActionButtons
+              candidateName={uiCandidate.name}
+              candidateId={candidate?.id ?? id ?? ""}
+              jobId={jobRouteJobId ?? candidate?.job_id ?? undefined}
+              currentStageId={currentAssignment?.stage_id ?? candidate?.stage_id}
+              stages={jobStages}
+              onCandidateUpdated={async () => {
+                if (id) await loadAll(id);
+                await loadScore();
+                if (onCandidateUpdated) await onCandidateUpdated();
+              }}
+              onStageMoved={onStageMoved}
+            />
+          </div>
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTabWithUrl}>

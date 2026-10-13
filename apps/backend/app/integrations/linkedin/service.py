@@ -44,7 +44,9 @@ LINKEDIN_SCOPES = [
 
 
 def requested_scopes(lead_sync: bool = False) -> list[str]:
-    scopes = ["openid", "profile", "email", "w_organization_social", "rw_organization_admin"]
+    scopes = ["openid", "profile", "email"]
+    if settings.feature_linkedin_distribution:
+        scopes.extend(["w_organization_social", "rw_organization_admin"])
     if lead_sync and settings.feature_linkedin_applicant_ingestion:
         scopes.append("r_marketing_leadgen_automation")
     return scopes
@@ -246,7 +248,10 @@ async def get_linkedin_status(db: AsyncSession, owner: IntegrationOwnerContext) 
     # Derive setup state from persisted config first so legacy/drifted status
     # values do not force the UI into an incorrect "Connect" state.
     has_org_selection = bool(organization and organization.get("id"))
-    setup_complete = bool(config.get("setup_complete")) and has_org_selection
+    setup_complete = (
+        not settings.feature_linkedin_distribution
+        or (bool(config.get("setup_complete")) and has_org_selection)
+    )
     setup_incomplete = not setup_complete
 
     expired = float(config.get("token_expires_at") or 0) <= datetime.now(timezone.utc).timestamp()

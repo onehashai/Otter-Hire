@@ -7,9 +7,11 @@ import { useSetPageMetadata } from "@/hooks/useSetPageMetadata";
 import {
   bulkAssignCandidatesToJob,
   deleteCandidate,
+  getCandidateFilterOptions,
   getCandidatesPaginated,
   getJobs,
   type CandidateListItemResponse,
+  type CandidateSortBy,
   type JobListItemResponse,
 } from "@/api";
 import { importCandidatesCsv } from "@/api/candidates";
@@ -17,6 +19,7 @@ import {
   CANDIDATE_ALL_COLUMNS,
   CANDIDATE_COLUMN_DEFS,
   CANDIDATE_FIXED_COLUMNS,
+  type CandidateDatePeriod,
   type CandidateColumnKey,
   CandidatesTable,
   DEFAULT_VISIBLE_CANDIDATE_COLUMNS,
@@ -24,11 +27,12 @@ import {
   normalizeVisibleCandidateColumns,
 } from "@/components/candidates/CandidatesTable";
 import { Button } from "@onehash/ui/button";
-import { EmptyCard, ErrorCard } from "@onehash/ui/card";
-import { Label } from "@onehash/ui/label";
 import { Calendar } from "@onehash/ui/calendar";
+import { EmptyCard, ErrorCard } from "@onehash/ui/card";
+import { InputField } from "@onehash/ui/input";
+import { Label } from "@onehash/ui/label";
 import { SelectField } from "@onehash/ui/select";
-import { format, subDays, startOfDay, endOfDay } from "date-fns";
+import { subDays, startOfDay, endOfDay } from "date-fns";
 import { AddCandidateDialog } from "@/components/candidates/shared/dialogs/AddCandidateDialog";
 import { ResolveDuplicateDialog } from "@/components/candidates/shared/dialogs/ResolveDuplicateDialog";
 import {
@@ -65,19 +69,33 @@ import { toast } from "@onehash/ui/sonner";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { getMyPreferences, updateMyPreferences } from "@/api/users";
 import { classifyError } from "@/api/client/client";
+import { formatCandidateSource } from "@/lib/candidate-source";
 import {
   DEFAULT_TABLE_PAGE_SIZE,
-  TABLE_PAGE_SIZE_OPTIONS,
+  isValidTablePageSize,
   TablePagination,
 } from "@/components/common/TablePagination";
 
-const PAGE_SIZE_OPTIONS = TABLE_PAGE_SIZE_OPTIONS;
 const DEFAULT_PAGE_SIZE = DEFAULT_TABLE_PAGE_SIZE;
-const ASSIGNMENT_ALL = "all";
-const ASSIGNMENT_ASSIGNED = "assigned";
-const ASSIGNMENT_UNASSIGNED = "unassigned";
+const ASSIGNED_JOB_ALL = "all_assigned_jobs";
+const STATUS_ALL = "all_statuses";
+const SOURCE_ALL = "all_sources";
+const SHOW_CANDIDATE_FILTER_POPOVER = false;
 
-type LastActivityPreset = "today" | "7d" | "30d" | "custom" | null;
+const CANDIDATE_DATE_CALENDAR_CLASS_NAMES = {
+  months: "relative flex w-full flex-col",
+  month: "w-full space-y-3",
+  month_caption: "relative flex h-10 items-center justify-center px-12",
+  caption_label: "text-center text-sm font-semibold leading-none text-foreground",
+  nav: "pointer-events-none absolute inset-x-0 top-0 z-10 flex h-10 w-full items-center justify-between px-1",
+  button_previous:
+    "pointer-events-auto !size-8 shrink-0 rounded-md border border-input bg-background p-0 opacity-75 shadow-sm transition-colors hover:bg-accent hover:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+  button_next:
+    "pointer-events-auto !size-8 shrink-0 rounded-md border border-input bg-background p-0 opacity-75 shadow-sm transition-colors hover:bg-accent hover:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+  month_grid: "w-full table-fixed border-collapse border-spacing-0",
+};
+
+type LastActivityPreset = "today" | "yesterday" | "7d" | "30d" | "custom" | null;
 type CandidatePageSize = number;
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -94,9 +112,7 @@ function asStringArray(value: unknown): string[] | undefined {
 
 function normalizeCandidatePageSize(value: unknown): CandidatePageSize {
   const pageSize = typeof value === "number" ? value : Number(value);
-  return PAGE_SIZE_OPTIONS.includes(pageSize as CandidatePageSize)
-    ? (pageSize as CandidatePageSize)
-    : DEFAULT_PAGE_SIZE;
+  return isValidTablePageSize(pageSize) ? pageSize : DEFAULT_PAGE_SIZE;
 }
 
 function withCandidateTablePreferences(
@@ -121,9 +137,16 @@ export default function CandidatesPage() {
   const isMobile = useIsMobile();
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [assignment, setAssignment] = useState<string>(ASSIGNMENT_ALL);
+  const [assignedJobId, setAssignedJobId] = useState(ASSIGNED_JOB_ALL);
+  const [statusFilter, setStatusFilter] = useState(STATUS_ALL);
+  const [sourceFilter, setSourceFilter] = useState(SOURCE_ALL);
+  const [emailDomainFilter, setEmailDomainFilter] = useState("");
+  const [scoreMin, setScoreMin] = useState("");
+  const [scoreMax, setScoreMax] = useState("");
   const [lastActivityPreset, setLastActivityPreset] = useState<LastActivityPreset>(null);
   const [lastActivityRange, setLastActivityRange] = useState<{ from?: Date; to?: Date }>({});
+  const [createdAtPreset, setCreatedAtPreset] = useState<LastActivityPreset>(null);
+  const [createdAtRange, setCreatedAtRange] = useState<{ from?: Date; to?: Date }>({});
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<CandidatePageSize>(DEFAULT_PAGE_SIZE);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -141,6 +164,10 @@ export default function CandidatesPage() {
 
   const [items, setItems] = useState<CandidateListItemResponse[]>([]);
   const [jobs, setJobs] = useState<JobListItemResponse[]>([]);
+  const [candidateSources, setCandidateSources] = useState<string[]>([]);
+  const [candidateEmailDomains, setCandidateEmailDomains] = useState<string[]>([]);
+  const [sortBy, setSortBy] = useState<CandidateSortBy>("created_at");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [visibleColumns, setVisibleColumns] = useState<CandidateColumnKey[]>(
     DEFAULT_VISIBLE_CANDIDATE_COLUMNS,
   );
@@ -160,7 +187,9 @@ export default function CandidatesPage() {
     JSON.stringify(normalizeCandidateColumnOrder(CANDIDATE_ALL_COLUMNS)),
   );
   const lastSavedPageSizeRef = useRef<CandidatePageSize>(DEFAULT_PAGE_SIZE);
+  const pageSizeChangedByUserRef = useRef(false);
   const draggedColumnRef = useRef<CandidateColumnKey | null>(null);
+  const candidateRequestIdRef = useRef(0);
 
   useSetPageMetadata({
     title: t("candidates_title"),
@@ -175,17 +204,51 @@ export default function CandidatesPage() {
   const lastActivityFilterKey = useMemo(
     () =>
       JSON.stringify({
-        p: lastActivityPreset,
-        f: lastActivityRange.from?.toISOString(),
-        t: lastActivityRange.to?.toISOString(),
+        activityPreset: lastActivityPreset,
+        activityFrom: lastActivityRange.from?.toISOString(),
+        activityTo: lastActivityRange.to?.toISOString(),
+        createdPreset: createdAtPreset,
+        createdFrom: createdAtRange.from?.toISOString(),
+        createdTo: createdAtRange.to?.toISOString(),
       }),
-    [lastActivityPreset, lastActivityRange.from, lastActivityRange.to],
+    [
+      lastActivityPreset,
+      lastActivityRange.from,
+      lastActivityRange.to,
+      createdAtPreset,
+      createdAtRange.from,
+      createdAtRange.to,
+    ],
+  );
+
+  const candidateFiltersKey = useMemo(
+    () =>
+      JSON.stringify({
+        assignedJobId,
+        statusFilter,
+        sourceFilter,
+        emailDomainFilter,
+        scoreMin,
+        scoreMax,
+        sortBy,
+        sortOrder,
+      }),
+    [
+      assignedJobId,
+      statusFilter,
+      sourceFilter,
+      emailDomainFilter,
+      scoreMin,
+      scoreMax,
+      sortBy,
+      sortOrder,
+    ],
   );
 
   useEffect(() => {
     setPage(1);
     setSelectedIds(new Set());
-  }, [debouncedSearch, assignment, lastActivityFilterKey]);
+  }, [debouncedSearch, candidateFiltersKey, lastActivityFilterKey]);
 
   useEffect(() => {
     setSelectedIds(new Set());
@@ -195,19 +258,42 @@ export default function CandidatesPage() {
     setLastActivityPreset(preset);
     if (preset === "today") {
       setLastActivityRange({ from: startOfDay(new Date()), to: new Date() });
+    } else if (preset === "yesterday") {
+      const yesterday = subDays(new Date(), 1);
+      setLastActivityRange({ from: startOfDay(yesterday), to: endOfDay(yesterday) });
     } else if (preset === "7d") {
       setLastActivityRange({ from: subDays(new Date(), 7), to: new Date() });
     } else if (preset === "30d") {
       setLastActivityRange({ from: subDays(new Date(), 30), to: new Date() });
+    } else if (preset === "custom") {
+      setLastActivityRange({});
     } else if (preset === null) {
       setLastActivityRange({});
+    }
+  }, []);
+
+  const applyCreatedAtPreset = useCallback((preset: LastActivityPreset) => {
+    setCreatedAtPreset(preset);
+    if (preset === "today") {
+      setCreatedAtRange({ from: startOfDay(new Date()), to: new Date() });
+    } else if (preset === "yesterday") {
+      const yesterday = subDays(new Date(), 1);
+      setCreatedAtRange({ from: startOfDay(yesterday), to: endOfDay(yesterday) });
+    } else if (preset === "7d") {
+      setCreatedAtRange({ from: subDays(new Date(), 7), to: new Date() });
+    } else if (preset === "30d") {
+      setCreatedAtRange({ from: subDays(new Date(), 30), to: new Date() });
+    } else if (preset === "custom") {
+      setCreatedAtRange({});
+    } else if (preset === null) {
+      setCreatedAtRange({});
     }
   }, []);
 
   const lastActivityApiParams = useMemo(() => {
     if (!lastActivityPreset) return {};
     if (lastActivityPreset === "custom") {
-      if (!lastActivityRange.from) return {};
+      if (!lastActivityRange.from || !lastActivityRange.to) return {};
       return {
         updated_from: startOfDay(lastActivityRange.from).toISOString(),
         ...(lastActivityRange.to
@@ -220,6 +306,13 @@ export default function CandidatesPage() {
       return {
         updated_from: startOfDay(now).toISOString(),
         updated_to: now.toISOString(),
+      };
+    }
+    if (lastActivityPreset === "yesterday") {
+      const yesterday = subDays(now, 1);
+      return {
+        updated_from: startOfDay(yesterday).toISOString(),
+        updated_to: endOfDay(yesterday).toISOString(),
       };
     }
     if (lastActivityPreset === "7d") {
@@ -237,6 +330,35 @@ export default function CandidatesPage() {
     return {};
   }, [lastActivityPreset, lastActivityRange.from, lastActivityRange.to]);
 
+  const createdAtApiParams = useMemo(() => {
+    if (!createdAtPreset) return {};
+    if (createdAtPreset === "custom") {
+      if (!createdAtRange.from || !createdAtRange.to) return {};
+      return {
+        created_from: startOfDay(createdAtRange.from).toISOString(),
+        ...(createdAtRange.to ? { created_to: endOfDay(createdAtRange.to).toISOString() } : {}),
+      };
+    }
+    const now = new Date();
+    if (createdAtPreset === "today") {
+      return { created_from: startOfDay(now).toISOString(), created_to: now.toISOString() };
+    }
+    if (createdAtPreset === "yesterday") {
+      const yesterday = subDays(now, 1);
+      return {
+        created_from: startOfDay(yesterday).toISOString(),
+        created_to: endOfDay(yesterday).toISOString(),
+      };
+    }
+    if (createdAtPreset === "7d") {
+      return { created_from: subDays(now, 7).toISOString(), created_to: now.toISOString() };
+    }
+    if (createdAtPreset === "30d") {
+      return { created_from: subDays(now, 30).toISOString(), created_to: now.toISOString() };
+    }
+    return {};
+  }, [createdAtPreset, createdAtRange.from, createdAtRange.to]);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -253,11 +375,13 @@ export default function CandidatesPage() {
         if (!cancelled) {
           setVisibleColumns(normalized);
           setColumnOrder(normalizedOrder);
-          setPageSize(storedPageSize);
+          if (!pageSizeChangedByUserRef.current) {
+            setPageSize(storedPageSize);
+            lastSavedPageSizeRef.current = storedPageSize;
+          }
           setPreferenceSnapshot(preferences);
           lastSavedColumnsRef.current = JSON.stringify(normalized);
           lastSavedOrderRef.current = JSON.stringify(normalizedOrder);
-          lastSavedPageSizeRef.current = storedPageSize;
         }
       } catch {
         // Keep defaults when preferences are unavailable.
@@ -314,105 +438,115 @@ export default function CandidatesPage() {
     if (total > 0 && page > totalPages) setPage(totalPages);
   }, [page, total, totalPages]);
 
-  const hasActiveFilters = assignment !== ASSIGNMENT_ALL || lastActivityPreset !== null;
-  const clearAllFilters = () => {
-    setAssignment(ASSIGNMENT_ALL);
+  const scoreMinValue = scoreMin === "" ? undefined : Number(scoreMin);
+  const scoreMaxValue = scoreMax === "" ? undefined : Number(scoreMax);
+  const hasActiveScoreFilter = scoreMinValue !== undefined || scoreMaxValue !== undefined;
+  const hasActiveFilters =
+    hasActiveScoreFilter || lastActivityPreset !== null || createdAtPreset !== null;
+  const clearFilters = () => {
+    setScoreMin("");
+    setScoreMax("");
     applyLastActivityPreset(null);
+    applyCreatedAtPreset(null);
   };
 
-  const activeChips = useMemo(() => {
-    const chips: { label: string; clear: () => void }[] = [];
-    if (assignment !== ASSIGNMENT_ALL) {
-      const assignmentLabel =
-        assignment === ASSIGNMENT_ASSIGNED
-          ? t("candidates_assignment_assigned")
-          : assignment === ASSIGNMENT_UNASSIGNED
-            ? t("candidates_assignment_unassigned")
-            : "";
-      chips.push({
-        label: assignmentLabel,
-        clear: () => setAssignment(ASSIGNMENT_ALL),
-      });
-    }
-    if (lastActivityPreset) {
-      let dateLabel: string;
-      if (lastActivityPreset === "custom" && lastActivityRange.from) {
-        dateLabel = lastActivityRange.to
-          ? `${format(lastActivityRange.from, "d MMM, yyyy")} – ${format(lastActivityRange.to, "d MMM, yyyy")}`
-          : format(lastActivityRange.from, "d MMM, yyyy");
-      } else if (lastActivityPreset === "custom") {
-        dateLabel = t("custom");
-      } else if (lastActivityPreset === "today") {
-        dateLabel = t("today");
-      } else {
-        dateLabel = t("last_n_days", { count: lastActivityPreset === "7d" ? 7 : 30 });
-      }
-      chips.push({
-        label: dateLabel,
-        clear: () => applyLastActivityPreset(null),
-      });
-    }
-    return chips;
-  }, [
-    assignment,
-    lastActivityPreset,
-    lastActivityRange.from,
-    lastActivityRange.to,
-    t,
-    applyLastActivityPreset,
-  ]);
+  const assignedJobOptions = useMemo(
+    () => [
+      { value: ASSIGNED_JOB_ALL, label: "All jobs" },
+      ...jobs
+        .filter((job) => job.status !== "archived")
+        .map((job) => ({ value: job.id, label: job.title })),
+    ],
+    [jobs],
+  );
+
+  const sourceOptions = useMemo(() => {
+    const sources = new Set(candidateSources);
+    return [
+      { value: SOURCE_ALL, label: t("candidates_assignment_all") },
+      ...Array.from(sources)
+        .sort((a, b) => formatCandidateSource(a).localeCompare(formatCandidateSource(b)))
+        .map((source) => ({ value: source, label: formatCandidateSource(source) })),
+    ];
+  }, [candidateSources, t]);
+
+  const headerSourceOptions = useMemo(
+    () =>
+      sourceOptions.map((option) =>
+        option.value === SOURCE_ALL ? { ...option, value: "" } : option,
+      ),
+    [sourceOptions],
+  );
+
+  const headerUpdatedPeriod: CandidateDatePeriod = lastActivityPreset ?? "all";
+  const headerCreatedPeriod: CandidateDatePeriod = createdAtPreset ?? "all";
 
   const filterContent = (
-    <div className="space-y-5 p-1">
-      <SelectField
-        label={t("candidates_assignment")}
-        value={assignment}
-        onValueChange={setAssignment}
-        options={[
-          { value: ASSIGNMENT_ALL, label: t("candidates_assignment_all") },
-          { value: ASSIGNMENT_ASSIGNED, label: t("candidates_assignment_assigned") },
-          { value: ASSIGNMENT_UNASSIGNED, label: t("candidates_assignment_unassigned") },
-        ]}
-      />
-      <div className="space-y-2">
-        <Label className="text-xs font-medium text-muted-foreground">{t("last_activity")}</Label>
+    <div className="space-y-3 p-1">
+      <p className="text-sm font-medium">Resume score</p>
+      <div className="grid grid-cols-2 gap-3">
+        <InputField
+          label="Minimum score"
+          type="number"
+          min="0"
+          max="100"
+          value={scoreMin}
+          onChange={(event) => setScoreMin(event.target.value)}
+          placeholder="0"
+          className="h-9 text-sm"
+        />
+        <InputField
+          label="Maximum score"
+          type="number"
+          min="0"
+          max="100"
+          value={scoreMax}
+          onChange={(event) => setScoreMax(event.target.value)}
+          placeholder="100"
+          className="h-9 text-sm"
+        />
+      </div>
+      <div className="space-y-2 border-t border-border pt-3">
+        <Label className="text-sm font-medium">Last activity</Label>
         <div className="flex flex-wrap gap-1.5">
           {(
             [
               { key: "today" as const, label: t("today") },
+              { key: "yesterday" as const, label: t("yesterday") },
               { key: "7d" as const, label: t("last_n_days", { count: 7 }) },
               { key: "30d" as const, label: t("last_n_days", { count: 30 }) },
               { key: "custom" as const, label: t("custom") },
             ] as const
-          ).map((p) => (
+          ).map((preset) => (
             <Button
-              key={p.key}
-              variant={lastActivityPreset === p.key ? "default" : "outline"}
+              key={preset.key}
+              variant={lastActivityPreset === preset.key ? "default" : "outline"}
               size="sm"
               className="h-7 text-xs"
               type="button"
-              onClick={() => applyLastActivityPreset(lastActivityPreset === p.key ? null : p.key)}
+              onClick={() =>
+                applyLastActivityPreset(lastActivityPreset === preset.key ? null : preset.key)
+              }
             >
-              {p.label}
+              {preset.label}
             </Button>
           ))}
         </div>
         {lastActivityPreset === "custom" ? (
-          <div className="mt-3 border-t border-border pt-3">
-            <Calendar
-              mode="range"
-              selected={
-                lastActivityRange.from
-                  ? { from: lastActivityRange.from, to: lastActivityRange.to }
-                  : undefined
-              }
-              onSelect={(range) =>
-                setLastActivityRange(range ? { from: range.from, to: range.to } : {})
-              }
-              numberOfMonths={1}
-              className="w-full max-w-full rounded-md border bg-card p-3 shadow-none pointer-events-auto"
-            />
-          </div>
+          <Calendar
+            mode="range"
+            selected={
+              lastActivityRange.from
+                ? { from: lastActivityRange.from, to: lastActivityRange.to }
+                : undefined
+            }
+            onSelect={(range) =>
+              setLastActivityRange(range ? { from: range.from, to: range.to } : {})
+            }
+            numberOfMonths={1}
+            className="w-full rounded-md border bg-card p-3 shadow-none"
+            classNames={CANDIDATE_DATE_CALENDAR_CLASS_NAMES}
+          />
         ) : null}
       </div>
       {hasActiveFilters ? (
@@ -421,7 +555,7 @@ export default function CandidatesPage() {
           size="sm"
           className="w-full text-xs h-8 text-muted-foreground"
           type="button"
-          onClick={clearAllFilters}
+          onClick={clearFilters}
         >
           {t("clear_all")}
         </Button>
@@ -430,27 +564,53 @@ export default function CandidatesPage() {
   );
 
   const refresh = useCallback(async () => {
+    const requestId = ++candidateRequestIdRef.current;
     setError(null);
     setLoading(true);
     try {
       const res = await getCandidatesPaginated({
-        ...(assignment === ASSIGNMENT_UNASSIGNED ? { unassignedOnly: true } : {}),
-        ...(assignment === ASSIGNMENT_ASSIGNED ? { assigned_only: true } : {}),
+        ...(assignedJobId !== ASSIGNED_JOB_ALL ? { assignment_job_id: assignedJobId } : {}),
+        ...(statusFilter !== STATUS_ALL ? { status: statusFilter } : {}),
+        ...(sourceFilter !== SOURCE_ALL ? { source: sourceFilter } : {}),
+        ...(emailDomainFilter ? { email_domain: emailDomainFilter } : {}),
+        ...(scoreMinValue !== undefined ? { score_min: scoreMinValue } : {}),
+        ...(scoreMaxValue !== undefined ? { score_max: scoreMaxValue } : {}),
+        sort_by: sortBy,
+        sort_order: sortOrder,
         ...lastActivityApiParams,
+        ...createdAtApiParams,
         search: debouncedSearch || undefined,
         limit: pageSize,
         offset,
       });
-      setItems(res.items);
-      setTotal(res.total);
+      if (requestId === candidateRequestIdRef.current) {
+        setItems(res.items);
+        setTotal(res.total);
+      }
     } catch (err) {
-      const classified = classifyError(err);
-      setError({ message: classified.message, forbidden: classified.forbidden });
-      if (!classified.forbidden) toast.error(classified.message);
+      if (requestId === candidateRequestIdRef.current) {
+        const classified = classifyError(err);
+        setError({ message: classified.message, forbidden: classified.forbidden });
+        if (!classified.forbidden) toast.error(classified.message);
+      }
     } finally {
-      setLoading(false);
+      if (requestId === candidateRequestIdRef.current) setLoading(false);
     }
-  }, [debouncedSearch, assignment, offset, lastActivityApiParams, pageSize]);
+  }, [
+    debouncedSearch,
+    assignedJobId,
+    statusFilter,
+    sourceFilter,
+    emailDomainFilter,
+    scoreMinValue,
+    scoreMaxValue,
+    sortBy,
+    sortOrder,
+    offset,
+    lastActivityApiParams,
+    createdAtApiParams,
+    pageSize,
+  ]);
 
   useEffect(() => {
     void refresh();
@@ -459,12 +619,16 @@ export default function CandidatesPage() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      try {
-        const list = await getJobs();
-        if (!cancelled) setJobs(list);
-      } catch {
-        if (!cancelled) setJobs([]);
-      }
+      const [jobsResult, optionsResult] = await Promise.allSettled([
+        getJobs(),
+        getCandidateFilterOptions(),
+      ]);
+      if (cancelled) return;
+      setJobs(jobsResult.status === "fulfilled" ? jobsResult.value : []);
+      setCandidateSources(optionsResult.status === "fulfilled" ? optionsResult.value.sources : []);
+      setCandidateEmailDomains(
+        optionsResult.status === "fulfilled" ? optionsResult.value.email_domains : [],
+      );
     })();
     return () => {
       cancelled = true;
@@ -532,6 +696,7 @@ export default function CandidatesPage() {
   const handlePageSizeChange = (value: number) => {
     const nextPageSize = normalizeCandidatePageSize(value);
     if (nextPageSize === pageSize) return;
+    pageSizeChangedByUserRef.current = true;
     setPageSize(nextPageSize);
     setPage(1);
     setSelectedIds(new Set());
@@ -584,12 +749,12 @@ export default function CandidatesPage() {
     if (columnKey === "created_at") return t("candidates_table_created");
     if (columnKey === "name") return t("col_candidate");
     if (columnKey === "email") return t("email");
+    if (columnKey === "score") return "Resume score";
     if (columnKey === "phone") return t("col_phone");
     if (columnKey === "source") return t("col_source");
     if (columnKey === "status") return t("status");
     if (columnKey === "location") return t("col_location");
     if (columnKey === "updated_at") return t("col_updated");
-    if (columnKey === "tags") return t("tags");
     if (columnKey === "stage_name") return t("stage");
     return t("stage");
   };
@@ -777,10 +942,9 @@ export default function CandidatesPage() {
     <MainPagesLayout
       searchValue={search}
       onSearchChange={setSearch}
-      filterContent={filterContent}
+      filterContent={SHOW_CANDIDATE_FILTER_POPOVER ? filterContent : undefined}
       hasActiveFilters={hasActiveFilters}
-      activeChips={activeChips}
-      onClearAllFilters={hasActiveFilters ? clearAllFilters : undefined}
+      onClearAllFilters={hasActiveFilters ? clearFilters : undefined}
       filterTitle={t("filters")}
       rightActions={
         <div className="flex items-center gap-2">
@@ -846,7 +1010,16 @@ export default function CandidatesPage() {
         </div>
       }
     >
-      {loading && items.length === 0 ? (
+      {loading &&
+      items.length === 0 &&
+      !(
+        hasActiveFilters ||
+        assignedJobId !== ASSIGNED_JOB_ALL ||
+        statusFilter !== STATUS_ALL ||
+        sourceFilter !== SOURCE_ALL ||
+        emailDomainFilter ||
+        debouncedSearch
+      ) ? (
         <div className="space-y-2">
           {Array.from({ length: 5 }).map((_, i) => (
             <div
@@ -855,12 +1028,34 @@ export default function CandidatesPage() {
             />
           ))}
         </div>
-      ) : items.length === 0 ? (
+      ) : items.length === 0 &&
+        !(
+          hasActiveFilters ||
+          assignedJobId !== ASSIGNED_JOB_ALL ||
+          statusFilter !== STATUS_ALL ||
+          sourceFilter !== SOURCE_ALL ||
+          emailDomainFilter ||
+          debouncedSearch
+        ) ? (
         <EmptyCard icon="Users" title={t("candidates_title")} description={t("candidates_empty")} />
       ) : (
         <>
           <CandidatesTable
             items={items}
+            total={total}
+            emptyState={
+              items.length === 0
+                ? loading
+                  ? {
+                      title: "Loading candidates",
+                      description: "Updating the candidate list for the selected filters.",
+                    }
+                  : {
+                      title: "No candidates match these filters",
+                      description: "Change or clear the selected filters to see candidates.",
+                    }
+                : undefined
+            }
             jobs={jobs}
             visibleColumns={visibleColumns}
             columnOrder={columnOrder}
@@ -871,6 +1066,35 @@ export default function CandidatesPage() {
             onResolveDuplicate={(c) => {
               setResolveCandidate(c);
               setResolveOpen(true);
+            }}
+            headerControls={{
+              sortBy,
+              sortOrder,
+              onSortChange: (nextSortBy, nextSortOrder) => {
+                setSortBy(nextSortBy);
+                setSortOrder(nextSortOrder);
+              },
+              emailDomain: emailDomainFilter,
+              emailDomains: candidateEmailDomains,
+              onEmailDomainChange: setEmailDomainFilter,
+              assignedJobId,
+              assignedJobOptions,
+              onAssignedJobChange: setAssignedJobId,
+              source: sourceFilter === SOURCE_ALL ? "" : sourceFilter,
+              sourceOptions: headerSourceOptions,
+              onSourceChange: (source) => setSourceFilter(source || SOURCE_ALL),
+              status: statusFilter === STATUS_ALL ? "" : statusFilter,
+              onStatusChange: (status) => setStatusFilter(status || STATUS_ALL),
+              createdPeriod: headerCreatedPeriod,
+              createdRange: createdAtRange,
+              onCreatedPeriodChange: (period) =>
+                applyCreatedAtPreset(period === "all" ? null : period),
+              onCreatedRangeChange: setCreatedAtRange,
+              updatedPeriod: headerUpdatedPeriod,
+              onUpdatedPeriodChange: (period) =>
+                applyLastActivityPreset(period === "all" ? null : period),
+              updatedRange: lastActivityRange,
+              onUpdatedRangeChange: setLastActivityRange,
             }}
           />
           <TablePagination

@@ -136,6 +136,19 @@ export function CreateAutomationDialog({
       toast.error(msg);
       return;
     }
+    const incompleteCustomMessage = actions.find(
+      (action) =>
+        action.type === "send_email" &&
+        action.config.mode === "custom" &&
+        (!action.config.subject?.trim() || !action.config.body?.trim()),
+    );
+    if (incompleteCustomMessage) {
+      const msg = "Please enter a subject and message for the custom email";
+      setValidationError(msg);
+      setActiveStep(2);
+      toast.error(msg);
+      return;
+    }
     if (scope === "specific_job" && !selectedJob?.trim()) {
       const msg = "Please select a job when scope is Specific job";
       setValidationError(msg);

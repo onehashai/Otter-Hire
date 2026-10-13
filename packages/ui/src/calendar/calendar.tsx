@@ -15,18 +15,18 @@ function Calendar({ className, classNames, showOutsideDays = true, ...props }: C
       showOutsideDays={showOutsideDays}
       className={cn("p-3", className)}
       classNames={{
-        months: "flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0",
+        months: "relative flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0 w-full",
         month: "space-y-4 w-full",
-        month_caption: "flex justify-center pt-1 pb-2 relative items-center px-11 min-h-9",
-        caption_label: "text-sm font-medium text-center",
-        nav: "flex items-center gap-1",
+        month_caption: "flex justify-center items-center h-8 relative px-8",
+        caption_label: "text-sm font-medium text-center text-foreground leading-none",
+        nav: "flex items-center justify-between absolute inset-x-0 top-0 h-8 w-full pointer-events-none z-10",
         button_previous: cn(
           buttonVariants({ variant: "outline" }),
-          "absolute left-1 top-1/2 -translate-y-1/2 z-10 size-7 shrink-0 bg-transparent p-0 opacity-70 hover:opacity-100",
+          "size-7 shrink-0 bg-transparent p-0 opacity-70 hover:opacity-100 pointer-events-auto flex items-center justify-center",
         ),
         button_next: cn(
           buttonVariants({ variant: "outline" }),
-          "absolute right-1 top-1/2 -translate-y-1/2 z-10 size-7 shrink-0 bg-transparent p-0 opacity-70 hover:opacity-100",
+          "size-7 shrink-0 bg-transparent p-0 opacity-70 hover:opacity-100 pointer-events-auto flex items-center justify-center",
         ),
         month_grid: "w-full table-fixed border-collapse border-spacing-0",
         weekdays: "",

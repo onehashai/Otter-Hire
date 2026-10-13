@@ -7,6 +7,7 @@ import pytest
 from app.api.v1.internal.endpoints.public import (
     _has_candidate_application_signal,
     _is_automated_email,
+    _is_no_reply_sender_reason,
     _is_resume_attachment,
     _missing_resume_reason,
     _normalize_resume_attachment_metadata,
@@ -20,6 +21,7 @@ from app.temporal.inbound_email.activities import (
     _contact_from_email_body,
     _has_stored_attachment_fallback,
     _has_stored_resume_fallback,
+    _is_forwarded_subject_or_body,
     _is_placeholder_candidate_name,
     _is_resume_attachment_compatible,
     _resume_keyword_points,
@@ -94,6 +96,16 @@ def test_auto_response_suppression_does_not_make_human_mail_automated() -> None:
     payload = _payload("Application", "I would like to apply.")
     payload.x_auto_response_suppress = "All"
     assert _is_automated_email(payload) is None
+
+
+def test_no_reply_reason_is_distinguished_from_other_automated_mail() -> None:
+    no_reply_payload = _payload("Re: Resume", "hi")
+    no_reply_payload.from_email = "noreply@applications.otter.bz"
+
+    assert _is_no_reply_sender_reason(_is_automated_email(no_reply_payload))
+    assert not _is_no_reply_sender_reason(
+        _is_automated_email(_payload("Out of office: Re: Resume", "Away"))
+    )
 
 
 def test_sender_and_body_contact_fallback_extracts_signature_phone_location() -> None:
@@ -390,3 +402,40 @@ async def test_application_fallback_creates_active_candidate_and_processed_log(m
     assert row.parsed_candidate_id == candidate.id
     assert result["status"] == "ok"
     assert len(automation_calls) == (0 if historical else 1)
+
+
+def test_is_forwarded_subject_or_body() -> None:
+    assert _is_forwarded_subject_or_body("FW: Application for Data Analyst")
+    assert _is_forwarded_subject_or_body("Fwd: Resume for AI Engineer")
+    assert _is_forwarded_subject_or_body("forward: Candidate Resume")
+    assert _is_forwarded_subject_or_body("[EXTERNAL] FW: Candidate Application")
+    assert not _is_forwarded_subject_or_body("Application for Data Analyst")
+    assert _is_forwarded_subject_or_body(
+        "Application",
+        "---------- Forwarded message ---------\nFrom: John Doe <john@example.com>",
+    )
+
+
+def test_contact_from_forwarded_email_body() -> None:
+    inbound_email = InboundEmail(
+        id=UUID("01999999-0000-7000-8000-000000000001"),
+        org_id=UUID("01999999-0000-7000-8000-000000000002"),
+        inbox_address="inbox@ats.local",
+        from_email="founder@company.com",
+        from_name="Founder Name",
+        subject="FW: Application for Backend Engineer",
+        received_at=datetime.now(timezone.utc),
+    )
+    body = (
+        "---------- Forwarded message ---------\n"
+        "From: Alice Candidate <alice.candidate@example.com>\n"
+        "Date: Mon, Oct 5, 2026\n"
+        "Subject: Application for Backend Engineer\n\n"
+        "Hi, please find my resume attached.\n"
+        "Phone: +91 98765 43210\n"
+    )
+    name, email, phone, location = _contact_from_email_body(inbound_email, body, None)
+    assert name == "Alice Candidate"
+    assert email == "alice.candidate@example.com"
+    assert phone is not None and "9876543210" in phone.replace(" ", "")
+

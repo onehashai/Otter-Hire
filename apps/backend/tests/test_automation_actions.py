@@ -138,6 +138,39 @@ async def test_handle_send_email_action_success(
 
 
 @pytest.mark.asyncio
+@patch("app.temporal.email.queue.enqueue_outbound_email")
+async def test_handle_send_email_action_with_custom_message(
+    mock_enqueue_email: AsyncMock,
+    db: AsyncSession,
+    test_org: Organization,
+    test_candidate: Candidate,
+    test_job: Job,
+):
+    """Custom automation messages use the same outbound email workflow as templates."""
+    mock_enqueue_email.return_value = {"workflow_id": "test-wf", "started": True}
+
+    success, message = await handle_send_email_action(
+        db=db,
+        action_config={
+            "mode": "custom",
+            "subject": "Update for {{candidate_name}}",
+            "body": "Hello {{candidate_name}},\nYour {{job_title}} application is under review.",
+        },
+        candidate_id=test_candidate.id,
+        org_id=test_org.id,
+        job_id=test_job.id,
+        metadata=None,
+    )
+
+    assert success is True
+    assert "jane.doe@example.com" in message
+    input_obj = mock_enqueue_email.call_args.args[0]
+    assert input_obj.subject == "Update for Jane Doe"
+    assert "Software Engineer application" in input_obj.body
+    assert "<br />" in input_obj.html_body
+
+
+@pytest.mark.asyncio
 async def test_handle_send_email_action_no_template_id(
     db: AsyncSession,
     test_org: Organization,

@@ -891,6 +891,11 @@ _OAUTH_STATE_TTL_SECONDS = 600  # 10 minutes
 _OAUTH_CODE_VERIFIER_COOKIE = "_oauth_cv"
 
 
+def _oauth_cookie_secure() -> bool:
+    """Match OAuth cookie transport to the public callback URL, not deployment mode."""
+    return settings.external_api_base_url.startswith("https://")
+
+
 def _build_pkce_pair() -> tuple[str, str]:
     """Return (code_verifier, code_challenge) for PKCE S256 flow."""
     verifier = secrets.token_urlsafe(96)  # 128 bytes → URL-safe base64 string
@@ -947,7 +952,7 @@ async def google_oauth_redirect(request: Request, response: Response) -> Redirec
         value=state_hash,
         httponly=True,
         samesite="lax",
-        secure=settings.is_production,
+        secure=_oauth_cookie_secure(),
         max_age=_OAUTH_STATE_TTL_SECONDS,
         domain=settings.cookie_domain or None,
     )
@@ -956,7 +961,7 @@ async def google_oauth_redirect(request: Request, response: Response) -> Redirec
         value=code_verifier,
         httponly=True,
         samesite="lax",
-        secure=settings.is_production,
+        secure=_oauth_cookie_secure(),
         max_age=_OAUTH_STATE_TTL_SECONDS,
         domain=settings.cookie_domain or None,
     )
@@ -1195,12 +1200,33 @@ async def google_oauth_callback(
     )
     membership = membership_result.scalars().first()
     if membership is None:
-        return _error_redirect("No active organization membership found for this account.")
+        # A legacy or interrupted signup can leave an owner account with its
+        # organization attached but without any membership row. Restore only
+        # that orphaned owner state; pending and declined invitations stay intact.
+        any_membership_result = await db.execute(
+            select(OrgMembership.id).where(OrgMembership.user_id == user.id)
+        )
+        has_any_membership = any_membership_result.scalar_one_or_none() is not None
+        organization_result = await db.execute(
+            select(Organization).where(Organization.id == user.org_id)
+        )
+        organization = organization_result.scalar_one_or_none()
+        if has_any_membership or organization is None:
+            return _error_redirect("No active organization membership found for this account.")
+
+        membership = OrgMembership(
+            user_id=user.id,
+            org_id=organization.id,
+            role="owner",
+            status="active",
+        )
+        db.add(membership)
+        await db.flush()
 
     dest = (
         f"{settings.frontend_base_url}/onboarding"
         if not user.is_onboarded
-        else settings.frontend_base_url
+        else settings.google_oauth_post_login_url
     )
     session_token = _create_session_token(user, membership)
     raw_refresh = await _issue_refresh_token(db, user)
@@ -1263,7 +1289,7 @@ async def google_link_redirect(
         value=state_hash,
         httponly=True,
         samesite="lax",
-        secure=settings.is_production,
+        secure=_oauth_cookie_secure(),
         max_age=_OAUTH_STATE_TTL_SECONDS,
         path="/",
     )
@@ -1272,7 +1298,7 @@ async def google_link_redirect(
         value=code_verifier,
         httponly=True,
         samesite="lax",
-        secure=settings.is_production,
+        secure=_oauth_cookie_secure(),
         max_age=_OAUTH_STATE_TTL_SECONDS,
         path="/",
     )
@@ -1282,7 +1308,7 @@ async def google_link_redirect(
         value="1",
         httponly=True,
         samesite="lax",
-        secure=settings.is_production,
+        secure=_oauth_cookie_secure(),
         max_age=_OAUTH_STATE_TTL_SECONDS,
         path="/",
     )

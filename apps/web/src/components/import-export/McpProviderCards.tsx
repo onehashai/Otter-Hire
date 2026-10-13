@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { Check, Plug } from "lucide-react";
 import { Button } from "@onehash/ui/button";
 import { API_BASE_URL } from "@/api";
@@ -32,10 +33,13 @@ type Integration = {
   };
 };
 
-const accessGuidance: Record<
-  string,
-  { location: string; credential: string; permissions: string }
-> = {
+type AccessGuidance = {
+  location: string;
+  credential: string;
+  permissions: string;
+};
+
+const accessGuidance: Record<string, AccessGuidance> = {
   ashby: {
     location: "Open Ashby Settings and create or authorize an MCP connection for your workspace.",
     credential: "No token copy is needed; sign in to Ashby in the OAuth window.",
@@ -64,6 +68,47 @@ const accessGuidance: Record<
     permissions: "The available records follow the roles and permissions of the Zoho user.",
   },
 };
+
+const providerLogos: Record<string, string> = {
+  ashby: "/integrations/providers/ashby.png",
+  greenhouse: "/integrations/providers/greenhouse.png",
+  ninehire: "/integrations/providers/ninehire.png",
+  pinpoint: "/integrations/providers/pinpoint.png",
+  "zoho recruit": "/integrations/providers/zoho-recruit.ico",
+};
+
+function McpConnectionGuide({
+  providerName,
+  authType,
+  guidance,
+}: {
+  providerName: string;
+  authType: string;
+  guidance?: AccessGuidance;
+}) {
+  const usesApiKey = authType === "api_key";
+
+  return (
+    <div className="space-y-2 break-words text-sm">
+      <h4 className="font-medium">Connect {providerName} through MCP</h4>
+      <ol className="list-decimal space-y-2 pl-5 text-muted-foreground">
+        <li>{guidance?.location || "Open the provider MCP or developer settings."}</li>
+        <li>
+          {guidance?.credential || "Create or copy the access credential supplied by the ATS."}
+        </li>
+        <li>
+          {guidance?.permissions ||
+            "Choose read access for the recruiting records you want to import."}
+        </li>
+        <li>
+          {usesApiKey
+            ? "Paste the credential below, then select Discover tools and connect."
+            : "Select Continue to provider, sign in, approve access, and return to Otter Hire."}
+        </li>
+      </ol>
+    </div>
+  );
+}
 
 export function McpProviderCards({
   onSyncRequested,
@@ -215,15 +260,31 @@ export function McpProviderCards({
         {providers.map((provider) => {
           const integration = connectedIntegration(provider.ats_name);
           const importReady = Boolean(integration?.provider_details?.mcp_import_contract?.ready);
+          const providerName = provider.ats_name.replaceAll("_", " ");
+          const providerLogo = providerLogos[providerName.toLowerCase()];
+          const guidance =
+            accessGuidance[provider.ats_name] || accessGuidance[providerName.toLowerCase()];
           return (
             <div key={provider.ats_name} className="rounded-lg border bg-card p-4">
               <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h3 className="font-medium">{provider.ats_name.replaceAll("_", " ")}</h3>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {provider.auth_type === "api_key" ? "Bearer API key" : "OAuth"} ·{" "}
-                    {provider.mcp_status.replace("native_", "")}
-                  </p>
+                <div className="flex min-w-0 items-start gap-3">
+                  {providerLogo ? (
+                    <Image
+                      src={providerLogo}
+                      alt=""
+                      width={32}
+                      height={32}
+                      unoptimized
+                      className="mt-0.5 size-8 shrink-0 rounded-sm object-contain"
+                    />
+                  ) : null}
+                  <div className="min-w-0">
+                    <h3 className="font-medium">{providerName}</h3>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {provider.auth_type === "api_key" ? "Bearer API key" : "OAuth"} ·{" "}
+                      {provider.mcp_status.replace("native_", "")}
+                    </p>
+                  </div>
                 </div>
                 <span
                   className={`inline-flex items-center gap-1 text-xs ${
@@ -311,6 +372,11 @@ export function McpProviderCards({
                         : "Paste the provider-issued MCP bearer key."
                       : "Continue to the provider, sign in, and approve read access. OAuth is handled automatically."}
                   </p>
+                  <McpConnectionGuide
+                    providerName={providerName}
+                    authType={provider.auth_type}
+                    guidance={guidance}
+                  />
                   {!provider.mcp_server_url && (
                     <input
                       className="h-9 w-full rounded-md border bg-background px-2 text-sm"
@@ -322,8 +388,13 @@ export function McpProviderCards({
                   {provider.auth_type === "api_key" && (
                     <input
                       className="h-9 w-full rounded-md border bg-background px-2 text-sm"
+                      name={`${providerName.toLowerCase().replaceAll(" ", "-")}-mcp-api-key`}
                       type="password"
                       placeholder="MCP API key"
+                      autoComplete="new-password"
+                      data-lpignore="true"
+                      data-1p-ignore="true"
+                      data-bwignore="true"
                       value={token}
                       onChange={(event) => setToken(event.target.value)}
                     />

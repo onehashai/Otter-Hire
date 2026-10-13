@@ -12,6 +12,7 @@ from app.api.v1.internal.endpoints.file_responses import file_not_found_response
 from app.core.config import settings
 from app.db.session import get_db
 from app.deps.auth import require_active_user
+from app.api.v1.internal.endpoints.file_responses import file_not_found_response
 from app.models.organization import Organization
 from app.models.user import User
 from app.services.storage import storage_service

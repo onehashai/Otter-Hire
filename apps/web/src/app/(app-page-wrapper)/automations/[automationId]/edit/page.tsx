@@ -126,6 +126,17 @@ export default function AutomationEditPage() {
       toast.error("Please add at least one action");
       return;
     }
+    if (
+      actions.some(
+        (action) =>
+          action.type === "send_email" &&
+          action.config.mode === "custom" &&
+          (!action.config.subject?.trim() || !action.config.body?.trim()),
+      )
+    ) {
+      toast.error("Please enter a subject and message for the custom email");
+      return;
+    }
     if (scope === "specific_job" && !selectedJob?.trim()) {
       toast.error("Please select a job when scope is Specific job");
       return;

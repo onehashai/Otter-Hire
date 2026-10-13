@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import { Icon } from "@onehash/ui/icon";
@@ -11,10 +11,7 @@ import { useSetPageMetadata } from "@/hooks/useSetPageMetadata";
 import { getOrgEmailLogsPaginated, type EmailLogRow, type EmailLogFilters } from "@/api/email-logs";
 import { downloadEmailLogsCsv, EmailLogsTable } from "@/components/settings/logs/EmailLogsTable";
 import { getMyPreferences, updateMyPreferences } from "@/api/users";
-import {
-  DEFAULT_TABLE_PAGE_SIZE,
-  TABLE_PAGE_SIZE_OPTIONS,
-} from "@/components/common/TablePagination";
+import { DEFAULT_TABLE_PAGE_SIZE, isValidTablePageSize } from "@/components/common/TablePagination";
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -24,7 +21,7 @@ function asRecord(value: unknown): Record<string, unknown> {
 
 function normalizePageSize(value: unknown): number {
   const pageSize = typeof value === "number" ? value : Number(value);
-  return TABLE_PAGE_SIZE_OPTIONS.includes(pageSize) ? pageSize : DEFAULT_TABLE_PAGE_SIZE;
+  return isValidTablePageSize(pageSize) ? pageSize : DEFAULT_TABLE_PAGE_SIZE;
 }
 
 async function persistPageSize(pageSize: number) {
@@ -58,6 +55,7 @@ export default function LogsPage() {
   const [senderFilter, setSenderFilter] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_TABLE_PAGE_SIZE);
+  const pageSizeChangedByUserRef = useRef(false);
   const [total, setTotal] = useState(0);
   const [exporting, setExporting] = useState(false);
 
@@ -69,7 +67,9 @@ export default function LogsPage() {
       .then(({ preferences }) => {
         if (cancelled) return;
         const tables = asRecord(preferences.tables);
-        setPageSize(normalizePageSize(asRecord(tables.email_logs).page_size));
+        if (!pageSizeChangedByUserRef.current) {
+          setPageSize(normalizePageSize(asRecord(tables.email_logs).page_size));
+        }
       })
       .catch(() => undefined);
     return () => {
@@ -118,7 +118,8 @@ export default function LogsPage() {
   }, [authLoading, isAllowed, load, router]);
 
   const handlePageSizeChange = (nextPageSize: number) => {
-    if (!TABLE_PAGE_SIZE_OPTIONS.includes(nextPageSize) || nextPageSize === pageSize) return;
+    if (!isValidTablePageSize(nextPageSize) || nextPageSize === pageSize) return;
+    pageSizeChangedByUserRef.current = true;
     setPageSize(nextPageSize);
     setPage(1);
     void persistPageSize(nextPageSize).catch(() =>

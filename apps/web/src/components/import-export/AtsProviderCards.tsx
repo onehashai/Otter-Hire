@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { Check, Plug, Unplug } from "lucide-react";
 import { Button } from "@onehash/ui/button";
 import { API_BASE_URL } from "@/api";
@@ -30,6 +31,17 @@ const providers = [
   ["bamboohr", "BambooHR", "API key and company subdomain"],
   ["workable", "Workable", "Bearer token and company URL"],
 ] as const;
+
+const providerLogos: Record<(typeof providers)[number][0], string> = {
+  greenhouse: "/integrations/providers/greenhouse.png",
+  lever: "/integrations/providers/lever.png",
+  recruiterbox: "/integrations/providers/recruiterbox.png",
+  workday: "/integrations/providers/workday.ico",
+  icims: "/integrations/providers/icims.png",
+  smartrecruiters: "/integrations/providers/smartrecruiters.png",
+  bamboohr: "/integrations/providers/bamboohr.ico",
+  workable: "/integrations/providers/workable.svg",
+};
 
 const providerBaseUrls: Record<string, string> = {
   greenhouse: "https://harvest.greenhouse.io",
@@ -347,9 +359,19 @@ export function AtsProviderCards({
             return (
               <div key={id} className="rounded-lg border bg-card p-4">
                 <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h3 className="font-medium">{name}</h3>
-                    <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+                  <div className="flex min-w-0 items-start gap-3">
+                    <Image
+                      src={providerLogos[id]}
+                      alt=""
+                      width={32}
+                      height={32}
+                      unoptimized
+                      className="mt-0.5 size-8 shrink-0 rounded-sm object-contain"
+                    />
+                    <div className="min-w-0">
+                      <h3 className="font-medium">{name}</h3>
+                      <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+                    </div>
                   </div>
                   {connected ? (
                     <span className="inline-flex items-center gap-1 text-xs text-emerald-600">
@@ -485,12 +507,17 @@ export function AtsProviderCards({
                             {generic.auth !== "none" && (
                               <input
                                 className="h-9 w-full rounded-md border bg-background px-2 text-sm"
+                                name="generic-migration-credential"
                                 placeholder={
                                   generic.auth === "oauth2"
                                     ? "OAuth access token"
                                     : "API key or credential"
                                 }
                                 type="password"
+                                autoComplete="new-password"
+                                data-lpignore="true"
+                                data-1p-ignore="true"
+                                data-bwignore="true"
                                 value={key}
                                 onChange={(event) => setKey(event.target.value)}
                               />
@@ -512,7 +539,12 @@ export function AtsProviderCards({
                             {id === "greenhouse" && (
                               <input
                                 className="h-9 w-full rounded-md border bg-background px-2 text-sm"
+                                name="greenhouse-oauth-client-id"
                                 placeholder="Greenhouse OAuth client ID"
+                                autoComplete="off"
+                                data-lpignore="true"
+                                data-1p-ignore="true"
+                                data-bwignore="true"
                                 value={clientId}
                                 onChange={(event) => setClientId(event.target.value)}
                               />
@@ -531,6 +563,7 @@ export function AtsProviderCards({
                             )}
                             <input
                               className="h-9 w-full rounded-md border bg-background px-2 text-sm"
+                              name={`${id}-migration-api-key`}
                               placeholder={
                                 id === "greenhouse"
                                   ? "Greenhouse OAuth client secret"
@@ -539,6 +572,10 @@ export function AtsProviderCards({
                                     : "Paste API key or token"
                               }
                               type="password"
+                              autoComplete="new-password"
+                              data-lpignore="true"
+                              data-1p-ignore="true"
+                              data-bwignore="true"
                               value={key}
                               onChange={(event) => setKey(event.target.value)}
                             />

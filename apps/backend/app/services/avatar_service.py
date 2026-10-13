@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import logging
 import re
 import zipfile
@@ -358,6 +359,8 @@ async def enrich_candidate_profile_and_avatar(
         profile = candidate.parsed_resume if isinstance(candidate.parsed_resume, dict) else {}
         personal = profile.get("personal") if isinstance(profile.get("personal"), dict) else {}
         location = candidate.address or personal.get("address")
+        resume_context = json.dumps(profile, ensure_ascii=False)
+        candidate_email = candidate.email or personal.get("email")
         existing_links = dict(candidate.profile_links or {})
         parsed_links = {
             key: str(value).strip()
@@ -378,9 +381,19 @@ async def enrich_candidate_profile_and_avatar(
                 },
             }
         if candidate.phone and not candidate.phone.strip().startswith("+"):
-            candidate.phone = normalize_phone_with_country(candidate.phone, location=location)
+            candidate.phone = normalize_phone_with_country(
+                candidate.phone,
+                location=location,
+                text=resume_context,
+                email=candidate_email,
+            )
         elif not candidate.phone and isinstance(personal.get("phone"), str) and personal["phone"].strip():
-            candidate.phone = normalize_phone_with_country(personal["phone"].strip(), location=location)
+            candidate.phone = normalize_phone_with_country(
+                personal["phone"].strip(),
+                location=location,
+                text=resume_context,
+                email=candidate_email,
+            )
         if not candidate.headline:
             for key in ("headline", "professional_summary", "summary"):
                 value = personal.get(key) or profile.get(key)

@@ -11,6 +11,8 @@ from app.services.resume.heuristics import (
     extract_location,
     extract_name,
     extract_phone,
+    is_dummy_phone_number,
+    is_phone_in_text,
     normalize_phone_with_country,
     should_replace_name,
 )
@@ -35,7 +37,16 @@ def _profile_from_heuristics(text: str, fallback_email: str) -> ResumeProfile:
     email = extract_email(text)
     address = extract_location(text)
     raw_phone = extract_phone(text)
-    phone = normalize_phone_with_country(raw_phone, location=address) if raw_phone else None
+    phone = (
+        normalize_phone_with_country(
+            raw_phone,
+            location=address,
+            text=text,
+            email=email or fallback_email,
+        )
+        if raw_phone
+        else None
+    )
     name = extract_name(text, email or fallback_email)
     return ResumeProfile(
         personal=PersonalInfo(
@@ -98,8 +109,20 @@ def enrich_with_heuristics(
 
     address = profile.personal.address or extract_location(text)
     heuristic_phone = extract_phone(text)
-    raw_phone = heuristic_phone or profile.personal.phone
-    phone = normalize_phone_with_country(raw_phone, location=address) if raw_phone else None
+    llm_phone = profile.personal.phone
+    if llm_phone and (is_dummy_phone_number(llm_phone) or not is_phone_in_text(llm_phone, text)):
+        llm_phone = None
+    raw_phone = heuristic_phone or llm_phone
+    phone = (
+        normalize_phone_with_country(
+            raw_phone,
+            location=address,
+            text=text,
+            email=email or fallback_email,
+        )
+        if raw_phone and not is_dummy_phone_number(raw_phone)
+        else None
+    )
 
     return profile.model_copy(
         update={
@@ -107,7 +130,7 @@ def enrich_with_heuristics(
                 update={
                     "full_name": name or profile.personal.full_name,
                     "email": email or profile.personal.email,
-                    "phone": phone or profile.personal.phone,
+                    "phone": phone,
                     "address": address or profile.personal.address,
                 }
             )

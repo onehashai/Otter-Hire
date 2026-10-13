@@ -95,39 +95,88 @@ export function ActionsStep({
 
               {a.type === "send_email" && (
                 <div className="space-y-3">
-                  <FieldRow label="Email Template">
-                    <div className="flex gap-2">
-                      <Select
-                        value={a.config.template ?? ""}
-                        onValueChange={(v) => onUpdateActionConfig(a.id, "template", v)}
-                      >
-                        <SelectTrigger className="h-8 text-xs flex-1">
-                          <SelectValue placeholder="Select template" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {templatesLoading && templates.length === 0 && (
-                            <SelectItem value="__loading" disabled className="text-xs">
-                              Loading templates...
-                            </SelectItem>
-                          )}
-                          {templates.map((tmpl) => (
-                            <SelectItem key={tmpl.id} value={tmpl.id} className="text-xs">
-                              {tmpl.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-8 text-xs gap-1"
-                        onClick={onEmailPreviewOpen}
-                      >
-                        <Eye className="h-3 w-3" /> Preview
-                      </Button>
-                    </div>
-                  </FieldRow>
+                  <div className="grid grid-cols-2 gap-1 rounded-md bg-muted p-1">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={a.config.mode !== "custom" ? "secondary" : "ghost"}
+                      className="h-7 text-xs"
+                      onClick={() => onUpdateActionConfig(a.id, "mode", "template")}
+                    >
+                      Use template
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={a.config.mode === "custom" ? "secondary" : "ghost"}
+                      className="h-7 text-xs"
+                      onClick={() => onUpdateActionConfig(a.id, "mode", "custom")}
+                    >
+                      Create message
+                    </Button>
+                  </div>
+
+                  {a.config.mode === "custom" ? (
+                    <>
+                      <FieldRow label="Subject">
+                        <InputField
+                          value={a.config.subject ?? ""}
+                          onChange={(event) =>
+                            onUpdateActionConfig(a.id, "subject", event.target.value)
+                          }
+                          className="h-8 text-xs"
+                          placeholder="e.g. Update on your application"
+                        />
+                      </FieldRow>
+                      <FieldRow label="Message">
+                        <textarea
+                          value={a.config.body ?? ""}
+                          onChange={(event) =>
+                            onUpdateActionConfig(a.id, "body", event.target.value)
+                          }
+                          className="min-h-28 w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-xs shadow-sm outline-none placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring"
+                          placeholder={"Hello {{candidate_name}},\n\nThank you for applying for {{job_title}}."}
+                        />
+                      </FieldRow>
+                      <p className="text-[11px] text-muted-foreground">
+                        Variables: {"{{candidate_name}}"}, {"{{job_title}}"}, {"{{company_name}}"}
+                      </p>
+                    </>
+                  ) : (
+                    <FieldRow label="Email Template">
+                      <div className="flex gap-2">
+                        <Select
+                          value={a.config.template ?? ""}
+                          onValueChange={(v) => onUpdateActionConfig(a.id, "template", v)}
+                        >
+                          <SelectTrigger className="h-8 text-xs flex-1">
+                            <SelectValue placeholder="Select template" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {templatesLoading && templates.length === 0 && (
+                              <SelectItem value="__loading" disabled className="text-xs">
+                                Loading templates...
+                              </SelectItem>
+                            )}
+                            {templates.map((tmpl) => (
+                              <SelectItem key={tmpl.id} value={tmpl.id} className="text-xs">
+                                {tmpl.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-8 text-xs gap-1"
+                          onClick={onEmailPreviewOpen}
+                        >
+                          <Eye className="h-3 w-3" /> Preview
+                        </Button>
+                      </div>
+                    </FieldRow>
+                  )}
                 </div>
               )}
               {/* TODO: Re-enable candidate actions (Move to stage, Assign recruiter, Add tag) */}

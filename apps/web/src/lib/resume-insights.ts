@@ -217,6 +217,8 @@ export interface CandidateBase {
   email: string;
   phone: string;
   address: string;
+  avatarUrl?: string | null;
+  headline?: string | null;
   source: string;
   appliedDate: string;
   documents: MappedDocument[];

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@onehash/ui/select";
 import { getAdminOrganizations } from "@/api/admin";
 import {
@@ -10,10 +10,7 @@ import {
 } from "@/api/email-logs";
 import { downloadEmailLogsCsv, EmailLogsTable } from "@/components/settings/logs/EmailLogsTable";
 import { getMyPreferences, updateMyPreferences } from "@/api/users";
-import {
-  DEFAULT_TABLE_PAGE_SIZE,
-  TABLE_PAGE_SIZE_OPTIONS,
-} from "@/components/common/TablePagination";
+import { DEFAULT_TABLE_PAGE_SIZE, isValidTablePageSize } from "@/components/common/TablePagination";
 import { toast } from "@onehash/ui/sonner";
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -24,7 +21,7 @@ function asRecord(value: unknown): Record<string, unknown> {
 
 function normalizePageSize(value: unknown): number {
   const pageSize = typeof value === "number" ? value : Number(value);
-  return TABLE_PAGE_SIZE_OPTIONS.includes(pageSize) ? pageSize : DEFAULT_TABLE_PAGE_SIZE;
+  return isValidTablePageSize(pageSize) ? pageSize : DEFAULT_TABLE_PAGE_SIZE;
 }
 
 async function persistPageSize(pageSize: number) {
@@ -52,6 +49,7 @@ export function AdminLogsTab() {
   const [senderFilter, setSenderFilter] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_TABLE_PAGE_SIZE);
+  const pageSizeChangedByUserRef = useRef(false);
   const [total, setTotal] = useState(0);
   const [exporting, setExporting] = useState(false);
 
@@ -67,7 +65,9 @@ export function AdminLogsTab() {
       .then(({ preferences }) => {
         if (cancelled) return;
         const tables = asRecord(preferences.tables);
-        setPageSize(normalizePageSize(asRecord(tables.admin_email_logs).page_size));
+        if (!pageSizeChangedByUserRef.current) {
+          setPageSize(normalizePageSize(asRecord(tables.admin_email_logs).page_size));
+        }
       })
       .catch(() => undefined);
     return () => {
@@ -111,7 +111,8 @@ export function AdminLogsTab() {
   }, [page, pageSize, total]);
 
   const handlePageSizeChange = (nextPageSize: number) => {
-    if (!TABLE_PAGE_SIZE_OPTIONS.includes(nextPageSize) || nextPageSize === pageSize) return;
+    if (!isValidTablePageSize(nextPageSize) || nextPageSize === pageSize) return;
+    pageSizeChangedByUserRef.current = true;
     setPageSize(nextPageSize);
     setPage(1);
     void persistPageSize(nextPageSize).catch(() =>

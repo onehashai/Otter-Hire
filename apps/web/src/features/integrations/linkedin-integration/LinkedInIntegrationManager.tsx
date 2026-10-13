@@ -50,16 +50,19 @@ export function LinkedInIntegrationManager({ onChanged }: LinkedInIntegrationMan
 
   useEffect(() => () => oauthCleanup.current?.(), []);
 
-  const fetchStatus = async () => {
+  const fetchStatus = async (): Promise<LinkedInStatus | null> => {
     try {
       const data = await getLinkedInStatus();
       setStatus(data);
+      return data;
     } catch (error) {
       console.error("Failed to fetch LinkedIn status:", error);
-      setStatus({
+      const unavailableStatus = {
         connected: false,
         status: "not_connected",
-      });
+      };
+      setStatus(unavailableStatus);
+      return null;
     } finally {
       setLoading(false);
     }
@@ -175,9 +178,17 @@ export function LinkedInIntegrationManager({ onChanged }: LinkedInIntegrationMan
         }
         if (event.data?.type === "linkedin_oauth_complete") {
           oauthCleanup.current?.();
-          await fetchStatus();
-          setSetupDialogOpen(true);
-          await fetchOrganizations();
+          const refreshedStatus = await fetchStatus();
+          if (refreshedStatus?.distribution_enabled) {
+            setSetupDialogOpen(true);
+            await fetchOrganizations();
+          } else if (refreshedStatus) {
+            setSetupDialogOpen(false);
+            toast.success("LinkedIn connected successfully");
+            await onChanged?.();
+          } else {
+            toast.error("LinkedIn connected, but its status could not be refreshed. Reload settings.");
+          }
           setConnecting(false);
           window.removeEventListener("message", handleMessage);
         }
@@ -292,20 +303,22 @@ export function LinkedInIntegrationManager({ onChanged }: LinkedInIntegrationMan
         <div className="flex flex-wrap items-center justify-between gap-2">
           {isSetupComplete ? (
             <div className="flex items-center justify-between gap-2 w-full">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-8 w-8 p-0"
-                    onClick={handleOpenSetup}
-                    disabled={loadingOrgs || completingSetup}
-                  >
-                    <Settings className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Manage</TooltipContent>
-              </Tooltip>
+              {status.distribution_enabled && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 w-8 p-0"
+                      onClick={handleOpenSetup}
+                      disabled={loadingOrgs || completingSetup}
+                    >
+                      <Settings className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Manage</TooltipContent>
+                </Tooltip>
+              )}
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -348,7 +361,7 @@ export function LinkedInIntegrationManager({ onChanged }: LinkedInIntegrationMan
             </Button>
           )}
         </div>
-        {isSetupComplete && !status.can_post && (
+        {isSetupComplete && status.distribution_enabled && !status.can_post && (
           <Button size="sm" variant="outline" onClick={handleConnect} disabled={connecting}>
             Reauthorize posting
           </Button>

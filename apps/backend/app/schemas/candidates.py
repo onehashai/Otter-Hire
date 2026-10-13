@@ -19,6 +19,7 @@ class CandidateListItemResponse(BaseModel):
     headline: Optional[str] = None
     profile_links: Optional[dict[str, Any]] = None
     parsed_resume: Optional[dict[str, Any]] = None
+    has_resume: bool = False
     source: Optional[str] = None
     tags: list[str] = []
     status: str
@@ -146,6 +147,13 @@ class CandidateStageFilterOptionsResponse(BaseModel):
     """Ordered hiring stage filter labels (stage union + terminal statuses when applicable)."""
 
     names: list[str]
+
+
+class CandidateFilterOptionsResponse(BaseModel):
+    """Organization-scoped values used by the candidate list filters."""
+
+    sources: list[str]
+    email_domains: list[str]
 
 
 class CandidateBulkStageUpdateRequest(BaseModel):

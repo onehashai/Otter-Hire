@@ -90,6 +90,19 @@ def _fallback_sender_name(inbound_email: InboundEmail) -> str:
     return cleaned.title() if cleaned else "Unknown Candidate"
 
 
+def _is_forwarded_subject_or_body(subject: str | None, text_body: str | None = None) -> bool:
+    """Return True if email subject or body indicates a forwarded email."""
+    subj = (subject or "").strip()
+    if re.match(r"^(?:\[[^\]]+\]\s*)?(?:fw|fwd|forward)\s*:\s*", subj, re.IGNORECASE):
+        return True
+    if text_body:
+        if re.search(r"(?im)^\s*-+\s*forwarded message\s*-+", text_body):
+            return True
+        if re.search(r"(?im)^\s*begin forwarded message:", text_body):
+            return True
+    return False
+
+
 def _contact_from_email_body(
     inbound_email: InboundEmail, text_body: str | None, html_body: str | None
 ) -> tuple[str, str | None, str | None, str | None]:
@@ -98,11 +111,33 @@ def _contact_from_email_body(
     from app.services.resume.heuristics import (
         extract_location,
         extract_phone,
+        is_dummy_phone_number,
+        is_phone_in_text,
         normalize_phone_with_country,
     )
 
     html_text = re.sub(r"(?i)<br\s*/?>|</(?:p|div|li)>", "\n", html_body or "")
     body = text_body or unescape(re.sub(r"<[^>]+>", " ", html_text))
+
+    forwarded_email = None
+    forwarded_name = None
+    forwarded_match = re.search(
+        r"(?im)^\s*(?:from|sender)\s*:\s*([^<\n]+?)\s*<([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})>",
+        body,
+    )
+    if forwarded_match:
+        cand_name_raw = forwarded_match.group(1).strip().strip('"\'')
+        if cand_name_raw and not re.match(r"^(?:mailto:|from:)", cand_name_raw, re.IGNORECASE):
+            forwarded_name = cand_name_raw
+        forwarded_email = forwarded_match.group(2).strip().lower()
+    else:
+        bare_from = re.search(
+            r"(?im)^\s*(?:from|sender)\s*:\s*([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})",
+            body,
+        )
+        if bare_from:
+            forwarded_email = bare_from.group(1).strip().lower()
+
     labeled_location = re.search(r"(?im)^\s*(?:location|address)\s*:\s*([^\n]+)", body)
     location = (
         extract_location(labeled_location.group(1)) if labeled_location else None
@@ -121,25 +156,34 @@ def _contact_from_email_body(
                 location = extract_location(segment)
                 if location:
                     break
-            if location:
-                break
+    if location and ("@" in location or "<" in location or location.lower().startswith("from:")):
+        location = None
+
     raw_phone = extract_phone(body)
+    effective_email = forwarded_email or inbound_email.from_email
     phone = (
-        normalize_phone_with_country(raw_phone, location=location)
-        if raw_phone and location
+        normalize_phone_with_country(
+            raw_phone,
+            location=location,
+            text=body,
+            email=effective_email,
+        )
+        if raw_phone
         else raw_phone
     )
-    name = _fallback_sender_name(inbound_email)
-    if not (inbound_email.from_name or "").strip():
-        named = re.search(r"(?im)^\s*name\s*:\s*([A-Za-z][A-Za-z .'-]{1,79})\s*$", body)
-        signed = re.search(
-            r"(?im)^\s*(?:regards|sincerely|best(?: regards)?|thank you)[,!.]?\s*\n\s*([A-Za-z][A-Za-z .'-]{1,79})\s*$",
-            body,
-        )
-        candidate_name = named or signed
-        if candidate_name:
-            name = candidate_name.group(1).strip()
-    return name, inbound_email.from_email, phone, location
+    name = forwarded_name or _fallback_sender_name(inbound_email)
+    if not (inbound_email.from_name or "").strip() or forwarded_name:
+        if not forwarded_name:
+            named = re.search(r"(?im)^\s*name\s*:\s*([A-Za-z][A-Za-z .'-]{1,79})\s*$", body)
+            introduced = re.search(r"(?im)\b(?:i am|my name is|i'm)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})\b", body)
+            signed = re.search(
+                r"(?im)^\s*(?:regards|sincerely|best(?: regards)?|thank you)[,!.]?\s*\n\s*([A-Za-z][A-Za-z .'-]{1,79})\s*$",
+                body,
+            )
+            candidate_name = named or introduced or signed
+            if candidate_name:
+                name = candidate_name.group(1).strip()
+    return name, effective_email, phone, location
 
 
 def _is_placeholder_candidate_name(name: str | None) -> bool:
@@ -189,6 +233,10 @@ async def parse_inbound_email_activity(input_data: InboundEmailParseInput) -> di
         _upsert_candidate_job_assignment,
         should_replace_name,
     )
+    from app.services.resume.heuristics import (
+        is_dummy_phone_number,
+        is_phone_in_text,
+    )
     from app.integrations.app_store.email_integration.ses_bridge import (
         _extract_text_and_attachments,
     )
@@ -219,7 +267,7 @@ async def parse_inbound_email_activity(input_data: InboundEmailParseInput) -> di
             if not inbound_email:
                 return {"status": "failed", "reason": "inbound_email_not_found"}
 
-            if inbound_email.parse_status == "processed":
+            if inbound_email.parse_status == "processed" and not input_data.force_reprocess:
                 return {"status": "ok", "reason": "already_processed"}
 
             target_job_id = target_job_id or inbound_email.job_id
@@ -530,6 +578,9 @@ async def parse_inbound_email_activity(input_data: InboundEmailParseInput) -> di
                 # LLM structured extraction pipeline
                 inbound_parsed_resume_profile = None
                 _inbound_profile_links = {}
+                is_forwarded_mail = _is_forwarded_subject_or_body(
+                    inbound_email.subject, normalized.get("text_body")
+                )
                 # Sender identity prevents weak text extraction from blocking
                 # candidate creation; it must not suppress the AI resume parse.
                 if not no_document:
@@ -539,7 +590,7 @@ async def parse_inbound_email_activity(input_data: InboundEmailParseInput) -> di
                             resume_filename,
                             resume_content_type,
                             content,
-                            fallback_email=inbound_email.from_email or "",
+                            fallback_email="" if is_forwarded_mail else (inbound_email.from_email or ""),
                         )
                         if _llm_result is not None:
                             inbound_parsed_resume_profile = _llm_result.profile.model_dump(mode="json")
@@ -559,7 +610,11 @@ async def parse_inbound_email_activity(input_data: InboundEmailParseInput) -> di
                             if llm_email:
                                 extracted_email = llm_email
                             if _personal.phone and _personal.phone.strip():
-                                extracted_phone = _personal.phone.strip()
+                                _cand_phone = _personal.phone.strip()
+                                if not is_dummy_phone_number(_cand_phone) and (
+                                    not resume_text or is_phone_in_text(_cand_phone, resume_text)
+                                ):
+                                    extracted_phone = _cand_phone
                             if _personal.address and _personal.address.strip():
                                 extracted_location = _personal.address.strip()
                             for _key, _url in [
@@ -576,7 +631,7 @@ async def parse_inbound_email_activity(input_data: InboundEmailParseInput) -> di
                             _llm_exc,
                         )
 
-                if not extracted_email:
+                if not extracted_email and not is_forwarded_mail:
                     extracted_email = inbound_email.from_email
 
                 resume_pending = no_document or (
@@ -588,9 +643,16 @@ async def parse_inbound_email_activity(input_data: InboundEmailParseInput) -> di
                 current_job_id = target_job_id
                 candidate = None
 
-                # Serialize parallel applications by sender, including replayed
-                # emails, before checking whether the candidate already exists.
-                identity_email = inbound_email.from_email or extracted_email
+                is_shared_forwarding_sender = is_forwarded_mail or (
+                    bool(extracted_email)
+                    and bool(inbound_email.from_email)
+                    and extracted_email.lower() != inbound_email.from_email.lower()
+                )
+
+                # Serialize parallel applications by candidate identity email (from resume first)
+                identity_email = extracted_email or (
+                    None if is_shared_forwarding_sender else inbound_email.from_email
+                )
                 if identity_email:
                     await session.execute(
                         select(
@@ -602,11 +664,42 @@ async def parse_inbound_email_activity(input_data: InboundEmailParseInput) -> di
                         )
                     )
 
-                # The sender address is the strongest idempotency key for an
-                # inbound resume update. Resume text can contain an older name
-                # or a forwarding address, neither of which should duplicate
-                # an existing candidate.
-                if inbound_email.from_email:
+                # 1. Primary identity match: Match by the candidate's actual extracted email
+                if extracted_email:
+                    if current_job_id is not None and extracted_name and not _is_placeholder_candidate_name(extracted_name):
+                        candidate_query = await session.execute(
+                            select(Candidate).where(
+                                Candidate.org_id == org_id,
+                                func.lower(Candidate.email) == extracted_email.lower(),
+                                func.lower(func.trim(Candidate.name)) == extracted_name.strip().lower(),
+                            ).order_by(Candidate.created_at.desc())
+                        )
+                        candidate = candidate_query.scalars().first()
+
+                    if candidate is None:
+                        candidate_query = await session.execute(
+                            select(Candidate).where(
+                                Candidate.org_id == org_id,
+                                func.lower(Candidate.email) == extracted_email.lower(),
+                            ).order_by(Candidate.created_at.desc())
+                        )
+                        candidate = candidate_query.scalars().first()
+
+                # 2. Secondary match: Match by extracted candidate phone
+                if candidate is None and extracted_phone:
+                    normalized_phone = _normalize_phone(extracted_phone)
+                    if normalized_phone:
+                        candidate_query = await session.execute(
+                            select(Candidate).where(
+                                Candidate.org_id == org_id,
+                                Candidate.phone.is_not(None),
+                                func.regexp_replace(Candidate.phone, r"\D", "", "g") == normalized_phone,
+                            ).order_by(Candidate.created_at.desc())
+                        )
+                        candidate = candidate_query.scalars().first()
+
+                # 3. Fallback match by sender address ONLY for direct applicants (never for forwarded or shared senders)
+                if candidate is None and not is_shared_forwarding_sender and inbound_email.from_email:
                     candidate_query = await session.execute(
                         select(Candidate)
                         .where(
@@ -615,34 +708,6 @@ async def parse_inbound_email_activity(input_data: InboundEmailParseInput) -> di
                         )
                         .order_by(Candidate.created_at.desc())
                     )
-                    candidate = candidate_query.scalars().first()
-
-                if candidate is None and current_job_id is not None and extracted_email and extracted_name:
-                    candidate_query = await session.execute(
-                        select(Candidate).where(
-                            Candidate.org_id == org_id,
-                            func.lower(Candidate.email) == extracted_email.lower(),
-                            func.lower(func.trim(Candidate.name)) == extracted_name.strip().lower(),
-                        )
-                    )
-                elif candidate is None and extracted_email:
-                    candidate_query = await session.execute(
-                        select(Candidate).where(
-                            Candidate.org_id == org_id,
-                            func.lower(Candidate.email) == extracted_email.lower(),
-                        )
-                    )
-                elif candidate is None and extracted_phone:
-                    normalized_phone = _normalize_phone(extracted_phone)
-                    if normalized_phone:
-                        candidate_query = await session.execute(
-                            select(Candidate).where(
-                                Candidate.org_id == org_id,
-                                Candidate.phone.is_not(None),
-                                func.regexp_replace(Candidate.phone, r"\D", "", "g") == normalized_phone,
-                            )
-                        )
-                if candidate is None and candidate_query is not None:
                     candidate = candidate_query.scalars().first()
 
                 if candidate is None:

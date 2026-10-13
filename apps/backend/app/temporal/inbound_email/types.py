@@ -10,3 +10,5 @@ class InboundEmailParseInput(BaseModel):
     # Reserved for explicitly audited historical recovery batches. It must not
     # be set by the public inbound-email endpoint.
     force_contact_only: bool = False
+    force_reprocess: bool = False
+

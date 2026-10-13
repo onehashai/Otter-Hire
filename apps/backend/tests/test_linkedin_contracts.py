@@ -39,6 +39,24 @@ class FakeRedis:
 
 
 class LinkedInContractTests(unittest.IsolatedAsyncioTestCase):
+    def test_scope_requests_follow_enabled_linkedin_products(self):
+        with patch.object(settings, "feature_linkedin_distribution", False), patch.object(
+            settings, "feature_linkedin_applicant_ingestion", True
+        ):
+            self.assertEqual(service.requested_scopes(), ["openid", "profile", "email"])
+            self.assertEqual(
+                service.requested_scopes(lead_sync=True),
+                ["openid", "profile", "email", "r_marketing_leadgen_automation"],
+            )
+
+        with patch.object(settings, "feature_linkedin_distribution", True), patch.object(
+            settings, "feature_linkedin_applicant_ingestion", True
+        ):
+            self.assertEqual(
+                service.requested_scopes(),
+                ["openid", "profile", "email", "w_organization_social", "rw_organization_admin"],
+            )
+
     def test_authorization_encoding_and_pkce(self):
         with patch.object(settings, "linkedin_client_id", "client"), patch.object(settings, "linkedin_client_secret", "secret"):
             query = parse_qs(urlsplit(service.get_authorization_url("a+b&state", "verifier", service.requested_scopes(True))).query)

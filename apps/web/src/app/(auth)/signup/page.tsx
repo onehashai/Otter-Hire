@@ -77,12 +77,13 @@ export default function Signup() {
         return;
       }
 
+      const normalizedEmail = normalizeEmail(data.email);
+      sessionStorage.setItem("signup_email", normalizedEmail);
       await signup({
-        email: normalizeEmail(data.email),
+        email: normalizedEmail,
         password: data.password,
       });
-      sessionStorage.setItem("signup_email", normalizeEmail(data.email));
-      router.replace("/verify");
+      router.replace(`/verify?email=${encodeURIComponent(normalizedEmail)}`);
       router.refresh();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to sign up";
@@ -191,6 +192,12 @@ export default function Signup() {
               {form.formState.errors.root?.message && (
                 <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-sm text-destructive">
                   {form.formState.errors.root.message}
+                  <Link
+                    href={`/verify?email=${encodeURIComponent(normalizeEmail(form.getValues("email") || ""))}`}
+                    className="mt-2 block font-medium underline underline-offset-4"
+                  >
+                    Open email verification
+                  </Link>
                 </div>
               )}
               <FormField

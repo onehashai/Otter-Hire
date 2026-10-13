@@ -37,6 +37,7 @@ import {
   GraduationCap,
   Github,
   Globe,
+  ImageUp,
   Link2,
   Linkedin,
   Palette,
@@ -326,7 +327,7 @@ export function SummaryPanel({
                   onClick={() => void onEnrich()}
                 >
                   <Icon name="RefreshCw" className="mr-1 h-3.5 w-3.5" />
-                  Refresh photo
+                  Update info
                 </Button>
               ) : null}
               {onReplaceAvatar ? (
@@ -351,7 +352,7 @@ export function SummaryPanel({
                     disabled={replacingAvatar}
                     onClick={() => avatarInputRef.current?.click()}
                   >
-                    <Icon name="ImageUp" className="mr-1 h-3.5 w-3.5" />
+                    <ImageUp className="mr-1 h-3.5 w-3.5" />
                     Edit photo
                   </Button>
                 </>

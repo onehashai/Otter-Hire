@@ -175,7 +175,7 @@ export default function SpamControlPage() {
               Domains
             </TabsTrigger>
             <TabsTrigger value="email" disabled={submitting}>
-              Email addresses
+              Email address
             </TabsTrigger>
           </TabsList>
           <TabsContent value={blockType} className="space-y-6 pt-4">

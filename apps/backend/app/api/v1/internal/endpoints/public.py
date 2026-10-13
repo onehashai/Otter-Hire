@@ -2046,6 +2046,10 @@ def _is_automated_email(payload: "InboundEmailPayload") -> str | None:
     return None
 
 
+def _is_no_reply_sender_reason(reason: str | None) -> bool:
+    return bool(reason and reason.startswith("No-reply sender address:"))
+
+
 async def _process_resume_link_fallback(
     body_text: str,
     org_id: UUID,
@@ -2866,7 +2870,9 @@ async def ingest_inbound_email(
         }
 
     # --- Spam / noise filter ---
-    if automated_reason:
+    if automated_reason and not (
+        reply_to_conv_id is not None and _is_no_reply_sender_reason(automated_reason)
+    ):
         inbound_email.parse_status = "ignored"
         inbound_email.parse_error = f"Automated email skipped: {automated_reason}"
         await db.commit()

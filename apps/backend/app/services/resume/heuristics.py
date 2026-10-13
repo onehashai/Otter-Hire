@@ -38,6 +38,13 @@ _COUNTRY_LOCATION_HINTS = {
     "AE": {"UAE", "UNITED ARAB EMIRATES", "DUBAI", "ABU DHABI", "SHARJAH"},
 }
 
+INDIAN_RESUME_INDICATORS = {
+    "LPA", "LAKH", "LAKHS", "INR", "₹", "CTC", "PER ANNUM",
+    "B.TECH", "BTECH", "M.TECH", "MTECH", "B.E.", "CBSE", "ICSE", "HSC", "SSC",
+    "IIT", "NIT", "BITS PILANI", "IIIT", "IIM", "VTU", "ANNA UNIVERSITY",
+    "DELHI UNIVERSITY", "MUMBAI UNIVERSITY", "PUNE UNIVERSITY",
+}
+
 
 def infer_country_from_location(location_str: Optional[str]) -> Optional[str]:
     if not location_str or not location_str.strip():
@@ -60,22 +67,131 @@ def infer_country_from_location(location_str: Optional[str]) -> Optional[str]:
     return None
 
 
+def infer_country_from_context(
+    location_str: Optional[str] = None,
+    text: Optional[str] = None,
+    email: Optional[str] = None,
+) -> Optional[str]:
+    """Infer a phone region only from explicit location or supporting context."""
+    country = infer_country_from_location(location_str)
+    if country:
+        return country
+
+    if email and "@" in email:
+        domain = email.rsplit("@", 1)[1].strip().lower().rstrip(".")
+        domain_regions = (
+            ((".co.in", ".ac.in", ".edu.in", ".res.in", ".gov.in", ".in"), "IN"),
+            ((".co.uk", ".ac.uk", ".gov.uk", ".uk"), "GB"),
+            ((".gc.ca", ".ca"), "CA"),
+            ((".com.au", ".edu.au", ".au"), "AU"),
+            ((".de",), "DE"),
+            ((".fr",), "FR"),
+            ((".com.sg", ".sg"), "SG"),
+            ((".ae",), "AE"),
+        )
+        for suffixes, region in domain_regions:
+            if domain.endswith(suffixes):
+                return region
+
+    if text and text.strip():
+        normalized_text = re.sub(r"[^A-Z0-9]+", " ", text.upper()).strip()
+        padded_text = f" {normalized_text} "
+        if "₹" in text or any(
+            f" {re.sub(r'[^A-Z0-9]+', ' ', indicator.upper()).strip()} " in padded_text
+            for indicator in INDIAN_RESUME_INDICATORS
+            if re.sub(r"[^A-Z0-9]+", " ", indicator.upper()).strip()
+        ):
+            return "IN"
+    return None
+
+
+def is_dummy_phone_number(value: Optional[str]) -> bool:
+    """Return True if value is empty, lacks sufficient digits, or matches obvious dummy/placeholder patterns."""
+    if not value or not value.strip():
+        return True
+    digits = re.sub(r"\D", "", value)
+    if len(digits) < 7 or len(digits) > 16:
+        return True
+
+    # Repeated digits (e.g. 0000000000, 1111111111, 9999999999)
+    if len(set(digits)) <= 2:
+        return True
+    if len(digits) >= 10 and len(set(digits[-10:])) <= 2:
+        return True
+
+    dummy_sequences = (
+        "1234567890",
+        "0123456789",
+        "123456789",
+        "12345678",
+        "1234567",
+        "0123456",
+        "000000",
+        "111111",
+        "222222",
+        "333333",
+        "444444",
+        "555555",
+        "666666",
+        "777777",
+        "888888",
+        "999999",
+    )
+    return any(seq in digits for seq in dummy_sequences)
+
+
+def is_phone_in_text(phone: Optional[str], text: Optional[str]) -> bool:
+    """Check if the extracted phone number (or its significant digits) actually appears in the source text."""
+    if not phone or not text:
+        return False
+    if is_dummy_phone_number(phone):
+        return False
+    digits = re.sub(r"\D", "", phone)
+    if len(digits) < 7:
+        return False
+
+    text_digits = re.sub(r"\D", "", text)
+    if len(digits) >= 10:
+        last_10 = digits[-10:]
+        last_7 = digits[-7:]
+        if last_10 in text_digits or last_7 in text_digits:
+            return True
+    else:
+        if digits in text_digits:
+            return True
+
+    clean_phone = re.sub(r"[^\d+]", "", phone).lstrip("+")
+    if clean_phone and clean_phone in text_digits:
+        return True
+
+    return False
+
+
 def normalize_phone_with_country(
-    raw_phone: Optional[str], location: Optional[str] = None, default_region: str = "US"
+    raw_phone: Optional[str],
+    location: Optional[str] = None,
+    text: Optional[str] = None,
+    email: Optional[str] = None,
+    default_region: Optional[str] = None,
 ) -> Optional[str]:
     if not raw_phone or not raw_phone.strip():
         return None
+    if is_dummy_phone_number(raw_phone):
+        return None
     value = raw_phone.strip()
+    region = None
+    if not value.startswith("+"):
+        region = infer_country_from_context(location_str=location, text=text, email=email) or default_region
+        if not region:
+            return value
     try:
-        parsed = phonenumbers.parse(
-            value,
-            None if value.startswith("+") else (infer_country_from_location(location) or default_region),
-        )
+        parsed = phonenumbers.parse(value, None if value.startswith("+") else region)
         if phonenumbers.is_valid_number(parsed) or phonenumbers.is_possible_number(parsed):
             return phonenumbers.format_number(parsed, PhoneNumberFormat.INTERNATIONAL)
     except (phonenumbers.NumberParseException, ValueError):
         pass
     return value
+
 
 _NAME_BLOCKLIST = {
     "functional",
@@ -268,7 +384,7 @@ def extract_partial_email(text: str) -> Optional[str]:
 
 
 def score_phone(value: Optional[str]) -> int:
-    if not value:
+    if not value or is_dummy_phone_number(value):
         return 0
     raw = re.sub(r"\s+", " ", value).strip()
     digits = re.sub(r"\D", "", raw)
@@ -300,7 +416,7 @@ def extract_phone(text: str) -> Optional[str]:
     if e164_match:
         candidate = e164_match.group(0)
         digits = re.sub(r"\D", "", candidate)
-        if 8 <= len(digits) <= 15:
+        if 8 <= len(digits) <= 15 and not is_dummy_phone_number(candidate):
             return candidate
 
     candidates = re.finditer(r"(?:\+?\d|\(\d)[\d()\-\s]{8,}\d", text)

@@ -242,7 +242,7 @@ export function EmailViewModal({ open, onOpenChange, email }: EmailViewModalProp
         <div className="p-6 md:p-8 max-h-[58vh] overflow-y-auto space-y-6 select-text">
           {linkedHtml ? (
             <div
-              className="prose prose-sm md:prose-base max-w-none text-foreground leading-relaxed dark:prose-invert"
+              className="prose prose-sm md:prose-base max-w-none text-foreground leading-relaxed dark:prose-invert [&_*]:!text-foreground [&_*]:!bg-transparent [&_a]:!text-primary [&_a]:underline"
               dangerouslySetInnerHTML={{ __html: linkedHtml }}
             />
           ) : fullText ? (

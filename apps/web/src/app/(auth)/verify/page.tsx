@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense, useCallback, useRef } from "react";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@onehash/ui/button";
+import { InputField } from "@onehash/ui/input";
 import { Icon } from "@onehash/ui/icon";
 import { useTranslation } from "react-i18next";
 import { LOGO_SVG_PATH } from "@/lib/constants";
@@ -76,9 +77,12 @@ function VerifyEmailContent() {
       return;
     }
 
-    const storedEmail = sessionStorage.getItem("signup_email");
-    if (storedEmail) {
-      setEmail(storedEmail);
+    const queryEmail = searchParams.get("email")?.trim();
+    const storedEmail = sessionStorage.getItem("signup_email")?.trim();
+    const initialEmail = queryEmail || storedEmail;
+    if (initialEmail) {
+      setEmail(initialEmail);
+      sessionStorage.setItem("signup_email", initialEmail);
     }
 
     const storedTimer = sessionStorage.getItem("resend_timer");
@@ -118,11 +122,13 @@ function VerifyEmailContent() {
   };
 
   const handleResend = async () => {
-    if (!email) return;
+    const recipient = email.trim().toLowerCase();
+    if (!recipient) return;
     setResending(true);
     setError(null);
     try {
-      await resendVerification(email);
+      sessionStorage.setItem("signup_email", recipient);
+      await resendVerification(recipient);
       startResendTimer();
     } catch (err) {
       setError("Failed to resend email");
@@ -177,9 +183,15 @@ function VerifyEmailContent() {
 
           <h2 className="text-xl font-semibold tracking-tight mb-2">{t("verify_your_email")}</h2>
           <p className="text-sm text-muted-foreground leading-relaxed max-w-[300px] mx-auto mb-6">
-            {t("we_ve_sent_a_verification_link_to")}{" "}
-            {email && <span className="text-foreground font-medium">{email}</span>}.
-            {t("check_your_inbox_to_continue")}
+            {email ? (
+              <>
+                {t("we_ve_sent_a_verification_link_to")}{" "}
+                <span className="text-foreground font-medium">{email}</span>.{" "}
+                {t("check_your_inbox_to_continue")}
+              </>
+            ) : (
+              "Enter your account email to resend the verification link."
+            )}
           </p>
 
           {error && (
@@ -189,11 +201,20 @@ function VerifyEmailContent() {
           )}
 
           <div className="space-y-3">
+            <InputField
+              label="Email address"
+              type="email"
+              autoComplete="email"
+              placeholder="you@example.com"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              className="h-10 text-sm text-left"
+            />
             <Button
               variant="outline"
               className="w-full h-10 text-sm"
               onClick={handleResend}
-              disabled={resendDisabled || resending || !email}
+              disabled={resendDisabled || resending || !email.trim()}
             >
               {resending ? (
                 <Icon name="Loader" className="h-4 w-4 animate-spin" />
